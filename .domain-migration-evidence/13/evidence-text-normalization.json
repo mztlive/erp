@@ -1,0 +1,11 @@
+{
+  "rule": "文本副本仅规范化尾部空白；原字节保留在gzip附件",
+  "files": [
+    {
+      "path": "unit-tests.log",
+      "raw_attachment": "unit-tests.log.raw.gz",
+      "raw_sha256": "c63b6c9ec216727a79ff9983599867810608b6bd728177244e1b21623304b78e",
+      "normalized_sha256": "1e32c0f3c670323ac983c6b461a2d52a540ed382aea1965f4e9e816a0226ae8a"
+    }
+  ]
+}

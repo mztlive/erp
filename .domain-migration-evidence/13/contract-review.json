@@ -1,0 +1,26 @@
+{
+  "phase": "13",
+  "code_commit": "453cd48082793b8f40e5afa37d5d225a747fd1b0",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "added_count": 0,
+  "raw_needs_review_count": 47,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "evidence": "parser-limitations-review.json",
+      "result": "真实当前9对parser源文件逐字相同，11个DTO及12个动态索引按源码核验；额外returns索引与注册链保持。"
+    },
+    {
+      "raw_items": 1,
+      "transaction_symbols": 24,
+      "evidence": "idempotency-transaction-review.json",
+      "result": "逐真实qualified符号与provider核验四commit/submit、退款replay/8次恢复及全部最终过账和撤回写序。"
+    }
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

@@ -52,7 +52,7 @@ Rust 类型边界、金额序列化、消费方 Port、旧调用方上移与历�
 | 10 | [销售](10-sales.md) | erp-sales | 本地门禁通过 |
 | 11 | [采购](11-procurement.md) | erp-procurement | 本地门禁通过 |
 | 12 | [履约](12-fulfillment.md) | erp-fulfillment | 本地门禁通过 |
-| 13 | [退货与逆向流程](13-returns.md) | erp-returns | 执行中 |
+| 13 | [退货与逆向流程](13-returns.md) | erp-returns | 本地门禁通过 |
 | 14 | [外部集成](14-integration.md) | erp-integration | 未开始 |
 | 15 | [商城范围核验](15-commerce-scope.md) | 无实现范围核验 | 未开始 |
 | 16 | [供应链协同](16-supply.md) | erp-supply | 未开始 |

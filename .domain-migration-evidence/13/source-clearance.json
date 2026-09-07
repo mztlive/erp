@@ -1,0 +1,254 @@
+{
+  "phase": "13",
+  "source_count": 39,
+  "owned_count": 8,
+  "all_old_sources_removed": true,
+  "remaining_old_sources": [],
+  "sources": [
+    {
+      "source": "database/src/indexes/returns.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/returns.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/returns.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/returns_customer_refund_search.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/returns_posted_totals.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/cumulative_limit.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/customer_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/payment_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/purchase_return_line.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/purchase_return_order.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/receipt_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/sales_return_case.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/sales_return_line.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/returns/supplier_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/adapter.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/adapter/customer_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/adapter/payment_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/adapter/receipt_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/adapter/supplier_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/cancel_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/customer_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/customer_refund_list.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/offset_batch.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/payment_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/purchase_return.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/receipt_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/sales_return.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval/customer_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval/mapping.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval/payment_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval/prepare.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval/receipt_reversal.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/start_approval/supplier_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/supplier_refund.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/returns/version_conflict.rs",
+      "old_source_exists": false
+    }
+  ],
+  "owned": [
+    {
+      "entity": "CustomerRefund",
+      "owned_type": "CustomerRefundRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/customer_refund.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/customer_refund.rs",
+      "impl_sources": "database/src/repository/returns.rs,database/src/repository/returns_posted_totals.rs"
+    },
+    {
+      "entity": "PaymentReversal",
+      "owned_type": "PaymentReversalRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/payment_reversal.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/payment_reversal.rs",
+      "impl_sources": "database/src/repository/returns.rs,database/src/repository/returns_posted_totals.rs"
+    },
+    {
+      "entity": "PurchaseReturnLine",
+      "owned_type": "PurchaseReturnLineRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/purchase_return_line.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/purchase_return_line.rs",
+      "impl_sources": "database/src/repository/returns.rs"
+    },
+    {
+      "entity": "PurchaseReturnOrder",
+      "owned_type": "PurchaseReturnOrderRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/purchase_return_order.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/purchase_return_order.rs",
+      "impl_sources": "database/src/repository/returns.rs"
+    },
+    {
+      "entity": "ReceiptReversal",
+      "owned_type": "ReceiptReversalRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/receipt_reversal.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/receipt_reversal.rs",
+      "impl_sources": "database/src/repository/returns.rs,database/src/repository/returns_posted_totals.rs"
+    },
+    {
+      "entity": "SalesReturnCase",
+      "owned_type": "SalesReturnCaseRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/sales_return_case.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/sales_return_case.rs",
+      "impl_sources": "database/src/repository/returns.rs"
+    },
+    {
+      "entity": "SalesReturnLine",
+      "owned_type": "SalesReturnLineRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/sales_return_line.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/sales_return_line.rs",
+      "impl_sources": "database/src/repository/returns.rs"
+    },
+    {
+      "entity": "SupplierRefund",
+      "owned_type": "SupplierRefundRepository",
+      "preparation_phase": "01",
+      "owner_phase": "13",
+      "target_crate": "erp-returns",
+      "prepare_at": "database/src/repository/owned/supplier_refund.rs",
+      "final_type_definition": "crates/erp-returns/src/repository/owned/supplier_refund.rs",
+      "impl_sources": "database/src/repository/returns.rs,database/src/repository/returns_posted_totals.rs"
+    }
+  ],
+  "extra_closure": [
+    "finance customer/supplier refund and payment reversal providers",
+    "existing ReceiptReversalProcess and PaymentReversalProcess",
+    "approval_dispatch callbacks/object_read/upgrade_subject",
+    "HTTP commands/read models/legacy work item readers",
+    "inventory approval inline structural source includes"
+  ]
+}

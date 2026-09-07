@@ -1,0 +1,260 @@
+{
+  "input_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "records": [
+    {
+      "source": "backend/entities/src/returns/cumulative_limit.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/cumulative_limit.rs",
+      "before_sha256": "1071a7301e6b6b0e03caccb0057dc942fa47cd9af0c997bba217149f1583060d",
+      "original_tests": [
+        "below_limit_passes",
+        "equal_to_limit_passes",
+        "above_limit_fails",
+        "history_already_exceeded_fails",
+        "zero_amount_boundary",
+        "precision_boundary"
+      ],
+      "original_test_count": 6,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/customer_refund.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/customer_refund.rs",
+      "before_sha256": "4e6c6ad4b73acc38d8d38dbd71deccf352efbd0cc175415df71e6d812f221d78",
+      "original_tests": [
+        "new_trims_text_fields_and_starts_as_draft",
+        "matches_version_accepts_current_and_rejects_stale",
+        "creator_is_normalized_and_legacy_missing_field_defaults_empty",
+        "new_rejects_blank_no_same_actor_and_bad_target",
+        "update_applies_draft_changes_and_rejects_posted",
+        "state_machine_forces_in_approval_before_posting",
+        "start_approval_increments_version_and_cancel_does_not_rollback",
+        "status_serializes_with_stable_codes_and_labels"
+      ],
+      "original_test_count": 8,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/payment_reversal.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/payment_reversal.rs",
+      "before_sha256": "f4817df7f2de570ae4b523a41817529653c0157a4a56316b41136d93a3149f5c",
+      "original_tests": [
+        "new_trims_text_fields_and_starts_as_draft",
+        "matches_version_accepts_current_and_rejects_stale",
+        "creator_is_normalized_and_legacy_missing_field_defaults_empty",
+        "new_rejects_blank_no_same_actor_and_non_positive",
+        "update_applies_draft_changes_and_rejects_posted",
+        "state_machine_forces_in_approval_before_posting",
+        "start_approval_increments_version_and_cancel_does_not_rollback",
+        "status_serializes_with_stable_codes_and_labels"
+      ],
+      "original_test_count": 8,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/purchase_return_line.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/purchase_return_line.rs",
+      "before_sha256": "e238233a95988a925a610e38a8bdd169d237e947099923251966263da61e9d1f",
+      "original_tests": [
+        "new_accepts_valid_line",
+        "new_rejects_non_positive_quantity",
+        "update_changes_quantity_and_warehouse",
+        "purchase_return_line_has_no_approval_binding_or_state_machine"
+      ],
+      "original_test_count": 4,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/purchase_return_order.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/purchase_return_order.rs",
+      "before_sha256": "269c2bc889cd25983daff61e0ba1a359bd5545dd10dd218055cb952e4ad53a3d",
+      "original_tests": [
+        "new_trims_text_fields_and_starts_as_draft",
+        "new_rejects_blank_no",
+        "update_applies_changes_and_rejects_terminal",
+        "enums_serialize_with_stable_codes_and_labels",
+        "purchase_return_order_has_no_approval_binding_or_state_machine"
+      ],
+      "original_test_count": 5,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/receipt_reversal.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/receipt_reversal.rs",
+      "before_sha256": "2ac247679a3b46e252e1cc4aaf62d382217b0f517ffafccd4688bbf72bb71fe4",
+      "original_tests": [
+        "new_trims_text_fields_and_starts_as_draft",
+        "matches_version_accepts_current_and_rejects_stale",
+        "creator_is_normalized_and_legacy_missing_field_defaults_empty",
+        "new_rejects_blank_no_same_actor_and_non_positive",
+        "update_applies_draft_changes_and_rejects_posted",
+        "state_machine_forces_in_approval_before_posting",
+        "start_approval_increments_version_and_cancel_does_not_rollback",
+        "status_serializes_with_stable_codes_and_labels"
+      ],
+      "original_test_count": 8,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/sales_return_case.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/sales_return_case.rs",
+      "before_sha256": "04ac2158a7feb9322bb18b8e101f3f6518292a945043e69f90d3f210f8dd16d9",
+      "original_tests": [
+        "new_trims_text_fields_and_starts_as_draft",
+        "new_rejects_blank_no_and_overlong_reason",
+        "update_applies_draft_changes_and_rejects_terminal",
+        "enums_serialize_with_stable_codes_and_labels",
+        "sales_return_case_has_no_approval_binding_or_state_machine"
+      ],
+      "original_test_count": 5,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/sales_return_line.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/sales_return_line.rs",
+      "before_sha256": "746fa80e07f7be563b5200e935d72239f6f08d4d15b8b5bdc1f35796b071563d",
+      "original_tests": [
+        "new_accepts_pending_acceptance_line",
+        "new_rejects_non_positive_request_and_inconsistent_acceptance",
+        "update_applies_acceptance_progress",
+        "sales_return_line_has_no_approval_binding_or_work_item"
+      ],
+      "original_test_count": 4,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/supplier_refund.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/supplier_refund.rs",
+      "before_sha256": "8ce350036e72afd6096fc088c57eec19ec5c160862312e12ab6e454ab4a38296",
+      "original_tests": [
+        "new_trims_text_fields_and_starts_as_draft",
+        "matches_version_accepts_current_and_rejects_stale",
+        "creator_is_normalized_and_legacy_missing_field_defaults_empty",
+        "new_rejects_blank_no_same_actor_and_bad_target",
+        "update_applies_draft_changes_and_rejects_posted",
+        "state_machine_forces_in_approval_before_posting",
+        "start_approval_increments_version_and_cancel_does_not_rollback",
+        "status_serializes_with_stable_codes_and_labels"
+      ],
+      "original_test_count": 8,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/entities/src/returns/mod.rs",
+      "target": "backend/crates/erp-returns/src/entity/returns/mod.rs",
+      "before_sha256": "cf772d55c05fcc0c3eef887d4f9497730afc675e0a4c6aff3ae0c959ef1d7afc",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "entity"
+    },
+    {
+      "source": "backend/database/src/repository/owned/customer_refund.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/customer_refund.rs",
+      "before_sha256": "d0f3e90bb91fa9533274c7fb8c6c38342f0fa32372fc62e4a31997cdccd21ee0",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/payment_reversal.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/payment_reversal.rs",
+      "before_sha256": "81534ac1d739036aa16ff4cb4fdad4ec157842b0f2430deef8f9fe03250a6984",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/purchase_return_line.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/purchase_return_line.rs",
+      "before_sha256": "ae5f5e2e6292efa69fb322789e551d865f2da8c613822e6a3c24d66e519eca9d",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/purchase_return_order.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/purchase_return_order.rs",
+      "before_sha256": "e4f9c4c71c2df6175d1d1865c69e752acce18af82de3712b462a80e74fa940a3",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/receipt_reversal.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/receipt_reversal.rs",
+      "before_sha256": "71b112dede22a9bc26bbe3a304b98109def42748a656b6fe7b6190c2fa6a9824",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/sales_return_case.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/sales_return_case.rs",
+      "before_sha256": "f04fec5f6342308cb1218d974c676d9515ed0ca691f70e89cbde4500057138fa",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/sales_return_line.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/sales_return_line.rs",
+      "before_sha256": "42ed9486ecee1b32ad45d7f35016193f63e9425d53239f467bf2d02e2e1afb17",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/owned/supplier_refund.rs",
+      "target": "backend/crates/erp-returns/src/repository/owned/supplier_refund.rs",
+      "before_sha256": "b75b999d8b9276c5b6e1e8f2c8cc6c04f84a33045b1b5fe3ed20c190ff41d735",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "owned"
+    },
+    {
+      "source": "backend/database/src/repository/extensions/returns.rs",
+      "target": "backend/crates/erp-returns/src/repository/extensions/returns.rs",
+      "before_sha256": "ffeedeaf2c96618572ba78fc657cbafead89667fe6e75d42c5700b9ddfdeff62",
+      "original_tests": [],
+      "original_test_count": 0,
+      "scope": "repository"
+    },
+    {
+      "source": "backend/database/src/repository/returns.rs",
+      "target": "backend/crates/erp-returns/src/repository/returns.rs",
+      "before_sha256": "643dd8814a219e83c31428363ac44284a16084c4a976011c99f2060bbb5a9e07",
+      "original_tests": [
+        "case_filter_applies_optional_fields_and_deleted_filter",
+        "purchase_return_filter_filters_by_order_and_status",
+        "refund_filter_escapes_regex_and_sort_whitelist_falls_back",
+        "sort_doc_appends_id_tiebreaker_for_both_directions",
+        "customer_refund_projection_covers_view_facts_without_approval",
+        "case_filter_type_field_roundtrips_through_entity_enum"
+      ],
+      "original_test_count": 6,
+      "scope": "repository"
+    },
+    {
+      "source": "backend/database/src/repository/returns_posted_totals.rs",
+      "target": "backend/crates/erp-returns/src/repository/returns_posted_totals.rs",
+      "before_sha256": "9380459c8f6c5fee8ba80a0bed5c19f117d3317bd0ac2c3004f53c0f0e6c4559",
+      "original_tests": [
+        "pipeline_matches_original_and_posted_only",
+        "pipeline_covers_all_original_fields"
+      ],
+      "original_test_count": 2,
+      "scope": "repository"
+    },
+    {
+      "source": "backend/database/src/indexes/returns.rs",
+      "target": "backend/crates/erp-returns/src/indexes/returns.rs",
+      "before_sha256": "db4aae1e3f1cf91ba1b0b00b228229d34edbe75619161b9b2576429a7e807eb9",
+      "original_tests": [
+        "case_and_order_numbers_are_globally_unique",
+        "refunds_and_reversals_cover_original_fact_lookups"
+      ],
+      "original_test_count": 2,
+      "scope": "index"
+    }
+  ],
+  "test_count": 66
+}

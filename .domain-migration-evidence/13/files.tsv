@@ -1,0 +1,132 @@
+M	backend/Cargo.lock
+M	backend/Cargo.toml
+M	backend/apps/web-api/Cargo.toml
+M	backend/apps/web-api/src/core/errors.rs
+M	backend/apps/web-api/src/core/handler/returns/mod.rs
+M	backend/crates/erp-finance/src/service/payable.rs
+R096	backend/services/src/returns/offset_batch.rs	backend/crates/erp-finance/src/service/payable/offset_batch.rs
+A	backend/crates/erp-finance/src/service/payable/payment_reversal.rs
+A	backend/crates/erp-finance/src/service/payable/supplier_refund.rs
+M	backend/crates/erp-finance/src/service/receivable.rs
+A	backend/crates/erp-finance/src/service/receivable/customer_refund.rs
+A	backend/crates/erp-finance/src/service/receivable/customer_refund/tests.rs
+M	backend/crates/erp-processes/Cargo.toml
+M	backend/crates/erp-processes/src/approval_dispatch/action_registry.rs
+M	backend/crates/erp-processes/src/approval_dispatch/object_read.rs
+M	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs
+M	backend/crates/erp-processes/src/inventory_adjustment/start_tests.rs
+A	backend/crates/erp-processes/src/reverse_flow/adapter.rs
+R078	backend/services/src/returns/adapter/customer_refund.rs	backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs
+R078	backend/services/src/returns/adapter/payment_reversal.rs	backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs
+R078	backend/services/src/returns/adapter/receipt_reversal.rs	backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs
+R078	backend/services/src/returns/adapter/supplier_refund.rs	backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs
+R080	backend/services/src/returns/cancel_approval.rs	backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs
+A	backend/crates/erp-processes/src/reverse_flow/cancel_write.rs
+A	backend/crates/erp-processes/src/reverse_flow/customer_refund.rs
+A	backend/crates/erp-processes/src/reverse_flow/customer_refund/start.rs
+M	backend/crates/erp-processes/src/reverse_flow/mod.rs
+A	backend/crates/erp-processes/src/reverse_flow/payment_posting.rs
+R075	backend/services/src/returns/payment_reversal.rs	backend/crates/erp-processes/src/reverse_flow/payment_reversal.rs
+R069	backend/services/src/returns/purchase_return.rs	backend/crates/erp-processes/src/reverse_flow/purchase_return.rs
+M	backend/crates/erp-processes/src/reverse_flow/receipt_reversal.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal/approval.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal/commit.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal/context.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal/create.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal/receipt_reversal_approval_tests.rs
+A	backend/crates/erp-processes/src/reverse_flow/receipt_reversal/sales_refresh.rs
+R066	backend/services/src/returns/sales_return.rs	backend/crates/erp-processes/src/reverse_flow/sales_return.rs
+R098	backend/services/src/returns/start_approval.rs	backend/crates/erp-processes/src/reverse_flow/start_approval.rs
+A	backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs
+R097	backend/services/src/returns/start_approval/customer_refund.rs	backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs
+R100	backend/services/src/returns/start_approval/mapping.rs	backend/crates/erp-processes/src/reverse_flow/start_approval/mapping.rs
+R097	backend/services/src/returns/start_approval/payment_reversal.rs	backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs
+R087	backend/services/src/returns/start_approval/prepare.rs	backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs
+R098	backend/services/src/returns/start_approval/receipt_reversal.rs	backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs
+R098	backend/services/src/returns/start_approval/supplier_refund.rs	backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs
+R068	backend/services/src/returns/supplier_refund.rs	backend/crates/erp-processes/src/reverse_flow/supplier_refund.rs
+M	backend/crates/erp-read-models/Cargo.toml
+M	backend/crates/erp-read-models/src/finance/payable/display.rs
+M	backend/crates/erp-read-models/src/lib.rs
+A	backend/crates/erp-read-models/src/returns_center/approval/customer_refund.rs
+A	backend/crates/erp-read-models/src/returns_center/approval/mod.rs
+A	backend/crates/erp-read-models/src/returns_center/approval/payment_reversal.rs
+A	backend/crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs
+A	backend/crates/erp-read-models/src/returns_center/approval/supplier_refund.rs
+A	backend/crates/erp-read-models/src/returns_center/customer_refund.rs
+R098	backend/services/src/returns/customer_refund_list.rs	backend/crates/erp-read-models/src/returns_center/customer_refund_list.rs
+R057	backend/services/src/returns/dto.rs	backend/crates/erp-read-models/src/returns_center/dto.rs
+A	backend/crates/erp-read-models/src/returns_center/mod.rs
+A	backend/crates/erp-read-models/src/returns_center/payment_reversal.rs
+A	backend/crates/erp-read-models/src/returns_center/purchase_return.rs
+A	backend/crates/erp-read-models/src/returns_center/receipt_reversal.rs
+A	backend/crates/erp-read-models/src/returns_center/repository/mod.rs
+R093	backend/database/src/repository/returns_customer_refund_search.rs	backend/crates/erp-read-models/src/returns_center/repository/returns_customer_refund_search.rs
+A	backend/crates/erp-read-models/src/returns_center/sales_return.rs
+A	backend/crates/erp-read-models/src/returns_center/supplier_refund.rs
+M	backend/crates/erp-read-models/src/workbench/funds_document_brief/payment.rs
+M	backend/crates/erp-read-models/src/workbench/funds_document_brief/receipt.rs
+A	backend/crates/erp-returns/Cargo.toml
+A	backend/crates/erp-returns/src/dto/mod.rs
+A	backend/crates/erp-returns/src/dto/requests.rs
+A	backend/crates/erp-returns/src/entity/mod.rs
+R100	backend/entities/src/returns/cumulative_limit.rs	backend/crates/erp-returns/src/entity/returns/cumulative_limit.rs
+R096	backend/entities/src/returns/customer_refund.rs	backend/crates/erp-returns/src/entity/returns/customer_refund.rs
+R096	backend/entities/src/returns/mod.rs	backend/crates/erp-returns/src/entity/returns/mod.rs
+R096	backend/entities/src/returns/payment_reversal.rs	backend/crates/erp-returns/src/entity/returns/payment_reversal.rs
+R100	backend/entities/src/returns/purchase_return_line.rs	backend/crates/erp-returns/src/entity/returns/purchase_return_line.rs
+R100	backend/entities/src/returns/purchase_return_order.rs	backend/crates/erp-returns/src/entity/returns/purchase_return_order.rs
+R096	backend/entities/src/returns/receipt_reversal.rs	backend/crates/erp-returns/src/entity/returns/receipt_reversal.rs
+R100	backend/entities/src/returns/sales_return_case.rs	backend/crates/erp-returns/src/entity/returns/sales_return_case.rs
+R100	backend/entities/src/returns/sales_return_line.rs	backend/crates/erp-returns/src/entity/returns/sales_return_line.rs
+R096	backend/entities/src/returns/supplier_refund.rs	backend/crates/erp-returns/src/entity/returns/supplier_refund.rs
+A	backend/crates/erp-returns/src/error.rs
+A	backend/crates/erp-returns/src/indexes/mod.rs
+R069	backend/database/src/indexes/returns.rs	backend/crates/erp-returns/src/indexes/returns.rs
+A	backend/crates/erp-returns/src/lib.rs
+A	backend/crates/erp-returns/src/ports/mod.rs
+A	backend/crates/erp-returns/src/repository/extensions/mod.rs
+R100	backend/database/src/repository/extensions/returns.rs	backend/crates/erp-returns/src/repository/extensions/returns.rs
+A	backend/crates/erp-returns/src/repository/mod.rs
+R084	backend/database/src/repository/owned/customer_refund.rs	backend/crates/erp-returns/src/repository/owned/customer_refund.rs
+A	backend/crates/erp-returns/src/repository/owned/mod.rs
+R083	backend/database/src/repository/owned/payment_reversal.rs	backend/crates/erp-returns/src/repository/owned/payment_reversal.rs
+R083	backend/database/src/repository/owned/purchase_return_line.rs	backend/crates/erp-returns/src/repository/owned/purchase_return_line.rs
+R083	backend/database/src/repository/owned/purchase_return_order.rs	backend/crates/erp-returns/src/repository/owned/purchase_return_order.rs
+R083	backend/database/src/repository/owned/receipt_reversal.rs	backend/crates/erp-returns/src/repository/owned/receipt_reversal.rs
+R083	backend/database/src/repository/owned/sales_return_case.rs	backend/crates/erp-returns/src/repository/owned/sales_return_case.rs
+R083	backend/database/src/repository/owned/sales_return_line.rs	backend/crates/erp-returns/src/repository/owned/sales_return_line.rs
+R084	backend/database/src/repository/owned/supplier_refund.rs	backend/crates/erp-returns/src/repository/owned/supplier_refund.rs
+R087	backend/database/src/repository/returns.rs	backend/crates/erp-returns/src/repository/returns.rs
+R094	backend/database/src/repository/returns_posted_totals.rs	backend/crates/erp-returns/src/repository/returns_posted_totals.rs
+A	backend/crates/erp-returns/src/repository/serialization_contract.rs
+A	backend/crates/erp-returns/src/service/approval.rs
+A	backend/crates/erp-returns/src/service/customer_refund.rs
+A	backend/crates/erp-returns/src/service/mod.rs
+A	backend/crates/erp-returns/src/service/payment_reversal.rs
+A	backend/crates/erp-returns/src/service/purchase_return.rs
+A	backend/crates/erp-returns/src/service/receipt_reversal.rs
+A	backend/crates/erp-returns/src/service/sales_return.rs
+A	backend/crates/erp-returns/src/service/shared.rs
+A	backend/crates/erp-returns/src/service/supplier_refund.rs
+R098	backend/services/src/returns/version_conflict.rs	backend/crates/erp-returns/src/service/version_conflict.rs
+M	backend/database/Cargo.toml
+M	backend/database/src/indexes/mod.rs
+M	backend/database/src/repository/extensions/mod.rs
+M	backend/database/src/repository/mod.rs
+M	backend/database/src/repository/owned/mod.rs
+M	backend/docs/superpowers/plans/domain-crate-migration/13-returns.md
+M	backend/docs/superpowers/plans/domain-crate-migration/README.md
+M	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json
+M	backend/entities/Cargo.toml
+M	backend/entities/src/lib.rs
+M	backend/services/Cargo.toml
+M	backend/services/src/errors.rs
+M	backend/services/src/integration_ops/evidence.rs
+M	backend/services/src/lib.rs
+D	backend/services/src/returns/adapter.rs
+D	backend/services/src/returns/customer_refund.rs
+D	backend/services/src/returns/mod.rs
+D	backend/services/src/returns/receipt_reversal.rs
+M	backend/services/src/work_item/funds_document_brief/payment.rs
+M	backend/services/src/work_item/funds_document_brief/receipt.rs

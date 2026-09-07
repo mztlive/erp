@@ -1,0 +1,3443 @@
+{
+  "schema": "returns13-approval-evidence-v1",
+  "input_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "working_tree": "/private/tmp/erp-domain-crate-13-returns",
+  "generated_at": "2026-09-07T04:28:25.963225+00:00",
+  "owned_original_file_count": 15,
+  "original_production_functions": 110,
+  "body_equal_after_owner_path_normalization": 94,
+  "original_inline_test_count": 40,
+  "preserved_inline_tests": [
+    {
+      "name": "correction_source_requires_same_posted_fact",
+      "before_path": "backend/services/src/returns/mod.rs",
+      "after_path": "backend/crates/erp-returns/src/service/shared.rs",
+      "after_line": 47,
+      "preserved": true
+    },
+    {
+      "name": "stale_version_returns_conflict_with_stable_retry_message",
+      "before_path": "backend/services/src/returns/version_conflict.rs",
+      "after_path": "backend/crates/erp-returns/src/service/version_conflict.rs",
+      "after_line": 47,
+      "preserved": true
+    },
+    {
+      "name": "refund_and_reversal_entities_map_stale_version_to_conflict",
+      "before_path": "backend/services/src/returns/version_conflict.rs",
+      "after_path": "backend/crates/erp-returns/src/service/version_conflict.rs",
+      "after_line": 56,
+      "preserved": true
+    },
+    {
+      "name": "adapter_declares_all_required_fields",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 308,
+      "preserved": true
+    },
+    {
+      "name": "submit_enters_in_approval_and_cancel_returns_draft",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 348,
+      "preserved": true
+    },
+    {
+      "name": "illegal_status_transitions_fail_closed",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 364,
+      "preserved": true
+    },
+    {
+      "name": "post_only_accepts_in_approval",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 375,
+      "preserved": true
+    },
+    {
+      "name": "start_command_omits_definition_and_assignee",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 384,
+      "preserved": true
+    },
+    {
+      "name": "snapshot_freezes_customer_and_amount",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 401,
+      "preserved": true
+    },
+    {
+      "name": "detail_approval_is_read_only_and_has_history_cap",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+      "after_line": 60,
+      "preserved": true
+    },
+    {
+      "name": "object_read_fails_closed_on_empty_identity",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 418,
+      "preserved": true
+    },
+    {
+      "name": "domain_action_dispatch_rejects_foreign_actions",
+      "before_path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "after_line": 426,
+      "preserved": true
+    },
+    {
+      "name": "adapter_declares_all_required_fields",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 312,
+      "preserved": true
+    },
+    {
+      "name": "submit_enters_in_approval_and_cancel_returns_draft",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 352,
+      "preserved": true
+    },
+    {
+      "name": "illegal_status_transitions_fail_closed",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 368,
+      "preserved": true
+    },
+    {
+      "name": "post_only_accepts_in_approval",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 379,
+      "preserved": true
+    },
+    {
+      "name": "start_command_omits_definition_and_assignee",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 388,
+      "preserved": true
+    },
+    {
+      "name": "snapshot_freezes_supplier_and_amount",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 405,
+      "preserved": true
+    },
+    {
+      "name": "detail_approval_is_read_only_and_has_history_cap",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+      "after_line": 60,
+      "preserved": true
+    },
+    {
+      "name": "object_read_fails_closed_on_empty_identity",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 422,
+      "preserved": true
+    },
+    {
+      "name": "domain_action_dispatch_rejects_foreign_actions",
+      "before_path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "after_line": 430,
+      "preserved": true
+    },
+    {
+      "name": "adapter_declares_all_required_fields",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 313,
+      "preserved": true
+    },
+    {
+      "name": "submit_enters_in_approval_and_cancel_returns_draft",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 359,
+      "preserved": true
+    },
+    {
+      "name": "illegal_status_transitions_fail_closed",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 375,
+      "preserved": true
+    },
+    {
+      "name": "post_only_accepts_in_approval",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 386,
+      "preserved": true
+    },
+    {
+      "name": "start_command_omits_definition_and_assignee",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 395,
+      "preserved": true
+    },
+    {
+      "name": "snapshot_freezes_customer_and_amount",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 412,
+      "preserved": true
+    },
+    {
+      "name": "detail_approval_is_read_only_and_has_history_cap",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+      "after_line": 60,
+      "preserved": true
+    },
+    {
+      "name": "object_read_fails_closed_on_empty_identity",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 442,
+      "preserved": true
+    },
+    {
+      "name": "domain_action_dispatch_rejects_foreign_actions",
+      "before_path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "after_line": 450,
+      "preserved": true
+    },
+    {
+      "name": "adapter_declares_all_required_fields",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 313,
+      "preserved": true
+    },
+    {
+      "name": "submit_enters_in_approval_and_cancel_returns_draft",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 359,
+      "preserved": true
+    },
+    {
+      "name": "illegal_status_transitions_fail_closed",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 375,
+      "preserved": true
+    },
+    {
+      "name": "post_only_accepts_in_approval",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 386,
+      "preserved": true
+    },
+    {
+      "name": "start_command_omits_definition_and_assignee",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 395,
+      "preserved": true
+    },
+    {
+      "name": "snapshot_freezes_supplier_and_amount",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 412,
+      "preserved": true
+    },
+    {
+      "name": "detail_approval_is_read_only_and_has_history_cap",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+      "after_line": 60,
+      "preserved": true
+    },
+    {
+      "name": "object_read_fails_closed_on_empty_identity",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 446,
+      "preserved": true
+    },
+    {
+      "name": "domain_action_dispatch_rejects_foreign_actions",
+      "before_path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "after_line": 454,
+      "preserved": true
+    },
+    {
+      "name": "list_projection_copies_entry_assignee",
+      "before_path": "backend/services/src/returns/start_approval/mapping.rs",
+      "after_path": "backend/crates/erp-processes/src/reverse_flow/start_approval/mapping.rs",
+      "after_line": 54,
+      "preserved": true
+    }
+  ],
+  "files": [
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/adapter.rs",
+      "sha256": "ad65d141a77b4ba61d2d75666c34f5e5e8dabf48e0cb8df3d1735e122c6407fc",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/adapter/customer_refund.rs",
+      "sha256": "a5240a0c8147435318e8995133c9adea2dc2e3298202a4ccc5264e884467aa44",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+      "sha256": "32ae2cf14e7f125469fda4db8097ea156fd31b41ea90ecd06bfbf5b99e2f4b55",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+      "sha256": "048ceb51c86b675dcc102538919de242d0c5fe3cc3daef689805b1ffb8edf586",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+      "sha256": "3de8c70ac3728ae7d419bc5959082fc3e712488cc9c35c18cf043d904931098a",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/cancel_approval.rs",
+      "sha256": "59e52be09255f87e8b51417e3996f35389e0382485b1b6a809fa6520bc6e1a77",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/mod.rs",
+      "sha256": "36281ef1be7e068d9e72ba665f7c7a0f77a479b401f42c4657d0f112c93ef144",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval.rs",
+      "sha256": "77e37c5440c45469ed4f6cb4f78134a01b70c5e6479ec075c848af56abc624a1",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+      "sha256": "3bdb0448b13a7f5ffdf365236af43d89cf5cabf07ed75124751a4de44151e0f2",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval/mapping.rs",
+      "sha256": "6620febb8ec34ed68116874d066ea7817f6154ffc09fda80cda6bb1c80c1f40a",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+      "sha256": "9b39242dec1f435994d1fc5c16eb5503e1449bfb6719d9656bd6747e1a1ac42e",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval/prepare.rs",
+      "sha256": "7189836066dfb87f28a5969203b4e072097177383d65a8929d265127b8ba0973",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+      "sha256": "63aefdf2e5c225dcb375c4db7d98fad13f97c85b7e3b5437c0bec8c4b6e82abc",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+      "sha256": "9ad26cca91fef44437c66a195a32725f0e800cb54bae769e87d6ead7d45d7a76",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "before",
+      "path": "backend/services/src/returns/version_conflict.rs",
+      "sha256": "e92bf060eca0d5d8f80568132f1fc761650d8db1797d7cd8634ed5259ea46dbe",
+      "source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+      "old_source_deleted": true
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/adapter.rs",
+      "sha256": "f72f8b8a03877a9c02b09bbba949cbee28bb7fbfbf7f50352ec61467d4d32fcb",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+      "sha256": "0e7e97df180427526481a19fb119b344403107e8e771a4890702b7a13577a930",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+      "sha256": "e75e214cd8e6671671b91510f5f1d32bb66aac3084019a43601f0f377fb2ae47",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+      "sha256": "ec6d97aed657687ac4149efe3576dbde43a8ea248e7b120ca53a9c0b72b74d61",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+      "sha256": "60da6a3ad11e97210658093ddcbe4c1a260991ae502c588eafb3e8b77e62c626",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+      "sha256": "c731a4b1b8f9fc55676e581e6700e314fcca83c427f50a993e6a70e3900a5d93",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+      "sha256": "27baf3753a36aeb16b120216bf29cbbfac055d1be1eb0fc519a1d6a8b5a4955d",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/mod.rs",
+      "sha256": "3b00fcfc3425a22db9968dab7b409b4b5aa6f1580b3c48e63f85e752de60de89",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval.rs",
+      "sha256": "4dd6c3811c5613ffd4f9cafac32d0168e5378b373b95ed4f6f9d9463f513e3cd",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+      "sha256": "582a83de23ce502a1b470de7cee6fb1ddf3e28092bbf2b96dfe7a8efdf7442d1",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+      "sha256": "795daafd72529a15cc1c6f97f39a1d0f5dc0c5629d99cf4049478d402ead012e",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/mapping.rs",
+      "sha256": "6620febb8ec34ed68116874d066ea7817f6154ffc09fda80cda6bb1c80c1f40a",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+      "sha256": "f8edf950a3ed54f21bbeb597b3439646e8790185f2331c0ccd9df55a09508b96",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+      "sha256": "07bfa5c7d9561c7661dcd8be9e1991807f89a1e2e1ec6c9c03fa36d80fbd0eed",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+      "sha256": "289124899eaa736d0d632461cb1c81ec80f3b34282c1279ddf2dadd615f5e8f5",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+      "sha256": "cc16a84811d85d45c248dfd7c9d15c721a459fb89825ba73a3cb679bf2f14e62",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+      "sha256": "f0bc06b02f0e2608395e529457399d95ff46ae7720652b7a4ae05803475f328e",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/returns_center/approval/mod.rs",
+      "sha256": "6c86c3dd6a954a4c20480785d4937ddd36e5a072fae73a29960241625f428daf",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+      "sha256": "ac274ef5b734a8e1b3f4051ca7feadb4078b7faddb744b5751b4771e45c4176f",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+      "sha256": "1613d1747d1e6ed8ecb1f1a22b3caffacdf0ccf44f7d13facf8f7c252354890b",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+      "sha256": "1c3c99f0a53a7823c8fcdfe603b0157be1f15db689ed8e7702d1d4ca3e126ccf",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/ports/mod.rs",
+      "sha256": "5054504aaa505b48b11b79a9232481584afa39fb9431cfee6d0187e9bce241dd",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/approval.rs",
+      "sha256": "20d875bf138a88a062a4c45042c7ebab1c89c41435230cb858564baae8794137",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/customer_refund.rs",
+      "sha256": "80655e85bcb7998d0546a69c38a8aa4662582e8899a915400079ad1cfe96dfd5",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/mod.rs",
+      "sha256": "4783536212e5a6904ab2d4eb48e316d0d457345e90c6b3731ebce00a243b84e6",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/payment_reversal.rs",
+      "sha256": "1134e1412883b52ef296e2a6ca409827586b0117775fb090cf23b107ec28c8db",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/receipt_reversal.rs",
+      "sha256": "92d903fc6e9850dfcd2088ff6cc3adce0efbcc7ffc1292603a69580782e5dd60",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/shared.rs",
+      "sha256": "74f052fdfb3c125e837534e9fafc22cdd35814ed3a6c101dd873c9baf5e2debc",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/supplier_refund.rs",
+      "sha256": "84dca51fd473564f3bdbb8c99a8ed433ed2a2adc9caddeec7932619920bf0eb3",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-returns/src/service/version_conflict.rs",
+      "sha256": "509dd76764f1e4056dfc6a1e835a60b786de92abab7c7e7e6d2ceec0980881a1",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-workflow/src/entity/work_item/entity/approval.rs",
+      "sha256": "01759089dfdc2d32921b8b922513335a4efe9f117f2303ee937513f5a7a1b911",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-workflow/src/repository/bpm/runtime_write.rs",
+      "sha256": "4252eb14cfe2a4213f9552fffd4eeea7520bf96ff90b864d63164de0b721347c",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-workflow/src/repository/work_item/approval.rs",
+      "sha256": "a6829f674dce4a3872c023a92e28dbd98930c168ff1b506d029021b068ad233b",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/erp-workflow/src/service/approval/scope.rs",
+      "sha256": "0529757d6280cf8fe890bd80368e0a5255b72116b4bcc35a66db46379be88ee6",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    },
+    {
+      "side": "after",
+      "path": "backend/crates/persistence-core/src/transaction.rs",
+      "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+      "source_commit": null,
+      "snapshot": "working_tree"
+    }
+  ],
+  "symbol_map": [
+    {
+      "before": {
+        "path": "backend/services/src/returns/mod.rs",
+        "name": "return_command_no",
+        "line": 74,
+        "end_line": 79,
+        "body_sha256": "d6de4c864f86e6606232db793fbc3e7c6e565d90cf035c34be15b07fa483ca6b",
+        "tokens_sha256": "3aca0ad0508c30727b3bd3b20284a8f1ea5972a0c80ff412de213690933fcb82"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/shared.rs",
+          "name": "return_command_no",
+          "line": 6,
+          "end_line": 11,
+          "body_sha256": "d6de4c864f86e6606232db793fbc3e7c6e565d90cf035c34be15b07fa483ca6b",
+          "tokens_sha256": "3aca0ad0508c30727b3bd3b20284a8f1ea5972a0c80ff412de213690933fcb82"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/mod.rs",
+        "name": "ensure_posted_source",
+        "line": 94,
+        "end_line": 107,
+        "body_sha256": "54b0359f4fd51985b34ddf55f6c157361d42fbd5bd8e906e1f8b674f80ba5039",
+        "tokens_sha256": "12c56e7ac9b0d90752fdf1403c187956d33bd6805f76ec3d85f79e420dec500f"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/shared.rs",
+          "name": "ensure_posted_source",
+          "line": 26,
+          "end_line": 39,
+          "body_sha256": "54b0359f4fd51985b34ddf55f6c157361d42fbd5bd8e906e1f8b674f80ba5039",
+          "tokens_sha256": "12c56e7ac9b0d90752fdf1403c187956d33bd6805f76ec3d85f79e420dec500f"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/mod.rs",
+        "name": "new",
+        "line": 117,
+        "end_line": 124,
+        "body_sha256": "cd49abbe3de16ec7c27d4a24b4b240d722e75e1cd46dc960304e7abf650aabc6",
+        "tokens_sha256": "aec3377f7cab5e38fea4abe1af0d5f8615b279ba1a9d62ba28f56df3581bec5b"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/mod.rs",
+          "name": "new",
+          "line": 38,
+          "end_line": 45,
+          "body_sha256": "212a5ede7406f3f46c6ae1d70220bd27ea27e777c75dbb9be853a0c4cd896cce",
+          "tokens_sha256": "a1882a5e2011eb4f3e5887232a778350896cdda99b5318eae98d73e5b5929287"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Original ReturnsService command composition becomes ReturnsProcess; original shared RBAC and FailClosed/object-read injection"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/mod.rs",
+        "name": "with_object_read",
+        "line": 127,
+        "end_line": 133,
+        "body_sha256": "c8a9bc5cf536c3ddc30af47c19394324fd9dd6bb970f7e3182d65bfc39966c8e",
+        "tokens_sha256": "6164accb086ce56a3f674220fa2f411726d856fe3a53a7b14a6eeeb0a5a51545"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/mod.rs",
+          "name": "with_object_read",
+          "line": 47,
+          "end_line": 53,
+          "body_sha256": "c8a9bc5cf536c3ddc30af47c19394324fd9dd6bb970f7e3182d65bfc39966c8e",
+          "tokens_sha256": "6164accb086ce56a3f674220fa2f411726d856fe3a53a7b14a6eeeb0a5a51545"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Original ReturnsService command composition becomes ReturnsProcess; original shared RBAC and FailClosed/object-read injection"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/mod.rs",
+        "name": "finalize_approved_return_in_transaction",
+        "line": 150,
+        "end_line": 184,
+        "body_sha256": "06f07b95f2101a0e136be9a94e110a9cd51e85f2eaece78eefdb4c156f94b7c6",
+        "tokens_sha256": "b05116c8ba3c2937d209375b3d4553542f675202b2695cafdd2470f4701fb906"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/mod.rs",
+          "name": "finalize_approved_return_in_transaction",
+          "line": 81,
+          "end_line": 115,
+          "body_sha256": "06f07b95f2101a0e136be9a94e110a9cd51e85f2eaece78eefdb4c156f94b7c6",
+          "tokens_sha256": "b05116c8ba3c2937d209375b3d4553542f675202b2695cafdd2470f4701fb906"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/mod.rs",
+        "name": "cancel_approval_in_transaction",
+        "line": 190,
+        "end_line": 248,
+        "body_sha256": "5c1f4587aa34fbdcd6750dcd243d2ed19f4b07a44c2d0e1d4933b6c36398bdcc",
+        "tokens_sha256": "406c0335b7e1f1323bd03b98482cf188943a8e8f7c43c2ceac38adc2318bea14"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/mod.rs",
+          "name": "cancel_approval_in_transaction",
+          "line": 121,
+          "end_line": 183,
+          "body_sha256": "4182fefaafadcf84cbfac5b97d0f2b66c5a6e24419ce4155c0d5a1dc0d570d25",
+          "tokens_sha256": "6a789010793b472197d9f938b6bc7f1cc8ffd32ab60808f2807db58483cd33f7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Original callback dispatch/read/state/audit order; local CAS delegated to domain persistence"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/version_conflict.rs",
+        "name": "conflict_if_stale_version",
+        "line": 23,
+        "end_line": 28,
+        "body_sha256": "41156cd972b53136215065bead8a3bb9466f5ed82eb18dcdd0ebd4a5acadd0bb",
+        "tokens_sha256": "bc9a8ced63fceb28a82bbae9a17dae17be30e611b0d2c4e86c638b8b1773c93c"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/version_conflict.rs",
+          "name": "conflict_if_stale_version",
+          "line": 23,
+          "end_line": 28,
+          "body_sha256": "41156cd972b53136215065bead8a3bb9466f5ed82eb18dcdd0ebd4a5acadd0bb",
+          "tokens_sha256": "bc9a8ced63fceb28a82bbae9a17dae17be30e611b0d2c4e86c638b8b1773c93c"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter.rs",
+        "name": "definition_view_from_binding",
+        "line": 49,
+        "end_line": 56,
+        "body_sha256": "0eb0c9bacb902e7bc443809fe42d7a53c0f4b1bf4b8070f18c028957fc659d8b",
+        "tokens_sha256": "17166188f44f3771131f4951b495e93fced8c849ae94fa7a04af57eb25318035"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/mod.rs",
+          "name": "definition_view_from_binding",
+          "line": 17,
+          "end_line": 24,
+          "body_sha256": "0eb0c9bacb902e7bc443809fe42d7a53c0f4b1bf4b8070f18c028957fc659d8b",
+          "tokens_sha256": "17166188f44f3771131f4951b495e93fced8c849ae94fa7a04af57eb25318035"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only definition projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "load_cancel_runtime",
+        "line": 57,
+        "end_line": 96,
+        "body_sha256": "5e2c41a58ab746a8616ed148d2ba9b96b4cbb1976f77a198a31070d8ef87425c",
+        "tokens_sha256": "342b4e2478f04a49f389d6c26127c51963e468e1f5c150ab4a0e612af7937498"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "load_cancel_runtime",
+          "line": 55,
+          "end_line": 94,
+          "body_sha256": "5e2c41a58ab746a8616ed148d2ba9b96b4cbb1976f77a198a31070d8ef87425c",
+          "tokens_sha256": "342b4e2478f04a49f389d6c26127c51963e468e1f5c150ab4a0e612af7937498"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "build_customer_refund_cancel_input",
+        "line": 115,
+        "end_line": 152,
+        "body_sha256": "ff1a1ba1c9d10f1430fd3f0b0bf86af2d48b2e01a174b3a44f48c62a592f1749",
+        "tokens_sha256": "62da2c54d24057ea6a0e3b08baef8a0b5547c3ad730d402ed79ae5e6201194e4"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "build_customer_refund_cancel_input",
+          "line": 113,
+          "end_line": 150,
+          "body_sha256": "ff1a1ba1c9d10f1430fd3f0b0bf86af2d48b2e01a174b3a44f48c62a592f1749",
+          "tokens_sha256": "62da2c54d24057ea6a0e3b08baef8a0b5547c3ad730d402ed79ae5e6201194e4"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "persist_customer_refund_cancel",
+        "line": 204,
+        "end_line": 243,
+        "body_sha256": "7aef7cfefd045a1d9432904c06cef165edd2010bd6248ea378c2d8a179cc0aa0",
+        "tokens_sha256": "7b0067f014fddcab3b14fd50d92a79f18cf2d5b9ff1ec237b596e142d42f8aa6"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "persist_customer_refund_cancel",
+          "line": 202,
+          "end_line": 238,
+          "body_sha256": "f79f39f912043d1b36c512d335ef524e950a6f4a0f2427e572964831c6f31a8a",
+          "tokens_sha256": "fbae55f54968a66cfa27abf1dacd4fc6d12c86d390ef29698e3676fdbe2657ec"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "applies_runtime",
+          "line": 41,
+          "end_line": 43,
+          "body_sha256": "7a65a0244505f65257fcbb6aef6c0e0b7f4178ea081cb3514205fee0c1f9f016",
+          "tokens_sha256": "115397e42f3c10564eee6ff6fa38654999c579b6017b20e76ff8f9f0d3ba12b6"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "runtime",
+          "line": 44,
+          "end_line": 64,
+          "body_sha256": "44c8ce14e5210165e2bc56e93774d2ba5a382922f4348f6aed564feccac01819",
+          "tokens_sha256": "8c9d035f6232f3d7bc31241809806767f77d74193bb19c03c27044cfb947e0d9"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "tasks",
+          "line": 65,
+          "end_line": 71,
+          "body_sha256": "28cdfdfd389ee5d8b3a9273b1cd84a10181fbdd1c1cefb0d70457ca53744476d",
+          "tokens_sha256": "e8424be9fccc7004f91e040fcb745f61f04988aa832bd23439e44a5135a1415f"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "record",
+          "line": 72,
+          "end_line": 90,
+          "body_sha256": "8d98518679083de22067102e1f5f1bf2320a49caee29ea3503149403d99a264c",
+          "tokens_sha256": "1793b1c67caf6005c4cf3b147d677990b2c7c9c6e4bebafb076e4d1505ae7ad0"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "audit",
+          "line": 91,
+          "end_line": 94,
+          "body_sha256": "9eb36bb9e2eed33d943950bb96397b1cde3aef2717676efd7a6bde6fb28ed2e3",
+          "tokens_sha256": "dc7f76f86ad416db836dce2e72b3b8edcaafc115b4b43d6f75edaef6b0013b2c"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "execute",
+          "line": 96,
+          "end_line": 104,
+          "body_sha256": "0b325fa50b0b5dc457b3ebc2ebc7a2041fc3e1c8e483fc85cdd22dc3ad3a71b1",
+          "tokens_sha256": "c9bb8cf2c204cde36baeac669f97971afd51d7d661be7267dee7d0dd19e3cfb1"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "persist",
+          "line": 105,
+          "end_line": 107,
+          "body_sha256": "06e4593a98f16cfb67660d996cc82d9c964ca0b50ee655ad97b2ecd96199cb47",
+          "tokens_sha256": "c33854ba169e408bc0b24934eaa99d7952101dd57e2ec1a7ba50fdcf74c1dbff"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Actual shared MongoCancelWrite: Apply close/runtime/tasks then domain CAS/audit; Replay retains CAS/audit on same executor"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "build_supplier_refund_cancel_input",
+        "line": 263,
+        "end_line": 272,
+        "body_sha256": "783cdcfd31286225746a7cdeecdac1f19f5adb5261f41a6867052571689d3953",
+        "tokens_sha256": "c0fd423b2789a4fd90a75c6a16636b5e50af2db068489bd0b598c2b1ed589f50"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "build_supplier_refund_cancel_input",
+          "line": 258,
+          "end_line": 267,
+          "body_sha256": "783cdcfd31286225746a7cdeecdac1f19f5adb5261f41a6867052571689d3953",
+          "tokens_sha256": "c0fd423b2789a4fd90a75c6a16636b5e50af2db068489bd0b598c2b1ed589f50"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "persist_supplier_refund_cancel",
+        "line": 324,
+        "end_line": 363,
+        "body_sha256": "f4d5366557376cc3a8c8fb894639f85be4fed9b4024e0ad2de3e45f1eef66868",
+        "tokens_sha256": "840a149d0e0f24b6f22a8c77a2088cc37e8eb0204e58822b6c218e7454160bc0"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "persist_supplier_refund_cancel",
+          "line": 319,
+          "end_line": 355,
+          "body_sha256": "a1423eac1016c7cfcd08a7a689696128021b083ecb66eb507c4884896ec49559",
+          "tokens_sha256": "215cd1313502fbf01b75dfae31a95d385de512dfb4ae67fdc623fa9d463b691d"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "applies_runtime",
+          "line": 41,
+          "end_line": 43,
+          "body_sha256": "7a65a0244505f65257fcbb6aef6c0e0b7f4178ea081cb3514205fee0c1f9f016",
+          "tokens_sha256": "115397e42f3c10564eee6ff6fa38654999c579b6017b20e76ff8f9f0d3ba12b6"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "runtime",
+          "line": 44,
+          "end_line": 64,
+          "body_sha256": "44c8ce14e5210165e2bc56e93774d2ba5a382922f4348f6aed564feccac01819",
+          "tokens_sha256": "8c9d035f6232f3d7bc31241809806767f77d74193bb19c03c27044cfb947e0d9"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "tasks",
+          "line": 65,
+          "end_line": 71,
+          "body_sha256": "28cdfdfd389ee5d8b3a9273b1cd84a10181fbdd1c1cefb0d70457ca53744476d",
+          "tokens_sha256": "e8424be9fccc7004f91e040fcb745f61f04988aa832bd23439e44a5135a1415f"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "record",
+          "line": 72,
+          "end_line": 90,
+          "body_sha256": "8d98518679083de22067102e1f5f1bf2320a49caee29ea3503149403d99a264c",
+          "tokens_sha256": "1793b1c67caf6005c4cf3b147d677990b2c7c9c6e4bebafb076e4d1505ae7ad0"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "audit",
+          "line": 91,
+          "end_line": 94,
+          "body_sha256": "9eb36bb9e2eed33d943950bb96397b1cde3aef2717676efd7a6bde6fb28ed2e3",
+          "tokens_sha256": "dc7f76f86ad416db836dce2e72b3b8edcaafc115b4b43d6f75edaef6b0013b2c"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "execute",
+          "line": 96,
+          "end_line": 104,
+          "body_sha256": "0b325fa50b0b5dc457b3ebc2ebc7a2041fc3e1c8e483fc85cdd22dc3ad3a71b1",
+          "tokens_sha256": "c9bb8cf2c204cde36baeac669f97971afd51d7d661be7267dee7d0dd19e3cfb1"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "persist",
+          "line": 105,
+          "end_line": 107,
+          "body_sha256": "06e4593a98f16cfb67660d996cc82d9c964ca0b50ee655ad97b2ecd96199cb47",
+          "tokens_sha256": "c33854ba169e408bc0b24934eaa99d7952101dd57e2ec1a7ba50fdcf74c1dbff"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Actual shared MongoCancelWrite: Apply close/runtime/tasks then domain CAS/audit; Replay retains CAS/audit on same executor"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "build_receipt_reversal_cancel_input",
+        "line": 383,
+        "end_line": 392,
+        "body_sha256": "783cdcfd31286225746a7cdeecdac1f19f5adb5261f41a6867052571689d3953",
+        "tokens_sha256": "c0fd423b2789a4fd90a75c6a16636b5e50af2db068489bd0b598c2b1ed589f50"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "build_receipt_reversal_cancel_input",
+          "line": 375,
+          "end_line": 384,
+          "body_sha256": "783cdcfd31286225746a7cdeecdac1f19f5adb5261f41a6867052571689d3953",
+          "tokens_sha256": "c0fd423b2789a4fd90a75c6a16636b5e50af2db068489bd0b598c2b1ed589f50"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "persist_receipt_reversal_cancel",
+        "line": 444,
+        "end_line": 483,
+        "body_sha256": "a07c631e0afdefd1223f3b4a49d1f4773264e0402d55ae82a4101ec8d423572b",
+        "tokens_sha256": "e962156b010067b815489ba3c44763253d4537ac9a88182a8ccb4ce938ef16a1"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "persist_receipt_reversal_cancel",
+          "line": 436,
+          "end_line": 472,
+          "body_sha256": "728b5401b5554c77f4699479360d3c45e8a7aa57202c48d793f33a5904f52eb4",
+          "tokens_sha256": "521724b2fb5b8d5a4a98830c5b65fa583f888018fe6feabcc85876bbfd731a18"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "applies_runtime",
+          "line": 41,
+          "end_line": 43,
+          "body_sha256": "7a65a0244505f65257fcbb6aef6c0e0b7f4178ea081cb3514205fee0c1f9f016",
+          "tokens_sha256": "115397e42f3c10564eee6ff6fa38654999c579b6017b20e76ff8f9f0d3ba12b6"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "runtime",
+          "line": 44,
+          "end_line": 64,
+          "body_sha256": "44c8ce14e5210165e2bc56e93774d2ba5a382922f4348f6aed564feccac01819",
+          "tokens_sha256": "8c9d035f6232f3d7bc31241809806767f77d74193bb19c03c27044cfb947e0d9"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "tasks",
+          "line": 65,
+          "end_line": 71,
+          "body_sha256": "28cdfdfd389ee5d8b3a9273b1cd84a10181fbdd1c1cefb0d70457ca53744476d",
+          "tokens_sha256": "e8424be9fccc7004f91e040fcb745f61f04988aa832bd23439e44a5135a1415f"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "record",
+          "line": 72,
+          "end_line": 90,
+          "body_sha256": "8d98518679083de22067102e1f5f1bf2320a49caee29ea3503149403d99a264c",
+          "tokens_sha256": "1793b1c67caf6005c4cf3b147d677990b2c7c9c6e4bebafb076e4d1505ae7ad0"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "audit",
+          "line": 91,
+          "end_line": 94,
+          "body_sha256": "9eb36bb9e2eed33d943950bb96397b1cde3aef2717676efd7a6bde6fb28ed2e3",
+          "tokens_sha256": "dc7f76f86ad416db836dce2e72b3b8edcaafc115b4b43d6f75edaef6b0013b2c"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "execute",
+          "line": 96,
+          "end_line": 104,
+          "body_sha256": "0b325fa50b0b5dc457b3ebc2ebc7a2041fc3e1c8e483fc85cdd22dc3ad3a71b1",
+          "tokens_sha256": "c9bb8cf2c204cde36baeac669f97971afd51d7d661be7267dee7d0dd19e3cfb1"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "persist",
+          "line": 105,
+          "end_line": 107,
+          "body_sha256": "06e4593a98f16cfb67660d996cc82d9c964ca0b50ee655ad97b2ecd96199cb47",
+          "tokens_sha256": "c33854ba169e408bc0b24934eaa99d7952101dd57e2ec1a7ba50fdcf74c1dbff"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Actual shared MongoCancelWrite: Apply close/runtime/tasks then domain CAS/audit; Replay retains CAS/audit on same executor"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "build_payment_reversal_cancel_input",
+        "line": 503,
+        "end_line": 512,
+        "body_sha256": "783cdcfd31286225746a7cdeecdac1f19f5adb5261f41a6867052571689d3953",
+        "tokens_sha256": "c0fd423b2789a4fd90a75c6a16636b5e50af2db068489bd0b598c2b1ed589f50"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "build_payment_reversal_cancel_input",
+          "line": 492,
+          "end_line": 501,
+          "body_sha256": "783cdcfd31286225746a7cdeecdac1f19f5adb5261f41a6867052571689d3953",
+          "tokens_sha256": "c0fd423b2789a4fd90a75c6a16636b5e50af2db068489bd0b598c2b1ed589f50"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/cancel_approval.rs",
+        "name": "persist_payment_reversal_cancel",
+        "line": 564,
+        "end_line": 603,
+        "body_sha256": "809957711efde8a835abf8f3b5e801bb1bbaabcce33743ca7c3c9888899f3119",
+        "tokens_sha256": "91d2d59c55373bf91ba98143feb0c2cd7c0a652a6711344ff0262aaa1e85685c"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_approval.rs",
+          "name": "persist_payment_reversal_cancel",
+          "line": 553,
+          "end_line": 589,
+          "body_sha256": "58f45377297adfe6e168702da6730c0047e801f61de679c6373730ceb63c21f2",
+          "tokens_sha256": "dc726c065d3db4ded86723490f6abb7a5afd62a3fb4cb1751b4ed4f259c34951"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "applies_runtime",
+          "line": 41,
+          "end_line": 43,
+          "body_sha256": "7a65a0244505f65257fcbb6aef6c0e0b7f4178ea081cb3514205fee0c1f9f016",
+          "tokens_sha256": "115397e42f3c10564eee6ff6fa38654999c579b6017b20e76ff8f9f0d3ba12b6"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "runtime",
+          "line": 44,
+          "end_line": 64,
+          "body_sha256": "44c8ce14e5210165e2bc56e93774d2ba5a382922f4348f6aed564feccac01819",
+          "tokens_sha256": "8c9d035f6232f3d7bc31241809806767f77d74193bb19c03c27044cfb947e0d9"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "tasks",
+          "line": 65,
+          "end_line": 71,
+          "body_sha256": "28cdfdfd389ee5d8b3a9273b1cd84a10181fbdd1c1cefb0d70457ca53744476d",
+          "tokens_sha256": "e8424be9fccc7004f91e040fcb745f61f04988aa832bd23439e44a5135a1415f"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "record",
+          "line": 72,
+          "end_line": 90,
+          "body_sha256": "8d98518679083de22067102e1f5f1bf2320a49caee29ea3503149403d99a264c",
+          "tokens_sha256": "1793b1c67caf6005c4cf3b147d677990b2c7c9c6e4bebafb076e4d1505ae7ad0"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "audit",
+          "line": 91,
+          "end_line": 94,
+          "body_sha256": "9eb36bb9e2eed33d943950bb96397b1cde3aef2717676efd7a6bde6fb28ed2e3",
+          "tokens_sha256": "dc7f76f86ad416db836dce2e72b3b8edcaafc115b4b43d6f75edaef6b0013b2c"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "execute",
+          "line": 96,
+          "end_line": 104,
+          "body_sha256": "0b325fa50b0b5dc457b3ebc2ebc7a2041fc3e1c8e483fc85cdd22dc3ad3a71b1",
+          "tokens_sha256": "c9bb8cf2c204cde36baeac669f97971afd51d7d661be7267dee7d0dd19e3cfb1"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+          "name": "persist",
+          "line": 105,
+          "end_line": 107,
+          "body_sha256": "06e4593a98f16cfb67660d996cc82d9c964ca0b50ee655ad97b2ecd96199cb47",
+          "tokens_sha256": "c33854ba169e408bc0b24934eaa99d7952101dd57e2ec1a7ba50fdcf74c1dbff"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Actual shared MongoCancelWrite: Apply close/runtime/tasks then domain CAS/audit; Replay retains CAS/audit on same executor"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "customer_refund_adapter",
+        "line": 59,
+        "end_line": 63,
+        "body_sha256": "2fabed1688b79c284d9b5a7e19b71730b769084e22bc3a85fff5e4e5af66fa0e",
+        "tokens_sha256": "c3e1ef19fae1835163424f7a92b2da035b9f662eacc16cfd52a9ecc7070e247b"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "customer_refund_adapter",
+          "line": 59,
+          "end_line": 63,
+          "body_sha256": "2fabed1688b79c284d9b5a7e19b71730b769084e22bc3a85fff5e4e5af66fa0e",
+          "tokens_sha256": "c3e1ef19fae1835163424f7a92b2da035b9f662eacc16cfd52a9ecc7070e247b"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "adapter_from_spec",
+        "line": 69,
+        "end_line": 98,
+        "body_sha256": "cc9613e32dd754cdfc8752ecee42bdf85c160943a62bb9132805609750932695",
+        "tokens_sha256": "8c184184f511377c7a233679074b922d8df31d77f7f284a7add7fbebf4697d5f"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "adapter_from_spec",
+          "line": 69,
+          "end_line": 98,
+          "body_sha256": "cc9613e32dd754cdfc8752ecee42bdf85c160943a62bb9132805609750932695",
+          "tokens_sha256": "8c184184f511377c7a233679074b922d8df31d77f7f284a7add7fbebf4697d5f"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "customer_refund_subject_ref",
+        "line": 107,
+        "end_line": 113,
+        "body_sha256": "d7974c46b4fe3cbf28619e2ec49a4a499f496a2931cfcb7e7cac5629aa1546af",
+        "tokens_sha256": "c5cb043fb948f7bd98b597ad5dfceeba791ff8728e6b57a0462eb159bd6d12ba"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "customer_refund_subject_ref",
+          "line": 107,
+          "end_line": 113,
+          "body_sha256": "d7974c46b4fe3cbf28619e2ec49a4a499f496a2931cfcb7e7cac5629aa1546af",
+          "tokens_sha256": "c5cb043fb948f7bd98b597ad5dfceeba791ff8728e6b57a0462eb159bd6d12ba"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "start_customer_refund_approval",
+        "line": 125,
+        "end_line": 127,
+        "body_sha256": "b06aae3cedee5d247b23d3cd794748bc8dc510e13de402b17dc3810ba9234487",
+        "tokens_sha256": "af0fa9d492a64e57978df70dece91cfec31f77ecba22f6544d10663a72ce6cba"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "start_customer_refund_approval",
+          "line": 18,
+          "end_line": 20,
+          "body_sha256": "b06aae3cedee5d247b23d3cd794748bc8dc510e13de402b17dc3810ba9234487",
+          "tokens_sha256": "af0fa9d492a64e57978df70dece91cfec31f77ecba22f6544d10663a72ce6cba"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "cancel_customer_refund_to_draft",
+        "line": 136,
+        "end_line": 138,
+        "body_sha256": "26fcdc343726e655778582adcfa38092640cd41e679a9d4e299e58a2762c5925",
+        "tokens_sha256": "feaf1318942af813c1ded5e2a47a11c5fa487fd85e4343084cf5db055c05aa90"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "cancel_customer_refund_to_draft",
+          "line": 29,
+          "end_line": 31,
+          "body_sha256": "26fcdc343726e655778582adcfa38092640cd41e679a9d4e299e58a2762c5925",
+          "tokens_sha256": "feaf1318942af813c1ded5e2a47a11c5fa487fd85e4343084cf5db055c05aa90"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "ensure_final_approve_posting",
+        "line": 144,
+        "end_line": 151,
+        "body_sha256": "4c1bd291e34688057cf185b44f3ea02c38cc6cb91dc4a640867657bae1e0293c",
+        "tokens_sha256": "056722d448d643e2fa8380885d57a8a62b2f4d4ceff49deff2f80649655ee4e4"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "ensure_final_approve_posting",
+          "line": 37,
+          "end_line": 44,
+          "body_sha256": "4c1bd291e34688057cf185b44f3ea02c38cc6cb91dc4a640867657bae1e0293c",
+          "tokens_sha256": "056722d448d643e2fa8380885d57a8a62b2f4d4ceff49deff2f80649655ee4e4"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "require_frozen_binding",
+        "line": 157,
+        "end_line": 161,
+        "body_sha256": "ce887702277c1ddbf3b8f6194707700293a0e5426281aa27bae44943e6034264",
+        "tokens_sha256": "683e60306869cd49e8150bd8e8c3a2c22759261201f7d5d25e2c4b61484c8398"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "require_frozen_binding",
+          "line": 119,
+          "end_line": 123,
+          "body_sha256": "ce887702277c1ddbf3b8f6194707700293a0e5426281aa27bae44943e6034264",
+          "tokens_sha256": "683e60306869cd49e8150bd8e8c3a2c22759261201f7d5d25e2c4b61484c8398"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "customer_refund_start_command",
+        "line": 191,
+        "end_line": 204,
+        "body_sha256": "05998a5bcd88661af21554d88ebbf369728616fb9b3c1acaa2b5cf95e6bcae60",
+        "tokens_sha256": "45b116a3b82ca8e7630e979e8bc77851375c6a86944502042763a0847a767f55"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "customer_refund_start_command",
+          "line": 153,
+          "end_line": 166,
+          "body_sha256": "05998a5bcd88661af21554d88ebbf369728616fb9b3c1acaa2b5cf95e6bcae60",
+          "tokens_sha256": "45b116a3b82ca8e7630e979e8bc77851375c6a86944502042763a0847a767f55"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "start_approval_command_kind",
+        "line": 213,
+        "end_line": 217,
+        "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+        "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "start_approval_command_kind",
+          "line": 175,
+          "end_line": 179,
+          "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+          "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "execute_customer_refund_domain_action",
+        "line": 227,
+        "end_line": 239,
+        "body_sha256": "cb4710fdf955f27901099abd10c586cf3c774fe9c87684d91f24848c42517784",
+        "tokens_sha256": "629ea486803ca2ce245c9b102a30d9f7429494527e5f0ca4e4da438e568a1636"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "execute_customer_refund_domain_action",
+          "line": 189,
+          "end_line": 203,
+          "body_sha256": "72c7ff324063109f7ebceb3c3439727a207c32d80d95b891aa32abfe7cbdd4d3",
+          "tokens_sha256": "0ec87f9f43cbb82197b7bee1caa9290c168f16c5eb55cfd9a7a427d33d2b26f4"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Same workflow action dispatch; local state/guard errors converted from domain to identical services error category"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "customer_refund_object_readable",
+        "line": 254,
+        "end_line": 259,
+        "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+        "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "customer_refund_object_readable",
+          "line": 218,
+          "end_line": 223,
+          "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+          "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "customer_refund_responsible_org_id",
+        "line": 271,
+        "end_line": 278,
+        "body_sha256": "f7439a491db08a4232a3615c5530eda363323f68161cfcf112a2fbf0881be985",
+        "tokens_sha256": "d40d3466824cfd01116c0a107b89ab3b674174c76b316e145bce21af05f2810c"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "customer_refund_responsible_org_id",
+          "line": 235,
+          "end_line": 242,
+          "body_sha256": "f7439a491db08a4232a3615c5530eda363323f68161cfcf112a2fbf0881be985",
+          "tokens_sha256": "d40d3466824cfd01116c0a107b89ab3b674174c76b316e145bce21af05f2810c"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "build_customer_refund_snapshot",
+        "line": 293,
+        "end_line": 311,
+        "body_sha256": "70a1c988e69d8008e67e6c61ba6108720ed05edf36446e9cae00c26ef83e50be",
+        "tokens_sha256": "53994aea5a571deec59d8a618415221b938c64b01786482126d2e9ad4fb10e14"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/customer_refund.rs",
+          "name": "build_customer_refund_snapshot",
+          "line": 257,
+          "end_line": 275,
+          "body_sha256": "70a1c988e69d8008e67e6c61ba6108720ed05edf36446e9cae00c26ef83e50be",
+          "tokens_sha256": "53994aea5a571deec59d8a618415221b938c64b01786482126d2e9ad4fb10e14"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "document_approval_view",
+        "line": 324,
+        "end_line": 344,
+        "body_sha256": "ffaf80b59b008d2777dc0773b043737b0b9e0ec4f35ddd34c3e9a86d3bcf82f8",
+        "tokens_sha256": "d7192e08671899780454129734e58d7634dc10f59fcfc3e04f620a14f27f6779"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+          "name": "document_approval_view",
+          "line": 20,
+          "end_line": 40,
+          "body_sha256": "ffaf80b59b008d2777dc0773b043737b0b9e0ec4f35ddd34c3e9a86d3bcf82f8",
+          "tokens_sha256": "d7192e08671899780454129734e58d7634dc10f59fcfc3e04f620a14f27f6779"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/customer_refund.rs",
+        "name": "allowed_document_actions",
+        "line": 347,
+        "end_line": 353,
+        "body_sha256": "7e8b8a80464a00d479044801edb8f36f8d68236562c51f14421e0cf4c5464bde",
+        "tokens_sha256": "0ed799f002dca6a9c51e8be55b544c9545450f287ff5e46c9320f931730dbb20"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+          "name": "allowed_document_actions",
+          "line": 43,
+          "end_line": 49,
+          "body_sha256": "7e8b8a80464a00d479044801edb8f36f8d68236562c51f14421e0cf4c5464bde",
+          "tokens_sha256": "0ed799f002dca6a9c51e8be55b544c9545450f287ff5e46c9320f931730dbb20"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_adapter",
+        "line": 59,
+        "end_line": 63,
+        "body_sha256": "501f55242fa9ae14539a77465ef1bc99652f81f83a43fb9869bb8d63d23a1ab8",
+        "tokens_sha256": "58d2f0a413a36e83bd2d3b3b7cad1461f4def2d0b8209d8f4d8ecd62a6ab7332"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_refund_adapter",
+          "line": 61,
+          "end_line": 65,
+          "body_sha256": "501f55242fa9ae14539a77465ef1bc99652f81f83a43fb9869bb8d63d23a1ab8",
+          "tokens_sha256": "58d2f0a413a36e83bd2d3b3b7cad1461f4def2d0b8209d8f4d8ecd62a6ab7332"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_adapter_from_spec",
+        "line": 69,
+        "end_line": 98,
+        "body_sha256": "eee89e34ad1b37356292e49752dcec8c39dfbaa148e5af6ee3b95c5b974c937f",
+        "tokens_sha256": "58635f8e91ec72009170ac65d3c94ce6d992db95d4e205a5d3597fd31cf24e18"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_adapter_from_spec",
+          "line": 71,
+          "end_line": 100,
+          "body_sha256": "eee89e34ad1b37356292e49752dcec8c39dfbaa148e5af6ee3b95c5b974c937f",
+          "tokens_sha256": "58635f8e91ec72009170ac65d3c94ce6d992db95d4e205a5d3597fd31cf24e18"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_subject_ref",
+        "line": 107,
+        "end_line": 113,
+        "body_sha256": "9c8886363fc3e34761660c39bc26e9437cf865ccf955cd38ddaab83a55cb7047",
+        "tokens_sha256": "2c31678641df946855a471f379c8ed9af3c23ee48e37803c9e912bf28415e04b"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_refund_subject_ref",
+          "line": 109,
+          "end_line": 115,
+          "body_sha256": "9c8886363fc3e34761660c39bc26e9437cf865ccf955cd38ddaab83a55cb7047",
+          "tokens_sha256": "2c31678641df946855a471f379c8ed9af3c23ee48e37803c9e912bf28415e04b"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "start_supplier_refund_approval",
+        "line": 125,
+        "end_line": 127,
+        "body_sha256": "b06aae3cedee5d247b23d3cd794748bc8dc510e13de402b17dc3810ba9234487",
+        "tokens_sha256": "af0fa9d492a64e57978df70dece91cfec31f77ecba22f6544d10663a72ce6cba"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "start_supplier_refund_approval",
+          "line": 56,
+          "end_line": 58,
+          "body_sha256": "b06aae3cedee5d247b23d3cd794748bc8dc510e13de402b17dc3810ba9234487",
+          "tokens_sha256": "af0fa9d492a64e57978df70dece91cfec31f77ecba22f6544d10663a72ce6cba"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "cancel_supplier_refund_to_draft",
+        "line": 136,
+        "end_line": 138,
+        "body_sha256": "26fcdc343726e655778582adcfa38092640cd41e679a9d4e299e58a2762c5925",
+        "tokens_sha256": "feaf1318942af813c1ded5e2a47a11c5fa487fd85e4343084cf5db055c05aa90"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "cancel_supplier_refund_to_draft",
+          "line": 67,
+          "end_line": 69,
+          "body_sha256": "26fcdc343726e655778582adcfa38092640cd41e679a9d4e299e58a2762c5925",
+          "tokens_sha256": "feaf1318942af813c1ded5e2a47a11c5fa487fd85e4343084cf5db055c05aa90"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "ensure_supplier_refund_final_approve_posting",
+        "line": 144,
+        "end_line": 151,
+        "body_sha256": "9aa4007868a4e25d0a86bc73b8d62d0806faf2e1bdc815b30220eae02b951fbb",
+        "tokens_sha256": "9e2d86d798ea6d89a9db4ecc50475606e60db0f17ad658c05cc3433d32e64ceb"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "ensure_supplier_refund_final_approve_posting",
+          "line": 75,
+          "end_line": 82,
+          "body_sha256": "9aa4007868a4e25d0a86bc73b8d62d0806faf2e1bdc815b30220eae02b951fbb",
+          "tokens_sha256": "9e2d86d798ea6d89a9db4ecc50475606e60db0f17ad658c05cc3433d32e64ceb"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "require_supplier_refund_binding",
+        "line": 157,
+        "end_line": 161,
+        "body_sha256": "a239745571db987c35ba40462d6efdad70ce65f27dfe930c01fbb4a7eb3fdec6",
+        "tokens_sha256": "03887736c189990d469d8d191212193669db9fb59dd8e0a594cd74057a40a524"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "require_supplier_refund_binding",
+          "line": 121,
+          "end_line": 125,
+          "body_sha256": "a239745571db987c35ba40462d6efdad70ce65f27dfe930c01fbb4a7eb3fdec6",
+          "tokens_sha256": "03887736c189990d469d8d191212193669db9fb59dd8e0a594cd74057a40a524"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_start_command",
+        "line": 191,
+        "end_line": 204,
+        "body_sha256": "7b9833ae62f8fe08de424bf139d8ea4894d5183be94b90135c6e50e8778f7e3d",
+        "tokens_sha256": "3f9cf188d3ef9650922cfc44cd2ac0c505bc7c5221842910a83a293367f039f9"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_refund_start_command",
+          "line": 155,
+          "end_line": 168,
+          "body_sha256": "7b9833ae62f8fe08de424bf139d8ea4894d5183be94b90135c6e50e8778f7e3d",
+          "tokens_sha256": "3f9cf188d3ef9650922cfc44cd2ac0c505bc7c5221842910a83a293367f039f9"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_start_command_kind",
+        "line": 213,
+        "end_line": 217,
+        "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+        "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_refund_start_command_kind",
+          "line": 177,
+          "end_line": 181,
+          "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+          "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "execute_supplier_refund_domain_action",
+        "line": 227,
+        "end_line": 239,
+        "body_sha256": "ebaa4c10b2185a1eed5a19f2749028b0e62add6ab0e0599ef19b9e17bf6a1315",
+        "tokens_sha256": "a3d3de32f4e10900f069b86ac61b43fe8b6f0c1efc7a517aa40ae27342330119"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "execute_supplier_refund_domain_action",
+          "line": 191,
+          "end_line": 207,
+          "body_sha256": "29f817ed30fe6d19231904107d8ff70a5b9bbe897885311ab6c46e79e09ad2ee",
+          "tokens_sha256": "498cccc1eef59567af6e15ab22aced97a637974590512f41455f88118c92826d"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Same workflow action dispatch; local state/guard errors converted from domain to identical services error category"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_object_readable",
+        "line": 254,
+        "end_line": 259,
+        "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+        "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_refund_object_readable",
+          "line": 222,
+          "end_line": 227,
+          "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+          "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_responsible_org_id",
+        "line": 271,
+        "end_line": 278,
+        "body_sha256": "2f3563179cc0c9c5fa89829281ab6e41c01fe3de4caa67dc6daa8f0159bb7d5d",
+        "tokens_sha256": "8c4dd00e6b5931266e5fc3d8439ccf99b0717de4db2cced4c4b3ecaa5fe71385"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "supplier_refund_responsible_org_id",
+          "line": 239,
+          "end_line": 246,
+          "body_sha256": "2f3563179cc0c9c5fa89829281ab6e41c01fe3de4caa67dc6daa8f0159bb7d5d",
+          "tokens_sha256": "8c4dd00e6b5931266e5fc3d8439ccf99b0717de4db2cced4c4b3ecaa5fe71385"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "build_supplier_refund_snapshot",
+        "line": 293,
+        "end_line": 311,
+        "body_sha256": "f6bf346720da8676a61bb5eeb9951327c13b0a1e189dae810ab3fb084809a8f3",
+        "tokens_sha256": "32a9e8ebca53fe97707bd703265d8474d1c2f4b24955a5b1ea85d76899de2180"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/supplier_refund.rs",
+          "name": "build_supplier_refund_snapshot",
+          "line": 261,
+          "end_line": 279,
+          "body_sha256": "f6bf346720da8676a61bb5eeb9951327c13b0a1e189dae810ab3fb084809a8f3",
+          "tokens_sha256": "32a9e8ebca53fe97707bd703265d8474d1c2f4b24955a5b1ea85d76899de2180"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_approval_view",
+        "line": 324,
+        "end_line": 344,
+        "body_sha256": "b31e25fb598cac9121db5dc974d159ed3f2d1323a86ab15080c0b8f621034b05",
+        "tokens_sha256": "91f6d1b5f0234908589dfbf1341d5474f554109d7c8c345fc8278c17154dc787"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+          "name": "supplier_refund_approval_view",
+          "line": 20,
+          "end_line": 40,
+          "body_sha256": "b31e25fb598cac9121db5dc974d159ed3f2d1323a86ab15080c0b8f621034b05",
+          "tokens_sha256": "91f6d1b5f0234908589dfbf1341d5474f554109d7c8c345fc8278c17154dc787"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/supplier_refund.rs",
+        "name": "supplier_refund_allowed_actions",
+        "line": 347,
+        "end_line": 353,
+        "body_sha256": "633c678aa4d7b961c7e276990c6f5b509fa097638fb85b928b44ddc414b7c72a",
+        "tokens_sha256": "262a98c3cd502f7a8b83be3b50f2639eb4ccebec6ead5b848b6623a1880f7943"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+          "name": "supplier_refund_allowed_actions",
+          "line": 43,
+          "end_line": 49,
+          "body_sha256": "633c678aa4d7b961c7e276990c6f5b509fa097638fb85b928b44ddc414b7c72a",
+          "tokens_sha256": "262a98c3cd502f7a8b83be3b50f2639eb4ccebec6ead5b848b6623a1880f7943"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_adapter",
+        "line": 59,
+        "end_line": 63,
+        "body_sha256": "3dee543265be85a6a8409343fe832e56508ae42ff559e6c792dd611b49bf89f8",
+        "tokens_sha256": "566ee5ba98d92704cdbb688cb3cb93f1c8265b9e4a25aab865248dd30ba96e2e"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_adapter",
+          "line": 61,
+          "end_line": 65,
+          "body_sha256": "3dee543265be85a6a8409343fe832e56508ae42ff559e6c792dd611b49bf89f8",
+          "tokens_sha256": "566ee5ba98d92704cdbb688cb3cb93f1c8265b9e4a25aab865248dd30ba96e2e"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_adapter_from_spec",
+        "line": 69,
+        "end_line": 98,
+        "body_sha256": "5143d780d271226513bdbda5c095e93a0badcd9e33a56f121847def8c0e1f61d",
+        "tokens_sha256": "3a7fd5d74a325ed52bbe4d0b25b37911783140e3c5c4654e5964e4e37c2d140e"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_adapter_from_spec",
+          "line": 71,
+          "end_line": 100,
+          "body_sha256": "5143d780d271226513bdbda5c095e93a0badcd9e33a56f121847def8c0e1f61d",
+          "tokens_sha256": "3a7fd5d74a325ed52bbe4d0b25b37911783140e3c5c4654e5964e4e37c2d140e"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_subject_ref",
+        "line": 107,
+        "end_line": 113,
+        "body_sha256": "f8b4571da63d5cde3b227f4b045d4d62b45482812f6ef45aa68a749698a62e91",
+        "tokens_sha256": "6d394945e31dca200fd820a4b1060f3b09a659c78573f471453b24a95578393e"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_subject_ref",
+          "line": 109,
+          "end_line": 115,
+          "body_sha256": "f8b4571da63d5cde3b227f4b045d4d62b45482812f6ef45aa68a749698a62e91",
+          "tokens_sha256": "6d394945e31dca200fd820a4b1060f3b09a659c78573f471453b24a95578393e"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "start_receipt_reversal_approval",
+        "line": 125,
+        "end_line": 127,
+        "body_sha256": "e2bcb3b06f7993319408e308dbf9cd27f885a4b3b828f424654523bbe1dac8c2",
+        "tokens_sha256": "0663cdf150d4214eebd7f1b5e5f7fd7d378b0f5afd8fa72ccb3c5d53052372fd"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "start_receipt_reversal_approval",
+          "line": 94,
+          "end_line": 96,
+          "body_sha256": "e2bcb3b06f7993319408e308dbf9cd27f885a4b3b828f424654523bbe1dac8c2",
+          "tokens_sha256": "0663cdf150d4214eebd7f1b5e5f7fd7d378b0f5afd8fa72ccb3c5d53052372fd"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "cancel_receipt_reversal_to_draft",
+        "line": 136,
+        "end_line": 138,
+        "body_sha256": "3744d0e3b427d03faaf68d1d6061813243287d912900d7f6951b0814f379b589",
+        "tokens_sha256": "f58faf921c698717a3a3009d8794153ef41977f6b8986fe8e3fff5617de10332"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "cancel_receipt_reversal_to_draft",
+          "line": 105,
+          "end_line": 107,
+          "body_sha256": "3744d0e3b427d03faaf68d1d6061813243287d912900d7f6951b0814f379b589",
+          "tokens_sha256": "f58faf921c698717a3a3009d8794153ef41977f6b8986fe8e3fff5617de10332"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "ensure_receipt_reversal_final_approve_posting",
+        "line": 144,
+        "end_line": 151,
+        "body_sha256": "2460e35f0da6a8413a734cebf7aacbcdedf012aa8c052bab28373413fab2703b",
+        "tokens_sha256": "ff109fd9f9f21a3a769c7e3901477f90466d6535e71bf5d94106cc4ae507ce00"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "ensure_receipt_reversal_final_approve_posting",
+          "line": 113,
+          "end_line": 120,
+          "body_sha256": "2460e35f0da6a8413a734cebf7aacbcdedf012aa8c052bab28373413fab2703b",
+          "tokens_sha256": "ff109fd9f9f21a3a769c7e3901477f90466d6535e71bf5d94106cc4ae507ce00"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "require_receipt_reversal_binding",
+        "line": 157,
+        "end_line": 161,
+        "body_sha256": "cc5f471a57970225df3a9c28f66171c238d38b7c4ad05c4490e08b589c6d476f",
+        "tokens_sha256": "8a53c6916371af0942e07b4ba012de476ddc6067a447e5a97f3889935b698d3e"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "require_receipt_reversal_binding",
+          "line": 121,
+          "end_line": 125,
+          "body_sha256": "cc5f471a57970225df3a9c28f66171c238d38b7c4ad05c4490e08b589c6d476f",
+          "tokens_sha256": "8a53c6916371af0942e07b4ba012de476ddc6067a447e5a97f3889935b698d3e"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_start_command",
+        "line": 191,
+        "end_line": 206,
+        "body_sha256": "e5af1c6feea12e681fad179af655eaa075eb99a6b41c9117023b12d24882f9a4",
+        "tokens_sha256": "e5d9171d37cf020ba69a5d8fdc0cd3a0c2b0dc4d8f80be45af52516b527534af"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_start_command",
+          "line": 155,
+          "end_line": 170,
+          "body_sha256": "e5af1c6feea12e681fad179af655eaa075eb99a6b41c9117023b12d24882f9a4",
+          "tokens_sha256": "e5d9171d37cf020ba69a5d8fdc0cd3a0c2b0dc4d8f80be45af52516b527534af"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_start_command_kind",
+        "line": 215,
+        "end_line": 219,
+        "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+        "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_start_command_kind",
+          "line": 179,
+          "end_line": 183,
+          "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+          "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "execute_receipt_reversal_domain_action",
+        "line": 229,
+        "end_line": 241,
+        "body_sha256": "64a714162daeaadae3b30257e94c3f17d966e96654f5bfc484b4882dae60dcdc",
+        "tokens_sha256": "e4bb8b200a3d8df5d76ad7c9d500dd88f0b55aaa6db733bf98470d2f373a1bcb"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "execute_receipt_reversal_domain_action",
+          "line": 193,
+          "end_line": 209,
+          "body_sha256": "02d1466c70379679e6d315d92f65cff531170404d3bae8c0527dd99b269f9836",
+          "tokens_sha256": "95258ded190ed4fa5d8f670fac58780570bffa6e0ba7ed29d2520a45c1517eef"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Same workflow action dispatch; local state/guard errors converted from domain to identical services error category"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_object_readable",
+        "line": 256,
+        "end_line": 261,
+        "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+        "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_object_readable",
+          "line": 224,
+          "end_line": 229,
+          "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+          "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_responsible_org_id",
+        "line": 273,
+        "end_line": 280,
+        "body_sha256": "ff91425427279ca736c76a80df32a50e05898e71c9e0fb7f40bb6ac859d23139",
+        "tokens_sha256": "bd17571d3fb5d0c5e79639bcaa1ffc3141039507c4056ac958f60e701d55d505"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "receipt_reversal_responsible_org_id",
+          "line": 241,
+          "end_line": 248,
+          "body_sha256": "ff91425427279ca736c76a80df32a50e05898e71c9e0fb7f40bb6ac859d23139",
+          "tokens_sha256": "bd17571d3fb5d0c5e79639bcaa1ffc3141039507c4056ac958f60e701d55d505"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "build_receipt_reversal_snapshot",
+        "line": 296,
+        "end_line": 315,
+        "body_sha256": "3cfa61cd861baa755449d582415d159adffbfc706670fa0df64f6fe015e3fb58",
+        "tokens_sha256": "9d4ec11d6c110dbb0c6b5c8749b70b5d48bb39e5f99ffd77a7fd06f2e52a6e0a"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/receipt_reversal.rs",
+          "name": "build_receipt_reversal_snapshot",
+          "line": 264,
+          "end_line": 283,
+          "body_sha256": "3cfa61cd861baa755449d582415d159adffbfc706670fa0df64f6fe015e3fb58",
+          "tokens_sha256": "9d4ec11d6c110dbb0c6b5c8749b70b5d48bb39e5f99ffd77a7fd06f2e52a6e0a"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_approval_view",
+        "line": 328,
+        "end_line": 348,
+        "body_sha256": "85b7c09a6c2f830c4c7d5c33797add15b8be47b1bf35a406b277452f004438d6",
+        "tokens_sha256": "d29fc4264c033924c34efcfb5d74392cf5913cb6905fff026df1be356c5f1f5f"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+          "name": "receipt_reversal_approval_view",
+          "line": 20,
+          "end_line": 40,
+          "body_sha256": "85b7c09a6c2f830c4c7d5c33797add15b8be47b1bf35a406b277452f004438d6",
+          "tokens_sha256": "d29fc4264c033924c34efcfb5d74392cf5913cb6905fff026df1be356c5f1f5f"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/receipt_reversal.rs",
+        "name": "receipt_reversal_allowed_actions",
+        "line": 351,
+        "end_line": 357,
+        "body_sha256": "7335ba85211bbd2a2e5a22466d0808fda50cd59d1de35dd5d1a9fd723b05093a",
+        "tokens_sha256": "5b6eecf7a7155c3c4f057b8f6fcb4614a87f7d10c429c0ddfabb482458c15248"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+          "name": "receipt_reversal_allowed_actions",
+          "line": 43,
+          "end_line": 49,
+          "body_sha256": "7335ba85211bbd2a2e5a22466d0808fda50cd59d1de35dd5d1a9fd723b05093a",
+          "tokens_sha256": "5b6eecf7a7155c3c4f057b8f6fcb4614a87f7d10c429c0ddfabb482458c15248"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_adapter",
+        "line": 59,
+        "end_line": 63,
+        "body_sha256": "dec1b925956e8faf8e18522a4512a614e1813aec95c81f88385bb3c69b0a2e73",
+        "tokens_sha256": "ff23fff42387462dc1f3ed8c7ef1d5e7f8896628fa8680a40ae2170496e4bb3f"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_adapter",
+          "line": 61,
+          "end_line": 65,
+          "body_sha256": "dec1b925956e8faf8e18522a4512a614e1813aec95c81f88385bb3c69b0a2e73",
+          "tokens_sha256": "ff23fff42387462dc1f3ed8c7ef1d5e7f8896628fa8680a40ae2170496e4bb3f"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_adapter_from_spec",
+        "line": 69,
+        "end_line": 98,
+        "body_sha256": "34f96f1ca33300b8ee4b36c099938fa68b19c4124eb0715cd1a41e7ade5757cb",
+        "tokens_sha256": "d459c2aa0d3c406865f0f5b110666b5fee2ac646579a6e06ae06a25a462cbcd6"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_adapter_from_spec",
+          "line": 71,
+          "end_line": 100,
+          "body_sha256": "34f96f1ca33300b8ee4b36c099938fa68b19c4124eb0715cd1a41e7ade5757cb",
+          "tokens_sha256": "d459c2aa0d3c406865f0f5b110666b5fee2ac646579a6e06ae06a25a462cbcd6"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_subject_ref",
+        "line": 107,
+        "end_line": 113,
+        "body_sha256": "7663e90de2a7dc7ad68f5a77cff93029eb62ccf90081c5fb16f1fc72da195a37",
+        "tokens_sha256": "9ee2d1987693549179a3218fbb82718eb25ba3877c0e4b30452e3ad1679753d3"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_subject_ref",
+          "line": 109,
+          "end_line": 115,
+          "body_sha256": "7663e90de2a7dc7ad68f5a77cff93029eb62ccf90081c5fb16f1fc72da195a37",
+          "tokens_sha256": "9ee2d1987693549179a3218fbb82718eb25ba3877c0e4b30452e3ad1679753d3"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "start_payment_reversal_approval",
+        "line": 125,
+        "end_line": 127,
+        "body_sha256": "e2bcb3b06f7993319408e308dbf9cd27f885a4b3b828f424654523bbe1dac8c2",
+        "tokens_sha256": "0663cdf150d4214eebd7f1b5e5f7fd7d378b0f5afd8fa72ccb3c5d53052372fd"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "start_payment_reversal_approval",
+          "line": 132,
+          "end_line": 134,
+          "body_sha256": "e2bcb3b06f7993319408e308dbf9cd27f885a4b3b828f424654523bbe1dac8c2",
+          "tokens_sha256": "0663cdf150d4214eebd7f1b5e5f7fd7d378b0f5afd8fa72ccb3c5d53052372fd"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "cancel_payment_reversal_to_draft",
+        "line": 136,
+        "end_line": 138,
+        "body_sha256": "3744d0e3b427d03faaf68d1d6061813243287d912900d7f6951b0814f379b589",
+        "tokens_sha256": "f58faf921c698717a3a3009d8794153ef41977f6b8986fe8e3fff5617de10332"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "cancel_payment_reversal_to_draft",
+          "line": 143,
+          "end_line": 145,
+          "body_sha256": "3744d0e3b427d03faaf68d1d6061813243287d912900d7f6951b0814f379b589",
+          "tokens_sha256": "f58faf921c698717a3a3009d8794153ef41977f6b8986fe8e3fff5617de10332"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "ensure_payment_reversal_final_approve_posting",
+        "line": 144,
+        "end_line": 151,
+        "body_sha256": "9dc04b604fde15ce639332c21ec92ca2e70e671896cf7e23b1a40727fe9d0889",
+        "tokens_sha256": "10d8d474fe37f9f8a3f2fdfd823b8d152182aae87a2830b90e39de65109f047f"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-returns/src/service/approval.rs",
+          "name": "ensure_payment_reversal_final_approve_posting",
+          "line": 151,
+          "end_line": 158,
+          "body_sha256": "9dc04b604fde15ce639332c21ec92ca2e70e671896cf7e23b1a40727fe9d0889",
+          "tokens_sha256": "10d8d474fe37f9f8a3f2fdfd823b8d152182aae87a2830b90e39de65109f047f"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Pure original local state/guard implementation; no workflow dependency"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "require_payment_reversal_binding",
+        "line": 157,
+        "end_line": 161,
+        "body_sha256": "6d7ecff86b6cb6c6d8e8a8cd609cc86034c213bce2a723690fa7d7ed058a399b",
+        "tokens_sha256": "52814877681fe01e7b87c5b30afecb35fe548595bff7bbdedcc55c52b9c3d705"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "require_payment_reversal_binding",
+          "line": 121,
+          "end_line": 125,
+          "body_sha256": "6d7ecff86b6cb6c6d8e8a8cd609cc86034c213bce2a723690fa7d7ed058a399b",
+          "tokens_sha256": "52814877681fe01e7b87c5b30afecb35fe548595bff7bbdedcc55c52b9c3d705"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_start_command",
+        "line": 191,
+        "end_line": 206,
+        "body_sha256": "81baa4a3e9b6224577ceb8237b55e44b63c58668cd3265399619e5da9c66aaae",
+        "tokens_sha256": "15606472292c5f3533cf15fa4510cf1c1e665cddc527c474ed5809571f83591b"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_start_command",
+          "line": 155,
+          "end_line": 170,
+          "body_sha256": "81baa4a3e9b6224577ceb8237b55e44b63c58668cd3265399619e5da9c66aaae",
+          "tokens_sha256": "15606472292c5f3533cf15fa4510cf1c1e665cddc527c474ed5809571f83591b"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_start_command_kind",
+        "line": 215,
+        "end_line": 219,
+        "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+        "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_start_command_kind",
+          "line": 179,
+          "end_line": 183,
+          "body_sha256": "ae80491465067a4422168333a7b98d45f3da7867fceb7b75da2395d0aaee77c5",
+          "tokens_sha256": "91bec81e198c89398fdbc2202697debacd0daa0f27f6191ad535763ddb2164f7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "execute_payment_reversal_domain_action",
+        "line": 229,
+        "end_line": 241,
+        "body_sha256": "59bed2ce61a3a6942b5fce263571df2223527cc65312e55e0427b6ad8db706f9",
+        "tokens_sha256": "bc9a1f7ae3658375801d9eac70c7eca0f0621b2e6c3ada4d094add3d5bd40f52"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "execute_payment_reversal_domain_action",
+          "line": 193,
+          "end_line": 209,
+          "body_sha256": "f81ee5aa2c2b32edde3b189a7e93ca9e1c2db24de00df25db351ff9fe192bd38",
+          "tokens_sha256": "307dcea75f547ae9beb6c244ce22bbcfab47cb35f6274ef2228db320133cd48b"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Same workflow action dispatch; local state/guard errors converted from domain to identical services error category"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_object_readable",
+        "line": 256,
+        "end_line": 261,
+        "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+        "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_object_readable",
+          "line": 224,
+          "end_line": 229,
+          "body_sha256": "6ec4296145dcacbab12db3a4dfb1b36c3126217c2c662a271d63b43b316e1d14",
+          "tokens_sha256": "6e90daa9e52870c769004127964dbbc64e830c7b6e2a44bd454669bd3f8d215d"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_responsible_org_id",
+        "line": 273,
+        "end_line": 280,
+        "body_sha256": "4fdb21ee9e6274f86af43a30d6a068ea4e71fd9f3c156e953c222e8270c5dbd8",
+        "tokens_sha256": "552594a545b867eb4974b110578e04834a7d0520caefd33e46e014386ff783f3"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "payment_reversal_responsible_org_id",
+          "line": 241,
+          "end_line": 248,
+          "body_sha256": "4fdb21ee9e6274f86af43a30d6a068ea4e71fd9f3c156e953c222e8270c5dbd8",
+          "tokens_sha256": "552594a545b867eb4974b110578e04834a7d0520caefd33e46e014386ff783f3"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "build_payment_reversal_snapshot",
+        "line": 296,
+        "end_line": 315,
+        "body_sha256": "9c063d2621d1f452702731cd95521f8f60f3862bce0ea89d61258f93ac8ed3b7",
+        "tokens_sha256": "ed9fc27d8415f87b8d0e46ef23c6eafb7aefdd41b5c6241d69ee68b0c69cb0a0"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/adapter/payment_reversal.rs",
+          "name": "build_payment_reversal_snapshot",
+          "line": 264,
+          "end_line": 283,
+          "body_sha256": "9c063d2621d1f452702731cd95521f8f60f3862bce0ea89d61258f93ac8ed3b7",
+          "tokens_sha256": "ed9fc27d8415f87b8d0e46ef23c6eafb7aefdd41b5c6241d69ee68b0c69cb0a0"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_approval_view",
+        "line": 328,
+        "end_line": 348,
+        "body_sha256": "de019dac68f5f02cd1547fca5eec24423c1133c0baf3c195721a373a58f3187b",
+        "tokens_sha256": "67b3826d8af8a0b1211990998c4a79bfa8ca92ad4cd41e625acce3f3dc77bae7"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+          "name": "payment_reversal_approval_view",
+          "line": 20,
+          "end_line": 40,
+          "body_sha256": "de019dac68f5f02cd1547fca5eec24423c1133c0baf3c195721a373a58f3187b",
+          "tokens_sha256": "67b3826d8af8a0b1211990998c4a79bfa8ca92ad4cd41e625acce3f3dc77bae7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/adapter/payment_reversal.rs",
+        "name": "payment_reversal_allowed_actions",
+        "line": 351,
+        "end_line": 357,
+        "body_sha256": "43a48f36eddc8dd4a4a7f507183c173b9a6e5e3469ec72bf2f9149294fb8b0e4",
+        "tokens_sha256": "70683dbb8f3a0f6fefa8e8557300aed06af31c33e709b06be3c032d2ff09bf7a"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+          "name": "payment_reversal_allowed_actions",
+          "line": 43,
+          "end_line": 49,
+          "body_sha256": "43a48f36eddc8dd4a4a7f507183c173b9a6e5e3469ec72bf2f9149294fb8b0e4",
+          "tokens_sha256": "70683dbb8f3a0f6fefa8e8557300aed06af31c33e709b06be3c032d2ff09bf7a"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Display-only projection assigned to unique read-model owner"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+        "name": "load_start_receipt",
+        "line": 50,
+        "end_line": 64,
+        "body_sha256": "f067cacbfab1b9d9ca7e5aeda595568fb730f4ce4d45e1313ac11b31c65b2d3e",
+        "tokens_sha256": "e1483c838dc91152bf85ff098412672bbc08a8d40871f4eb025929ecb6ecc2a9"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+          "name": "load_start_receipt",
+          "line": 49,
+          "end_line": 63,
+          "body_sha256": "f067cacbfab1b9d9ca7e5aeda595568fb730f4ce4d45e1313ac11b31c65b2d3e",
+          "tokens_sha256": "e1483c838dc91152bf85ff098412672bbc08a8d40871f4eb025929ecb6ecc2a9"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+        "name": "build_customer_refund_start_input",
+        "line": 121,
+        "end_line": 171,
+        "body_sha256": "5fef26dfcda258c3ac913463a9c918b556025501802318ba53245ab1bedbe59a",
+        "tokens_sha256": "eb617196d6781a60222980c7548990ac02d446ba767e7684b52f35454a664905"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+          "name": "build_customer_refund_start_input",
+          "line": 120,
+          "end_line": 170,
+          "body_sha256": "5fef26dfcda258c3ac913463a9c918b556025501802318ba53245ab1bedbe59a",
+          "tokens_sha256": "eb617196d6781a60222980c7548990ac02d446ba767e7684b52f35454a664905"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+        "name": "start_bindings_from_graph",
+        "line": 184,
+        "end_line": 208,
+        "body_sha256": "3d8d10b9156ce076fe59823748d4238187ea2c37bae7fd0202031879848121d1",
+        "tokens_sha256": "45b565f1cea416049b287378cc6fcd634b6af079b691215964a7514cc54edbe3"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+          "name": "start_bindings_from_graph",
+          "line": 183,
+          "end_line": 207,
+          "body_sha256": "3d8d10b9156ce076fe59823748d4238187ea2c37bae7fd0202031879848121d1",
+          "tokens_sha256": "45b565f1cea416049b287378cc6fcd634b6af079b691215964a7514cc54edbe3"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+        "name": "persist_customer_refund_start",
+        "line": 262,
+        "end_line": 322,
+        "body_sha256": "f83cbafa3767533112fe5a131754e3d4fba150e683f325aad0c48610288a9198",
+        "tokens_sha256": "aa863bd935d9a7d4d201d0502a0f7b06e7a3f8d3bc9c9e8acf4ec5131e1598ed"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+          "name": "persist_customer_refund_start",
+          "line": 261,
+          "end_line": 323,
+          "body_sha256": "83487f6beaa2de6bff504754f52dbcade56770c23ca0a6540fe94bef5ce03cce",
+          "tokens_sha256": "08b9b91b3e19f3d15268db0b9dee1697c95b7a1cacc439247ac182dadb2fcdd5"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Original receipt-first Apply/runtime/local-update/audit order; only local update delegated to domain; Replay unchanged"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+        "name": "persist_runtime_writes",
+        "line": 328,
+        "end_line": 363,
+        "body_sha256": "cf8445793b5dbe672a8532033fc6942aa62b8b06ea27b7be3190c195ab7009e0",
+        "tokens_sha256": "e8831bec556a968e7bba7fb9480ecd8526ccb3b20c0f45e4121f12e79a1e1f05"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+          "name": "persist_runtime_writes",
+          "line": 329,
+          "end_line": 364,
+          "body_sha256": "cf8445793b5dbe672a8532033fc6942aa62b8b06ea27b7be3190c195ab7009e0",
+          "tokens_sha256": "e8831bec556a968e7bba7fb9480ecd8526ccb3b20c0f45e4121f12e79a1e1f05"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/customer_refund.rs",
+        "name": "persist_open_tasks",
+        "line": 369,
+        "end_line": 404,
+        "body_sha256": "6e9a3ffd4ed38f2d03fe61ef658726e972b1c30f2284c9941682919344d9c200",
+        "tokens_sha256": "adfd3d6e4ecee3fc0e4327b20b91844d061283e5d81eda94d0fa73c705dc26b8"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/customer_refund.rs",
+          "name": "persist_open_tasks",
+          "line": 370,
+          "end_line": 405,
+          "body_sha256": "6e9a3ffd4ed38f2d03fe61ef658726e972b1c30f2284c9941682919344d9c200",
+          "tokens_sha256": "adfd3d6e4ecee3fc0e4327b20b91844d061283e5d81eda94d0fa73c705dc26b8"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+        "name": "load_supplier_refund_start_receipt",
+        "line": 50,
+        "end_line": 64,
+        "body_sha256": "9a5487f4e30266fff8f9b63d1aa6d96ed501d584897984d092d39bc395217fd5",
+        "tokens_sha256": "4f18f98135708b472c3bf89a15def41a2ec13ca762b93c0f4bf92e96bfb18cbe"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+          "name": "load_supplier_refund_start_receipt",
+          "line": 49,
+          "end_line": 63,
+          "body_sha256": "9a5487f4e30266fff8f9b63d1aa6d96ed501d584897984d092d39bc395217fd5",
+          "tokens_sha256": "4f18f98135708b472c3bf89a15def41a2ec13ca762b93c0f4bf92e96bfb18cbe"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+        "name": "build_supplier_refund_start_input",
+        "line": 121,
+        "end_line": 171,
+        "body_sha256": "5679f31927d78954681f85f176ea7a35862230d8eae15ea5d07f00a5545b1703",
+        "tokens_sha256": "0ffd3ef3967374a0bc0972c25b8b638fef36b0fa89ce8733149368e96dc16f66"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+          "name": "build_supplier_refund_start_input",
+          "line": 120,
+          "end_line": 170,
+          "body_sha256": "5679f31927d78954681f85f176ea7a35862230d8eae15ea5d07f00a5545b1703",
+          "tokens_sha256": "0ffd3ef3967374a0bc0972c25b8b638fef36b0fa89ce8733149368e96dc16f66"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+        "name": "supplier_refund_start_bindings",
+        "line": 184,
+        "end_line": 208,
+        "body_sha256": "b989fc154bad13ff854a8b15ea7860cf91201dfd4f4d1d5a8d8dea93c406c784",
+        "tokens_sha256": "4ce133d03f4d6a23e41bb837962d62e2e165dde4fef797dc77a17a41be5c293d"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+          "name": "supplier_refund_start_bindings",
+          "line": 183,
+          "end_line": 207,
+          "body_sha256": "b989fc154bad13ff854a8b15ea7860cf91201dfd4f4d1d5a8d8dea93c406c784",
+          "tokens_sha256": "4ce133d03f4d6a23e41bb837962d62e2e165dde4fef797dc77a17a41be5c293d"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+        "name": "persist_supplier_refund_start",
+        "line": 262,
+        "end_line": 322,
+        "body_sha256": "fe52e7fd9a8bdd443f5b9fa4a37435c85aaa809845ac190681f23014e642378d",
+        "tokens_sha256": "7c31705c741c3433d7078925c05e08f771e27e4b96a8d0b02f75043de731b8cc"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+          "name": "persist_supplier_refund_start",
+          "line": 261,
+          "end_line": 322,
+          "body_sha256": "36ba59b532ae5de1d9921084cf46a7bd3186ff9b7d7424f6a72c8810fd562844",
+          "tokens_sha256": "0e03c7526a88efccf4460c7220b8cbe5016bb3b4e01c8a6d10a5d6d952d288d4"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Original receipt-first Apply/runtime/local-update/audit order; only local update delegated to domain; Replay unchanged"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+        "name": "persist_supplier_refund_runtime",
+        "line": 328,
+        "end_line": 363,
+        "body_sha256": "4f12758dab64d3e81e638bcb553cf7b49229ff75a68af4ada59b2b70d46d27e2",
+        "tokens_sha256": "0a9456288b81f0bba00436d897294f79bb84dc583dcd0b3f7d219c920a8a426e"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+          "name": "persist_supplier_refund_runtime",
+          "line": 328,
+          "end_line": 363,
+          "body_sha256": "4f12758dab64d3e81e638bcb553cf7b49229ff75a68af4ada59b2b70d46d27e2",
+          "tokens_sha256": "0a9456288b81f0bba00436d897294f79bb84dc583dcd0b3f7d219c920a8a426e"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/supplier_refund.rs",
+        "name": "persist_supplier_refund_open_tasks",
+        "line": 369,
+        "end_line": 404,
+        "body_sha256": "03f5ed80986b9f83e863c7b6a0534eb2fb82510ad1b7cc0869d75ce4d5ac2f3a",
+        "tokens_sha256": "26472ea8f5dd16775ab8ec0303302b42eec79a6d95660933bc0f038593a98634"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/supplier_refund.rs",
+          "name": "persist_supplier_refund_open_tasks",
+          "line": 369,
+          "end_line": 404,
+          "body_sha256": "03f5ed80986b9f83e863c7b6a0534eb2fb82510ad1b7cc0869d75ce4d5ac2f3a",
+          "tokens_sha256": "26472ea8f5dd16775ab8ec0303302b42eec79a6d95660933bc0f038593a98634"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+        "name": "load_receipt_reversal_start_receipt",
+        "line": 50,
+        "end_line": 64,
+        "body_sha256": "2e19f76dbda9343e4f1dc8fba5ee35ffa9ce3d3c570d44c62d70a1a05549a47e",
+        "tokens_sha256": "0518418b656045662c17e30b0016642a4c932342895ff6bb67bb7efb95226b08"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+          "name": "load_receipt_reversal_start_receipt",
+          "line": 49,
+          "end_line": 63,
+          "body_sha256": "2e19f76dbda9343e4f1dc8fba5ee35ffa9ce3d3c570d44c62d70a1a05549a47e",
+          "tokens_sha256": "0518418b656045662c17e30b0016642a4c932342895ff6bb67bb7efb95226b08"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+        "name": "build_receipt_reversal_start_input",
+        "line": 121,
+        "end_line": 173,
+        "body_sha256": "1bdec2929bbb40686cb1c0b8b1ba36eff2ee8d0af366cb3c324190dbf25a1802",
+        "tokens_sha256": "e6e66f209f92404ecf16c4076aa7c597f1263c2d09b66e5f833b4d6b0b5305d3"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+          "name": "build_receipt_reversal_start_input",
+          "line": 120,
+          "end_line": 172,
+          "body_sha256": "1bdec2929bbb40686cb1c0b8b1ba36eff2ee8d0af366cb3c324190dbf25a1802",
+          "tokens_sha256": "e6e66f209f92404ecf16c4076aa7c597f1263c2d09b66e5f833b4d6b0b5305d3"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+        "name": "receipt_reversal_start_bindings",
+        "line": 186,
+        "end_line": 210,
+        "body_sha256": "b260974ce7858f8227fe2285710beefe4511d2f4c0a9b0c2d9e47d884a3a6c0b",
+        "tokens_sha256": "9748e9f7093c97ebe0cfcc51af44ac298a83621ea87f28888a5544ef81516e0f"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+          "name": "receipt_reversal_start_bindings",
+          "line": 185,
+          "end_line": 209,
+          "body_sha256": "b260974ce7858f8227fe2285710beefe4511d2f4c0a9b0c2d9e47d884a3a6c0b",
+          "tokens_sha256": "9748e9f7093c97ebe0cfcc51af44ac298a83621ea87f28888a5544ef81516e0f"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+        "name": "persist_receipt_reversal_start",
+        "line": 264,
+        "end_line": 324,
+        "body_sha256": "5af6da45102e5cee8f7916db29847af9cfce95d3363bfb4c182853676eb616d6",
+        "tokens_sha256": "0763e3f8ef9141a5d198e6c7ccc577170795e6e13f02741e7aa4fd18347a1143"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+          "name": "persist_receipt_reversal_start",
+          "line": 263,
+          "end_line": 324,
+          "body_sha256": "4396d4d3aedff90ba26d50940e22f69704d46d641cb26a164b8d88dee0545798",
+          "tokens_sha256": "921ede3beaf47bc00a2c4f295654380757f08f174db92f002c725bb746316fb7"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Original receipt-first Apply/runtime/local-update/audit order; only local update delegated to domain; Replay unchanged"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+        "name": "persist_receipt_reversal_runtime",
+        "line": 330,
+        "end_line": 365,
+        "body_sha256": "e240d7b87fbdd7b91424dae3e9d880164e129f16d86712d0a454e3636430a01a",
+        "tokens_sha256": "f60057891003244cf1f25ed95bbc0a713b20386a637797a5a887d13df27c5bc2"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+          "name": "persist_receipt_reversal_runtime",
+          "line": 330,
+          "end_line": 365,
+          "body_sha256": "e240d7b87fbdd7b91424dae3e9d880164e129f16d86712d0a454e3636430a01a",
+          "tokens_sha256": "f60057891003244cf1f25ed95bbc0a713b20386a637797a5a887d13df27c5bc2"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/receipt_reversal.rs",
+        "name": "persist_receipt_reversal_open_tasks",
+        "line": 371,
+        "end_line": 406,
+        "body_sha256": "f3675dfbb3a99f4f7fb0b3ebf80922571f52ac093bd8679335babcd14c5a2521",
+        "tokens_sha256": "72a0fbc4435998df1d0802e1cc256a741cce73c71a44fa8d68f52b66db53059c"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/receipt_reversal.rs",
+          "name": "persist_receipt_reversal_open_tasks",
+          "line": 371,
+          "end_line": 406,
+          "body_sha256": "f3675dfbb3a99f4f7fb0b3ebf80922571f52ac093bd8679335babcd14c5a2521",
+          "tokens_sha256": "72a0fbc4435998df1d0802e1cc256a741cce73c71a44fa8d68f52b66db53059c"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+        "name": "load_payment_reversal_start_receipt",
+        "line": 49,
+        "end_line": 63,
+        "body_sha256": "a0965d499071d59a34f45137d2d9697ddf58fceb9ae1d7c4466ee1a1bc52733a",
+        "tokens_sha256": "383727cb6080fd2de06dc7ebaab01946170810aa31ad27cb0c7f6183616830fc"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+          "name": "load_payment_reversal_start_receipt",
+          "line": 48,
+          "end_line": 62,
+          "body_sha256": "a0965d499071d59a34f45137d2d9697ddf58fceb9ae1d7c4466ee1a1bc52733a",
+          "tokens_sha256": "383727cb6080fd2de06dc7ebaab01946170810aa31ad27cb0c7f6183616830fc"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+        "name": "build_payment_reversal_start_input",
+        "line": 120,
+        "end_line": 172,
+        "body_sha256": "ca8e0ab6a637d6beafadfd18ce1ad253a79d6aa8d2f930de8a95c31906192e81",
+        "tokens_sha256": "56d61699baff5cf808915b4bb0386100b55abf34263694f9e0e55a5b66eb6b4e"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+          "name": "build_payment_reversal_start_input",
+          "line": 119,
+          "end_line": 171,
+          "body_sha256": "ca8e0ab6a637d6beafadfd18ce1ad253a79d6aa8d2f930de8a95c31906192e81",
+          "tokens_sha256": "56d61699baff5cf808915b4bb0386100b55abf34263694f9e0e55a5b66eb6b4e"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+        "name": "payment_reversal_start_bindings",
+        "line": 185,
+        "end_line": 209,
+        "body_sha256": "ae32df983941f4c6618d29380d582a1fe7a21983d2b0ec8873e8882da41738fd",
+        "tokens_sha256": "9a6d1dceb33b5438ebe032a67f7f0974f541c63e206b09bc5ace1550df094aad"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+          "name": "payment_reversal_start_bindings",
+          "line": 184,
+          "end_line": 208,
+          "body_sha256": "ae32df983941f4c6618d29380d582a1fe7a21983d2b0ec8873e8882da41738fd",
+          "tokens_sha256": "9a6d1dceb33b5438ebe032a67f7f0974f541c63e206b09bc5ace1550df094aad"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+        "name": "persist_payment_reversal_start",
+        "line": 263,
+        "end_line": 323,
+        "body_sha256": "4d8f0fd8208b87f5742c075b9ec9a7a486212794defbf35b720150c581fce243",
+        "tokens_sha256": "08cb948f135a1cd1ac330a9eb177b4c8e415d8d3cfe008dc5fecd91427cb954d"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+          "name": "persist_payment_reversal_start",
+          "line": 262,
+          "end_line": 323,
+          "body_sha256": "32c8507ffc5ce66e14c91e146059693d607a3d0fd33c8762d500aaac454dc7a5",
+          "tokens_sha256": "b45f655cc48a79d2a3a9e7589b606b3c7501ddaa86686e87122a61b90c1efd98"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Original receipt-first Apply/runtime/local-update/audit order; only local update delegated to domain; Replay unchanged"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+        "name": "persist_payment_reversal_runtime",
+        "line": 329,
+        "end_line": 364,
+        "body_sha256": "c61b00850f0a00d1ae4e6d40ad0be104a19e8b2b8b546121af223350d9e93cb3",
+        "tokens_sha256": "bf810a5a9e0dd29993a4b70a5c7a34b016b6c5136b1201e29bf097709f0e9d46"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+          "name": "persist_payment_reversal_runtime",
+          "line": 329,
+          "end_line": 364,
+          "body_sha256": "c61b00850f0a00d1ae4e6d40ad0be104a19e8b2b8b546121af223350d9e93cb3",
+          "tokens_sha256": "bf810a5a9e0dd29993a4b70a5c7a34b016b6c5136b1201e29bf097709f0e9d46"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/payment_reversal.rs",
+        "name": "persist_payment_reversal_open_tasks",
+        "line": 370,
+        "end_line": 405,
+        "body_sha256": "16da82164f4dbf791e9c7364acf46560f8953fce9328d8def4932325d6daca72",
+        "tokens_sha256": "e34fc63772a50040c48611fee0c2c3b160ef20a1c0d79e245b4de16b6a538484"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/payment_reversal.rs",
+          "name": "persist_payment_reversal_open_tasks",
+          "line": 370,
+          "end_line": 405,
+          "body_sha256": "16da82164f4dbf791e9c7364acf46560f8953fce9328d8def4932325d6daca72",
+          "tokens_sha256": "e34fc63772a50040c48611fee0c2c3b160ef20a1c0d79e245b4de16b6a538484"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "ensure_return_start_actor_active",
+        "line": 24,
+        "end_line": 40,
+        "body_sha256": "f2525273762e81822c618b1722f166b0ee64db5a3f5c92ae922d2f193aa42e8f",
+        "tokens_sha256": "402bf7ce61b13f4cbf9514fad1ebdac66edca2b49219aaf3930eb57d33ce30de"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "ensure_return_start_actor_active",
+          "line": 20,
+          "end_line": 27,
+          "body_sha256": "0207fd997833c136f3427a9ce41802e936105b327621987f93cfd794e79d96ef",
+          "tokens_sha256": "64b78c4ab2603705f1eb6cc6db2eb9744c17a1b0f9a2ecbbb350b28a46bd4bfa"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "actor_active",
+          "line": 36,
+          "end_line": 43,
+          "body_sha256": "da147c676573ce17de276c3a79d981726265727b01b04ff18d2579020caac6c9",
+          "tokens_sha256": "bda4f2e1b3bc15191e92df34822d65f7ccc7067ad6f296db5b5f6307acb630b4"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "action_scope",
+          "line": 44,
+          "end_line": 57,
+          "body_sha256": "f6d2d31a6550ab81fe42acbdaee1925cd93c36d25a5b68294937ed3d7561769e",
+          "tokens_sha256": "d47274735e0948e2fa307f3ebce874fd331493729f97a082a279e51e2eece55f"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "read_scope",
+          "line": 58,
+          "end_line": 71,
+          "body_sha256": "4f60036b125a7b8339599f688392997020aa4705506f2e02fcc486e61e193111",
+          "tokens_sha256": "6254bf81896aa5b7070ab54304ed89699407ec1ec4a517bf1882ebf796990358"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "ensure_active",
+          "line": 73,
+          "end_line": 82,
+          "body_sha256": "663600b2e0c4ae1ffd2a454144c5bfb455e689afc83d1864c4f52779d15ebbd4",
+          "tokens_sha256": "0753116cdcc3576b7989893b2c8d575e257df3316d0b432fd8791df1721d3def"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "authorize",
+          "line": 83,
+          "end_line": 98,
+          "body_sha256": "1b24a9fbe9dffd171b3b87717ae41efc807672505ad36dfd5b95ce0ded737961",
+          "tokens_sha256": "bdcd6222ab63af2cadb5e76f970fdbe9dc7b6af6aa0b50ad58f4e0b226bf9140"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "ensure_actor_active",
+          "line": 99,
+          "end_line": 106,
+          "body_sha256": "67511d539ba8e53f8f999d3aaf7276314a5cf643c42fc8067d5fe99a06c58323",
+          "tokens_sha256": "28ea280214925a77664efa79c72156b778e670d53eb7058c8a38bac0a1eec050"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "ensure_replay_authorized",
+          "line": 107,
+          "end_line": 125,
+          "body_sha256": "7ecc6208c43cf55a847baff3ddd9db7cdfccd089643e8d39888894c1e0c9af52",
+          "tokens_sha256": "8b323c323590173ba08b3bbd6b358d15e362bfee50214e4a74f483930ff604e6"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Actual MongoReplayAuthorization shared runner preserves active/action/read order, params, covers check and same executor"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "ensure_return_start_replay_authorized",
+        "line": 43,
+        "end_line": 71,
+        "body_sha256": "efdb7cb6a8ea20a63bf90a69939fc0fc2915b8abc5af1abaeefd9042dff2f828",
+        "tokens_sha256": "bc6199107b1c37b40acdca198dfeb3f0a2552b0a196d691381298139ef52ad50"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "ensure_return_start_replay_authorized",
+          "line": 30,
+          "end_line": 49,
+          "body_sha256": "662d5eff211e2ed4052d6bbd55d45ae8db286668f7d665c68b1191d96200cf8c",
+          "tokens_sha256": "f1f10c97e6e70eca208cc795fc76271b257ad835f1ca9d9350b54be589e15191"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "actor_active",
+          "line": 36,
+          "end_line": 43,
+          "body_sha256": "da147c676573ce17de276c3a79d981726265727b01b04ff18d2579020caac6c9",
+          "tokens_sha256": "bda4f2e1b3bc15191e92df34822d65f7ccc7067ad6f296db5b5f6307acb630b4"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "action_scope",
+          "line": 44,
+          "end_line": 57,
+          "body_sha256": "f6d2d31a6550ab81fe42acbdaee1925cd93c36d25a5b68294937ed3d7561769e",
+          "tokens_sha256": "d47274735e0948e2fa307f3ebce874fd331493729f97a082a279e51e2eece55f"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "read_scope",
+          "line": 58,
+          "end_line": 71,
+          "body_sha256": "4f60036b125a7b8339599f688392997020aa4705506f2e02fcc486e61e193111",
+          "tokens_sha256": "6254bf81896aa5b7070ab54304ed89699407ec1ec4a517bf1882ebf796990358"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "ensure_active",
+          "line": 73,
+          "end_line": 82,
+          "body_sha256": "663600b2e0c4ae1ffd2a454144c5bfb455e689afc83d1864c4f52779d15ebbd4",
+          "tokens_sha256": "0753116cdcc3576b7989893b2c8d575e257df3316d0b432fd8791df1721d3def"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "authorize",
+          "line": 83,
+          "end_line": 98,
+          "body_sha256": "1b24a9fbe9dffd171b3b87717ae41efc807672505ad36dfd5b95ce0ded737961",
+          "tokens_sha256": "bdcd6222ab63af2cadb5e76f970fdbe9dc7b6af6aa0b50ad58f4e0b226bf9140"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "ensure_actor_active",
+          "line": 99,
+          "end_line": 106,
+          "body_sha256": "67511d539ba8e53f8f999d3aaf7276314a5cf643c42fc8067d5fe99a06c58323",
+          "tokens_sha256": "28ea280214925a77664efa79c72156b778e670d53eb7058c8a38bac0a1eec050"
+        },
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+          "name": "ensure_replay_authorized",
+          "line": 107,
+          "end_line": 125,
+          "body_sha256": "7ecc6208c43cf55a847baff3ddd9db7cdfccd089643e8d39888894c1e0c9af52",
+          "tokens_sha256": "8b323c323590173ba08b3bbd6b358d15e362bfee50214e4a74f483930ff604e6"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": false,
+      "disposition": "Actual MongoReplayAuthorization shared runner preserves active/action/read order, params, covers check and same executor"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "replay_subject_versions",
+        "line": 74,
+        "end_line": 86,
+        "body_sha256": "467aff5df65b7975e58e9636728106d5f3fab55f36881948ef307ad0ff1eb2e5",
+        "tokens_sha256": "b1d774081d020ad81751807f973f4cfee572a9abef2148bd4ae43baae10d2a74"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "replay_subject_versions",
+          "line": 52,
+          "end_line": 64,
+          "body_sha256": "467aff5df65b7975e58e9636728106d5f3fab55f36881948ef307ad0ff1eb2e5",
+          "tokens_sha256": "b1d774081d020ad81751807f973f4cfee572a9abef2148bd4ae43baae10d2a74"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "load_bound_definition_graph",
+        "line": 99,
+        "end_line": 104,
+        "body_sha256": "45a0721aeccb2a2fb405b94bb87368902c5a062f732dbc7d690b280a9c0633f0",
+        "tokens_sha256": "f6db65910225c8d60656c0b48b4c082faaf911bd5af0500ba04a484bc5801c4b"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "load_bound_definition_graph",
+          "line": 77,
+          "end_line": 82,
+          "body_sha256": "45a0721aeccb2a2fb405b94bb87368902c5a062f732dbc7d690b280a9c0633f0",
+          "tokens_sha256": "f6db65910225c8d60656c0b48b4c082faaf911bd5af0500ba04a484bc5801c4b"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "load_bound_definition_graph_with_executor",
+        "line": 107,
+        "end_line": 118,
+        "body_sha256": "8af6d3911ac15f6c2efc6d9985f5dc6514a09ec08efa2540ae92bbae4fac8848",
+        "tokens_sha256": "720de5bee046dfe01fc4df80286d7119cc4d19ac586a707b09f888247bafbfd5"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "load_bound_definition_graph_with_executor",
+          "line": 85,
+          "end_line": 96,
+          "body_sha256": "8af6d3911ac15f6c2efc6d9985f5dc6514a09ec08efa2540ae92bbae4fac8848",
+          "tokens_sha256": "720de5bee046dfe01fc4df80286d7119cc4d19ac586a707b09f888247bafbfd5"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "engine_graph",
+        "line": 127,
+        "end_line": 133,
+        "body_sha256": "24e41dbc4f375686f2c807cb99b0a9cb8289a91016a1028e145a1f8277bff550",
+        "tokens_sha256": "8aff5de765ef4b2adf05d06096e948823b7cd2083bac6db20747db7dfe7dafc6"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "engine_graph",
+          "line": 105,
+          "end_line": 111,
+          "body_sha256": "24e41dbc4f375686f2c807cb99b0a9cb8289a91016a1028e145a1f8277bff550",
+          "tokens_sha256": "8aff5de765ef4b2adf05d06096e948823b7cd2083bac6db20747db7dfe7dafc6"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "load_start_receipt_for_document_type",
+        "line": 136,
+        "end_line": 166,
+        "body_sha256": "412a9c30c8dcc786ea26fb8441df027cacf00ee8b9eaac7c486c37dc91710fd5",
+        "tokens_sha256": "6da5c0fcba983ce924c72f6365990e7da1991eed04460fa3c0311867a2e6ad70"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "load_start_receipt_for_document_type",
+          "line": 114,
+          "end_line": 144,
+          "body_sha256": "412a9c30c8dcc786ea26fb8441df027cacf00ee8b9eaac7c486c37dc91710fd5",
+          "tokens_sha256": "6da5c0fcba983ce924c72f6365990e7da1991eed04460fa3c0311867a2e6ad70"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/prepare.rs",
+        "name": "replay_return_start_with_executor",
+        "line": 199,
+        "end_line": 255,
+        "body_sha256": "87b9689e601c4b003049280ef930cbddb40a4a85a44deff4a8ed932a18c1a3b4",
+        "tokens_sha256": "20ed08e73db594658eb1ea0b891955df1751e437e3b51663f4180238a1344de9"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/prepare.rs",
+          "name": "replay_return_start_with_executor",
+          "line": 177,
+          "end_line": 233,
+          "body_sha256": "87b9689e601c4b003049280ef930cbddb40a4a85a44deff4a8ed932a18c1a3b4",
+          "tokens_sha256": "20ed08e73db594658eb1ea0b891955df1751e437e3b51663f4180238a1344de9"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    },
+    {
+      "before": {
+        "path": "backend/services/src/returns/start_approval/mapping.rs",
+        "name": "list_projection_from_execution",
+        "line": 13,
+        "end_line": 26,
+        "body_sha256": "f79c617f53ab16af6d4671a7cb54d7f23b1215e109404abbb3546c1b13ca39e2",
+        "tokens_sha256": "b73064da4a9c33cfbe812d09ca5b0ef994882572d707614832d5fcdfd92d3205"
+      },
+      "after": [
+        {
+          "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/mapping.rs",
+          "name": "list_projection_from_execution",
+          "line": 13,
+          "end_line": 26,
+          "body_sha256": "f79c617f53ab16af6d4671a7cb54d7f23b1215e109404abbb3546c1b13ca39e2",
+          "tokens_sha256": "b73064da4a9c33cfbe812d09ca5b0ef994882572d707614832d5fcdfd92d3205"
+        }
+      ],
+      "body_equal_after_whitespace_comments_owner_path_normalization": true,
+      "disposition": "Actual owner/import movement; original operation body retained"
+    }
+  ],
+  "new_production_port_tests": {
+    "replay_authorization": {
+      "path": "backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs",
+      "count": 4,
+      "actual_adapter": "MongoReplayAuthorization",
+      "semantics": [
+        "same non-ZST Executor and actor/action/read order",
+        "provider failures stop and retain error",
+        "disabled actor precedes scope reads",
+        "both action and object scope must cover after both reads"
+      ]
+    },
+    "cancel_write": {
+      "path": "backend/crates/erp-processes/src/reverse_flow/cancel_write.rs",
+      "count": 3,
+      "actual_adapter": "MongoCancelWrite",
+      "semantics": [
+        "Apply runtime/tasks/domain CAS/audit with same non-ZST Executor",
+        "Replay retains domain CAS/audit without runtime",
+        "each original write failure stops all later calls"
+      ]
+    }
+  },
+  "scope_limits": [
+    "No Cargo or real MongoDB executed by this subagent",
+    "Customer/supplier recovery roots owned by B/D; E preserves real shared auth/replay provider and checks its consumer call order",
+    "Read-model-only projections and four original history-cap tests have unique C/G ownership"
+  ],
+  "validation": {
+    "targeted_rustfmt": "exit 0",
+    "git_diff_check": "exit 0",
+    "source_or_test_behavior_deviation_identified": false,
+    "real_database_execution": "not verified"
+  },
+  "source_snapshot_root": "/private/tmp/returns13-approval-source-snapshot",
+  "last_refresh_review": {
+    "reason": "root workspace rustfmt changed import/layout hashes",
+    "recorded_target_production_token_changes": [],
+    "reviewed_before_refresh": true,
+    "source_snapshot_saved_for_final_seal": true
+  }
+}

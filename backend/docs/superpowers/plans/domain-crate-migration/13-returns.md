@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 13 |
-| 状态 | 执行中 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-returns` |
 | 执行负责人 | Codex；唯一共享注册集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 输入/输出提交 | 输入 `5b83e18e`；实现 `453cd48082793b8f40e5afa37d5d225a747fd1b0`；证据以本文件所属提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -75,15 +75,15 @@ returns 仅依赖基础；reverse_flow 组合各领域；任何领域均不得�
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 固化原正向操作定位、全额/部分反转、累计上限、重复退款/冲销、超额拒绝与版本冲突测试。
+1. [x] 固化原正向操作定位、全额/部分反转、累计上限、重复退款/冲销、超额拒绝与版本冲突测试。
 
-2. [ ] 迁入 returns 自身实体/DTO/拥有仓储/索引；与财务、履约、采购的关联仅保存原稳定 ID/快照事实。
+2. [x] 迁入 returns 自身实体/DTO/拥有仓储/索引；与财务、履约、采购的关联仅保存原稳定 ID/快照事实。
 
-3. [ ] 把 sales_return/purchase_return/customer_refund/supplier_refund/receipt_reversal/payment_reversal 的跨域事务移入 processes::reverse_flow；按原调用顺序委托各域事务内接口。
+3. [x] 把 sales_return/purchase_return/customer_refund/supplier_refund/receipt_reversal/payment_reversal 的跨域事务移入 processes::reverse_flow；按原调用顺序委托各域事务内接口。
 
-4. [ ] 根回执、审批取消和动作分发统一由逆向流程与 approval_dispatch 接线；每个失败点终止后续步骤，原提交结果未知分类保持不变。
+4. [x] 根回执、审批取消和动作分发统一由逆向流程与 approval_dispatch 接线；每个失败点终止后续步骤，原提交结果未知分类保持不变。
 
-5. [ ] 更新 returns Handler、财务/履约摘要和工作台视图，清除旧源码及注册；历史 MongoDB 测试档案原样保留且不执行。
+5. [x] 更新 returns Handler、财务/履约摘要和工作台视图，清除旧源码及注册；历史 MongoDB 测试档案原样保留且不执行。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -151,15 +151,27 @@ git diff --check
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 5b83e18e；专用阶段 worktree | .domain-migration-evidence/13/input.json |
+| 文件与符号 | 39 个清单旧路径、8 个 owned 准备文件已清零；跨域符号按固定提供方拆分 | source-clearance.json、files.tsv及逐符号报告 |
+| 依赖 | normal/build/dev 全依赖闭包无其他业务域或旧三层 | domain-dependencies.json、metadata.json、boundary.log |
+| 测试 | 3481 passed、0 failed、68 ignored；31 个历史 tests 档案逐字不变 | test-summary.json、unit-tests.log、historical-tests.json |
+| 协议与数据 | changed/missing/added 均为0；原始47条needs_review逐项复核；权限生成物无漂移 | contract-review.json、parser-limitations-review.json、permissions.log |
+| 事务合同 | 实际生产调用链、同Executor、原首错/写入顺序和I/O边界逐项复核；真实数据库运行未验证 | idempotency-transaction-review.json及各分片语义报告 |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/service/domain/permissions/git diff 全部exit0；516个第三方包版本和校验和不变 | quality-gates.log、dependency-lock.json |
+| 编译证据 | 本阶段边界与全workspace编译通过；最终三个性能场景统一在阶段17计时判定 | compile-applicability.json、domain-dependencies.json |
+| 阶段提交 | 实现453cd480；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/13/`。原始扫描保留exit2与needs_review；必须结合逐项复核证据使用，不得标为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- `erp-returns` 唯一持有退货退款实体、DTO、状态/金额限额规则、仓储、索引及本域写入；领域不得依赖财务、工作流或旧三层。组合入口为 `reverse_flow::ReturnsProcess`，六详情与三列表唯一归 `returns_center::ReturnsReadService`。
+- 销售退货和采购退货保留原首行处理及NO_APPROVAL登记，不补加来源存在性、多行或库存回补行为。四个客户端post入口始终返回原ConflictError，结果类型为Infallible。
+- 客户/供应商退款均按原分配规划及批量事实读取回冲结算，逐offset先写、全部成功后写减少分录、再写反向allocation；退款单随后Posted/CAS及审计。原收付款单不因此Reversed，不新增任务或销售刷新。
+- 付款冲正先完成全部结算回冲，再按原HashSet迭代同步付款任务，之后写反向分配、原付款Reversed/CAS、冲正单Posted/CAS、审计。回款冲正保持财务回冲、冲正单写入、审计后重新读取分配并逐销售刷新。
+- 四commit保留命令receipt优先、原ID/clock时点、源版本先于Posted校验，以及任意事务错误后的已提交结果恢复。普通submit独立保留receipt-first序；仅客户/供应商退款具备原preflight授权replay及最多8次fresh恢复。
+- 取消Apply仍按开放任务、runtime、审批任务、本域CAS、审计执行；Replay仍执行本域CAS与审计。授权、绑定、运行时与所有跨域写入复用调用方Executor，不新增内层事务。
+- 8个集合与19个索引、四类资金状态混合大小写、Decimal128/时间/Option、来源查询AND及双空查询所有未删除对象均保持原合同。
+- 原始扫描exit2与needs_review保留；纯内联测试、替身与源码核验不构成实际MongoDB回滚、并发或未知提交恢复证明。真实数据库运行未验证。

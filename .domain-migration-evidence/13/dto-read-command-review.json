@@ -1,0 +1,1288 @@
+{
+  "schema_version": 1,
+  "phase": "13",
+  "slice": "DTO/read-models/NO_APPROVAL return creation",
+  "input_source_commit": "de112614e03714bb6d1ca4ac9e25f580c5c273c8",
+  "after_source_frozen": false,
+  "evidence_kind": "static_source_and_token_review",
+  "real_database_verified": false,
+  "cargo_run": false,
+  "tests_run": false,
+  "disclaimer": "真实数据库运行未验证；测试执行由统一集成门禁记录，本文件不声称已通过 Cargo。",
+  "dto_contract": {
+    "definitions": 46,
+    "request_structs": 21,
+    "request_aliases": 4,
+    "all_field_serde_validate_tokens_equal": true,
+    "items": [
+      {
+        "symbol": "PageParams",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "4a96486c2fb9a94ec33eaf0e50fe861037d47243f5058d0876a2e4d97a868742",
+        "after_source_sha256": "4a96486c2fb9a94ec33eaf0e50fe861037d47243f5058d0876a2e4d97a868742",
+        "tokens": 43
+      },
+      {
+        "symbol": "CreateSalesReturnCaseRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "50842439e95d31d3bae302d7ce92733c7265d14f6615e59eac5538115bf34df4",
+        "after_source_sha256": "50842439e95d31d3bae302d7ce92733c7265d14f6615e59eac5538115bf34df4",
+        "tokens": 114
+      },
+      {
+        "symbol": "CreateSalesReturnLineRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "ee4bbb4c1201fdb494cb8c0c1b18f49d22e73ac3d9b867067e48af5d3a49661f",
+        "after_source_sha256": "ee4bbb4c1201fdb494cb8c0c1b18f49d22e73ac3d9b867067e48af5d3a49661f",
+        "tokens": 30
+      },
+      {
+        "symbol": "SalesReturnLineView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "346413f3e55e79838e19baa39f49b5ce20486081fb49be356fd2b3a30374644c",
+        "after_source_sha256": "346413f3e55e79838e19baa39f49b5ce20486081fb49be356fd2b3a30374644c",
+        "tokens": 59
+      },
+      {
+        "symbol": "SalesReturnCaseView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "f34e4e5d9c52c67844e08a13abef11e164b2b7f377fa8988cc065bc1ac259b03",
+        "after_source_sha256": "f34e4e5d9c52c67844e08a13abef11e164b2b7f377fa8988cc065bc1ac259b03",
+        "tokens": 86
+      },
+      {
+        "symbol": "SalesReturnCaseListParams",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "1bbf32d2e1e4e6f248e5a4c8baaed6108abbe516c1cb5900fb86eacaee7b143a",
+        "after_source_sha256": "1bbf32d2e1e4e6f248e5a4c8baaed6108abbe516c1cb5900fb86eacaee7b143a",
+        "tokens": 112
+      },
+      {
+        "symbol": "SalesReturnCaseListQuery",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "37bf16d90de3588a4792b5fa03568f0c76f3a49c23ed670ee9bb800fe17fd09f",
+        "after_source_sha256": "37bf16d90de3588a4792b5fa03568f0c76f3a49c23ed670ee9bb800fe17fd09f",
+        "tokens": 50
+      },
+      {
+        "symbol": "CreatePurchaseReturnOrderRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "2353154c73410512d397799745a93a1b4b46020cfb9c31b5f2c631259f74eea2",
+        "after_source_sha256": "2353154c73410512d397799745a93a1b4b46020cfb9c31b5f2c631259f74eea2",
+        "tokens": 83
+      },
+      {
+        "symbol": "CreatePurchaseReturnLineRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "cadbf751159ec218590e6ae446b0af934b47b33c4d11fd9d3d552f49130b3d6c",
+        "after_source_sha256": "cadbf751159ec218590e6ae446b0af934b47b33c4d11fd9d3d552f49130b3d6c",
+        "tokens": 38
+      },
+      {
+        "symbol": "PurchaseReturnLineView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "f54632376e4941158932436245427eec4c1b350d7e409ded6222b2dc0c8b6598",
+        "after_source_sha256": "f54632376e4941158932436245427eec4c1b350d7e409ded6222b2dc0c8b6598",
+        "tokens": 43
+      },
+      {
+        "symbol": "PurchaseReturnOrderView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "8a49c6f821372ab73c270b43895da2e1debf0450eae45a63fa697ef7abccce02",
+        "after_source_sha256": "8a49c6f821372ab73c270b43895da2e1debf0450eae45a63fa697ef7abccce02",
+        "tokens": 71
+      },
+      {
+        "symbol": "PurchaseReturnOrderListParams",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "c74ffe1e129a98088c27568d7903d1c05d4703ef2772475aaa9ce849a67e5f81",
+        "after_source_sha256": "c74ffe1e129a98088c27568d7903d1c05d4703ef2772475aaa9ce849a67e5f81",
+        "tokens": 112
+      },
+      {
+        "symbol": "PurchaseReturnOrderListQuery",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "cf43c27b509ba96b5497ead2899c351831b72ebbc0e6adbe66b9b7b5335f4246",
+        "after_source_sha256": "cf43c27b509ba96b5497ead2899c351831b72ebbc0e6adbe66b9b7b5335f4246",
+        "tokens": 50
+      },
+      {
+        "symbol": "CommitReturnFactRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "fdca88aadebd5487e8983d35deacaf5eff88f83d77ecf80f0f37f93a0a33158f",
+        "after_source_sha256": "fdca88aadebd5487e8983d35deacaf5eff88f83d77ecf80f0f37f93a0a33158f",
+        "tokens": 102
+      },
+      {
+        "symbol": "CommitCustomerRefundRequest",
+        "kind": "type",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "cbe2892c635622ea0255ace0061247a04a226e5a2ddde4730795bda35ff02c12",
+        "after_source_sha256": "cbe2892c635622ea0255ace0061247a04a226e5a2ddde4730795bda35ff02c12",
+        "tokens": 6
+      },
+      {
+        "symbol": "CommitSupplierRefundRequest",
+        "kind": "type",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "dc52d88d691a3cfc9aa04c9197ef5db356ea2f3c122bfa0efa8eeead079d506f",
+        "after_source_sha256": "dc52d88d691a3cfc9aa04c9197ef5db356ea2f3c122bfa0efa8eeead079d506f",
+        "tokens": 6
+      },
+      {
+        "symbol": "CommitReceiptReversalRequest",
+        "kind": "type",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "863cc46584acb17a8980859e4c712d97d18b7cdc785add2e65b9db3af8105e7e",
+        "after_source_sha256": "863cc46584acb17a8980859e4c712d97d18b7cdc785add2e65b9db3af8105e7e",
+        "tokens": 6
+      },
+      {
+        "symbol": "CommitPaymentReversalRequest",
+        "kind": "type",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "7ca60ba95ae889df1fcc2214ed42b70e69cb94b46f4d6bd8cc40c13e7afa6717",
+        "after_source_sha256": "7ca60ba95ae889df1fcc2214ed42b70e69cb94b46f4d6bd8cc40c13e7afa6717",
+        "tokens": 6
+      },
+      {
+        "symbol": "CreateCustomerRefundRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "78a9b5562ab01eb44315132c35e98bb821f10d61dfab8d0da58f6a2e537d4291",
+        "after_source_sha256": "78a9b5562ab01eb44315132c35e98bb821f10d61dfab8d0da58f6a2e537d4291",
+        "tokens": 151
+      },
+      {
+        "symbol": "PostCustomerRefundRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "505a55958d3c1888907935f3a8435a4d294e84706b98d91b8208253c6fd04d66",
+        "after_source_sha256": "505a55958d3c1888907935f3a8435a4d294e84706b98d91b8208253c6fd04d66",
+        "tokens": 22
+      },
+      {
+        "symbol": "SubmitCustomerRefundRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "48fb7625896e9c2330121024236bae63b48e884924274f39bd1a545838229028",
+        "after_source_sha256": "48fb7625896e9c2330121024236bae63b48e884924274f39bd1a545838229028",
+        "tokens": 73
+      },
+      {
+        "symbol": "CancelCustomerRefundApprovalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "3b6487f55e5cdf07594d7b29c0b159972bd30904624a7b8465afd1245449d91f",
+        "after_source_sha256": "3b6487f55e5cdf07594d7b29c0b159972bd30904624a7b8465afd1245449d91f",
+        "tokens": 98
+      },
+      {
+        "symbol": "CustomerRefundView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "87a1825a5ecfda307a400f7e2f423399150e531deac3898155b3f0d8dd2a74f6",
+        "after_source_sha256": "87a1825a5ecfda307a400f7e2f423399150e531deac3898155b3f0d8dd2a74f6",
+        "tokens": 112
+      },
+      {
+        "symbol": "DocumentApprovalView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "1a7e2375a5d77662dadd18cc221171e4a5a26c6cbe6d9394fcf6bccd62048345",
+        "after_source_sha256": "1a7e2375a5d77662dadd18cc221171e4a5a26c6cbe6d9394fcf6bccd62048345",
+        "tokens": 62
+      },
+      {
+        "symbol": "DocumentApprovalDefinitionView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "48da03e6511ee83770766d1250632845f458caca6e449c92ea3fac04543fde1a",
+        "after_source_sha256": "48da03e6511ee83770766d1250632845f458caca6e449c92ea3fac04543fde1a",
+        "tokens": 43
+      },
+      {
+        "symbol": "DocumentApprovalNodeView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "5de18de2671aa9866c70db0a11d877293ff8812ea7be97b8b34129056935ec22",
+        "after_source_sha256": "5de18de2671aa9866c70db0a11d877293ff8812ea7be97b8b34129056935ec22",
+        "tokens": 30
+      },
+      {
+        "symbol": "DocumentApprovalInstanceView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "d86bb443b7a1926aa862b10702fdd5bd24cd29573dfbf3d373b0e38e685013d8",
+        "after_source_sha256": "d86bb443b7a1926aa862b10702fdd5bd24cd29573dfbf3d373b0e38e685013d8",
+        "tokens": 59
+      },
+      {
+        "symbol": "DocumentApprovalHistoryItemView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "b9041fabddbfa750c647cb06b4a68f78741f6ec7c89e19558b383826c1858293",
+        "after_source_sha256": "b9041fabddbfa750c647cb06b4a68f78741f6ec7c89e19558b383826c1858293",
+        "tokens": 40
+      },
+      {
+        "symbol": "DocumentApprovalHistoryPageView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "f1640ba19d917becec8c02b2b5fe7bb57ee52566c1fbff03a4d4c1bb811a221c",
+        "after_source_sha256": "f1640ba19d917becec8c02b2b5fe7bb57ee52566c1fbff03a4d4c1bb811a221c",
+        "tokens": 33
+      },
+      {
+        "symbol": "CustomerRefundListParams",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "81323d2b4a575f7ca01ca72f7cad02667e5111b431cc9780c37e15f605397017",
+        "after_source_sha256": "81323d2b4a575f7ca01ca72f7cad02667e5111b431cc9780c37e15f605397017",
+        "tokens": 112
+      },
+      {
+        "symbol": "CustomerRefundListQuery",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "7e20a7905ed2045f51cc56a39d70d0544295db9b32a921b523f81c760d07224b",
+        "after_source_sha256": "7e20a7905ed2045f51cc56a39d70d0544295db9b32a921b523f81c760d07224b",
+        "tokens": 50
+      },
+      {
+        "symbol": "CreateSupplierRefundRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "194d08421513543e79e0873ec64ef8ed31d710e0d230d0cc91bf69adef81ae4d",
+        "after_source_sha256": "194d08421513543e79e0873ec64ef8ed31d710e0d230d0cc91bf69adef81ae4d",
+        "tokens": 151
+      },
+      {
+        "symbol": "PostSupplierRefundRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "a4f926bde96b69fb178db3b6084bc0c9a8457a065fc525a1835ce3693e897b61",
+        "after_source_sha256": "a4f926bde96b69fb178db3b6084bc0c9a8457a065fc525a1835ce3693e897b61",
+        "tokens": 22
+      },
+      {
+        "symbol": "SubmitSupplierRefundRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "88ec75548c6c72fb047682d0d370ad2edf1da30f56630250e1d72ab904656e48",
+        "after_source_sha256": "88ec75548c6c72fb047682d0d370ad2edf1da30f56630250e1d72ab904656e48",
+        "tokens": 73
+      },
+      {
+        "symbol": "CancelSupplierRefundApprovalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "d91392a7237caf946482edf2956e7063838738b8ea73574905e912d0a78ab5c0",
+        "after_source_sha256": "d91392a7237caf946482edf2956e7063838738b8ea73574905e912d0a78ab5c0",
+        "tokens": 98
+      },
+      {
+        "symbol": "SupplierRefundView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "bf0f24bee44b691790d8b0f4d11100b129c8d340cbc243461d52c850b0d99666",
+        "after_source_sha256": "bf0f24bee44b691790d8b0f4d11100b129c8d340cbc243461d52c850b0d99666",
+        "tokens": 112
+      },
+      {
+        "symbol": "CreateReceiptReversalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "aa1b17d6800e1bab8ac1b92b397c976c79927c93eda50fc55a552d436271e3cd",
+        "after_source_sha256": "aa1b17d6800e1bab8ac1b92b397c976c79927c93eda50fc55a552d436271e3cd",
+        "tokens": 127
+      },
+      {
+        "symbol": "PostReceiptReversalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "6b14c0647d0c97e6777c5a4eb7896e6714b178e00517fec5443e40145c6fce79",
+        "after_source_sha256": "6b14c0647d0c97e6777c5a4eb7896e6714b178e00517fec5443e40145c6fce79",
+        "tokens": 22
+      },
+      {
+        "symbol": "SubmitReceiptReversalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "37a4a15537f3ec38e4cb846103164bac64d617d6e9053e1f09f5728d6ed67c4b",
+        "after_source_sha256": "37a4a15537f3ec38e4cb846103164bac64d617d6e9053e1f09f5728d6ed67c4b",
+        "tokens": 73
+      },
+      {
+        "symbol": "CancelReceiptReversalApprovalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "78d7569f817cada53cc9965ade1ede6af20ae5d6509abd8d6dfae4b47dddb42c",
+        "after_source_sha256": "78d7569f817cada53cc9965ade1ede6af20ae5d6509abd8d6dfae4b47dddb42c",
+        "tokens": 98
+      },
+      {
+        "symbol": "ReceiptReversalView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "6888e935d21eae85ca94a327b81cc3fa0c25e07063f96d2ad3b69d8bd36483e1",
+        "after_source_sha256": "6888e935d21eae85ca94a327b81cc3fa0c25e07063f96d2ad3b69d8bd36483e1",
+        "tokens": 88
+      },
+      {
+        "symbol": "CreatePaymentReversalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "ef9b426c8d3d722e36db992d1eaf09e3fe14553b387fae0f413a6de45c5404d9",
+        "after_source_sha256": "ef9b426c8d3d722e36db992d1eaf09e3fe14553b387fae0f413a6de45c5404d9",
+        "tokens": 127
+      },
+      {
+        "symbol": "PostPaymentReversalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "7788bea7fcf7cc0967e88c35ac66ce5946068aaa1ce1d31557e9dd2d531c2b66",
+        "after_source_sha256": "7788bea7fcf7cc0967e88c35ac66ce5946068aaa1ce1d31557e9dd2d531c2b66",
+        "tokens": 22
+      },
+      {
+        "symbol": "SubmitPaymentReversalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "14763569c3c596e2aa45b21146d75d03fd39a79eedbac15698d502923ce45e38",
+        "after_source_sha256": "14763569c3c596e2aa45b21146d75d03fd39a79eedbac15698d502923ce45e38",
+        "tokens": 73
+      },
+      {
+        "symbol": "CancelPaymentReversalApprovalRequest",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-returns/src/dto/requests.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "fc1bedee46b77aad6590f1373b86ff99a3b4ade7482dc616c99451a14f4cda7c",
+        "after_source_sha256": "fc1bedee46b77aad6590f1373b86ff99a3b4ade7482dc616c99451a14f4cda7c",
+        "tokens": 98
+      },
+      {
+        "symbol": "PaymentReversalView",
+        "kind": "struct",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "tokens_equal": true,
+        "before_source_sha256": "434de8185740690c7ffe843e073a6acc499a7b3a31f1a7efdc8262075985bdde",
+        "after_source_sha256": "434de8185740690c7ffe843e073a6acc499a7b3a31f1a7efdc8262075985bdde",
+        "tokens": 88
+      }
+    ],
+    "public_aliases_preserved": [
+      "pub use application_core::PageView",
+      "pub use application_core::SortDir"
+    ]
+  },
+  "function_checks": [
+    {
+      "symbol": "sales_return_case_list",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/sales_return.rs",
+      "before_source_sha256": "31b5d9dfa1c5ed246e701df27ab83cd4a6ae1b68d7595b9e523d07dbf60ca5ba",
+      "after_source_sha256": "31b5d9dfa1c5ed246e701df27ab83cd4a6ae1b68d7595b9e523d07dbf60ca5ba",
+      "normalized_tokens_equal": true,
+      "token_count": 210
+    },
+    {
+      "symbol": "sales_return_case_detail",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/sales_return.rs",
+      "before_source_sha256": "6e78ecff1e95eefca101ee919f316a5526fbaeae540b97c60f2aa6ed84bc4978",
+      "after_source_sha256": "6e78ecff1e95eefca101ee919f316a5526fbaeae540b97c60f2aa6ed84bc4978",
+      "normalized_tokens_equal": true,
+      "token_count": 33
+    },
+    {
+      "symbol": "sales_return_case_view",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/sales_return.rs",
+      "before_source_sha256": "337f5535f6bbd859c04902d6a66deedce3c4c4975207827e2d5024dfa4dbd90b",
+      "after_source_sha256": "dca9debe3824803b269e86ddd13a22da41fecaf4c8a3336f472543f3f67336ae",
+      "normalized_tokens_equal": true,
+      "token_count": 292
+    },
+    {
+      "symbol": "purchase_return_order_list",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/purchase_return.rs",
+      "before_source_sha256": "5e757a55066ba8f076166d992c1147cbe409ed130398dfafb200c028f7131b77",
+      "after_source_sha256": "5e757a55066ba8f076166d992c1147cbe409ed130398dfafb200c028f7131b77",
+      "normalized_tokens_equal": true,
+      "token_count": 210
+    },
+    {
+      "symbol": "purchase_return_order_detail",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/purchase_return.rs",
+      "before_source_sha256": "8fb6650992b4754e1413d129493cb6c0cfc71fa02dc039b88d8c29b8a79580a5",
+      "after_source_sha256": "8fb6650992b4754e1413d129493cb6c0cfc71fa02dc039b88d8c29b8a79580a5",
+      "normalized_tokens_equal": true,
+      "token_count": 33
+    },
+    {
+      "symbol": "purchase_return_order_view",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/purchase_return.rs",
+      "before_source_sha256": "4b9778d8832a1dcf13e3d8795cb11c26b7494898b5cf4c8e9795c639eba24cf7",
+      "after_source_sha256": "04d5d51f002e47d05316200ab21e46cfe73235ceb82867b42e8bda92670c9434",
+      "normalized_tokens_equal": true,
+      "token_count": 258
+    },
+    {
+      "symbol": "customer_refund_list",
+      "before_path": "services/src/returns/customer_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/customer_refund.rs",
+      "before_source_sha256": "5bf8beaf9ed1169fc9c5e64f227ec721d59ff2954176e3409c18abec53dd6397",
+      "after_source_sha256": "5bf8beaf9ed1169fc9c5e64f227ec721d59ff2954176e3409c18abec53dd6397",
+      "normalized_tokens_equal": true,
+      "token_count": 347
+    },
+    {
+      "symbol": "customer_refund_detail",
+      "before_path": "services/src/returns/customer_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/customer_refund.rs",
+      "before_source_sha256": "9fea77abe2c845db9c27dfae2162019f027dd18d5bf59e28910643e9774b6edd",
+      "after_source_sha256": "9fea77abe2c845db9c27dfae2162019f027dd18d5bf59e28910643e9774b6edd",
+      "normalized_tokens_equal": true,
+      "token_count": 33
+    },
+    {
+      "symbol": "customer_refund_view",
+      "before_path": "services/src/returns/customer_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/customer_refund.rs",
+      "before_source_sha256": "f81a57853f5d3329b95b603b8e94f7b4cbf84fb87e6dd813cc54f39b795caa8b",
+      "after_source_sha256": "f81a57853f5d3329b95b603b8e94f7b4cbf84fb87e6dd813cc54f39b795caa8b",
+      "normalized_tokens_equal": true,
+      "token_count": 153
+    },
+    {
+      "symbol": "supplier_refund_detail",
+      "before_path": "services/src/returns/supplier_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/supplier_refund.rs",
+      "before_source_sha256": "dbc98c51a474293b459df5d2f8483e59b5888291c87dbc4cc139e01f932d26a2",
+      "after_source_sha256": "dbc98c51a474293b459df5d2f8483e59b5888291c87dbc4cc139e01f932d26a2",
+      "normalized_tokens_equal": true,
+      "token_count": 33
+    },
+    {
+      "symbol": "supplier_refund_view",
+      "before_path": "services/src/returns/supplier_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/supplier_refund.rs",
+      "before_source_sha256": "622cbd2211cf8aa40c2afd156baa66a2c04eb110918fbb4fad199e4345b5a9f2",
+      "after_source_sha256": "622cbd2211cf8aa40c2afd156baa66a2c04eb110918fbb4fad199e4345b5a9f2",
+      "normalized_tokens_equal": true,
+      "token_count": 295
+    },
+    {
+      "symbol": "receipt_reversal_detail",
+      "before_path": "services/src/returns/receipt_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/receipt_reversal.rs",
+      "before_source_sha256": "52664e9a824bc26db3928dd1813a2c78cb5f9a1d6acdcb20ae73eb9bba9c2312",
+      "after_source_sha256": "52664e9a824bc26db3928dd1813a2c78cb5f9a1d6acdcb20ae73eb9bba9c2312",
+      "normalized_tokens_equal": true,
+      "token_count": 33
+    },
+    {
+      "symbol": "receipt_reversal_view",
+      "before_path": "services/src/returns/receipt_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/receipt_reversal.rs",
+      "before_source_sha256": "8df1765e2cd7ea3d2d334548ef8f60e5b997cd0d0276eac7ef3fa9045e34750f",
+      "after_source_sha256": "8df1765e2cd7ea3d2d334548ef8f60e5b997cd0d0276eac7ef3fa9045e34750f",
+      "normalized_tokens_equal": true,
+      "token_count": 241
+    },
+    {
+      "symbol": "payment_reversal_detail",
+      "before_path": "services/src/returns/payment_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/payment_reversal.rs",
+      "before_source_sha256": "f323509e86736cf02f0c083e2447f1cc5d636bc4fcbfffe43d78c591182a2a6a",
+      "after_source_sha256": "f323509e86736cf02f0c083e2447f1cc5d636bc4fcbfffe43d78c591182a2a6a",
+      "normalized_tokens_equal": true,
+      "token_count": 33
+    },
+    {
+      "symbol": "payment_reversal_view",
+      "before_path": "services/src/returns/payment_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/payment_reversal.rs",
+      "before_source_sha256": "d8f3f1c10370d2cf7ce3ff5eda58623435e5947a90a1b186457f8ae41b4add17",
+      "after_source_sha256": "d8f3f1c10370d2cf7ce3ff5eda58623435e5947a90a1b186457f8ae41b4add17",
+      "normalized_tokens_equal": true,
+      "token_count": 241
+    },
+    {
+      "symbol": "document_approval_view",
+      "before_path": "services/src/returns/adapter/customer_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+      "before_source_sha256": "0d5b4f7ced40028f8fbff94f45cc868ea8aa6454706ae7a7d6cf593721fabc55",
+      "after_source_sha256": "0d5b4f7ced40028f8fbff94f45cc868ea8aa6454706ae7a7d6cf593721fabc55",
+      "normalized_tokens_equal": true,
+      "token_count": 103
+    },
+    {
+      "symbol": "allowed_document_actions",
+      "before_path": "services/src/returns/adapter/customer_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+      "before_source_sha256": "b819181031e485d2b9aae5f219b2a5ebc0d1dbdef840d0e0cf1f53cd9c7a8e51",
+      "after_source_sha256": "b819181031e485d2b9aae5f219b2a5ebc0d1dbdef840d0e0cf1f53cd9c7a8e51",
+      "normalized_tokens_equal": true,
+      "token_count": 69
+    },
+    {
+      "symbol": "supplier_refund_approval_view",
+      "before_path": "services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+      "before_source_sha256": "67a7d0d6cebbf9f5ecbc91050df07d28a9a32bc97d7328876dca811fc4114015",
+      "after_source_sha256": "67a7d0d6cebbf9f5ecbc91050df07d28a9a32bc97d7328876dca811fc4114015",
+      "normalized_tokens_equal": true,
+      "token_count": 103
+    },
+    {
+      "symbol": "supplier_refund_allowed_actions",
+      "before_path": "services/src/returns/adapter/supplier_refund.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+      "before_source_sha256": "d772edadb8cd69f289df9de5e8b6af9311062ab529200773879ae193177c2989",
+      "after_source_sha256": "d772edadb8cd69f289df9de5e8b6af9311062ab529200773879ae193177c2989",
+      "normalized_tokens_equal": true,
+      "token_count": 69
+    },
+    {
+      "symbol": "receipt_reversal_approval_view",
+      "before_path": "services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+      "before_source_sha256": "89c141fe424eaa64d5292527c8d22b163e1da4af80f7ad337db2037ba28e921c",
+      "after_source_sha256": "89c141fe424eaa64d5292527c8d22b163e1da4af80f7ad337db2037ba28e921c",
+      "normalized_tokens_equal": true,
+      "token_count": 103
+    },
+    {
+      "symbol": "receipt_reversal_allowed_actions",
+      "before_path": "services/src/returns/adapter/receipt_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+      "before_source_sha256": "64b11fb7a33bc3e47139b3d8c8bf178ce5a1ad38e32d9e0c2d66b40f95b5d45a",
+      "after_source_sha256": "64b11fb7a33bc3e47139b3d8c8bf178ce5a1ad38e32d9e0c2d66b40f95b5d45a",
+      "normalized_tokens_equal": true,
+      "token_count": 69
+    },
+    {
+      "symbol": "payment_reversal_approval_view",
+      "before_path": "services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+      "before_source_sha256": "91286946e92768ee1d5cc5d6a432b0a56614e2166957980f681abcebfde7f19d",
+      "after_source_sha256": "91286946e92768ee1d5cc5d6a432b0a56614e2166957980f681abcebfde7f19d",
+      "normalized_tokens_equal": true,
+      "token_count": 103
+    },
+    {
+      "symbol": "payment_reversal_allowed_actions",
+      "before_path": "services/src/returns/adapter/payment_reversal.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+      "before_source_sha256": "897b29b424150bb4c811b70b808cd9609841be1cc132b794061afbe1c8e6fd0f",
+      "after_source_sha256": "897b29b424150bb4c811b70b808cd9609841be1cc132b794061afbe1c8e6fd0f",
+      "normalized_tokens_equal": true,
+      "token_count": 69
+    },
+    {
+      "symbol": "definition_view_from_binding",
+      "before_path": "services/src/returns/adapter.rs",
+      "after_path": "crates/erp-read-models/src/returns_center/approval/mod.rs",
+      "before_source_sha256": "4d6d33139852217cff20f215955ecf7a66b3a096a91db6fa40a9f39c5216e2da",
+      "after_source_sha256": "4d6d33139852217cff20f215955ecf7a66b3a096a91db6fa40a9f39c5216e2da",
+      "normalized_tokens_equal": true,
+      "token_count": 54
+    },
+    {
+      "symbol": "build_sales_return_case_and_line",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-returns/src/service/sales_return.rs",
+      "before_source_sha256": "0629fed3e7f8781840a7fdaeac953e891a32c3177b8b60239384babb4badb7b4",
+      "after_source_sha256": "4cfb5342548088d4eb3d51261b72be3491624e63657040e9219187a0562d4163",
+      "normalized_tokens_equal": true,
+      "token_count": 178
+    },
+    {
+      "symbol": "sales_return_case_create_binding_decision",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "a0940152d28610618663761742c6594515f9f5be2739a9d4caf5bc94329e1dd6",
+      "after_source_sha256": "a0940152d28610618663761742c6594515f9f5be2739a9d4caf5bc94329e1dd6",
+      "normalized_tokens_equal": true,
+      "token_count": 104
+    },
+    {
+      "symbol": "ensure_sales_return_case_skips_approval_binding",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "bb531009bf47afe31d8081a087cdcf4a95bec9d9710bbcafa55719216970539d",
+      "after_source_sha256": "bb531009bf47afe31d8081a087cdcf4a95bec9d9710bbcafa55719216970539d",
+      "normalized_tokens_equal": true,
+      "token_count": 50
+    },
+    {
+      "symbol": "ensure_sales_return_case_has_no_adapter",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "2ac62eef502702a55e1ccf33e0390cc28768622c4e5f0dc0ee5b4210a5d7490b",
+      "after_source_sha256": "2ac62eef502702a55e1ccf33e0390cc28768622c4e5f0dc0ee5b4210a5d7490b",
+      "normalized_tokens_equal": true,
+      "token_count": 48
+    },
+    {
+      "symbol": "sales_return_case_binding_organization_id",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "07c7feab7800a557d1cef692183417b22a90eafc6e1bde28f980bdbb2564b6af",
+      "after_source_sha256": "07c7feab7800a557d1cef692183417b22a90eafc6e1bde28f980bdbb2564b6af",
+      "normalized_tokens_equal": true,
+      "token_count": 60
+    },
+    {
+      "symbol": "sales_return_case_bind_command",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "cdd841442e16789735562152d546c4997d0f6866055a96893a29a0e2a4e65dba",
+      "after_source_sha256": "cdd841442e16789735562152d546c4997d0f6866055a96893a29a0e2a4e65dba",
+      "normalized_tokens_equal": true,
+      "token_count": 77
+    },
+    {
+      "symbol": "apply_sales_return_case_create_binding",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "4162d624da76bf5c10fab73479bd53abf8c9f20583b6f5b05bcfc875a5888636",
+      "after_source_sha256": "4162d624da76bf5c10fab73479bd53abf8c9f20583b6f5b05bcfc875a5888636",
+      "normalized_tokens_equal": true,
+      "token_count": 112
+    },
+    {
+      "symbol": "persist_unbound_sales_return_document",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "8987c163d667f2ea8257b73b6d38246a1bf5a4530c7579507fb4984169fcc916",
+      "after_source_sha256": "5adf8a397e794a814b780d2e38a81f69187c86825626f9f0b24e72184bcd323f",
+      "normalized_tokens_equal": true,
+      "token_count": 131
+    },
+    {
+      "symbol": "register_created_sales_return_document",
+      "before_path": "services/src/returns/sales_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "before_source_sha256": "46897798ff1f8bb1ea2b05fa97a9b6ef544e1508a6dd481d0325a0c3eaae1e63",
+      "after_source_sha256": "83d468b6bfd26bb017c937fbb48442b902397804604e70279e1b85bcf37d1840",
+      "normalized_tokens_equal": true,
+      "token_count": 126
+    },
+    {
+      "symbol": "purchase_return_create_binding_decision",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "666e0b56eb9a33df7c25591583cc61ca4aeccedd348099b4689b550d8cc12263",
+      "after_source_sha256": "666e0b56eb9a33df7c25591583cc61ca4aeccedd348099b4689b550d8cc12263",
+      "normalized_tokens_equal": true,
+      "token_count": 104
+    },
+    {
+      "symbol": "ensure_purchase_return_skips_approval_binding",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "44d4debfb25a2cd052bd486fde298c00f40e9000afec05b0d2864253abcd1012",
+      "after_source_sha256": "44d4debfb25a2cd052bd486fde298c00f40e9000afec05b0d2864253abcd1012",
+      "normalized_tokens_equal": true,
+      "token_count": 50
+    },
+    {
+      "symbol": "ensure_purchase_return_has_no_adapter",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "0a2a9dd03a63e9802270f71a70f48a70bdc5974aca216571fcbda3142aebf96b",
+      "after_source_sha256": "0a2a9dd03a63e9802270f71a70f48a70bdc5974aca216571fcbda3142aebf96b",
+      "normalized_tokens_equal": true,
+      "token_count": 48
+    },
+    {
+      "symbol": "purchase_return_binding_organization_id",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "544181f47ef126ffe83b71459115f9a1fc077f03d334e92b03a3eed44212691f",
+      "after_source_sha256": "544181f47ef126ffe83b71459115f9a1fc077f03d334e92b03a3eed44212691f",
+      "normalized_tokens_equal": true,
+      "token_count": 60
+    },
+    {
+      "symbol": "purchase_return_bind_command",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "97e8cfd45dce146c448a65eaa7c04f8ce26df2b106e5a852bef33a5d522e79c8",
+      "after_source_sha256": "97e8cfd45dce146c448a65eaa7c04f8ce26df2b106e5a852bef33a5d522e79c8",
+      "normalized_tokens_equal": true,
+      "token_count": 77
+    },
+    {
+      "symbol": "apply_purchase_return_create_binding",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "4de06ed2dadbb910f03f74e87e1b5116e8adacf166432c35f32a78a39b70de20",
+      "after_source_sha256": "4de06ed2dadbb910f03f74e87e1b5116e8adacf166432c35f32a78a39b70de20",
+      "normalized_tokens_equal": true,
+      "token_count": 112
+    },
+    {
+      "symbol": "persist_unbound_purchase_return_document",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "61712a0e7fe1c65ad3bebea6b77f47ad237a494149126ea51bb330a67d3b5ac4",
+      "after_source_sha256": "6a165ef75df875779c820057f674f04b3e527ac664ffff134b4c55c1a725264b",
+      "normalized_tokens_equal": true,
+      "token_count": 131
+    },
+    {
+      "symbol": "register_created_purchase_return_document",
+      "before_path": "services/src/returns/purchase_return.rs",
+      "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "before_source_sha256": "ef027f20ad51ecb61ca5680f0b18c8e07139f84182c4a747d7c693f497c61d80",
+      "after_source_sha256": "414447fbbbe56f60ef34bb6a9b0ae9e53a22c5ea20715acee08e47d1c1b2490e",
+      "normalized_tokens_equal": true,
+      "token_count": 126
+    }
+  ],
+  "purchase_factory": {
+    "original_inline_payload_equals_domain_factory_tokens": true,
+    "before_path": "services/src/returns/purchase_return.rs",
+    "after_path": "crates/erp-returns/src/service/purchase_return.rs",
+    "only_receiver_substitution": "actor.id() -> created_by",
+    "keeps_first_line_only": true,
+    "order_id_and_line_id_allocation_order_preserved": true
+  },
+  "creation_sequences": [
+    {
+      "process_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "domain_path": "crates/erp-returns/src/service/sales_return.rs",
+      "root_symbol": "persist_created_sales_return_case",
+      "root_preparation": [
+        "original AuditActor resource_log",
+        "db/rbac/object_read clones",
+        "original client.with_transaction"
+      ],
+      "transaction_sequence": [
+        "NO_APPROVAL policy/adapter check and original binding port",
+        "BusinessDocument persistence",
+        "returns header then first line via original ReturnsRepository",
+        "audit create"
+      ],
+      "port_sequence": [
+        "register_document",
+        "persist_return",
+        "audit"
+      ],
+      "one_original_session_argument": "persist_creation(&mut creation, session)",
+      "error_contract": "Each awaited step preserves ? first-error return; domain persistence returns the mapped original repository error.",
+      "external_io": "No external gateway added. Original workflow/database binding operations remain inside the original root.",
+      "post_commit": "Original detail reload remains after successful root completion.",
+      "new_source_existence_or_inventory_validation": false
+    },
+    {
+      "process_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "domain_path": "crates/erp-returns/src/service/purchase_return.rs",
+      "root_symbol": "persist_created_purchase_return_order",
+      "root_preparation": [
+        "original AuditActor resource_log",
+        "db/rbac/object_read clones",
+        "original client.with_transaction"
+      ],
+      "transaction_sequence": [
+        "NO_APPROVAL policy/adapter check and original binding port",
+        "BusinessDocument persistence",
+        "returns header then first line via original ReturnsRepository",
+        "audit create"
+      ],
+      "port_sequence": [
+        "register_document",
+        "persist_return",
+        "audit"
+      ],
+      "one_original_session_argument": "persist_creation(&mut creation, session)",
+      "error_contract": "Each awaited step preserves ? first-error return; domain persistence returns the mapped original repository error.",
+      "external_io": "No external gateway added. Original workflow/database binding operations remain inside the original root.",
+      "post_commit": "Original detail reload remains after successful root completion.",
+      "new_source_existence_or_inventory_validation": false
+    }
+  ],
+  "original_tests": {
+    "total": 21,
+    "ignored": 2,
+    "items": [
+      {
+        "symbol": "sort_whitelist_rejects_unknown_fields_and_directions",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "before_source_sha256": "121a81fc60321a98a9e2c27c5af51b3f9b66e84f8ea2b6eea0e0788c08350d4d",
+        "after_source_sha256": "121a81fc60321a98a9e2c27c5af51b3f9b66e84f8ea2b6eea0e0788c08350d4d",
+        "normalized_tokens_equal": true,
+        "token_count": 112,
+        "ignored": false
+      },
+      {
+        "symbol": "sales_return_case_list_params_normalize_filters",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "before_source_sha256": "b617bd025ff7b0d96c8f97c1c27f01de3dcb1899d3456332324c5a5eca22e77e",
+        "after_source_sha256": "b617bd025ff7b0d96c8f97c1c27f01de3dcb1899d3456332324c5a5eca22e77e",
+        "normalized_tokens_equal": true,
+        "token_count": 163,
+        "ignored": false
+      },
+      {
+        "symbol": "return_and_refund_list_params_normalize",
+        "before_path": "services/src/returns/dto.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/dto.rs",
+        "before_source_sha256": "c2fa98cce53a564f0177e346042e6e2f8f9a3c1cbd1d1916156638bd7f4595f9",
+        "after_source_sha256": "c2fa98cce53a564f0177e346042e6e2f8f9a3c1cbd1d1916156638bd7f4595f9",
+        "normalized_tokens_equal": true,
+        "token_count": 146,
+        "ignored": false
+      },
+      {
+        "symbol": "missing_registry_row_keeps_refund_and_maps_process_required_without_definition",
+        "before_path": "services/src/returns/customer_refund_list.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/customer_refund_list.rs",
+        "before_source_sha256": "e5fcdf1954b395339867a525125f076a559ac4c1a68ff85c8afb6c3f63b2d5dc",
+        "after_source_sha256": "e5fcdf1954b395339867a525125f076a559ac4c1a68ff85c8afb6c3f63b2d5dc",
+        "normalized_tokens_equal": true,
+        "token_count": 259,
+        "ignored": false
+      },
+      {
+        "symbol": "from_refund_equals_projection_row_mapping_for_same_entity",
+        "before_path": "services/src/returns/customer_refund_list.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/customer_refund_list.rs",
+        "before_source_sha256": "93d85fcba1a9ee3a14a0aa3b3936a44b1730f66d8f6ebf68d061e8e40777ad5f",
+        "after_source_sha256": "93d85fcba1a9ee3a14a0aa3b3936a44b1730f66d8f6ebf68d061e8e40777ad5f",
+        "normalized_tokens_equal": true,
+        "token_count": 363,
+        "ignored": false
+      },
+      {
+        "symbol": "bound_registry_row_exposes_definition_summary",
+        "before_path": "services/src/returns/customer_refund_list.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/customer_refund_list.rs",
+        "before_source_sha256": "b6b5449dea1473d1397a279abb708f7064039e3b03daae93398b3364dd733c87",
+        "after_source_sha256": "b6b5449dea1473d1397a279abb708f7064039e3b03daae93398b3364dd733c87",
+        "normalized_tokens_equal": true,
+        "token_count": 125,
+        "ignored": false
+      },
+      {
+        "symbol": "index_document_bindings_skips_missing_ids_and_keeps_unbound",
+        "before_path": "services/src/returns/customer_refund_list.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/customer_refund_list.rs",
+        "before_source_sha256": "94ee0b62aec0dfcd90e8649f1ea8cc211f1bb8187fa8b859ac9c5b1c9b8e0a27",
+        "after_source_sha256": "94ee0b62aec0dfcd90e8649f1ea8cc211f1bb8187fa8b859ac9c5b1c9b8e0a27",
+        "normalized_tokens_equal": true,
+        "token_count": 211,
+        "ignored": false
+      },
+      {
+        "symbol": "map_page_keeps_missing_registry_rows_in_original_order",
+        "before_path": "services/src/returns/customer_refund_list.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/customer_refund_list.rs",
+        "before_source_sha256": "51db2c237dca01a3e89464240fbc8139ce1d94412bc4aedd5eda812fc22e842e",
+        "after_source_sha256": "51db2c237dca01a3e89464240fbc8139ce1d94412bc4aedd5eda812fc22e842e",
+        "normalized_tokens_equal": true,
+        "token_count": 143,
+        "ignored": false
+      },
+      {
+        "symbol": "sales_return_case_policy_is_no_approval_identity_only",
+        "before_path": "services/src/returns/sales_return.rs",
+        "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+        "before_source_sha256": "f22cc91715f330f09b505e1c461e4447dccb6bdde2238ed2ca744e2e5b5acf59",
+        "after_source_sha256": "f22cc91715f330f09b505e1c461e4447dccb6bdde2238ed2ca744e2e5b5acf59",
+        "normalized_tokens_equal": true,
+        "token_count": 118,
+        "ignored": false
+      },
+      {
+        "symbol": "create_registers_document_and_returns_empty_binding",
+        "before_path": "services/src/returns/sales_return.rs",
+        "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+        "before_source_sha256": "b4ebf8626f06522400743f80de4005919cc56ae530996fd9066ff42b22c7e80d",
+        "after_source_sha256": "b4ebf8626f06522400743f80de4005919cc56ae530996fd9066ff42b22c7e80d",
+        "normalized_tokens_equal": true,
+        "token_count": 206,
+        "ignored": false
+      },
+      {
+        "symbol": "create_does_not_query_definition_or_start_instance",
+        "before_path": "services/src/returns/sales_return.rs",
+        "after_path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+        "before_source_sha256": "29c5e944e2c6ed2c01e75277fb550a8be346665b1bb7d37e4cbd8c70568a6daf",
+        "after_source_sha256": "29c5e944e2c6ed2c01e75277fb550a8be346665b1bb7d37e4cbd8c70568a6daf",
+        "normalized_tokens_equal": true,
+        "token_count": 265,
+        "ignored": false
+      },
+      {
+        "symbol": "purchase_return_policy_is_no_approval_identity_only",
+        "before_path": "services/src/returns/purchase_return.rs",
+        "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+        "before_source_sha256": "e14ce215ab48c5433fdce9ba5e0cd7c305672b1d31de4984f0965841cd2b9191",
+        "after_source_sha256": "e14ce215ab48c5433fdce9ba5e0cd7c305672b1d31de4984f0965841cd2b9191",
+        "normalized_tokens_equal": true,
+        "token_count": 118,
+        "ignored": false
+      },
+      {
+        "symbol": "create_registers_document_and_returns_empty_binding",
+        "before_path": "services/src/returns/purchase_return.rs",
+        "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+        "before_source_sha256": "f6d47c1ff5930d7b2c15e5a0a60dda293ff494175c07b846320c3e84c0b8553b",
+        "after_source_sha256": "f6d47c1ff5930d7b2c15e5a0a60dda293ff494175c07b846320c3e84c0b8553b",
+        "normalized_tokens_equal": true,
+        "token_count": 206,
+        "ignored": false
+      },
+      {
+        "symbol": "create_does_not_query_definition_or_start_instance",
+        "before_path": "services/src/returns/purchase_return.rs",
+        "after_path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+        "before_source_sha256": "d0d1bf431b5a32e525f0e30c71fdbe7029ea1dfc9098ce2f72d3599d57d4dbc6",
+        "after_source_sha256": "d0d1bf431b5a32e525f0e30c71fdbe7029ea1dfc9098ce2f72d3599d57d4dbc6",
+        "normalized_tokens_equal": true,
+        "token_count": 265,
+        "ignored": false
+      },
+      {
+        "symbol": "search_customer_refunds_pages_filters_and_projects_view_facts",
+        "before_path": "database/src/repository/returns_customer_refund_search.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/repository/returns_customer_refund_search.rs",
+        "before_source_sha256": "7df53c8e669bf8e364f4ecf23edb7bd609ed4d82a1d010c5bc698b673506ed72",
+        "after_source_sha256": "7761b7fb6329320fce33b3b438777e3aba3ec0d2ec27702ed2ba342ddd15b44a",
+        "normalized_tokens_equal": true,
+        "token_count": 581,
+        "ignored": true
+      },
+      {
+        "symbol": "search_customer_refunds_id_tiebreaker_is_stable",
+        "before_path": "database/src/repository/returns_customer_refund_search.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/repository/returns_customer_refund_search.rs",
+        "before_source_sha256": "6e07e1b6113a5f936d99e9b8e635a9e252f0d9a9ed3b8b2cdd088b10b6b37b30",
+        "after_source_sha256": "d0729d560914355eb6f2553fd32f7fa2286f6c47687f1f81c8d6014760a38bca",
+        "normalized_tokens_equal": true,
+        "token_count": 320,
+        "ignored": true
+      },
+      {
+        "symbol": "detail_approval_is_read_only_and_has_history_cap",
+        "before_path": "services/src/returns/adapter/customer_refund.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+        "before_source_sha256": "7ac2524b2777169c8a9d6f036c4d4fb2ec2ac39b1565f6197d0762c6a8bc168f",
+        "after_source_sha256": "7ac2524b2777169c8a9d6f036c4d4fb2ec2ac39b1565f6197d0762c6a8bc168f",
+        "normalized_tokens_equal": true,
+        "token_count": 196,
+        "ignored": false
+      },
+      {
+        "symbol": "detail_approval_is_read_only_and_has_history_cap",
+        "before_path": "services/src/returns/adapter/supplier_refund.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+        "before_source_sha256": "19e471f66df4483b49429faea4a4f52bcb4ca84bb580fa5402f302300f4c5a8b",
+        "after_source_sha256": "19e471f66df4483b49429faea4a4f52bcb4ca84bb580fa5402f302300f4c5a8b",
+        "normalized_tokens_equal": true,
+        "token_count": 196,
+        "ignored": false
+      },
+      {
+        "symbol": "detail_approval_is_read_only_and_has_history_cap",
+        "before_path": "services/src/returns/adapter/receipt_reversal.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+        "before_source_sha256": "b8125f99c2df6969696d164fcb6489b1781588ef46e8b9cf300ade070a2782a1",
+        "after_source_sha256": "b8125f99c2df6969696d164fcb6489b1781588ef46e8b9cf300ade070a2782a1",
+        "normalized_tokens_equal": true,
+        "token_count": 196,
+        "ignored": false
+      },
+      {
+        "symbol": "detail_approval_is_read_only_and_has_history_cap",
+        "before_path": "services/src/returns/adapter/payment_reversal.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+        "before_source_sha256": "a8480f978fa1966595cfd2eaed5e9e661056773c276c77dd194ec4467d41ef4f",
+        "after_source_sha256": "a8480f978fa1966595cfd2eaed5e9e661056773c276c77dd194ec4467d41ef4f",
+        "normalized_tokens_equal": true,
+        "token_count": 196,
+        "ignored": false
+      },
+      {
+        "symbol": "list_batches_document_bindings_and_keeps_missing_registry_rows",
+        "before_path": "services/src/returns/customer_refund.rs",
+        "after_path": "crates/erp-read-models/src/returns_center/customer_refund.rs",
+        "original_assertions_equal": true,
+        "source_fixture_update": "Concatenate actual query, process and domain production prefixes; retain all original version and batching assertions.",
+        "ignored": false
+      }
+    ]
+  },
+  "new_tests": {
+    "total": 6,
+    "domain_first_line_contracts": 2,
+    "real_production_step_port_order_same_executor_first_error": 4
+  },
+  "target_files": [
+    {
+      "path": "crates/erp-processes/src/reverse_flow/purchase_return.rs",
+      "sha256": "db3509e53d53b9d857d8bfa7330ec051f753801f237b918c08514a372581cfe9",
+      "inline_tests": 5,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-processes/src/reverse_flow/sales_return.rs",
+      "sha256": "b86fc5789e7ecdb4faeaaeb9a66a0e66444e4e7117f5e68444db8dbf17808410",
+      "inline_tests": 5,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/approval/customer_refund.rs",
+      "sha256": "f0bc06b02f0e2608395e529457399d95ff46ae7720652b7a4ae05803475f328e",
+      "inline_tests": 1,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/approval/mod.rs",
+      "sha256": "6c86c3dd6a954a4c20480785d4937ddd36e5a072fae73a29960241625f428daf",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/approval/payment_reversal.rs",
+      "sha256": "ac274ef5b734a8e1b3f4051ca7feadb4078b7faddb744b5751b4771e45c4176f",
+      "inline_tests": 1,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/approval/receipt_reversal.rs",
+      "sha256": "1613d1747d1e6ed8ecb1f1a22b3caffacdf0ccf44f7d13facf8f7c252354890b",
+      "inline_tests": 1,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/approval/supplier_refund.rs",
+      "sha256": "1c3c99f0a53a7823c8fcdfe603b0157be1f15db689ed8e7702d1d4ca3e126ccf",
+      "inline_tests": 1,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/customer_refund.rs",
+      "sha256": "530a8f5c3461a5e9df0a1dc5c757ce3f1ea64bf542316d1edc2746b11e8d05e2",
+      "inline_tests": 1,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/customer_refund_list.rs",
+      "sha256": "e154943476b5e086b75153ac9aae1a70caeb91c88c417ecd3f1311fc1c9dc6c7",
+      "inline_tests": 5,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/dto.rs",
+      "sha256": "b3443aa0b7c021bedc14f0dbcd1db5fc7365874273abfe8f6ca9f5aa74bdb09d",
+      "inline_tests": 3,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/mod.rs",
+      "sha256": "566b31da4358b94f37ee5f2bb260e3ee6a29c154fa8cdb06ea40e3d361d0259f",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/payment_reversal.rs",
+      "sha256": "22abe5e7ac8fe091693d18fcf4ecbe39b529cae193f339df08162be4953bb5dd",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/purchase_return.rs",
+      "sha256": "c4706241854c235cc10f9162643b02b1a8b7ccccd0abda54bd6fea15090c7f33",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/receipt_reversal.rs",
+      "sha256": "3b9ce5c052251ca70c221f75cd46757c0ec7d4d8125b7ca79997d69914f9f5ef",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/repository/mod.rs",
+      "sha256": "919fe72ccb267a31aa269fab6e497a4e6e6e005f82cd5088203cbe8c0ac98c10",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/repository/returns_customer_refund_search.rs",
+      "sha256": "d8b052681adbb93009198ca25abc9a535ff742fda57cf60a1153f90c2996370d",
+      "inline_tests": 2,
+      "ignored": 2
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/sales_return.rs",
+      "sha256": "563b94581be6c97acb8aca99092c57ab1e027a5cd455be42db14d828592c7954",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-read-models/src/returns_center/supplier_refund.rs",
+      "sha256": "656f395d24dd2ab4f71a4c59b46511b9408f41928963b9a7090efcad5f315098",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-returns/src/dto/mod.rs",
+      "sha256": "ce88cedb01ad0f8bb24ad58733661c8f81801ffa31e4d74276998d4ec26fdb89",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-returns/src/dto/requests.rs",
+      "sha256": "c5ae5056e699c080de866d0317b449c91d48def5b2223647577fb2ea0004ac4b",
+      "inline_tests": 0,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-returns/src/service/purchase_return.rs",
+      "sha256": "2c6f8ef3178763c4888a10ac07dcf1f1a2d2332171191a6d89b11e3d5a296127",
+      "inline_tests": 1,
+      "ignored": 0
+    },
+    {
+      "path": "crates/erp-returns/src/service/sales_return.rs",
+      "sha256": "88065e44cbd0107260e58c0770214bcb80465bcd53e0cf6fbeab670d81a3334d",
+      "inline_tests": 1,
+      "ignored": 0
+    }
+  ],
+  "deleted_old_paths": [
+    "services/src/returns/dto.rs",
+    "services/src/returns/customer_refund_list.rs",
+    "services/src/returns/sales_return.rs",
+    "services/src/returns/purchase_return.rs",
+    "database/src/repository/returns_customer_refund_search.rs"
+  ],
+  "registration_requirements": [
+    "erp-returns::dto root",
+    "erp-returns::service::{sales_return,purchase_return}",
+    "erp-read-models::returns_center root",
+    "erp-processes::reverse_flow::{sales_return,purchase_return}"
+  ],
+  "scope_limits": [
+    "Shared four command and adapter files were read from the input snapshot; their owners perform removal.",
+    "No inventory, source-existence, extra-row or financial business validation was added.",
+    "The two ignored repository tests retain original names, assertions, gate and ignore reason at returns_center/repository/returns_customer_refund_search.rs."
+  ]
+}
