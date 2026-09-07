@@ -1,0 +1,9 @@
+{
+  "phase": "14",
+  "code_commit": "b274cebaefad13c1d0216a7b2252a4cecab5413f",
+  "isolated_domain": "erp-integration",
+  "normal_build_dev_proof": "domain-dependencies.json",
+  "timed_probe": "not separately required in this phase",
+  "reason": "阶段14要求完整workspace编译及integration无normal/build/dev业务回边；最终Customer/Sales/Finance check/build性能统一按阶段17五样本门禁判定。",
+  "final_performance_gate_phase": "17"
+}

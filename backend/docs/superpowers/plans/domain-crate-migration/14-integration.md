@@ -5,12 +5,12 @@
 | 字段 | 值 |
 | --- | --- |
 | 阶段 | 14 |
-| 状态 | 执行中 |
+| 状态 | 本地门禁通过 |
 | 编制日期 | 2026-09-06 |
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-integration` |
 | 执行负责人 | Codex；唯一共享注册集成负责人 |
-| 输入/输出提交 | 前序验收提交 / 本阶段验收后填写 |
+| 输入/输出提交 | 输入 `cb159e5b`；实现 `b274cebaefad13c1d0216a7b2252a4cecab5413f`；证据以本文件所属提交为准 |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -74,15 +74,15 @@ integration 不依赖 supply/workflow 或旧三层；具体外部和工作项 ad
 
 ## 8. 按顺序执行的任务清单
 
-1. [ ] 冻结 inbox 去重、错误分类、差异处置、证据引用、W29 完成/重放与失败关闭行为。
+1. [x] 冻结 inbox 去重、错误分类、差异处置、证据引用、W29 完成/重放与失败关闭行为。
 
-2. [ ] 迁入 integration_ops 实体/DTO/仓储/索引；处置所需其他领域事实通过 Port 获取，禁止为历史模块名补建功能。
+2. [x] 迁入 integration_ops 实体/DTO/仓储/索引；处置所需其他领域事实通过 Port 获取，禁止为历史模块名补建功能。
 
-3. [ ] 将需要 WorkItem、责任人和业务动作的 task_decision/complete 流程迁入 processes::integration_resolution；producer 本域记录保持原幂等合同。
+3. [x] 将需要 WorkItem、责任人和业务动作的 task_decision/complete 流程迁入 processes::integration_resolution；producer 本域记录保持原幂等合同。
 
-4. [ ] 任何外部 I/O 继续按意图事务、事务外调用、结果事务执行；未配置 gateway 返回现有失败关闭状态，不能用 Noop/成功替身接生产。
+4. [x] 任何外部 I/O 继续按意图事务、事务外调用、结果事务执行；未配置 gateway 返回现有失败关闭状态，不能用 Noop/成功替身接生产。
 
-5. [ ] 更新 integration_ops Handler、readiness/AppState、工作台错误摘要与供应链消费方；清除旧模块并执行门禁。
+5. [x] 更新 integration_ops Handler、readiness/AppState、工作台错误摘要与供应链消费方；清除旧模块并执行门禁。
 
 每个实体/仓储/服务迁移单元均按“特征测试 → 公开合同 → 实体 → 仓储 → 服务 → 流程/读模型 → 调用方 → 删除旧实现 → 边界 → 全量门禁”执行。其文件/符号范围取第 6 节与清单，测试取第 10 节，删除范围为已迁实现与旧注册，不包括历史 tests/ 档案。
 
@@ -149,15 +149,28 @@ git diff --check
 
 ## 15. 结构化验收证据
 
-| 证据 | 必填结果 | 初始状态 |
+| 证据 | 已核验结果 | 证据路径（仓库根） |
 | --- | --- | --- |
-| 输入基线 | 前序已验收 commit；阶段分支；源映射核对 | 未采集 |
-| 文件与符号 | 新增/修改/删除列表；source-map 核销；跨域符号归属 | 未采集 |
-| 依赖 | metadata/tree；normal/build/dev 边；无环与旧引用结果 | 未采集 |
-| 旧实现清零 | 源目录、根导出、#[path]/include 路径、调用方搜索命令及结果 | 未采集 |
-| 测试 | 内联测试命令、退出码、通过/失败/忽略数量、关键断言 | 未执行 |
-| 协议与数据 | HTTP/DTO/错误/权限、JSON/BSON、索引对比 | 未采集 |
-| 事务合同 | 同一 Executor、调用顺序、失败传播、I/O 边界；真实数据库运行未验证 | 未采集 |
-| 公共门禁 | 每条命令、工具版本、退出码和日志路径 | 未执行 |
-| 编译收益 | 适用场景原始样本、Fresh/Dirty、timings、中位数与改善率；不适用须写明 | 未执行 |
-| 阶段提交 | commit hash、范围、验收日期及验收人 | 未提交 |
+| 输入基线 | 前序 cb159e5b；专用阶段 worktree | .domain-migration-evidence/14/input.json |
+| 文件与符号 | 37 个清单旧路径、4 个 owned 准备文件已清零；跨域符号按固定提供方拆分 | source-clearance.json、files.tsv及逐符号报告 |
+| 依赖 | normal/build/dev 全依赖闭包无其他业务域或旧三层 | domain-dependencies.json、metadata.json、boundary.log |
+| 测试 | 3510 passed、0 failed、68 ignored；31 个历史 tests 档案逐字不变 | test-summary.json、unit-tests.log、historical-tests.json |
+| 协议与数据 | changed/missing/added 均为0；原始48条needs_review逐项复核；权限生成物无漂移 | contract-review.json、parser-limitations-review.json、permissions.log |
+| 事务合同 | 实际生产调用链、同Executor、原首错/写入顺序和I/O边界逐项复核；真实数据库运行未验证 | idempotency-transaction-review.json及各分片语义报告 |
+| 公共门禁 | fmt/check/严格clippy/lib tests/BPM/service/domain/permissions/git diff 全部exit0；516个第三方包版本和校验和不变 | quality-gates.log、dependency-lock.json |
+| 编译证据 | 本阶段边界与全workspace编译通过；最终三个性能场景统一在阶段17计时判定 | compile-applicability.json、domain-dependencies.json |
+| 阶段提交 | 实现b274ceba；证据以本文件提交记录为准；状态最高本地门禁通过 | input.json |
+
+表内未写目录前缀的证据均位于 `.domain-migration-evidence/14/`。原始扫描保留exit2与needs_review；必须结合逐项复核证据使用，不得标为扫描器直接通过。
+
+## 16. 固定调用与证据边界
+
+- `erp-integration` 唯一持有入站消息、异常任务、差异决定、DTO、证据规则、W29责任Spec、仓储和索引。领域不得依赖其他业务领域或旧三层。
+- HTTP四个本域查询调用IntegrationOpsService，两个聚合详情调用IntegrationCenterReadService，七个命令调用IntegrationResolutionProcess。AppState只构造一份MongoIntegrationEvidenceAuthority并以同一Arc注入命令和详情。
+- 注册保持来源存在性检查、原ID/时钟、message与audit写序。失败回写保持error insert、inbox CAS、WorkItem、audit；成功回写保持inbox CAS、audit。创建命令返回原已构造响应，不补回执或详情重读。
+- action/complete保持receipt优先，真实RBAC工厂位于receipt之后、Prepared之前；原正式任务关联与对象授权继续执行。direct保持正式任务存在性（含关闭任务）先于差异查询。三命令任何事务错误后均按原规则fresh读receipt恢复，不新增重试。
+- 证据五方法复用同一Executor，不开事务、不外发请求。query_original处理完成事实优先；replay只重排原入站消息；重新归属保持失败关闭；证据发现按inbox、差异历史、客户退款、供应商退款、供应商事实的原条件和首命中顺序执行。
+- W29领域Spec不生成ID或时钟；Process唯一工厂构造原WorkItem，保留差异责任注册两次检查、SystemRule和due_at=None。旧工作项关闭路径只更新集成领域引用，原替代任务与写入规则不变。
+- SupplierConnectionExecutionProcess保留start事务结束后调用网关，再开启结果事务。Health与Catalog分支分别保留原查询和写序；技术版本变化优先ResultUnknown。失败持久化保持集成任务、W29工作项、审计顺序。原HTTP tokio::spawn及默认失败关闭/readiness合同保持。
+- 4个集合、4个owned仓储、9个索引、DTO/receipt字段与serde、确定性命令身份及完整请求指纹保持。纯内联测试与源码核验不构成真实MongoDB回滚、并发或外部网关证明。
+- 原始扫描exit2与needs_review保留；真实数据库运行未验证。

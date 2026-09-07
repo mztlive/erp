@@ -1,0 +1,204 @@
+{
+  "phase": "14",
+  "source_count": 37,
+  "owned_count": 4,
+  "all_old_sources_removed": true,
+  "remaining_old_sources": [],
+  "sources": [
+    {
+      "source": "database/src/indexes/integration_ops.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/extensions/integration_ops.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/integration_ops.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "database/src/repository/integration_ops/difference_resolution_batch.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/decision_policy.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/direct_conclusion.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/error_classification.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/evidence_reference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/inbox_message.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/integration_error_task.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/reconciliation_difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/reconciliation_difference_resolution.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/w29_close.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "entities/src/integration_ops/w29_work_items.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/common.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/error_task.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/inbox_message.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/prepared_decision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/prepared_inbox.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/reconciliation_difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/dto/task_decision.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/error_task.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/evidence.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/inbox_message.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/producer.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/reconciliation_difference.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/task_decision/action.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/task_decision/complete.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/task_decision/direct.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/task_decision/guard.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/task_decision/mod.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/task_decision/tests.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/transaction.rs",
+      "old_source_exists": false
+    },
+    {
+      "source": "services/src/integration_ops/validation.rs",
+      "old_source_exists": false
+    }
+  ],
+  "owned": [
+    {
+      "entity": "InboxMessage",
+      "owned_type": "InboxMessageRepository",
+      "preparation_phase": "01",
+      "owner_phase": "14",
+      "target_crate": "erp-integration",
+      "prepare_at": "database/src/repository/owned/inbox_message.rs",
+      "final_type_definition": "crates/erp-integration/src/repository/owned/inbox_message.rs",
+      "impl_sources": "database/src/repository/integration_ops.rs"
+    },
+    {
+      "entity": "IntegrationErrorTask",
+      "owned_type": "IntegrationErrorTaskRepository",
+      "preparation_phase": "01",
+      "owner_phase": "14",
+      "target_crate": "erp-integration",
+      "prepare_at": "database/src/repository/owned/integration_error_task.rs",
+      "final_type_definition": "crates/erp-integration/src/repository/owned/integration_error_task.rs",
+      "impl_sources": "database/src/repository/integration_ops.rs"
+    },
+    {
+      "entity": "ReconciliationDifference",
+      "owned_type": "ReconciliationDifferenceRepository",
+      "preparation_phase": "01",
+      "owner_phase": "14",
+      "target_crate": "erp-integration",
+      "prepare_at": "database/src/repository/owned/reconciliation_difference.rs",
+      "final_type_definition": "crates/erp-integration/src/repository/owned/reconciliation_difference.rs",
+      "impl_sources": "database/src/repository/integration_ops.rs"
+    },
+    {
+      "entity": "ReconciliationDifferenceResolution",
+      "owned_type": "ReconciliationDifferenceResolutionRepository",
+      "preparation_phase": "01",
+      "owner_phase": "14",
+      "target_crate": "erp-integration",
+      "prepare_at": "database/src/repository/owned/reconciliation_difference_resolution.rs",
+      "final_type_definition": "crates/erp-integration/src/repository/owned/reconciliation_difference_resolution.rs",
+      "impl_sources": "database/src/repository/integration_ops.rs,database/src/repository/integration_ops/difference_resolution_batch.rs"
+    }
+  ],
+  "extra_closure": [
+    "supplier_connection_execution Health/Catalog and W29 failure provider",
+    "AppState single evidence Arc; thirteen integration HTTP actions; original supplier-api tokio::spawn",
+    "workbench/work_item/workflow_compose and supplier_fulfillment integration consumers"
+  ]
+}

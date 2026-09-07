@@ -1,0 +1,20 @@
+{
+  "source_commit": "b274cebaefad13c1d0216a7b2252a4cecab5413f",
+  "reports": [
+    {
+      "report": "integration14-a-result.json",
+      "files": 36,
+      "all_commit_blob_hashes_match": true
+    },
+    {
+      "report": "integration14-b-semantic-review.json",
+      "files": 17,
+      "all_commit_blob_hashes_match": true
+    },
+    {
+      "report": "integration14-task-decision-result.json",
+      "files": 15,
+      "all_commit_blob_hashes_match": true
+    }
+  ]
+}

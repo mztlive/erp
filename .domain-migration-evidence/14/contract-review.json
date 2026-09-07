@@ -1,0 +1,27 @@
+{
+  "phase": "14",
+  "code_commit": "b274cebaefad13c1d0216a7b2252a4cecab5413f",
+  "raw_scan_exit_code": 2,
+  "raw_scan_status": "needs_review",
+  "captured_contracts_equal": true,
+  "changed_count": 0,
+  "missing_count": 0,
+  "added_count": 0,
+  "raw_needs_review_count": 48,
+  "review_dispositions": [
+    {
+      "raw_items": 46,
+      "evidence": "parser-limitations-review.json",
+      "result": "原始DTO与索引解析限制逐项复核，实际来源、集合和注册链绑定源码。"
+    },
+    {
+      "raw_items": 2,
+      "transaction_symbols": 7,
+      "idempotency_symbols": 6,
+      "evidence": "idempotency-transaction-review.json",
+      "result": "逐真实qualified符号及实际Provider核对三条强命令的receipt优先/恢复、W29责任及Health/Catalog事务外网关调用。"
+    }
+  ],
+  "real_database_verified": false,
+  "disclaimer": "真实数据库运行未验证"
+}

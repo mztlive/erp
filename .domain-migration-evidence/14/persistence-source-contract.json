@@ -1,0 +1,661 @@
+{
+  "schema_version": 1,
+  "stage": "14",
+  "purpose": "preimplementation_domain_contract",
+  "read_only_preparation_tree": "/private/tmp/erp-domain-crate-13-returns",
+  "observed_head": "5b83e18ef01d4a36cd1c6862aa0ac38402a0e908",
+  "prepared_at_utc": "2026-09-07T04:28:26.330319+00:00",
+  "stage14_fixed_input": "Must be phase13 accepted commit; not yet claimed by this preparation",
+  "source_count": 41,
+  "original_test_count": 116,
+  "source_records": [
+    {
+      "path": "backend/entities/src/integration_ops/decision_policy.rs",
+      "sha256": "ab76f039de7f87fd7bcd42e5efd3c4d45d322da1591a4f20250193a234ccdd93",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/decision_policy.rs",
+      "tests": [
+        "error_policy_matrix_covers_message_and_business_tasks",
+        "difference_policy_matrix_covers_financial_impact",
+        "reason_registry_holds_three_registered_reasons",
+        "error_projection_covers_terminal_no_task_and_evidence_states",
+        "difference_projection_covers_task_and_direct_states",
+        "next_actions_cover_replay_and_resolve_hints"
+      ],
+      "test_count": 6,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/direct_conclusion.rs",
+      "sha256": "12a3be02784006bcae48816bb42c0d2e12031cb791013cd68dc5cfd9dc6f40e6",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/direct_conclusion.rs",
+      "tests": [
+        "both_conclusions_map_to_typed_action_and_terminal_status"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/error_classification.rs",
+      "sha256": "a0174a82447c6ee394cab5f9a21e4f687c1ef1cc2a48b4f21a1b3c6f04260bae",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/error_classification.rs",
+      "tests": [
+        "explicit_result_unknown_is_unknown",
+        "uppercase_timeout_and_outcome_unknown_are_unknown",
+        "ordinary_and_lowercase_codes_stay_definitive",
+        "normalization_only_replaces_class"
+      ],
+      "test_count": 4,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/evidence_reference.rs",
+      "sha256": "4822b2542cf29f65691be2f02fa0ce8a6b0967d63e4bb7c5279e5c54cea9ee8a",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/evidence_reference.rs",
+      "tests": [
+        "record_ref_accepts_type_id_and_rejects_nested_or_empty",
+        "record_ref_rejects_delimiter_injection",
+        "stored_reference_parses_historical_scheme_and_canonical_forms",
+        "stored_reference_rejects_nested_identity_and_leading_zero_version",
+        "referenced_id_returns_identity_not_version_suffix",
+        "association_uses_exact_identity_and_ignores_false_substring_hits",
+        "association_rejects_delimiter_injected_and_unparsed_token_splits",
+        "terminal_set_sorts_dedups_and_enforces_512_boundary",
+        "compact_set_sorts_dedups_empty_and_512_boundary",
+        "replay_original_preserves_pipe_bearing_fact_key_without_set_encoding"
+      ],
+      "test_count": 10,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/inbox_message.rs",
+      "sha256": "c7b3dc47bc64ddf3794ebfd1d0536dc0ffa0287cd6af29f559bb1c502c94a1d4",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/inbox_message.rs",
+      "tests": [
+        "new_trims_and_normalizes_all_text_fields",
+        "new_rejects_empty_required_fields",
+        "new_rejects_overlong_fields",
+        "new_rejects_processed_without_completed_time",
+        "update_applies_status_and_processed_at_only",
+        "update_rejects_inconsistent_status_and_time",
+        "enums_serialize_with_stable_codes_and_expose_labels",
+        "received_factory_fixes_initial_state_and_time",
+        "received_factory_rejects_invalid_envelope",
+        "entity_roundtrip_through_bson"
+      ],
+      "test_count": 10,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/integration_error_task.rs",
+      "sha256": "3c8e9f425ae802398c2beddf133738fcfdae57b7d2ae3e5af04b3e041625b741",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/integration_error_task.rs",
+      "tests": [
+        "new_normalizes_fields_and_starts_pending",
+        "new_rejects_missing_message_and_object",
+        "new_rejects_overlong_fields",
+        "update_applies_owner_fields_only",
+        "record_attempt_increments_and_updates_summary",
+        "record_attempt_rejected_when_terminal",
+        "status_machine_legal_edges_pass",
+        "status_machine_rejects_illegal_and_terminal_edges",
+        "status_machine_idempotent_transitions_pass",
+        "transition_to_manual_required_succeeds_without_resolution",
+        "transition_rejects_resolution_on_non_terminal_move",
+        "resolve_requires_reviewed_evidence_and_non_close_type",
+        "close_requires_evidence_and_accepts_controlled_result_unknown_evidence",
+        "terminal_status_blocks_further_transitions",
+        "auto_retry_policy_follows_error_class_and_status",
+        "replay_requires_server_confirmed_no_result_and_allowed_class",
+        "resolution_type_is_derived_from_verified_evidence",
+        "enums_serialize_with_stable_codes_and_expose_labels",
+        "entity_roundtrip_through_bson"
+      ],
+      "test_count": 19,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/mod.rs",
+      "sha256": "200e3be28e090090e3488c83be23f2011f6399c73c65f324da162766a8fc4062",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/mod.rs",
+      "tests": [
+        "command_identity_hides_key_and_rejects_changed_identity"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/reconciliation_difference.rs",
+      "sha256": "fce6403734d3d65fd0e71733e3e01085331a7edca651c3009be4cd4d848f9a05",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/reconciliation_difference.rs",
+      "tests": [
+        "new_trims_and_normalizes_fields",
+        "new_rejects_empty_required_fields",
+        "new_rejects_overlong_fields",
+        "new_rejects_difference_without_any_evidence",
+        "missing_source_side_allows_single_evidence",
+        "financial_impact_uses_fixed_case_insensitive_keywords",
+        "entity_roundtrip_through_bson"
+      ],
+      "test_count": 7,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/reconciliation_difference_resolution.rs",
+      "sha256": "019edb0ead5506db4dc2802ca24a037bf53d406660bb3af596d16abea8cbbb47",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/reconciliation_difference_resolution.rs",
+      "tests": [
+        "non_terminal_query_stays_open",
+        "evidence_and_terminal_decisions_require_reference",
+        "terminal_statuses_are_decision_specific",
+        "close_actions_form_terminal_non_business_evidence",
+        "close_evidence_constructor_rejects_business_decisions",
+        "close_evidence_constructor_requires_fixed_reference_shape",
+        "version_and_open_state_are_derived_from_latest_record",
+        "append_assigns_sequential_no_and_derived_status",
+        "append_fails_closed_on_serial_overflow_and_missing_evidence",
+        "entity_roundtrips_through_bson"
+      ],
+      "test_count": 10,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/w29_close.rs",
+      "sha256": "2cfa09088471f95f27bbedfa1dd205e1ff0f503b9f64f58ace68600645b4d730",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/w29_close.rs",
+      "tests": [
+        "duplicate_requires_replacement_and_round_trips_historical_evidence",
+        "misrouted_requires_comment_and_forbids_replacement",
+        "invalid_combinations_self_reference_and_sequence_overflow_fail_closed"
+      ],
+      "test_count": 3,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/entities/src/integration_ops/w29_work_items.rs",
+      "sha256": "f45a85b6a69dd981f6ea2cdbf474df2ccf6defeb5e026f649a37a202d7d842ad",
+      "owner": "A",
+      "target": "crates/erp-integration/src/entity/integration_ops/w29_work_items.rs",
+      "tests": [
+        "error_registry_covers_every_class",
+        "difference_registry_covers_every_code_and_rejects_unknown",
+        "error_work_item_carries_full_formal_fields",
+        "difference_work_item_carries_full_formal_fields",
+        "factories_reject_unknown_difference_and_blank_owner"
+      ],
+      "test_count": 5,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/common.rs",
+      "sha256": "c339cc1281393c35c4a0fe781fd0624f6889953dd9ada4df095ab11b33bb1fe0",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/common.rs",
+      "tests": [
+        "sort_whitelist_rejects_unknown_fields_and_directions"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/error_task.rs",
+      "sha256": "b042baf136be71a2de4c5221f035c87fe7ceb404e262a39fc13a0a3aead1e1e6",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/error_task.rs",
+      "tests": [
+        "error_task_list_params_normalize_flat_filters"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/inbox_message.rs",
+      "sha256": "6b681f9a78b3bdcf7da2f92d52ffcc919ba85a17503369e38c4c39399ba33a2a",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/inbox_message.rs",
+      "tests": [
+        "inbox_list_params_normalize_paging_filters_and_sort_defaults"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/prepared_decision.rs",
+      "sha256": "08fa6f553c1419dc4db09f92027d705473c9811afcb2c9c2a29f88b83b6321ea",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/prepared_decision.rs",
+      "tests": [
+        "task_target_trims_fields_and_holds_typed_version",
+        "task_target_rejects_zero_non_decimal_and_overflow",
+        "task_target_accepts_max_u64",
+        "direct_target_allows_zero_and_trims",
+        "direct_target_rejects_non_decimal",
+        "completion_adapts_to_non_terminal_action",
+        "dto_conclusion_converts_to_typed_domain_conclusion"
+      ],
+      "test_count": 7,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/prepared_inbox.rs",
+      "sha256": "a7184d4cbf3907ab9f7830fc2e82869c15257d14ae3d0fd4aa34157992ca42a1",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/prepared_inbox.rs",
+      "tests": [
+        "processed_holds_time_and_rejects_error_payload",
+        "failed_requires_error_class"
+      ],
+      "test_count": 2,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/reconciliation_difference.rs",
+      "sha256": "cbc866bee73aabff0102a082d2e0486b182bd322c2149e71c28fae8cca9fcd67",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/reconciliation_difference.rs",
+      "tests": [
+        "difference_list_params_normalize_and_reject_unbounded_page_size"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto/task_decision.rs",
+      "sha256": "d2701a1c64824be605ab6da9b8a0158bf908f425150e248f73abd19fd5bc04c2",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/task_decision.rs",
+      "tests": [
+        "task_action_rejects_raw_original_idempotency_key",
+        "direct_decision_uses_decision_only_shape"
+      ],
+      "test_count": 2,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/dto.rs",
+      "sha256": "7c13ac1eb4cb61caba207ef52330b82c61c463e468b2436db3e1ad9c7f96e2a8",
+      "owner": "A",
+      "target": "crates/erp-integration/src/dto/mod.rs",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/error_task.rs",
+      "sha256": "07a1bf3a0c42337f93590ba20250789f56b8795be37de8fcb636217e3eec38a2",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/evidence.rs",
+      "sha256": "357d7092e23db18a9b431bdbd6b30973de58c0713ada5b0802cac8931a54dace",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [
+        "completion_policy_requires_exact_identity_key_and_kinds",
+        "direct_reason_registry_binds_reason_to_conclusion_and_evidence",
+        "evidence_tables_are_owned_by_domain"
+      ],
+      "test_count": 3,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/inbox_message.rs",
+      "sha256": "0103fc11dfb9ab202de79a9c4cbcda0bc8a7cef69d854c9be68dbb67efaf1d29",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [
+        "inbox_shapes_are_owned_by_domain_and_prepared"
+      ],
+      "test_count": 1,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/mod.rs",
+      "sha256": "49fe13766bb98e7831f66cdb337fbce12bdd5db7a29de8cf1e8e9239ae1986e6",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/producer.rs",
+      "sha256": "e44c9bf23baf1c404d5199ce66babfb2cf856f52d13a802f654c5b0a13d3fd1f",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [
+        "responsibility_tables_are_owned_by_domain",
+        "error_ctor_delegates_formal_fields_to_domain",
+        "difference_ctor_keeps_business_error_for_unknown_type"
+      ],
+      "test_count": 3,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "sha256": "cec3b19ccdcbd8725642e01bd53ef57c4072f110cbcbbdc83ae7044ee6f0bb63",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [
+        "difference_list_resolves_latest_via_single_batch",
+        "create_difference_defers_reference_invariant_to_entity"
+      ],
+      "test_count": 2,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/action.rs",
+      "sha256": "6664ecfd22274abfb846711af6dbe7fc5032776e3149fc5d2ae9708219b5e2ff",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/complete.rs",
+      "sha256": "e0e9522992255b891bbd736b798ef249eb699e8b88b584477eafbe083074e5ff",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/direct.rs",
+      "sha256": "09dface40133fe5520329a9c5c98d1a91e6ab0c549ae90a02662eb6684cad85a",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/guard.rs",
+      "sha256": "c1c8af41017ba55eba1fe93f0d954cdb72c78d1f5400a987e3550e5caa5b09ce",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/mod.rs",
+      "sha256": "21bab246823de02ab6108a9248b11d546bad8942d30b9ba61d2967db27c6bcb0",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/tests.rs",
+      "sha256": "315deb250edbb4d9292d095e67393d710379b85ce7779af88746c04f6f488d54",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [
+        "receipt_never_contains_raw_idempotency_key",
+        "terminal_evidence_allows_explicit_resolve_without_completing_action",
+        "confirmed_no_result_allows_replay_only_for_error_task",
+        "versions_flow_typed_from_prepared_without_reparse",
+        "conclusion_and_append_are_owned_by_domain"
+      ],
+      "test_count": 5,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/transaction.rs",
+      "sha256": "6c5f7597737dc6ac4734a7687b9350746848118229a340fbaa39cbc28147b13e",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/services/src/integration_ops/validation.rs",
+      "sha256": "d3bdf38b3712240080b0f58e70a80bae9f744922da36ced3455ac3add1afb2b3",
+      "owner": "B",
+      "target": "B contract: split integration domain service / integration_resolution / integration_center",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/indexes/integration_ops.rs",
+      "sha256": "12d548dd4304611932df92fdde0c7d20ec8f0312caaec900d37e0b258b9a8791",
+      "owner": "A",
+      "target": "crates/erp-integration/src/indexes/integration_ops.rs",
+      "tests": [
+        "inbox_message_identity_and_business_fact_indexes_are_unique",
+        "error_task_unique_index_is_partial_to_active_message_tasks",
+        "reconciliation_indexes_cover_object_key_and_history_append_order"
+      ],
+      "test_count": 3,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/extensions/integration_ops.rs",
+      "sha256": "df4db150879c02ab8437d83782381fb228380a61c953e002585e5002c07cf7fe",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/extensions/integration_ops.rs",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/integration_ops.rs",
+      "sha256": "c1f9c30ecb4e48cd0721501c27a88b629c2b4e1da7cefe2dd74ca75423913e33",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/integration_ops.rs",
+      "tests": [
+        "inbox_filter_applies_optional_fields_and_time_range",
+        "error_task_filter_maps_enums_to_stable_codes",
+        "difference_filter_applies_object_key_and_time_range",
+        "sort_doc_defaults_to_created_at_and_rejects_non_whitelisted_fields"
+      ],
+      "test_count": 4,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/integration_ops/difference_resolution_batch.rs",
+      "sha256": "eb6ff2d33440164e525ce89b0df0cf8ce8e8be43caa2c6a6dd91c534dbc4c730",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/integration_ops/difference_resolution_batch.rs",
+      "tests": [
+        "dedupe_ids_keeps_first_order_and_handles_empty",
+        "batch_filter_uses_in_clause_and_soft_delete",
+        "latest_per_difference_picks_max_resolution_no",
+        "latest_per_difference_omits_differences_without_resolutions"
+      ],
+      "test_count": 4,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/owned/inbox_message.rs",
+      "sha256": "81429586fa4bd97cdd17464ba9de8506fb671f2305d7f14345518ce6ffd6bb93",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/owned/inbox_message.rs",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/owned/integration_error_task.rs",
+      "sha256": "ecda0a6c42219c77d7e13f5dfffbec8ad29740c1ef772b92e2a0bfd85f5df7fe",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/owned/integration_error_task.rs",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/owned/reconciliation_difference.rs",
+      "sha256": "2e975150f57828e7c6592a4f8f8f38c99c554dfc5dc12627c54017f22c01ad9f",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/owned/reconciliation_difference.rs",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    },
+    {
+      "path": "backend/database/src/repository/owned/reconciliation_difference_resolution.rs",
+      "sha256": "4980456a04763ff2498ec07d8d91bd73d48197c21ac8b1e6311843b4826c1771",
+      "owner": "A",
+      "target": "crates/erp-integration/src/repository/owned/reconciliation_difference_resolution.rs",
+      "tests": [],
+      "test_count": 0,
+      "ignore_count": 0
+    }
+  ],
+  "dto_snapshots": [
+    {
+      "source": "services/src/integration_ops/dto/common.rs",
+      "public_types": [
+        "PageParams"
+      ],
+      "crate_methods": [],
+      "production_source": "/// 排序方向。\npub use application_core::SortDir;\n\n/// 归一化后的分页查询 DTO（Service → Repository 共用）。\n#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub struct PageParams {\n    /// 页码（1 起）。\n    pub page: u64,\n    /// 单页条数（已 clamp 到 1–100）。\n    pub page_size: u32,\n    /// 排序字段（已过白名单校验，`&'static str` 保证来源只可能是白名单）。\n    pub sort_by: &'static str,\n    /// 排序方向。\n    pub sort_dir: SortDir,\n}\n\n/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。///\n/// # 参数\n/// * `sort_by` - 可选排序字段；空白视为未提供\n/// * `sort_dir` - 可选排序方向；空白视为未提供\n/// * `allowed_fields` - 白名单\n///\n/// # 返回\n/// 返回 `(排序字段, 方向)`；未提供时默认 `(\"created_at\", Desc)`。\n///\n/// # 错误\n/// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。\npub(crate) use application_core::normalize_sort;\n\n/// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。\npub use application_core::PageView;\n\n/// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。\npub(super) use application_core::non_blank;\n\n"
+    },
+    {
+      "source": "services/src/integration_ops/dto/error_task.rs",
+      "public_types": [
+        "CreateErrorTaskRequest",
+        "ErrorTaskListParams",
+        "ErrorTaskView",
+        "ErrorTaskDetailView",
+        "ActionBlockerView"
+      ],
+      "crate_methods": [
+        "normalized"
+      ],
+      "production_source": "use entities::integration_ops::{ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ResolutionType};\nuse serde::{Deserialize, Serialize};\nuse validator::Validate;\n\nuse crate::errors::Result;\nuse application_core::{normalized_text, page_or_default, page_size_or_default};\n\nuse super::common::{normalize_sort, PageParams};\nuse super::task_decision::{ControlledEvidenceRef, ResolutionEvidencePolicyView};\n\n/// `integration_error_task` 列表允许的排序字段白名单。\npub(crate) const ERROR_TASK_SORT_FIELDS: &[&str] = &[\"created_at\", \"last_attempt_at\", \"status\"];\n\n/// 错误任务登记请求（消息类失败必填 `message_id`，业务对象类失败必填 `business_object_id`）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\n#[serde(deny_unknown_fields)]\npub struct CreateErrorTaskRequest {\n    /// 关联的消息 ID（消息类失败必填其一）。\n    pub message_id: Option<entities::integration_ops::InboxMessageId>,\n    /// 关联的业务对象 ID（非消息类失败必填其一）。\n    #[validate(length(max = 128, message = \"业务对象ID过长\"))]\n    pub business_object_id: Option<String>,\n    /// 错误分类。\n    pub error_class: ErrorClass,\n    /// 创建时明确指定的当前责任人。\n    #[validate(length(min = 1, max = 128, message = \"责任人不能为空或过长\"))]\n    pub owner_user_id: String,\n}\n\n/// 错误任务列表查询参数（分页参数与筛选字段扁平传递）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\npub struct ErrorTaskListParams {\n    /// 关联消息 ID 筛选。\n    pub message_id: Option<entities::integration_ops::InboxMessageId>,\n    /// 关联业务对象 ID 筛选。\n    pub business_object_id: Option<String>,\n    /// 错误分类筛选。\n    pub error_class: Option<ErrorClass>,\n    /// 任务状态筛选。\n    pub status: Option<ErrorTaskStatus>,\n    /// 责任角色筛选。\n    pub owner_role: Option<String>,\n    /// 责任人模糊匹配（忽略大小写）。\n    pub owner_user_id: Option<String>,\n    /// 页码（1 起）。\n    #[validate(range(min = 1, message = \"页码必须大于0\"))]\n    pub page: Option<u64>,\n    /// 单页条数（1–100）。\n    #[validate(range(min = 1, max = 100, message = \"分页大小必须在1-100之间\"))]\n    pub page_size: Option<u32>,\n    /// 排序字段（白名单：`created_at`/`last_attempt_at`/`status`）。\n    pub sort_by: Option<String>,\n    /// 排序方向（`asc`/`desc`）。\n    pub sort_dir: Option<String>,\n}\n\n/// 归一化后的错误任务列表查询参数。\n#[derive(Debug, Clone, PartialEq, Eq)]\npub(crate) struct ErrorTaskListQuery {\n    /// 关联消息 ID 筛选。\n    pub message_id: Option<entities::integration_ops::InboxMessageId>,\n    /// 关联业务对象 ID 筛选。\n    pub business_object_id: Option<String>,\n    /// 错误分类筛选。\n    pub error_class: Option<ErrorClass>,\n    /// 任务状态筛选。\n    pub status: Option<ErrorTaskStatus>,\n    /// 责任角色筛选。\n    pub owner_role: Option<String>,\n    /// 责任人模糊匹配。\n    pub owner_user_id: Option<String>,\n    /// 分页与排序参数。\n    pub paging: PageParams,\n}\n\nimpl ErrorTaskListParams {\n    /// 归一化错误任务列表查询参数。\n    ///\n    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。\n    ///\n    /// # 返回\n    /// 返回不依赖仓储类型的规范化查询参数。\n    ///\n    /// # 错误\n    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。\n    pub(crate) fn normalized(&self) -> Result<ErrorTaskListQuery> {\n        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, ERROR_TASK_SORT_FIELDS)?;\n        Ok(ErrorTaskListQuery {\n            message_id: self.message_id.clone(),\n            business_object_id: normalized_text(self.business_object_id.as_deref()),\n            error_class: self.error_class,\n            status: self.status,\n            owner_role: normalized_text(self.owner_role.as_deref()),\n            owner_user_id: normalized_text(self.owner_user_id.as_deref()),\n            paging: PageParams {\n                page: page_or_default(self.page),\n                page_size: page_size_or_default(self.page_size),\n                sort_by,\n                sort_dir,\n            },\n        })\n    }\n}\n\n/// 错误任务列表响应视图（列表投影不含解决证据文本）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct ErrorTaskView {\n    /// 实体主键。\n    pub id: String,\n    /// 关联的消息。\n    pub message_id: Option<String>,\n    /// 关联的业务对象。\n    pub business_object_id: Option<String>,\n    /// 错误分类。\n    pub error_class: ErrorClass,\n    /// 任务状态。\n    pub status: ErrorTaskStatus,\n    /// 责任角色。\n    pub owner_role: Option<String>,\n    /// 责任人。\n    pub owner_user_id: Option<String>,\n    /// 重试次数。\n    pub attempt_count: u32,\n    /// 最近尝试时间（秒级时间戳）。\n    pub last_attempt_at: Option<i64>,\n    /// 最近尝试结果（脱敏）。\n    pub last_attempt_summary: Option<String>,\n    /// 解决方式。\n    pub resolution_type: Option<ResolutionType>,\n    /// 完成时间（秒级时间戳）。\n    pub resolved_at: Option<i64>,\n    /// 乐观锁版本。\n    pub version: u64,\n    /// 创建时间（秒级时间戳）。\n    pub created_at: u64,\n}\n\nimpl From<IntegrationErrorTask> for ErrorTaskView {\n    /// 从错误任务实体构造任务视图。\n    ///\n    /// # 参数\n    /// * `task` - 错误任务实体\n    ///\n    /// # 返回\n    /// 返回任务视图。\n    fn from(task: IntegrationErrorTask) -> Self {\n        Self {\n            id: task.base.id,\n            message_id: task.message_id.map(|id| id.to_string()),\n            business_object_id: task.business_object_id,\n            error_class: task.error_class,\n            status: task.status,\n            owner_role: task.owner_role,\n            owner_user_id: task.owner_user_id,\n            attempt_count: task.attempt_count,\n            last_attempt_at: task.last_attempt_at.map(|at| at.unix_secs()),\n            last_attempt_summary: task.last_attempt_summary,\n            resolution_type: task.resolution_type,\n            resolved_at: task.resolved_at.map(|at| at.unix_secs()),\n            version: task.base.version,\n            created_at: task.base.created_at,\n        }\n    }\n}\n\n/// 错误任务详情响应视图（任务字段 + 解决/关闭证据文本）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct ErrorTaskDetailView {\n    /// 任务列表视图字段（扁平展开）。\n    #[serde(flatten)]\n    pub task: ErrorTaskView,\n    /// 解决/关闭证据文本（列表投影不暴露，详情可见）。\n    pub resolution: Option<String>,\n    /// 服务端按当前领域事实开放的 W29 强动作。\n    pub allowed_actions: Vec<String>,\n    /// 当前阻断原因；未形成可验证结果时必须显式返回。\n    pub action_blockers: Vec<ActionBlockerView>,\n    /// 服务端发现并重验的受控证据；客户端不得自行补造引用。\n    pub linked_evidence: Vec<ControlledEvidenceRef>,\n    /// 当前业务项固定终态证据策略；无正式任务或已终结时为空。\n    pub resolution_evidence_policy: Option<ResolutionEvidencePolicyView>,\n}\n\n/// W29 业务动作阻断投影。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct ActionBlockerView {\n    /// 被阻断的动作代码。\n    pub action: String,\n    /// 稳定阻断代码。\n    pub code: String,\n    /// 面向处理人的明确说明。\n    pub message: String,\n}\n\n"
+    },
+    {
+      "source": "services/src/integration_ops/dto/inbox_message.rs",
+      "public_types": [
+        "RegisterInboxMessageRequest",
+        "WriteBackInboxResultRequest",
+        "WriteBackOutcome",
+        "InboxMessageListParams",
+        "InboxMessageListView",
+        "InboxMessageView"
+      ],
+      "crate_methods": [
+        "normalized"
+      ],
+      "production_source": "use entities::integration_ops::{ErrorClass, InboxMessage, InboxMessageStatus, MessageType};\nuse serde::{Deserialize, Serialize};\nuse validator::Validate;\n\nuse crate::errors::Result;\nuse application_core::{normalized_text, page_or_default, page_size_or_default};\n\nuse super::common::{non_blank, normalize_sort, PageParams};\n\n/// `inbox_message` 列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。\npub(crate) const INBOX_MESSAGE_SORT_FIELDS: &[&str] = &[\"created_at\", \"received_at\", \"status\"];\n\n/// 入站消息登记请求（HTTP 契约：消息信封字段；处理状态由服务端置为 `received`）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\npub struct RegisterInboxMessageRequest {\n    /// 来源系统 ID（D01，须已登记）。\n    pub source_system_id: entities::integration_ops::SourceSystemId,\n    /// 来源事件 ID（消息层幂等身份，与来源系统组合唯一）。\n    #[validate(\n        custom(function = \"non_blank\", message = \"来源事件ID不能为空\"),\n        length(max = 256, message = \"来源事件ID过长\")\n    )]\n    pub source_event_id: String,\n    /// 消息类型（商城关键事实或供应商回调）。\n    pub message_type: MessageType,\n    /// 业务事实键（业务事实层幂等身份）。\n    #[validate(\n        custom(function = \"non_blank\", message = \"业务事实键不能为空\"),\n        length(max = 256, message = \"业务事实键过长\")\n    )]\n    pub business_fact_key: String,\n    /// 来源契约版本。\n    #[validate(\n        custom(function = \"non_blank\", message = \"来源契约版本不能为空\"),\n        length(max = 64, message = \"来源契约版本过长\")\n    )]\n    pub payload_schema_version: String,\n    /// 规范化内容引用（非完整载荷）。\n    #[validate(length(max = 512, message = \"内容引用过长\"))]\n    pub payload_reference: Option<String>,\n    /// 来源系统发送时间（秒级时间戳）；缺省表示未知。\n    #[validate(range(min = 1, message = \"发送时间必须大于 0\"))]\n    pub source_sent_at: Option<i64>,\n    /// ERP 接收时间（秒级时间戳）；缺省取服务端当前时间。\n    #[validate(range(min = 1, message = \"接收时间必须大于 0\"))]\n    pub received_at: Option<i64>,\n}\n\n/// 入站消息结果回写请求（乐观锁：携带期望版本）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\n#[serde(deny_unknown_fields)]\npub struct WriteBackInboxResultRequest {\n    /// 期望的乐观锁版本；与当前版本不一致时拒绝（409）。\n    #[validate(range(min = 1, message = \"乐观锁版本必须大于 0\"))]\n    pub version: u64,\n    /// 回写结果：`processed` 标记已处理；`failed` 标记失败并登记错误任务。\n    pub outcome: WriteBackOutcome,\n    /// 处理完成时间（秒级时间戳）；缺省取服务端当前时间。\n    #[validate(range(min = 1, message = \"处理完成时间必须大于 0\"))]\n    pub processed_at: Option<i64>,\n    /// 失败时的错误分类（`outcome=failed` 必填）。\n    pub error_class: Option<ErrorClass>,\n    /// 失败时的脱敏尝试结果摘要。\n    #[validate(length(max = 512, message = \"尝试结果摘要过长\"))]\n    pub attempt_summary: Option<String>,\n}\n\n/// 结果回写取值（`processed` / `failed`）。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]\npub enum WriteBackOutcome {\n    /// 已处理。\n    Processed,\n    /// 失败（转入错误任务）。\n    Failed,\n}\n\n/// 入站消息列表查询参数（分页参数与筛选字段扁平传递）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\npub struct InboxMessageListParams {\n    /// 来源系统 ID 筛选。\n    pub source_system_id: Option<entities::integration_ops::SourceSystemId>,\n    /// 消息类型筛选。\n    pub message_type: Option<MessageType>,\n    /// 消息处理状态筛选。\n    pub status: Option<InboxMessageStatus>,\n    /// 来源事件 ID 模糊匹配（忽略大小写）。\n    pub source_event_id: Option<String>,\n    /// 接收时间下界（秒级时间戳，含）。\n    pub received_at_from: Option<i64>,\n    /// 接收时间上界（秒级时间戳，含）。\n    pub received_at_to: Option<i64>,\n    /// 页码（1 起）。\n    #[validate(range(min = 1, message = \"页码必须大于0\"))]\n    pub page: Option<u64>,\n    /// 单页条数（1–100）。\n    #[validate(range(min = 1, max = 100, message = \"分页大小必须在1-100之间\"))]\n    pub page_size: Option<u32>,\n    /// 排序字段（白名单：`created_at`/`received_at`/`status`）。\n    pub sort_by: Option<String>,\n    /// 排序方向（`asc`/`desc`）。\n    pub sort_dir: Option<String>,\n}\n\n/// 归一化后的入站消息列表查询参数。\n#[derive(Debug, Clone, PartialEq, Eq)]\npub(crate) struct InboxMessageListQuery {\n    /// 来源系统 ID 筛选。\n    pub source_system_id: Option<entities::integration_ops::SourceSystemId>,\n    /// 消息类型筛选。\n    pub message_type: Option<MessageType>,\n    /// 消息处理状态筛选。\n    pub status: Option<InboxMessageStatus>,\n    /// 来源事件 ID 模糊匹配。\n    pub source_event_id: Option<String>,\n    /// 接收时间下界。\n    pub received_at_from: Option<i64>,\n    /// 接收时间上界。\n    pub received_at_to: Option<i64>,\n    /// 分页与排序参数。\n    pub paging: PageParams,\n}\n\nimpl InboxMessageListParams {\n    /// 归一化入站消息列表查询参数。\n    ///\n    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。\n    ///\n    /// # 返回\n    /// 返回不依赖仓储类型的规范化查询参数。\n    ///\n    /// # 错误\n    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。\n    pub(crate) fn normalized(&self) -> Result<InboxMessageListQuery> {\n        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, INBOX_MESSAGE_SORT_FIELDS)?;\n        Ok(InboxMessageListQuery {\n            source_system_id: self.source_system_id.clone(),\n            message_type: self.message_type,\n            status: self.status,\n            source_event_id: normalized_text(self.source_event_id.as_deref()),\n            received_at_from: self.received_at_from,\n            received_at_to: self.received_at_to,\n            paging: PageParams {\n                page: page_or_default(self.page),\n                page_size: page_size_or_default(self.page_size),\n                sort_by,\n                sort_dir,\n            },\n        })\n    }\n}\n\n/// 入站消息列表响应视图（列表投影不暴露内容引用，字段与 P2 列表投影一致）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct InboxMessageListView {\n    /// 实体主键。\n    pub id: String,\n    /// 来源系统 ID。\n    pub source_system_id: String,\n    /// 来源事件 ID。\n    pub source_event_id: String,\n    /// 消息类型。\n    pub message_type: MessageType,\n    /// 业务事实键（幂等键）。\n    pub business_fact_key: String,\n    /// 来源契约版本。\n    pub payload_schema_version: String,\n    /// 消息处理状态。\n    pub status: InboxMessageStatus,\n    /// 来源系统发送时间（秒级时间戳）。\n    pub source_sent_at: Option<i64>,\n    /// ERP 接收时间（秒级时间戳）。\n    pub received_at: i64,\n    /// 处理完成时间（秒级时间戳）。\n    pub processed_at: Option<i64>,\n    /// 乐观锁版本。\n    pub version: u64,\n    /// 创建时间（秒级时间戳）。\n    pub created_at: u64,\n}\n\n/// 入站消息详情响应视图（含规范化内容引用，供详情页证据区展示）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct InboxMessageView {\n    /// 实体主键。\n    pub id: String,\n    /// 来源系统 ID。\n    pub source_system_id: String,\n    /// 来源事件 ID。\n    pub source_event_id: String,\n    /// 消息类型。\n    pub message_type: MessageType,\n    /// 业务事实键（幂等键）。\n    pub business_fact_key: String,\n    /// 来源契约版本。\n    pub payload_schema_version: String,\n    /// 规范化内容引用。\n    pub payload_reference: Option<String>,\n    /// 消息处理状态。\n    pub status: InboxMessageStatus,\n    /// 来源系统发送时间（秒级时间戳）。\n    pub source_sent_at: Option<i64>,\n    /// ERP 接收时间（秒级时间戳）。\n    pub received_at: i64,\n    /// 处理完成时间（秒级时间戳）。\n    pub processed_at: Option<i64>,\n    /// 乐观锁版本。\n    pub version: u64,\n    /// 创建时间（秒级时间戳）。\n    pub created_at: u64,\n}\n\nimpl From<InboxMessage> for InboxMessageView {\n    /// 从入站消息实体构造详情视图。\n    ///\n    /// # 参数\n    /// * `message` - 入站消息实体\n    ///\n    /// # 返回\n    /// 返回详情视图。\n    fn from(message: InboxMessage) -> Self {\n        Self {\n            id: message.base.id,\n            source_system_id: message.source_system_id.to_string(),\n            source_event_id: message.source_event_id,\n            message_type: message.message_type,\n            business_fact_key: message.business_fact_key,\n            payload_schema_version: message.payload_schema_version,\n            payload_reference: message.payload_reference,\n            status: message.status,\n            source_sent_at: message.source_sent_at.map(|at| at.unix_secs()),\n            received_at: message.received_at.unix_secs(),\n            processed_at: message.processed_at.map(|at| at.unix_secs()),\n            version: message.base.version,\n            created_at: message.base.created_at,\n        }\n    }\n}\n\n"
+    },
+    {
+      "source": "services/src/integration_ops/dto/prepared_decision.rs",
+      "public_types": [
+        "PreparedWorkItemTarget",
+        "PreparedDirectDecisionTarget"
+      ],
+      "crate_methods": [
+        "as_non_terminal_action"
+      ],
+      "production_source": "//! W29 强命令的规范化 Prepared DTO（INT-E22）。\n//!\n//! wire 契约保持字符串版本；本模块经 `TryFrom` 一次性完成边界校验、去首尾空白与\n//! 十进制解析，持有 typed `u64` 版本与规范化字段。Service 只消费 typed 结果，\n//! 不得对版本字符串二次解析。\n\nuse super::task_decision::{\n    decimal_version, DirectReconciliationCommand, DirectReconciliationConclusion,\n    IntegrationNonTerminalTaskAction, IntegrationTaskActionCommand, IntegrationTaskActionKind,\n    IntegrationTaskCompletionCommand,\n};\nuse crate::errors::Result;\n\n/// W29 任务命令共用的规范化目标身份与版本。\n///\n/// 由任务动作命令与任务完成命令经 `TryFrom` 生成；任务版本为已解析的 `u64`，\n/// 任务 ID 与业务主题版本已去首尾空白。幂等键与操作 ID 不在此规范化，\n/// 完整命令原文仍参与指纹计算，指纹语义不变。\n#[derive(Debug, Clone, PartialEq, Eq)]\npub struct PreparedWorkItemTarget {\n    /// 去首尾空白后的正式任务 ID。\n    pub work_item_id: String,\n    /// 已解析的任务版本（十进制 `u64`，不允许为 0）。\n    pub task_version: u64,\n    /// 去首尾空白后的业务主题版本。\n    pub subject_version: String,\n}\n\nimpl PreparedWorkItemTarget {\n    /// 从原始字段解析规范化目标身份与版本。\n    ///\n    /// # 参数\n    /// * `work_item_id` - 原始正式任务 ID（允许首尾空白）\n    /// * `task_version` - 原始任务版本字符串（十进制，不允许为 0）\n    /// * `subject_version` - 原始业务主题版本（允许首尾空白）\n    ///\n    /// # 返回\n    /// 返回持有 typed 版本与规范化字段的 `PreparedWorkItemTarget`。\n    ///\n    /// # 错误\n    /// 任务版本非十进制整数、为 0 或超出 `u64` 上限时返回 `ValidationError`。\n    ///\n    /// # 约束\n    /// 解析规则与 [`decimal_version`] 同源；wire 仍保持字符串合同。\n    fn parse(work_item_id: &str, task_version: &str, subject_version: &str) -> Result<Self> {\n        let task_version = decimal_version(task_version, false, \"任务版本\")?;\n        Ok(Self {\n            work_item_id: work_item_id.trim().to_string(),\n            task_version,\n            subject_version: subject_version.trim().to_string(),\n        })\n    }\n}\n\nimpl TryFrom<&IntegrationTaskActionCommand> for PreparedWorkItemTarget {\n    type Error = crate::errors::Error;\n\n    /// 从任务动作命令生成规范化目标。\n    ///\n    /// # 参数\n    /// * `command` - 已反序列化的任务动作命令\n    ///\n    /// # 返回\n    /// 返回持有 typed 任务版本与规范化身份的目标。\n    ///\n    /// # 错误\n    /// 命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。\n    ///\n    /// # 约束\n    /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。\n    fn try_from(command: &IntegrationTaskActionCommand) -> Result<Self> {\n        command.validate()?;\n        Self::parse(\n            &command.work_item_id,\n            &command.expected_task_version,\n            &command.expected_subject_version,\n        )\n    }\n}\n\nimpl TryFrom<&IntegrationTaskCompletionCommand> for PreparedWorkItemTarget {\n    type Error = crate::errors::Error;\n\n    /// 从任务完成命令生成规范化目标。\n    ///\n    /// # 参数\n    /// * `command` - 已反序列化的任务完成命令\n    ///\n    /// # 返回\n    /// 返回持有 typed 任务版本与规范化身份的目标。\n    ///\n    /// # 错误\n    /// 命令边界校验失败，或任务版本为 0、非十进制、溢出时返回 `ValidationError`。\n    ///\n    /// # 约束\n    /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。\n    fn try_from(command: &IntegrationTaskCompletionCommand) -> Result<Self> {\n        command.validate()?;\n        Self::parse(\n            &command.work_item_id,\n            &command.expected_task_version,\n            &command.expected_subject_version,\n        )\n    }\n}\n\n/// 直接对账命令的规范化目标身份与版本。\n///\n/// 差异版本允许为 0（尚无决定）；解析规则与差异决定版本检查同源。\n/// 幂等键与操作 ID 不在此规范化，完整命令原文仍参与指纹计算。\n#[derive(Debug, Clone, PartialEq, Eq)]\npub struct PreparedDirectDecisionTarget {\n    /// 去首尾空白后的差异 ID。\n    pub difference_id: String,\n    /// 已解析的差异版本（十进制 `u64`，允许为 0）。\n    pub difference_version: u64,\n}\n\nimpl TryFrom<&DirectReconciliationCommand> for PreparedDirectDecisionTarget {\n    type Error = crate::errors::Error;\n\n    /// 从直接对账命令生成规范化目标。\n    ///\n    /// # 参数\n    /// * `command` - 已反序列化的直接对账命令\n    ///\n    /// # 返回\n    /// 返回持有 typed 差异版本与规范化身份的目标。\n    ///\n    /// # 错误\n    /// 命令边界校验失败，或差异版本非十进制、溢出时返回 `ValidationError`。\n    ///\n    /// # 约束\n    /// 先执行命令自校验，再单次解析版本；Service 不得二次解析。\n    fn try_from(command: &DirectReconciliationCommand) -> Result<Self> {\n        command.validate()?;\n        let difference_version = decimal_version(&command.expected_difference_version, true, \"差异版本\")?;\n        Ok(Self {\n            difference_id: command.difference_id.trim().to_string(),\n            difference_version,\n        })\n    }\n}\n\nimpl IntegrationTaskCompletionCommand {\n    /// 将任务完成决定适配为非终结任务动作（用于任务绑定与责任校验）。\n    ///\n    /// # 返回\n    /// 返回携带完成决定业务身份的 `AddEvidence` 动作；原因码取完成原因，\n    /// 备注与证据引用原样透传。\n    ///\n    /// # 约束\n    /// 适配形状由 Prepared DTO 拥有，Service 不再维护镜像转换。\n    pub(crate) fn as_non_terminal_action(&self) -> IntegrationNonTerminalTaskAction {\n        IntegrationNonTerminalTaskAction {\n            item_type: self.decision.item_type,\n            item_id: self.decision.item_id.clone(),\n            kind: IntegrationTaskActionKind::AddEvidence,\n            operation_id: self.decision.operation_id.clone(),\n            reason_code: Some(self.decision.reason_code.as_str().to_string()),\n            comment: self.decision.comment.clone(),\n            evidence_refs: self.decision.evidence_refs.clone(),\n        }\n    }\n}\n\n/// 从服务 DTO 结论转换领域终态结论（机械映射，动作与状态派生归领域）。\nimpl From<DirectReconciliationConclusion> for entities::integration_ops::DirectConclusion {\n    /// 将服务 DTO 结论转换为领域终态结论。\n    ///\n    /// # 参数\n    /// * `conclusion` - 服务 DTO 的直接对账终态结论\n    ///\n    /// # 返回\n    /// 返回一一对应的领域终态结论；wire 代码仍由服务 DTO 拥有。\n    fn from(conclusion: DirectReconciliationConclusion) -> Self {\n        match conclusion {\n            DirectReconciliationConclusion::ConfirmNoError => Self::ConfirmNoError,\n            DirectReconciliationConclusion::ConfirmValidDifference => Self::ConfirmValidDifference,\n        }\n    }\n}\n\n"
+    },
+    {
+      "source": "services/src/integration_ops/dto/prepared_inbox.rs",
+      "public_types": [
+        "PreparedWriteBackOutcome"
+      ],
+      "crate_methods": [],
+      "production_source": "//! 入站消息结果回写的规范化 Prepared DTO（INT-E18）。\n//!\n//! wire 契约保持 `processed` / `failed` 字符串取值；本模块经 `prepare`\n//! 一次性完成边界校验与形状收紧，持有 tagged 决定。Service 只消费 tagged\n//! 结果，不再拼装初始状态与 outcome 形状。时间由调用方注入，DTO 不读取时钟。\n\nuse entities::integration_ops::ErrorClass;\nuse erp_core::common::time::Instant;\nuse validator::Validate;\n\nuse super::inbox_message::{WriteBackInboxResultRequest, WriteBackOutcome};\nuse crate::errors::{Error, Result};\n\n/// 结果回写的 tagged 规范化决定。\n///\n/// `processed` 仅携带处理完成时间；`failed` 携带错误分类、脱敏摘要与尝试时间。\n#[derive(Debug, Clone, PartialEq, Eq)]\npub enum PreparedWriteBackOutcome {\n    /// 已处理（含处理完成时间）。\n    Processed {\n        /// 处理完成时间（调用方注入）。\n        processed_at: Instant,\n    },\n    /// 失败（转入错误任务）。\n    Failed {\n        /// 错误分类（必填）。\n        error_class: ErrorClass,\n        /// 脱敏的尝试结果摘要。\n        attempt_summary: Option<String>,\n        /// 尝试时间（请求携带或调用方注入）。\n        attempt_at: Instant,\n    },\n}\n\nimpl PreparedWriteBackOutcome {\n    /// 从回写请求生成规范化决定（时间由调用方注入）。\n    ///\n    /// # 参数\n    /// * `request` - 已反序列化的回写请求\n    /// * `now` - 调用方当前时间，用于缺省处理完成时间与尝试时间\n    ///\n    /// # 返回\n    /// 返回 tagged 的已处理或失败决定。\n    ///\n    /// # 错误\n    /// 请求边界校验失败、`processed` 携带错误分类或尝试摘要、`failed`\n    /// 缺少错误分类时返回 `ValidationError`。\n    ///\n    /// # 约束\n    /// 不读取全局时钟；`processed` 禁止 error 信息是对旧静默忽略的收紧。\n    pub fn prepare(request: &WriteBackInboxResultRequest, now: Instant) -> Result<Self> {\n        request.validate()?;\n        match request.outcome {\n            WriteBackOutcome::Processed => {\n                if request.error_class.is_some() || request.attempt_summary.is_some() {\n                    return Err(Error::ValidationError(\n                        \"已处理回写不得携带错误分类或尝试摘要\".to_string(),\n                    ));\n                }\n                Ok(Self::Processed {\n                    processed_at: request.processed_at.map(Instant::from_unix_secs).unwrap_or(now),\n                })\n            }\n            WriteBackOutcome::Failed => {\n                let error_class = request\n                    .error_class\n                    .ok_or_else(|| Error::ValidationError(\"标记失败必须提供错误分类\".to_string()))?;\n                Ok(Self::Failed {\n                    error_class,\n                    attempt_summary: request.attempt_summary.clone(),\n                    attempt_at: request.processed_at.map(Instant::from_unix_secs).unwrap_or(now),\n                })\n            }\n        }\n    }\n}\n\n"
+    },
+    {
+      "source": "services/src/integration_ops/dto/reconciliation_difference.rs",
+      "public_types": [
+        "CreateDifferenceRequest",
+        "DifferenceListParams",
+        "DifferenceView",
+        "ResolutionView",
+        "DifferenceDetailView"
+      ],
+      "crate_methods": [
+        "normalized"
+      ],
+      "production_source": "use entities::integration_ops::{\n    ReconciliationDifference, ReconciliationDifferenceResolution, ResolutionAction, ResultingStatus,\n};\nuse serde::{Deserialize, Serialize};\nuse validator::Validate;\n\nuse crate::errors::Result;\nuse application_core::{normalized_text, page_or_default, page_size_or_default};\n\nuse super::common::{non_blank, normalize_sort, PageParams};\nuse super::error_task::ActionBlockerView;\nuse super::task_decision::{\n    ControlledEvidenceRef, ReconciliationReasonRegistryView, ResolutionEvidencePolicyView,\n};\n\n/// `reconciliation_difference` 列表允许的排序字段白名单（仅差异发现时间）。\npub(crate) const DIFFERENCE_SORT_FIELDS: &[&str] = &[\"created_at\"];\n\n/// 对账差异登记请求（创建后不可修改，不设软删除）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\n#[serde(deny_unknown_fields)]\npub struct CreateDifferenceRequest {\n    /// 差异对象类型（如商城订单、供应商订单、销售单等）。\n    #[validate(\n        custom(function = \"non_blank\", message = \"差异对象类型不能为空\"),\n        length(max = 64, message = \"差异对象类型过长\")\n    )]\n    pub business_object_type: String,\n    /// 差异对象 ID。\n    #[validate(\n        custom(function = \"non_blank\", message = \"差异对象ID不能为空\"),\n        length(max = 128, message = \"差异对象ID过长\")\n    )]\n    pub business_object_id: String,\n    /// 差异分类。\n    #[validate(\n        custom(function = \"non_blank\", message = \"差异分类不能为空\"),\n        length(max = 64, message = \"差异分类过长\")\n    )]\n    pub difference_type: String,\n    /// 左侧不可变证据引用；两侧至少其一。\n    #[validate(length(max = 512, message = \"证据引用过长\"))]\n    pub left_fact_reference: Option<String>,\n    /// 右侧不可变证据引用；两侧至少其一。\n    #[validate(length(max = 512, message = \"证据引用过长\"))]\n    pub right_fact_reference: Option<String>,\n    /// 创建时明确指定的当前责任人。\n    #[validate(length(min = 1, max = 128, message = \"责任人不能为空或过长\"))]\n    pub owner_user_id: String,\n}\n\n/// 对账差异列表查询参数（分页参数与筛选字段扁平传递）。\n#[derive(Debug, Clone, Serialize, Deserialize, Validate)]\npub struct DifferenceListParams {\n    /// 差异对象类型筛选。\n    pub business_object_type: Option<String>,\n    /// 差异对象 ID 筛选。\n    pub business_object_id: Option<String>,\n    /// 差异分类筛选。\n    pub difference_type: Option<String>,\n    /// 发现时间下界（秒级时间戳，含）。\n    pub created_at_from: Option<i64>,\n    /// 发现时间上界（秒级时间戳，含）。\n    pub created_at_to: Option<i64>,\n    /// 页码（1 起）。\n    #[validate(range(min = 1, message = \"页码必须大于0\"))]\n    pub page: Option<u64>,\n    /// 单页条数（1–100）。\n    #[validate(range(min = 1, max = 100, message = \"分页大小必须在1-100之间\"))]\n    pub page_size: Option<u32>,\n    /// 排序字段（白名单：`created_at`）。\n    pub sort_by: Option<String>,\n    /// 排序方向（`asc`/`desc`）。\n    pub sort_dir: Option<String>,\n}\n\n/// 归一化后的对账差异列表查询参数。\n#[derive(Debug, Clone, PartialEq, Eq)]\npub(crate) struct DifferenceListQuery {\n    /// 差异对象类型筛选。\n    pub business_object_type: Option<String>,\n    /// 差异对象 ID 筛选。\n    pub business_object_id: Option<String>,\n    /// 差异分类筛选。\n    pub difference_type: Option<String>,\n    /// 发现时间下界。\n    pub created_at_from: Option<i64>,\n    /// 发现时间上界。\n    pub created_at_to: Option<i64>,\n    /// 分页与排序参数。\n    pub paging: PageParams,\n}\n\nimpl DifferenceListParams {\n    /// 归一化对账差异列表查询参数。\n    ///\n    /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。\n    ///\n    /// # 返回\n    /// 返回不依赖仓储类型的规范化查询参数。\n    ///\n    /// # 错误\n    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。\n    pub(crate) fn normalized(&self) -> Result<DifferenceListQuery> {\n        let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DIFFERENCE_SORT_FIELDS)?;\n        Ok(DifferenceListQuery {\n            business_object_type: normalized_text(self.business_object_type.as_deref()),\n            business_object_id: normalized_text(self.business_object_id.as_deref()),\n            difference_type: normalized_text(self.difference_type.as_deref()),\n            created_at_from: self.created_at_from,\n            created_at_to: self.created_at_to,\n            paging: PageParams {\n                page: page_or_default(self.page),\n                page_size: page_size_or_default(self.page_size),\n                sort_by,\n                sort_dir,\n            },\n        })\n    }\n}\n\n/// 对账差异列表响应视图（`status` 由最后一条处理记录派生；无处理记录时为 `None`）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct DifferenceView {\n    /// 实体主键。\n    pub id: String,\n    /// 差异对象类型。\n    pub business_object_type: String,\n    /// 差异对象 ID。\n    pub business_object_id: String,\n    /// 差异分类。\n    pub difference_type: String,\n    /// 左侧不可变证据引用。\n    pub left_fact_reference: Option<String>,\n    /// 右侧不可变证据引用。\n    pub right_fact_reference: Option<String>,\n    /// 派生处理状态（`None` 表示尚无处理记录）。\n    pub status: Option<ResultingStatus>,\n    /// 最新追加式决定序号；初始为 `0`。\n    pub version: u64,\n    /// 差异发现时间（秒级时间戳）。\n    pub created_at: u64,\n}\n\n/// 差异处理记录视图（不可变追加历史）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct ResolutionView {\n    /// 实体主键。\n    pub id: String,\n    /// 递增处理序号。\n    pub resolution_no: u32,\n    /// 解决动作。\n    pub resolution_action: ResolutionAction,\n    /// 动作后的派生状态。\n    pub resulting_status: ResultingStatus,\n    /// 终态证据引用。\n    pub evidence_reference: Option<String>,\n    /// 处理人。\n    pub handled_by: String,\n    /// 处理时间（秒级时间戳）。\n    pub handled_at: i64,\n}\n\nimpl From<ReconciliationDifferenceResolution> for ResolutionView {\n    /// 从处理记录实体构造视图。\n    ///\n    /// # 参数\n    /// * `resolution` - 处理记录实体\n    ///\n    /// # 返回\n    /// 返回处理记录视图。\n    fn from(resolution: ReconciliationDifferenceResolution) -> Self {\n        Self {\n            id: resolution.base.id,\n            resolution_no: resolution.resolution_no,\n            resolution_action: resolution.resolution_action,\n            resulting_status: resolution.resulting_status,\n            evidence_reference: resolution.evidence_reference,\n            handled_by: resolution.handled_by,\n            handled_at: resolution.handled_at.unix_secs(),\n        }\n    }\n}\n\n/// 对账差异详情响应视图（差异字段 + 全部处理记录时间线）。\n#[derive(Debug, Clone, Serialize, PartialEq, Eq)]\npub struct DifferenceDetailView {\n    /// 差异字段（扁平展开）。\n    #[serde(flatten)]\n    pub difference: DifferenceView,\n    /// 处理记录时间线（按处理序号升序，不可变）。\n    pub resolutions: Vec<ResolutionView>,\n    /// 服务端按任务关联与当前差异状态开放的动作。\n    pub allowed_actions: Vec<String>,\n    /// 当前阻断原因。\n    pub action_blockers: Vec<ActionBlockerView>,\n    /// 服务端发现并重验的受控证据。\n    pub linked_evidence: Vec<ControlledEvidenceRef>,\n    /// 有正式任务时使用的固定终态证据策略。\n    pub resolution_evidence_policy: Option<ResolutionEvidencePolicyView>,\n    /// 无正式任务时使用的固定直接对账原因注册表。\n    pub reconciliation_reason_registry: Option<ReconciliationReasonRegistryView>,\n}\n\nimpl From<ReconciliationDifference> for DifferenceView {\n    /// 从差异实体构造视图（无处理记录时状态为 `None`）。\n    ///\n    /// # 参数\n    /// * `difference` - 差异实体\n    ///\n    /// # 返回\n    /// 返回差异视图。\n    fn from(difference: ReconciliationDifference) -> Self {\n        Self {\n            id: difference.base.id,\n            business_object_type: difference.business_object_type,\n            business_object_id: difference.business_object_id,\n            difference_type: difference.difference_type,\n            left_fact_reference: difference.left_fact_reference,\n            right_fact_reference: difference.right_fact_reference,\n            status: None,\n            version: 0,\n            created_at: difference.base.created_at,\n        }\n    }\n}\n\n"
+    },
+    {
+      "source": "services/src/integration_ops/dto/task_decision.rs",
+      "public_types": [
+        "IntegrationItemType",
+        "IntegrationTaskActionKind",
+        "ControlledEvidenceKind",
+        "ControlledEvidenceRef",
+        "IntegrationNonTerminalTaskAction",
+        "IntegrationTaskActionCommand",
+        "IntegrationTaskCompletionDecision",
+        "IntegrationResolutionReasonCode",
+        "IntegrationTaskCompletionKind",
+        "EvidencePolicyKey",
+        "IntegrationTaskCompletionCommand",
+        "DirectReconciliationDecision",
+        "DirectReconciliationConclusion",
+        "DifferenceReasonCode",
+        "ReviewerSeparation",
+        "ResolutionEvidencePolicyView",
+        "RegisteredReconciliationReasonView",
+        "ReconciliationReasonRegistryView",
+        "DirectReconciliationCommand",
+        "IntegrationActionOutcome",
+        "IntegrationTaskActionEvidence",
+        "IntegrationTaskActionResult",
+        "IntegrationWorkItemStatus",
+        "IntegrationTaskCompletionResult",
+        "DirectReconciliationStatus",
+        "DirectReconciliationResult"
+      ],
+      "crate_methods": [
+        "as_str",
+        "as_str",
+        "validate",
+        "as_str",
+        "validate",
+        "as_str",
+        "validate"
+      ],
+      "production_source": "//! W29 强类型任务动作、任务完成与直接对账决定合同。\n\nuse serde::{Deserialize, Serialize};\n\nuse crate::errors::{Error, Result};\n\nconst ID_MAX_LEN: usize = 128;\nconst OPERATION_ID_MAX_LEN: usize = 64;\nconst VERSION_MAX_LEN: usize = 128;\nconst IDEMPOTENCY_KEY_MAX_LEN: usize = 128;\nconst REASON_CODE_MAX_LEN: usize = 64;\nconst COMMENT_MAX_LEN: usize = 512;\nconst EVIDENCE_REF_MAX_COUNT: usize = 8;\n\n/// W29 强命令支持的业务项类型。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum IntegrationItemType {\n    /// 集成错误任务。\n    ErrorTask,\n    /// 对账差异。\n    ReconciliationDifference,\n}\n\n/// 非终结任务动作。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum IntegrationTaskActionKind {\n    /// 查询原结果。\n    QueryOriginalResult,\n    /// 重放原动作。\n    ReplayOriginal,\n    /// 重新归集。\n    Reattribute,\n    /// 关联正式补偿。\n    LinkCompensation,\n    /// 追加证据。\n    AddEvidence,\n}\n\nimpl IntegrationTaskActionKind {\n    /// 返回审计与持久化使用的稳定代码。\n    pub(crate) fn as_str(self) -> &'static str {\n        match self {\n            Self::QueryOriginalResult => \"QUERY_ORIGINAL_RESULT\",\n            Self::ReplayOriginal => \"REPLAY_ORIGINAL\",\n            Self::Reattribute => \"REATTRIBUTE\",\n            Self::LinkCompensation => \"LINK_COMPENSATION\",\n            Self::AddEvidence => \"ADD_EVIDENCE\",\n        }\n    }\n}\n\n/// 受控证据类型。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum ControlledEvidenceKind {\n    /// 外部案例结果。\n    ExternalCaseResult,\n    /// 业务对象核验。\n    BusinessObjectVerification,\n    /// 财务对账。\n    FinancialReconciliation,\n    /// 补偿结果。\n    CompensationResult,\n    /// 独立复核。\n    DistinctReview,\n}\n\nimpl ControlledEvidenceKind {\n    /// 返回稳定代码。\n    pub(crate) fn as_str(self) -> &'static str {\n        match self {\n            Self::ExternalCaseResult => \"EXTERNAL_CASE_RESULT\",\n            Self::BusinessObjectVerification => \"BUSINESS_OBJECT_VERIFICATION\",\n            Self::FinancialReconciliation => \"FINANCIAL_RECONCILIATION\",\n            Self::CompensationResult => \"COMPENSATION_RESULT\",\n            Self::DistinctReview => \"DISTINCT_REVIEW\",\n        }\n    }\n}\n\n/// 客户端提交的证据引用；服务端仍须验证被引用事实。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct ControlledEvidenceRef {\n    /// 证据类型。\n    pub kind: ControlledEvidenceKind,\n    /// 正式记录 ID。\n    pub record_id: String,\n    /// 展示标签，不参与事实判定。\n    pub label: String,\n}\n\n/// 非终结业务动作内容。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct IntegrationNonTerminalTaskAction {\n    /// 业务项类型。\n    pub item_type: IntegrationItemType,\n    /// 业务项 ID。\n    pub item_id: String,\n    /// 固定动作。\n    pub kind: IntegrationTaskActionKind,\n    /// 本次正式操作 ID。\n    pub operation_id: String,\n    /// 可选固定原因代码。\n    pub reason_code: Option<String>,\n    /// 可选备注。\n    pub comment: Option<String>,\n    /// 待验证的正式证据引用。\n    #[serde(default)]\n    pub evidence_refs: Vec<ControlledEvidenceRef>,\n}\n\n/// W29 非终结任务动作命令。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct IntegrationTaskActionCommand {\n    /// 正式任务 ID。\n    pub work_item_id: String,\n    /// 期望任务版本（十进制字符串）。\n    pub expected_task_version: String,\n    /// 期望业务主题版本。\n    pub expected_subject_version: String,\n    /// 非终结动作。\n    pub action: IntegrationNonTerminalTaskAction,\n    /// 客户端请求幂等键。\n    pub idempotency_key: String,\n}\n\nimpl IntegrationTaskActionCommand {\n    /// 校验命令边界与字段长度。\n    pub(crate) fn validate(&self) -> Result<()> {\n        validate_command_identity(\n            &self.work_item_id,\n            &self.expected_task_version,\n            &self.expected_subject_version,\n            &self.idempotency_key,\n        )?;\n        validate_action(&self.action)\n    }\n}\n\n/// W29 任务完成决定。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct IntegrationTaskCompletionDecision {\n    /// 业务项类型。\n    pub item_type: IntegrationItemType,\n    /// 业务项 ID。\n    pub item_id: String,\n    /// 固定完成决定，必须为 `RESOLVE`。\n    pub kind: IntegrationTaskCompletionKind,\n    /// 本次正式操作 ID。\n    pub operation_id: String,\n    /// 固定原因代码。\n    pub reason_code: IntegrationResolutionReasonCode,\n    /// 可选备注。\n    pub comment: Option<String>,\n    /// 服务端投影的固定证据策略 ID。\n    pub evidence_policy_id: String,\n    /// 证据策略版本。\n    pub evidence_policy_version: u64,\n    /// 证据策略键。\n    pub policy_key: EvidencePolicyKey,\n    /// 待验证的正式证据引用。\n    #[serde(default)]\n    pub evidence_refs: Vec<ControlledEvidenceRef>,\n}\n\n/// W29 任务完成固定原因代码。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum IntegrationResolutionReasonCode {\n    /// 服务端已按固定策略重验全部终态证据。\n    TerminalEvidenceVerified,\n}\n\nimpl IntegrationResolutionReasonCode {\n    /// 返回审计使用的稳定代码。\n    pub(crate) fn as_str(self) -> &'static str {\n        match self {\n            Self::TerminalEvidenceVerified => \"TERMINAL_EVIDENCE_VERIFIED\",\n        }\n    }\n}\n\n/// 唯一允许的任务完成决定。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum IntegrationTaskCompletionKind {\n    /// 形成正式解决结论并完成任务。\n    Resolve,\n}\n\n/// 证据策略匹配键。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct EvidencePolicyKey {\n    /// 错误类型。\n    pub error_type: String,\n    /// 资金影响代码。\n    pub funds_impact: String,\n}\n\n/// W29 任务完成强命令。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct IntegrationTaskCompletionCommand {\n    /// 正式任务 ID。\n    pub work_item_id: String,\n    /// 期望任务版本（十进制字符串）。\n    pub expected_task_version: String,\n    /// 期望业务主题版本。\n    pub expected_subject_version: String,\n    /// 完成决定。\n    pub decision: IntegrationTaskCompletionDecision,\n    /// 客户端请求幂等键。\n    pub idempotency_key: String,\n}\n\nimpl IntegrationTaskCompletionCommand {\n    /// 校验命令边界与字段长度。\n    pub(crate) fn validate(&self) -> Result<()> {\n        validate_command_identity(\n            &self.work_item_id,\n            &self.expected_task_version,\n            &self.expected_subject_version,\n            &self.idempotency_key,\n        )?;\n        required(&self.decision.item_id, \"业务项 ID\", ID_MAX_LEN)?;\n        required(&self.decision.operation_id, \"操作 ID\", OPERATION_ID_MAX_LEN)?;\n        required(\n            self.decision.reason_code.as_str(),\n            \"解决原因代码\",\n            REASON_CODE_MAX_LEN,\n        )?;\n        required(&self.decision.evidence_policy_id, \"证据策略 ID\", ID_MAX_LEN)?;\n        if self.decision.evidence_policy_version == 0 {\n            return Err(Error::ValidationError(\"证据策略版本必须大于 0\".to_string()));\n        }\n        required(\n            &self.decision.policy_key.error_type,\n            \"策略错误类型\",\n            REASON_CODE_MAX_LEN,\n        )?;\n        required(\n            &self.decision.policy_key.funds_impact,\n            \"策略资金影响\",\n            REASON_CODE_MAX_LEN,\n        )?;\n        optional(&self.decision.comment, \"备注\", COMMENT_MAX_LEN)?;\n        validate_evidence_refs(&self.decision.evidence_refs)?;\n        if self.decision.evidence_refs.is_empty() {\n            return Err(Error::ValidationError(\"完成任务必须提供终态证据引用\".to_string()));\n        }\n        Ok(())\n    }\n}\n\n/// 直接对账决定。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(tag = \"kind\", rename_all = \"SCREAMING_SNAKE_CASE\", deny_unknown_fields)]\npub enum DirectReconciliationDecision {\n    /// 只追加非终结证据动作。\n    NonTerminalAction {\n        /// 固定动作。\n        action: IntegrationTaskActionKind,\n        /// 待验证的证据引用。\n        #[serde(default)]\n        evidence_refs: Vec<ControlledEvidenceRef>,\n        /// 可选备注。\n        comment: Option<String>,\n    },\n    /// 形成正式终态结论。\n    TerminalConclusion {\n        /// 固定结论。\n        conclusion: DirectReconciliationConclusion,\n        /// 文档合同中的固定原因代码。\n        reason_code: DifferenceReasonCode,\n        /// 服务端投影的固定原因注册表身份。\n        reason_registry_id: String,\n        /// 原因注册表版本。\n        reason_registry_version: u64,\n        /// 注册原因 ID。\n        registered_reason_id: String,\n        /// 待验证的证据引用。\n        #[serde(default)]\n        evidence_refs: Vec<ControlledEvidenceRef>,\n        /// 可选备注。\n        comment: Option<String>,\n    },\n}\n\n/// 直接对账终态结论。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum DirectReconciliationConclusion {\n    /// 确认无误。\n    ConfirmNoError,\n    /// 确认有效差异。\n    ConfirmValidDifference,\n}\n\n/// 对账终结固定原因代码。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum DifferenceReasonCode {\n    /// 来源已更正并重新归集。\n    SourceCorrectedAndReattributed,\n    /// 业务确认无误。\n    BusinessConfirmedNoError,\n    /// 已补偿闭环。\n    CompensationClosed,\n}\n\nimpl DifferenceReasonCode {\n    /// 返回固定原因代码。\n    pub(crate) fn as_str(self) -> &'static str {\n        match self {\n            Self::SourceCorrectedAndReattributed => \"SOURCE_CORRECTED_AND_REATTRIBUTED\",\n            Self::BusinessConfirmedNoError => \"BUSINESS_CONFIRMED_NO_ERROR\",\n            Self::CompensationClosed => \"COMPENSATION_CLOSED\",\n        }\n    }\n}\n\n/// 证据策略要求的岗位分离规则。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum ReviewerSeparation {\n    /// 不要求额外复核人。\n    None,\n    /// 证据复核人与当前处理人必须不同。\n    DistinctReviewer,\n    /// 财务复核人与当前处理人必须不同。\n    DistinctFinanceReviewer,\n}\n\n/// 服务端固定终态证据策略投影。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct ResolutionEvidencePolicyView {\n    /// 策略稳定 ID。\n    pub evidence_policy_id: String,\n    /// 策略版本。\n    pub evidence_policy_version: u64,\n    /// 服务端按当前业务项派生的策略键。\n    pub key: EvidencePolicyKey,\n    /// 完成任务所需的全部证据类型。\n    pub required_evidence_kinds: Vec<ControlledEvidenceKind>,\n    /// 岗位分离要求。\n    pub reviewer_separation: ReviewerSeparation,\n}\n\n/// 固定直接对账原因投影。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct RegisteredReconciliationReasonView {\n    /// 注册原因稳定 ID。\n    pub registered_reason_id: String,\n    /// 注册原因版本。\n    pub registered_reason_version: u64,\n    /// 唯一允许的结论。\n    pub conclusion: DirectReconciliationConclusion,\n    /// 展示标签。\n    pub label: String,\n    /// 形成结论所需的全部证据类型。\n    pub required_evidence_kinds: Vec<ControlledEvidenceKind>,\n}\n\n/// 无正式任务差异可用的固定原因注册表投影。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct ReconciliationReasonRegistryView {\n    /// 注册表稳定 ID。\n    pub reason_registry_id: String,\n    /// 注册表版本。\n    pub reason_registry_version: u64,\n    /// 注册原因列表。\n    pub registered_reasons: Vec<RegisteredReconciliationReasonView>,\n}\n\n/// 无正式任务的直接对账命令。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct DirectReconciliationCommand {\n    /// 差异 ID；必须与路径一致。\n    pub difference_id: String,\n    /// 期望的最新决定序号（十进制字符串，初始为 `0`）。\n    pub expected_difference_version: String,\n    /// 强类型决定。\n    pub decision: DirectReconciliationDecision,\n    /// 本次正式操作 ID。\n    pub operation_id: String,\n    /// 客户端请求幂等键。\n    pub idempotency_key: String,\n}\n\nimpl DirectReconciliationCommand {\n    /// 校验路径外命令边界与字段长度。\n    pub(crate) fn validate(&self) -> Result<()> {\n        required(&self.difference_id, \"差异 ID\", ID_MAX_LEN)?;\n        decimal_version(&self.expected_difference_version, true, \"差异版本\")?;\n        required(&self.operation_id, \"操作 ID\", OPERATION_ID_MAX_LEN)?;\n        required(&self.idempotency_key, \"幂等键\", IDEMPOTENCY_KEY_MAX_LEN)?;\n        match &self.decision {\n            DirectReconciliationDecision::NonTerminalAction {\n                evidence_refs,\n                comment,\n                ..\n            } => {\n                optional(comment, \"备注\", COMMENT_MAX_LEN)?;\n                validate_evidence_refs(evidence_refs)\n            }\n            DirectReconciliationDecision::TerminalConclusion {\n                evidence_refs,\n                comment,\n                reason_registry_id,\n                reason_registry_version,\n                registered_reason_id,\n                ..\n            } => {\n                required(reason_registry_id, \"原因注册表 ID\", ID_MAX_LEN)?;\n                if *reason_registry_version == 0 {\n                    return Err(Error::ValidationError(\"原因注册表版本必须大于 0\".to_string()));\n                }\n                required(registered_reason_id, \"注册原因 ID\", ID_MAX_LEN)?;\n                optional(comment, \"备注\", COMMENT_MAX_LEN)?;\n                validate_evidence_refs(evidence_refs)?;\n                if evidence_refs.is_empty() {\n                    return Err(Error::ValidationError(\"终态对账必须提供证据引用\".to_string()));\n                }\n                Ok(())\n            }\n        }\n    }\n}\n\n/// 非终结动作的服务端事实结果。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum IntegrationActionOutcome {\n    /// 已找到可验证终态证据。\n    TerminalEvidenceFound,\n    /// 已明确确认原动作无结果。\n    NoResultConfirmed,\n    /// 当前仍无法确认结果。\n    ResultUnknown,\n    /// 重放已被权威动作端受理。\n    ReplayAccepted,\n    /// 已重新归集。\n    Reattributed,\n    /// 已关联正式补偿。\n    EvidenceLinked,\n    /// 已追加证据。\n    EvidenceAdded,\n    /// 已确认无误。\n    ConfirmedNoError,\n    /// 已确认有效差异。\n    ConfirmedValidDifference,\n}\n\n/// 单次非终结动作的证据结果。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct IntegrationTaskActionEvidence {\n    /// 操作 ID。\n    pub operation_id: String,\n    /// 服务端判定结果。\n    pub outcome: IntegrationActionOutcome,\n    /// 正式业务结果引用。\n    pub business_result_reference: Option<String>,\n    /// 本次追加证据记录引用。\n    pub evidence_reference: Option<String>,\n}\n\n/// W29 非终结任务动作结果。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct IntegrationTaskActionResult {\n    /// 正式任务 ID。\n    pub work_item_id: String,\n    /// 恒为 `OPEN`。\n    pub work_item_status: IntegrationWorkItemStatus,\n    /// 本次证据结果。\n    pub evidence: IntegrationTaskActionEvidence,\n    /// 服务端按当前事实给出的下一动作。\n    pub next_allowed_actions: Vec<String>,\n}\n\n/// W29 强命令返回的任务状态子集。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum IntegrationWorkItemStatus {\n    /// 任务仍开放。\n    Open,\n    /// 任务已由强类型命令完成。\n    Completed,\n}\n\n/// W29 任务完成结果。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct IntegrationTaskCompletionResult {\n    /// 正式任务 ID。\n    pub work_item_id: String,\n    /// 恒为 `COMPLETED`。\n    pub work_item_status: IntegrationWorkItemStatus,\n    /// 操作 ID。\n    pub operation_id: String,\n    /// 正式解决记录 ID。\n    pub resolution_record_id: String,\n    /// 已由服务端验证的终态证据引用。\n    pub terminal_evidence_reference: String,\n}\n\n/// 直接对账结果状态。\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(rename_all = \"SCREAMING_SNAKE_CASE\")]\npub enum DirectReconciliationStatus {\n    /// 仍开放。\n    Open,\n    /// 已追加证据，仍待正式结论。\n    EvidencePending,\n    /// 已确认无误。\n    ConfirmedNoError,\n    /// 已确认有效差异。\n    ConfirmedValidDifference,\n}\n\n/// 无正式任务的直接对账结果。\n#[derive(Debug, Clone, PartialEq, Eq, Serialize)]\npub struct DirectReconciliationResult {\n    /// 差异 ID。\n    pub difference_id: String,\n    /// 操作 ID。\n    pub operation_id: String,\n    /// 追加式决定记录 ID。\n    pub resolution_record_id: String,\n    /// 服务端派生状态。\n    pub resulting_status: DirectReconciliationStatus,\n    /// 是否已形成正式结论。\n    pub is_terminal: bool,\n    /// 服务端判定结果。\n    pub outcome: IntegrationActionOutcome,\n    /// 正式业务结果引用。\n    pub business_result_reference: Option<String>,\n}\n\nfn validate_command_identity(\n    work_item_id: &str,\n    task_version: &str,\n    subject_version: &str,\n    idempotency_key: &str,\n) -> Result<()> {\n    required(work_item_id, \"任务 ID\", ID_MAX_LEN)?;\n    decimal_version(task_version, false, \"任务版本\")?;\n    required(subject_version, \"业务主题版本\", VERSION_MAX_LEN)?;\n    required(idempotency_key, \"幂等键\", IDEMPOTENCY_KEY_MAX_LEN)\n}\n\nfn validate_action(action: &IntegrationNonTerminalTaskAction) -> Result<()> {\n    required(&action.item_id, \"业务项 ID\", ID_MAX_LEN)?;\n    required(&action.operation_id, \"操作 ID\", OPERATION_ID_MAX_LEN)?;\n    optional(&action.reason_code, \"原因代码\", REASON_CODE_MAX_LEN)?;\n    optional(&action.comment, \"备注\", COMMENT_MAX_LEN)?;\n    validate_evidence_refs(&action.evidence_refs)\n}\n\nfn validate_evidence_refs(refs: &[ControlledEvidenceRef]) -> Result<()> {\n    if refs.len() > EVIDENCE_REF_MAX_COUNT {\n        return Err(Error::ValidationError(\"证据引用数量超过上限\".to_string()));\n    }\n    for evidence in refs {\n        required(&evidence.record_id, \"证据记录 ID\", ID_MAX_LEN)?;\n        required(&evidence.label, \"证据标签\", ID_MAX_LEN)?;\n    }\n    Ok(())\n}\n\npub(super) fn decimal_version(value: &str, allow_zero: bool, label: &str) -> Result<u64> {\n    required(value, label, VERSION_MAX_LEN)?;\n    let version = value\n        .trim()\n        .parse::<u64>()\n        .map_err(|_| Error::ValidationError(format!(\"{label}必须为十进制整数字符串\")))?;\n    if !allow_zero && version == 0 {\n        return Err(Error::ValidationError(format!(\"{label}必须大于 0\")));\n    }\n    Ok(version)\n}\n\nfn required(value: &str, label: &str, max: usize) -> Result<()> {\n    let value = value.trim();\n    if value.is_empty() {\n        return Err(Error::ValidationError(format!(\"{label}不能为空\")));\n    }\n    if value.len() > max {\n        return Err(Error::ValidationError(format!(\"{label}过长\")));\n    }\n    Ok(())\n}\n\nfn optional(value: &Option<String>, label: &str, max: usize) -> Result<()> {\n    if let Some(value) = value {\n        if value.trim().is_empty() {\n            return Err(Error::ValidationError(format!(\"{label}不能为空白\")));\n        }\n        if value.len() > max {\n            return Err(Error::ValidationError(format!(\"{label}过长\")));\n        }\n    }\n    Ok(())\n}\n\n"
+    }
+  ],
+  "w29_test_transfer": {
+    "to_A_registry": [
+      "error_registry_covers_every_class",
+      "difference_registry_covers_every_code_and_rejects_unknown"
+    ],
+    "to_B_real_workitem": [
+      "error_work_item_carries_full_formal_fields",
+      "difference_work_item_carries_full_formal_fields",
+      "factories_reject_unknown_difference_and_blank_owner"
+    ]
+  },
+  "bson_test_transfer_to_A_repository": {
+    "inbox_message.rs": "entity_roundtrip_through_bson",
+    "integration_error_task.rs": "entity_roundtrip_through_bson",
+    "reconciliation_difference.rs": "entity_roundtrip_through_bson",
+    "reconciliation_difference_resolution.rs": "entity_roundtrips_through_bson"
+  },
+  "validation": {
+    "stage14_source_created": false,
+    "phase13_business_source_modified": false,
+    "cargo_executed": false,
+    "mongo_executed": false,
+    "real_database_verified": false
+  }
+}

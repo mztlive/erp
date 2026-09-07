@@ -1,0 +1,7 @@
+领域边界检查
+夹具: errors=0
+工作区: errors=0
+  说明: instantiated planned crates: application-core, erp-audit, erp-catalog, erp-contract, erp-core, erp-customer, erp-finance, erp-fulfillment, erp-identity, erp-import, erp-integration, erp-inventory, erp-party, erp-processes, erp-procurement, erp-read-models, erp-returns, erp-sales, erp-supplier, erp-support, erp-warehouse, erp-workflow, persistence-core
+  说明: cargo metadata 无 kind=test 集成目标
+  说明: 尚无已验收阶段；旧源清零规则已加载，当前不核销业务源文件
+领域边界检查通过（夹具自检通过；未伪造未实例化领域的隔离证据）。

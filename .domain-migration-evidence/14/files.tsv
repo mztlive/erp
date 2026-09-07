@@ -1,0 +1,120 @@
+M	backend/Cargo.lock
+M	backend/Cargo.toml
+M	backend/apps/web-api/Cargo.toml
+M	backend/apps/web-api/src/app_state.rs
+M	backend/apps/web-api/src/core/errors.rs
+M	backend/apps/web-api/src/core/handler/integration_ops/mod.rs
+M	backend/apps/web-api/src/core/handler/supplier_api/mod.rs
+A	backend/crates/erp-integration/Cargo.toml
+R100	backend/services/src/integration_ops/dto/common.rs	backend/crates/erp-integration/src/dto/common.rs
+R095	backend/services/src/integration_ops/dto/error_task.rs	backend/crates/erp-integration/src/dto/error_task.rs
+R096	backend/services/src/integration_ops/dto/inbox_message.rs	backend/crates/erp-integration/src/dto/inbox_message.rs
+R100	backend/services/src/integration_ops/dto.rs	backend/crates/erp-integration/src/dto/mod.rs
+R096	backend/services/src/integration_ops/dto/prepared_decision.rs	backend/crates/erp-integration/src/dto/prepared_decision.rs
+R097	backend/services/src/integration_ops/dto/prepared_inbox.rs	backend/crates/erp-integration/src/dto/prepared_inbox.rs
+R099	backend/services/src/integration_ops/dto/reconciliation_difference.rs	backend/crates/erp-integration/src/dto/reconciliation_difference.rs
+R098	backend/services/src/integration_ops/dto/task_decision.rs	backend/crates/erp-integration/src/dto/task_decision.rs
+R099	backend/entities/src/integration_ops/decision_policy.rs	backend/crates/erp-integration/src/entity/integration_ops/decision_policy.rs
+R100	backend/entities/src/integration_ops/direct_conclusion.rs	backend/crates/erp-integration/src/entity/integration_ops/direct_conclusion.rs
+R100	backend/entities/src/integration_ops/error_classification.rs	backend/crates/erp-integration/src/entity/integration_ops/error_classification.rs
+R100	backend/entities/src/integration_ops/evidence_reference.rs	backend/crates/erp-integration/src/entity/integration_ops/evidence_reference.rs
+R098	backend/entities/src/integration_ops/inbox_message.rs	backend/crates/erp-integration/src/entity/integration_ops/inbox_message.rs
+R099	backend/entities/src/integration_ops/integration_error_task.rs	backend/crates/erp-integration/src/entity/integration_ops/integration_error_task.rs
+R092	backend/entities/src/integration_ops/mod.rs	backend/crates/erp-integration/src/entity/integration_ops/mod.rs
+R095	backend/entities/src/integration_ops/reconciliation_difference.rs	backend/crates/erp-integration/src/entity/integration_ops/reconciliation_difference.rs
+R096	backend/entities/src/integration_ops/reconciliation_difference_resolution.rs	backend/crates/erp-integration/src/entity/integration_ops/reconciliation_difference_resolution.rs
+R099	backend/entities/src/integration_ops/w29_close.rs	backend/crates/erp-integration/src/entity/integration_ops/w29_close.rs
+A	backend/crates/erp-integration/src/entity/integration_ops/w29_work_items.rs
+A	backend/crates/erp-integration/src/entity/mod.rs
+A	backend/crates/erp-integration/src/error.rs
+R099	backend/database/src/indexes/integration_ops.rs	backend/crates/erp-integration/src/indexes/integration_ops.rs
+A	backend/crates/erp-integration/src/indexes/mod.rs
+A	backend/crates/erp-integration/src/lib.rs
+A	backend/crates/erp-integration/src/ports/evidence.rs
+A	backend/crates/erp-integration/src/ports/mod.rs
+R099	backend/database/src/repository/extensions/integration_ops.rs	backend/crates/erp-integration/src/repository/extensions.rs
+R099	backend/database/src/repository/integration_ops.rs	backend/crates/erp-integration/src/repository/integration_ops.rs
+R098	backend/database/src/repository/integration_ops/difference_resolution_batch.rs	backend/crates/erp-integration/src/repository/integration_ops/difference_resolution_batch.rs
+A	backend/crates/erp-integration/src/repository/mod.rs
+R083	backend/database/src/repository/owned/inbox_message.rs	backend/crates/erp-integration/src/repository/owned/inbox_message.rs
+R081	backend/database/src/repository/owned/integration_error_task.rs	backend/crates/erp-integration/src/repository/owned/integration_error_task.rs
+A	backend/crates/erp-integration/src/repository/owned/mod.rs
+R081	backend/database/src/repository/owned/reconciliation_difference.rs	backend/crates/erp-integration/src/repository/owned/reconciliation_difference.rs
+R080	backend/database/src/repository/owned/reconciliation_difference_resolution.rs	backend/crates/erp-integration/src/repository/owned/reconciliation_difference_resolution.rs
+A	backend/crates/erp-integration/src/repository/serialization_contract.rs
+A	backend/crates/erp-integration/src/service/error_task.rs
+A	backend/crates/erp-integration/src/service/evidence.rs
+A	backend/crates/erp-integration/src/service/inbox_message.rs
+A	backend/crates/erp-integration/src/service/mod.rs
+A	backend/crates/erp-integration/src/service/reconciliation_difference.rs
+R058	backend/services/src/integration_ops/task_decision/action.rs	backend/crates/erp-integration/src/service/task_decision/action.rs
+A	backend/crates/erp-integration/src/service/task_decision/action/tests.rs
+A	backend/crates/erp-integration/src/service/task_decision/complete.rs
+A	backend/crates/erp-integration/src/service/task_decision/direct.rs
+A	backend/crates/erp-integration/src/service/task_decision/guard.rs
+A	backend/crates/erp-integration/src/service/task_decision/mod.rs
+R074	backend/services/src/integration_ops/validation.rs	backend/crates/erp-integration/src/service/validation.rs
+M	backend/crates/erp-processes/Cargo.toml
+A	backend/crates/erp-processes/src/integration_resolution/creation_writes.rs
+A	backend/crates/erp-processes/src/integration_resolution/error_task.rs
+A	backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs
+A	backend/crates/erp-processes/src/integration_resolution/inbox_message.rs
+A	backend/crates/erp-processes/src/integration_resolution/mod.rs
+R090	backend/services/src/integration_ops/producer.rs	backend/crates/erp-processes/src/integration_resolution/producer.rs
+A	backend/crates/erp-processes/src/integration_resolution/reconciliation_difference.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/action.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/complete.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/direct.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/execution.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs
+R055	backend/services/src/integration_ops/task_decision/guard.rs	backend/crates/erp-processes/src/integration_resolution/task_decision/guard.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/guard/tests.rs
+A	backend/crates/erp-processes/src/integration_resolution/task_decision/mod.rs
+R090	backend/services/src/integration_ops/task_decision/tests.rs	backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs
+R092	backend/services/src/integration_ops/transaction.rs	backend/crates/erp-processes/src/integration_resolution/transaction.rs
+A	backend/crates/erp-processes/src/integration_resolution/work_item_factory.rs
+M	backend/crates/erp-processes/src/lib.rs
+A	backend/crates/erp-processes/src/supplier_connection_execution/catalog.rs
+A	backend/crates/erp-processes/src/supplier_connection_execution/execution.rs
+A	backend/crates/erp-processes/src/supplier_connection_execution/failure.rs
+A	backend/crates/erp-processes/src/supplier_connection_execution/health.rs
+A	backend/crates/erp-processes/src/supplier_connection_execution/mod.rs
+M	backend/crates/erp-read-models/Cargo.toml
+A	backend/crates/erp-read-models/src/integration_center/error_task.rs
+A	backend/crates/erp-read-models/src/integration_center/mod.rs
+A	backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs
+M	backend/crates/erp-read-models/src/lib.rs
+M	backend/crates/erp-read-models/src/workbench/facts.rs
+M	backend/database/Cargo.toml
+M	backend/database/src/indexes/mod.rs
+M	backend/database/src/repository/extensions/mod.rs
+M	backend/database/src/repository/mod.rs
+M	backend/database/src/repository/owned/mod.rs
+M	backend/docs/superpowers/plans/domain-crate-migration/14-integration.md
+M	backend/docs/superpowers/plans/domain-crate-migration/README.md
+M	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json
+M	backend/entities/Cargo.toml
+D	backend/entities/src/integration_ops/w29_work_items.rs
+M	backend/entities/src/lib.rs
+M	backend/services/Cargo.toml
+M	backend/services/src/errors.rs
+D	backend/services/src/integration_ops/error_task.rs
+D	backend/services/src/integration_ops/evidence.rs
+D	backend/services/src/integration_ops/inbox_message.rs
+D	backend/services/src/integration_ops/mod.rs
+D	backend/services/src/integration_ops/reconciliation_difference.rs
+D	backend/services/src/integration_ops/task_decision/complete.rs
+D	backend/services/src/integration_ops/task_decision/direct.rs
+D	backend/services/src/integration_ops/task_decision/mod.rs
+M	backend/services/src/lib.rs
+M	backend/services/src/supplier_api/governance/command.rs
+M	backend/services/src/supplier_api/governance/context.rs
+M	backend/services/src/supplier_api/governance/jobs.rs
+M	backend/services/src/supplier_api/governance/mod.rs
+M	backend/services/src/supplier_api/mod.rs
+M	backend/services/src/supplier_fulfillment/cancel.rs
+M	backend/services/src/supplier_fulfillment/gateway.rs
+M	backend/services/src/supplier_fulfillment/place.rs
+M	backend/services/src/supplier_fulfillment/refund_result.rs
+M	backend/services/src/work_item/facts.rs
+M	backend/services/src/workflow_compose.rs

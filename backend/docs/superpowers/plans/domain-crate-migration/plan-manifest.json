@@ -782,7 +782,7 @@
     {
       "id": "14",
       "file": "14-integration.md",
-      "status": "执行中",
+      "status": "本地门禁通过",
       "crates": [
         "erp-integration"
       ],

@@ -1,0 +1,12 @@
+    Checking erp-integration v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/crates/erp-integration)
+   Compiling web-api v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/apps/web-api)
+    Checking entities v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/entities)
+    Checking database v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/database)
+    Checking test-support v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/crates/test-support)
+    Checking services v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/services)
+    Checking erp-read-models v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/crates/erp-read-models)
+    Checking cli v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/apps/cli)
+    Checking erp-processes v0.1.0 (/private/tmp/erp-domain-crate-14-integration/backend/crates/erp-processes)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.46s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`

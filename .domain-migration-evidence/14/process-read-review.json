@@ -1,0 +1,696 @@
+{
+  "input_source_commit": "453cd48082793b8f40e5afa37d5d225a747fd1b0",
+  "worktree": "/private/tmp/erp-domain-crate-14-integration",
+  "captured_head": "b274cebaefad13c1d0216a7b2252a4cecab5413f",
+  "status": "implementation_review_before_root_gates",
+  "source_files": [
+    {
+      "path": "backend/services/src/integration_ops/mod.rs",
+      "sha256": "49fe13766bb98e7831f66cdb337fbce12bdd5db7a29de8cf1e8e9239ae1986e6",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/inbox_message.rs",
+      "sha256": "0103fc11dfb9ab202de79a9c4cbcda0bc8a7cef69d854c9be68dbb67efaf1d29",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/error_task.rs",
+      "sha256": "07a1bf3a0c42337f93590ba20250789f56b8795be37de8fcb636217e3eec38a2",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "sha256": "cec3b19ccdcbd8725642e01bd53ef57c4072f110cbcbbdc83ae7044ee6f0bb63",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/evidence.rs",
+      "sha256": "357d7092e23db18a9b431bdbd6b30973de58c0713ada5b0802cac8931a54dace",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/producer.rs",
+      "sha256": "e44c9bf23baf1c404d5199ce66babfb2cf856f52d13a802f654c5b0a13d3fd1f",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/transaction.rs",
+      "sha256": "6c5f7597737dc6ac4734a7687b9350746848118229a340fbaa39cbc28147b13e",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/validation.rs",
+      "sha256": "d3bdf38b3712240080b0f58e70a80bae9f744922da36ced3455ac3add1afb2b3",
+      "old_path_removed": true,
+      "matches_accepted_input": true
+    }
+  ],
+  "counterpart_files": [
+    {
+      "path": "backend/crates/erp-integration/src/service/error_task.rs",
+      "sha256": "f1b009b5ffa4b7ec8b5c6fc1329807dfdb6b01f96863a3952473a1672478c676"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/evidence.rs",
+      "sha256": "86817777e50532899e72bb84be918984b096307cb1f83df4d55e7aeb46828c0e"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/inbox_message.rs",
+      "sha256": "761d7ec50209b75c037ccb717716327e12f20ae451e3f044b9edc6c3a410ac06"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/reconciliation_difference.rs",
+      "sha256": "e3b418ef4b356f1e8e3a1a1329550cbf6502909499c3dcca1783c8f7267d54fd"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/validation.rs",
+      "sha256": "cf594eff86cf6209fe3b7abfe2c458ff1e3d47f427485e886f38fea59c767a93"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/creation_writes.rs",
+      "sha256": "2b5450a508057832df7ed9bd19b583f06a8de1a2882febddcff770ce6bc9e9ff"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/error_task.rs",
+      "sha256": "641cf66253be297d054bbd163780ac89868b436595225fb5e0e390b5950af361"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "sha256": "6d60a7d5186935aa43f96deadbe700718e6991f2e975f91a88b9255a8abfb8e1"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/inbox_message.rs",
+      "sha256": "6f9050405c50bc114a241d4e66ea2aca70265029d6857644115d606fa6c24ca8"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/mod.rs",
+      "sha256": "368126c15077d4c4fad0a4b42f51c2f9fe28e758339fe966cdf2be75ccbd5ce4"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/producer.rs",
+      "sha256": "776b80c5efd9abf0d249ec84cb18def741a2b617f2994821f1544e5a34b9aef2"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/reconciliation_difference.rs",
+      "sha256": "2808ce65b2fd3b46314c308dac6584e1127b5751c949a7b92f492bf178b7440a"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/transaction.rs",
+      "sha256": "a31f1be6c3a649e2c764fd20f7e6254c5cf0230b3e9d0ebaa222e095169e4191"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/work_item_factory.rs",
+      "sha256": "604f4388bb0258ea3e93802577f83a58f7e45f63b97b5f2c0c843e7a6699a85a"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/error_task.rs",
+      "sha256": "f5945fc689cef6a10a5003eb96080665f444e68b964fe8c1e4ae44dfc9219a67"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/mod.rs",
+      "sha256": "63141acc7fa61c966dbbd47ef6c32528e876460128d8666535095e8dac493dd7"
+    },
+    {
+      "path": "backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs",
+      "sha256": "3991a18b220af63c8aa206d5cbef96aa2e2c997a345a4cc2c97fcfc5845a9bbf"
+    }
+  ],
+  "whole_function_and_test_checks": [
+    {
+      "source": "backend/services/src/integration_ops/inbox_message.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/inbox_message.rs",
+      "symbol": "inbox_message_list",
+      "counterpart_symbol": "inbox_message_list",
+      "review_kind": "whole_function",
+      "source_function_sha256": "e704fc7dc776b7b1dc072997eeebf12dea5f830f385cd132b2cb7b28c89d9978",
+      "counterpart_function_sha256": "e704fc7dc776b7b1dc072997eeebf12dea5f830f385cd132b2cb7b28c89d9978",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/inbox_message.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/inbox_message.rs",
+      "symbol": "inbox_message_detail",
+      "counterpart_symbol": "inbox_message_detail",
+      "review_kind": "whole_function",
+      "source_function_sha256": "487565e7fa7f8c836030e778346470814f0ad2b8d91ce5968845f5e6d94f5c20",
+      "counterpart_function_sha256": "487565e7fa7f8c836030e778346470814f0ad2b8d91ce5968845f5e6d94f5c20",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/error_task.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/error_task.rs",
+      "symbol": "error_task_list",
+      "counterpart_symbol": "error_task_list",
+      "review_kind": "whole_function",
+      "source_function_sha256": "0a948b4d27c1eb653467031a34df27b0757a0b8b4e44413e3633d1ed7ef1a190",
+      "counterpart_function_sha256": "0a948b4d27c1eb653467031a34df27b0757a0b8b4e44413e3633d1ed7ef1a190",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/reconciliation_difference.rs",
+      "symbol": "difference_list",
+      "counterpart_symbol": "difference_list",
+      "review_kind": "whole_function",
+      "source_function_sha256": "c0023f291e1005da9b6f37cbcca7fbe6cfdf6af4f6a8ed2905a9150bd89f3a6a",
+      "counterpart_function_sha256": "c0023f291e1005da9b6f37cbcca7fbe6cfdf6af4f6a8ed2905a9150bd89f3a6a",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/validation.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/validation.rs",
+      "symbol": "ensure_version",
+      "counterpart_symbol": "ensure_version",
+      "review_kind": "whole_function",
+      "source_function_sha256": "5237bdf19a9e30550517252d0348a2f1aa6288d14dea060219cfd522c792b0c3",
+      "counterpart_function_sha256": "2fb58b24550f1f830bc0ec91eb0c1463557dbbdd95eb900186bd7557de3dd991",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/error_task.rs",
+      "counterpart": "backend/crates/erp-read-models/src/integration_center/error_task.rs",
+      "symbol": "error_task_detail",
+      "counterpart_symbol": "error_task_detail",
+      "review_kind": "whole_function",
+      "source_function_sha256": "c1e3d010e42f1d67b48cc4257e64651247f5f1cf47c9dc6ec2ddd54d3a29fe63",
+      "counterpart_function_sha256": "37e87cb66f0f585ea09ea60badfabd8ea9e0772476f4c67b2537b952c50eafae",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/error_task.rs",
+      "counterpart": "backend/crates/erp-read-models/src/integration_center/error_task.rs",
+      "symbol": "find_task_work_item",
+      "counterpart_symbol": "find_task_work_item",
+      "review_kind": "whole_function",
+      "source_function_sha256": "d66844d01ea05189646890798d8230c243b2bfeb0f3d7227f482fbb166d961e9",
+      "counterpart_function_sha256": "d66844d01ea05189646890798d8230c243b2bfeb0f3d7227f482fbb166d961e9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/error_task.rs",
+      "counterpart": "backend/crates/erp-read-models/src/integration_center/error_task.rs",
+      "symbol": "error_action_projection",
+      "counterpart_symbol": "error_action_projection",
+      "review_kind": "whole_function",
+      "source_function_sha256": "616e8a2068062cab9916d22447097c66785322cf0604e60dd8ae5329606a619e",
+      "counterpart_function_sha256": "ec9bcec5ad2a20740f847c770bc4ba688e7869242b068ea945fd72928cabdde5",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "counterpart": "backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs",
+      "symbol": "difference_detail",
+      "counterpart_symbol": "difference_detail",
+      "review_kind": "whole_function",
+      "source_function_sha256": "4bd178aa0c7035e4b53a01ff7e6e4b30981e837fbb6c8ec2bc098d6b36eb1bba",
+      "counterpart_function_sha256": "962c1fb9626969d51c33e455cb6f1021217011b67bb2d1fffa2c441ee8b903dd",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "counterpart": "backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs",
+      "symbol": "has_difference_work_item",
+      "counterpart_symbol": "has_difference_work_item",
+      "review_kind": "whole_function",
+      "source_function_sha256": "4118e70ca7ac7468fdcc43c16b4816407d0c4a60471d4c40ce3b5dbf9f5f798c",
+      "counterpart_function_sha256": "4118e70ca7ac7468fdcc43c16b4816407d0c4a60471d4c40ce3b5dbf9f5f798c",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "counterpart": "backend/crates/erp-read-models/src/integration_center/reconciliation_difference.rs",
+      "symbol": "difference_action_projection",
+      "counterpart_symbol": "difference_action_projection",
+      "review_kind": "whole_function",
+      "source_function_sha256": "263641ef337b10ce31cadc8f31edb613f4305add09ffae3aca868de05357ca51",
+      "counterpart_function_sha256": "43908019e85a9c366cc39729008399d6f186fa9b9e99fa478983ccf7dafdb965",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "error_evidence_policy",
+      "counterpart_symbol": "error_evidence_policy",
+      "review_kind": "whole_function",
+      "source_function_sha256": "f80b6cccf9a08250263275e80982bb6a3459b19c803b23099d52130283acec49",
+      "counterpart_function_sha256": "9a0f6a222b024b08cea6cc1f820cc6b9ec853a41ffdac66d53cc5394a21b82bb",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "difference_evidence_policy",
+      "counterpart_symbol": "difference_evidence_policy",
+      "review_kind": "whole_function",
+      "source_function_sha256": "aa8885a777512967f23e0c4d3ae6e4cf35845455f484b4e0a7cbe7b0b46087c2",
+      "counterpart_function_sha256": "5c577809eaa630e233f0d1703ec100cfcc5a42a956147e0ca9637930dadf4725",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "reconciliation_reason_registry",
+      "counterpart_symbol": "reconciliation_reason_registry",
+      "review_kind": "whole_function",
+      "source_function_sha256": "527704f505ca8473966b7ba27deac372b6feb1d53bc1c0b24ce11962defd2c97",
+      "counterpart_function_sha256": "de787cd779e4589358dae9b3c55c620f9d9aea478efa049bacbecdac1531faef",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "policy_view",
+      "counterpart_symbol": "policy_view",
+      "review_kind": "whole_function",
+      "source_function_sha256": "ee2e3972d57b1b58273784893bcd94ff66f00e18ce74fd86626f919dca9dcf7d",
+      "counterpart_function_sha256": "ee2e3972d57b1b58273784893bcd94ff66f00e18ce74fd86626f919dca9dcf7d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "domain_kinds",
+      "counterpart_symbol": "domain_kinds",
+      "review_kind": "whole_function",
+      "source_function_sha256": "6a66856af2d4ecb22dbc49d82efbc250bf26439b4ea4965c70f6a3df85396f48",
+      "counterpart_function_sha256": "6d612faaa774e0b85e9cb73f654d89b4f2cfee72e3a523579a4db3e222ba4924",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "blocker_view",
+      "counterpart_symbol": "blocker_view",
+      "review_kind": "whole_function",
+      "source_function_sha256": "ed697242d573d49dff3ee3622c3180af22acaae3054f610192a91c06f5b8a601",
+      "counterpart_function_sha256": "ae497fd70bbef6ae82bdf676581ff04fd6e485a95e7456a5ca52a0deb8ba4275",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "dto_conclusion",
+      "counterpart_symbol": "dto_conclusion",
+      "review_kind": "whole_function",
+      "source_function_sha256": "054ca8007fc71cb6167a0a347a0cbb6fddba0c713947185b00c69892bc277955",
+      "counterpart_function_sha256": "054ca8007fc71cb6167a0a347a0cbb6fddba0c713947185b00c69892bc277955",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "ensure_completion_policy",
+      "counterpart_symbol": "ensure_completion_policy",
+      "review_kind": "whole_function",
+      "source_function_sha256": "d4a15af5e7c3d7e78217c9bdfa0ecf8d6102188fd6382c9fa6ce352991213151",
+      "counterpart_function_sha256": "a5f38273403424af2cfe142c86817aa046723863b3932d639910f75e29b2d36b",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "ensure_direct_reason",
+      "counterpart_symbol": "ensure_direct_reason",
+      "review_kind": "whole_function",
+      "source_function_sha256": "d2f61a3bb86a525102c1568d6604a7777261000ee806c6277c611d88fccc8f98",
+      "counterpart_function_sha256": "5f61b8282b24e7ecd0fa46df21f6659090b6ceced9e3f64d76b33b047d39d923",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "kinds_subset",
+      "counterpart_symbol": "kinds_subset",
+      "review_kind": "whole_function",
+      "source_function_sha256": "8eea8c95e645c686d584249fc6fa03bf9309b035b6add3db7cc4e89cd5be9d8c",
+      "counterpart_function_sha256": "8eea8c95e645c686d584249fc6fa03bf9309b035b6add3db7cc4e89cd5be9d8c",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "verify_evidence_refs",
+      "counterpart_symbol": "verify_evidence_refs",
+      "review_kind": "whole_function",
+      "source_function_sha256": "ebf948d6a25217383e253e037726c2d0f3b3e6f50b62a21cb88d773c2a6c6c36",
+      "counterpart_function_sha256": "1172def42ae65b109c339752396258081e996f44b1cf457a8349d1aac5efbf51",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "verified_reference",
+      "counterpart_symbol": "verified_reference",
+      "review_kind": "whole_function",
+      "source_function_sha256": "2c4b99bfd4e8a4d48c8640d08c178dfb3b4ba3c92fa7c7bfc0ff7df25217a9d5",
+      "counterpart_function_sha256": "3722c5b8d40d91a0bf0bc09829eda1e1612ada85b0ab627bff9b9c365ef483b9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "evidence_reference_grammar",
+      "counterpart_symbol": "evidence_reference_grammar",
+      "review_kind": "whole_function",
+      "source_function_sha256": "e2b7b8812e7d960cf382de5170a05e6bf2e36000b1e0406d792dc680e831a477",
+      "counterpart_function_sha256": "3244c2f788298575dcb3bf601db336423b4544bf734b00a433102063824bf2b7",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "query_original",
+      "counterpart_symbol": "query_original",
+      "review_kind": "whole_function",
+      "source_function_sha256": "8a7d636bfcf1329057fcbf842550e34be0f469137afcde9e37223b7e4129074a",
+      "counterpart_function_sha256": "da00a9bcb1fc0730ebd4ddf8dbef3e71e61442ff5c05d11ccd09a8f5bee71629",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "replay_original",
+      "counterpart_symbol": "replay_original",
+      "review_kind": "whole_function",
+      "source_function_sha256": "c462cc7781dde26e98b88443e1331d16b699976876fc8f064fe75afe06c9dd44",
+      "counterpart_function_sha256": "10af2f4969b020a8b8a067072839a474b4742bbeba19899f91b90252fc617595",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "verify_reattribution",
+      "counterpart_symbol": "verify_reattribution",
+      "review_kind": "whole_function",
+      "source_function_sha256": "c649d926abeb1c0e1275d45f41d34056e952b80aee9d3453216af503841e2b99",
+      "counterpart_function_sha256": "c649d926abeb1c0e1275d45f41d34056e952b80aee9d3453216af503841e2b99",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "verify_evidence",
+      "counterpart_symbol": "verify_evidence",
+      "review_kind": "whole_function",
+      "source_function_sha256": "71fd557404953914618529e4ca21bdd4a3ed2b3c40c33687af3c68a36a7f575d",
+      "counterpart_function_sha256": "93a024686237be6dd2d3bd355502eddffc1b05f85f5ccfd99e114dec70cd09de",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "discover_evidence",
+      "counterpart_symbol": "discover_evidence",
+      "review_kind": "whole_function",
+      "source_function_sha256": "407249a5e9f5dbd9d7508c385c4d130ffe408edbef800841fcb7897fd338c30d",
+      "counterpart_function_sha256": "0154c8dab44c1d00d6239a0de3dd538591c9d1255261d9cc67dbcecc4fb45915",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "known_result_exists",
+      "counterpart_symbol": "known_result_exists",
+      "review_kind": "whole_function",
+      "source_function_sha256": "c42d6eb07269a9351cb35984b65c837beab8434f76bec6b9bba7ca18e6103d11",
+      "counterpart_function_sha256": "c42d6eb07269a9351cb35984b65c837beab8434f76bec6b9bba7ca18e6103d11",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "replay_adapter_registered",
+      "counterpart_symbol": "replay_adapter_registered",
+      "review_kind": "whole_function",
+      "source_function_sha256": "d5017365efa328856db35cc9eb0efa2ab312c2dfffb8f0a8dc5896a20f0137ac",
+      "counterpart_function_sha256": "d5017365efa328856db35cc9eb0efa2ab312c2dfffb8f0a8dc5896a20f0137ac",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "discover_compensation",
+      "counterpart_symbol": "discover_compensation",
+      "review_kind": "whole_function",
+      "source_function_sha256": "ed7f4c22d21afa83a749ee11d12237d064c9265b712d1a634bd6364e86c61701",
+      "counterpart_function_sha256": "ed7f4c22d21afa83a749ee11d12237d064c9265b712d1a634bd6364e86c61701",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "push_compensation_refs",
+      "counterpart_symbol": "push_compensation_refs",
+      "review_kind": "whole_function",
+      "source_function_sha256": "9a1b8928662d80b63f00a32d18b649c683c1e18d6c75dd64093147f96ce0d956",
+      "counterpart_function_sha256": "9a1b8928662d80b63f00a32d18b649c683c1e18d6c75dd64093147f96ce0d956",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "controlled_ref",
+      "counterpart_symbol": "controlled_ref",
+      "review_kind": "whole_function",
+      "source_function_sha256": "2721c4ae08edf099f1a0b0121769ef626499654845b08173b68b12a4c72c1607",
+      "counterpart_function_sha256": "2721c4ae08edf099f1a0b0121769ef626499654845b08173b68b12a4c72c1607",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "ensure_association",
+      "counterpart_symbol": "ensure_association",
+      "review_kind": "whole_function",
+      "source_function_sha256": "56f3ebc3423c72a8140e6f592ff5463c97339d5b348382def1e8f3b26c7ef9c0",
+      "counterpart_function_sha256": "56f3ebc3423c72a8140e6f592ff5463c97339d5b348382def1e8f3b26c7ef9c0",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "canonical_verified",
+      "counterpart_symbol": "canonical_verified",
+      "review_kind": "whole_function",
+      "source_function_sha256": "5145aff4e0fee9651cdc4aa90ac3800a40e86e9e4dbfed2c0181031674dd8d22",
+      "counterpart_function_sha256": "5145aff4e0fee9651cdc4aa90ac3800a40e86e9e4dbfed2c0181031674dd8d22",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "ensure_compensation_kind",
+      "counterpart_symbol": "ensure_compensation_kind",
+      "review_kind": "whole_function",
+      "source_function_sha256": "5e0a3682de746f12ee128339bbcbcadc7492f40d4e984560636d71e70f1b9cc3",
+      "counterpart_function_sha256": "5e0a3682de746f12ee128339bbcbcadc7492f40d4e984560636d71e70f1b9cc3",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "kind_mismatch",
+      "counterpart_symbol": "kind_mismatch",
+      "review_kind": "whole_function",
+      "source_function_sha256": "146cb26be8ab22373eea043b698b26ddf6ca51058b6707e14dd7caa9d6fbf73a",
+      "counterpart_function_sha256": "146cb26be8ab22373eea043b698b26ddf6ca51058b6707e14dd7caa9d6fbf73a",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/evidence_adapter.rs",
+      "symbol": "refund_association_ids",
+      "counterpart_symbol": "refund_association_ids",
+      "review_kind": "whole_function",
+      "source_function_sha256": "b0af58cdeae239a72c603b2c4c632a67b65695012b95a0e3385b90bbee7786da",
+      "counterpart_function_sha256": "b0af58cdeae239a72c603b2c4c632a67b65695012b95a0e3385b90bbee7786da",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/producer.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/producer.rs",
+      "symbol": "error_work_item",
+      "counterpart_symbol": "error_work_item",
+      "review_kind": "whole_function",
+      "source_function_sha256": "245c371c85415f5b0b50a4c57c828bf7078c4fd76670971847ebd87c705e092c",
+      "counterpart_function_sha256": "245c371c85415f5b0b50a4c57c828bf7078c4fd76670971847ebd87c705e092c",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/producer.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/producer.rs",
+      "symbol": "difference_work_item",
+      "counterpart_symbol": "difference_work_item",
+      "review_kind": "whole_function",
+      "source_function_sha256": "b14c441dd84fa255234838cc9e7a5d0ddada25a52fcd305847db3d4d976f7329",
+      "counterpart_function_sha256": "b14c441dd84fa255234838cc9e7a5d0ddada25a52fcd305847db3d4d976f7329",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/transaction.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/transaction.rs",
+      "symbol": "run_audited",
+      "counterpart_symbol": "run_audited",
+      "review_kind": "whole_function",
+      "source_function_sha256": "649a8bc412be1cee15cc61c9b0e55ee4e2fa7ed418f9b304c67b9ccef15eebd1",
+      "counterpart_function_sha256": "649a8bc412be1cee15cc61c9b0e55ee4e2fa7ed418f9b304c67b9ccef15eebd1",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/inbox_message.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/inbox_message.rs",
+      "symbol": "now_secs",
+      "counterpart_symbol": "now_secs",
+      "review_kind": "whole_function",
+      "source_function_sha256": "3bcbea7a6a9378233070f2970270a71e53c8acf5893d0d4a0a06d443136b7ce0",
+      "counterpart_function_sha256": "3bcbea7a6a9378233070f2970270a71e53c8acf5893d0d4a0a06d443136b7ce0",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "completion_policy_requires_exact_identity_key_and_kinds",
+      "counterpart_symbol": "completion_policy_requires_exact_identity_key_and_kinds",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "ab7a086baa0949a4db38d404bcfaee0be54794aa0948ecf2345a2d8c109a6267",
+      "counterpart_function_sha256": "ab7a086baa0949a4db38d404bcfaee0be54794aa0948ecf2345a2d8c109a6267",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "direct_reason_registry_binds_reason_to_conclusion_and_evidence",
+      "counterpart_symbol": "direct_reason_registry_binds_reason_to_conclusion_and_evidence",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "d78882430c7d758a3fae9b99ad5e9133c8322cc9bb1cd75acecc882c28b73278",
+      "counterpart_function_sha256": "d78882430c7d758a3fae9b99ad5e9133c8322cc9bb1cd75acecc882c28b73278",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/evidence.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/evidence.rs",
+      "symbol": "evidence_tables_are_owned_by_domain",
+      "counterpart_symbol": "evidence_tables_are_owned_by_domain",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "94a8057eebe97364591dd9b38bb49f6068458e613ba70e57735460e6325b8770",
+      "counterpart_function_sha256": "94a8057eebe97364591dd9b38bb49f6068458e613ba70e57735460e6325b8770",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/producer.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/producer.rs",
+      "symbol": "responsibility_tables_are_owned_by_domain",
+      "counterpart_symbol": "responsibility_tables_are_owned_by_domain",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "a3924fe9e1614e16c19e45bb7440276b308c3f034377eb3d86f5f58b2ced6ae1",
+      "counterpart_function_sha256": "a3924fe9e1614e16c19e45bb7440276b308c3f034377eb3d86f5f58b2ced6ae1",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/producer.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/producer.rs",
+      "symbol": "error_ctor_delegates_formal_fields_to_domain",
+      "counterpart_symbol": "error_ctor_delegates_formal_fields_to_domain",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "69f43387e5a1522ef7be3cd7e09c3a71492fea697c97ddcc34babd1aa871ad53",
+      "counterpart_function_sha256": "69f43387e5a1522ef7be3cd7e09c3a71492fea697c97ddcc34babd1aa871ad53",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/producer.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/producer.rs",
+      "symbol": "difference_ctor_keeps_business_error_for_unknown_type",
+      "counterpart_symbol": "difference_ctor_keeps_business_error_for_unknown_type",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "d4e05510f90a099ace14b32593da6cbd34e11f50f4d3360ad61d961a6931f509",
+      "counterpart_function_sha256": "64ca7fd0417a82a73f86bbb8d8a4d962dc24f89257bbea1e6f24fc4f7ace5848",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/inbox_message.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/inbox_message.rs",
+      "symbol": "inbox_shapes_are_owned_by_domain_and_prepared",
+      "counterpart_symbol": "inbox_shapes_are_owned_by_domain_and_prepared",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "b35d01c79c59ec3f5f7b955aa03214dc897120407d2fc92dc13da6b75920ac1d",
+      "counterpart_function_sha256": "b35d01c79c59ec3f5f7b955aa03214dc897120407d2fc92dc13da6b75920ac1d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/reconciliation_difference.rs",
+      "symbol": "difference_list_resolves_latest_via_single_batch",
+      "counterpart_symbol": "difference_list_resolves_latest_via_single_batch",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "c58bf0f02be8aafa8eb477a61dbf0ec0523acbe1b263198dee7c123b1647df76",
+      "counterpart_function_sha256": "c58bf0f02be8aafa8eb477a61dbf0ec0523acbe1b263198dee7c123b1647df76",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/services/src/integration_ops/reconciliation_difference.rs",
+      "counterpart": "backend/crates/erp-integration/src/service/reconciliation_difference.rs",
+      "symbol": "create_difference_defers_reference_invariant_to_entity",
+      "counterpart_symbol": "create_difference_defers_reference_invariant_to_entity",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "7d5ff4d911c31f2c9f3dff13db6352236a64b6493ce81941ccfe24b79fe32bf9",
+      "counterpart_function_sha256": "7d5ff4d911c31f2c9f3dff13db6352236a64b6493ce81941ccfe24b79fe32bf9",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/entities/src/integration_ops/w29_work_items.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/work_item_factory.rs",
+      "symbol": "error_work_item_carries_full_formal_fields",
+      "counterpart_symbol": "error_work_item_carries_full_formal_fields",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "855dbd470567c782a05e24af93f3ea4ffe63dc170d4238ab31c9168b8d99c245",
+      "counterpart_function_sha256": "855dbd470567c782a05e24af93f3ea4ffe63dc170d4238ab31c9168b8d99c245",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/entities/src/integration_ops/w29_work_items.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/work_item_factory.rs",
+      "symbol": "difference_work_item_carries_full_formal_fields",
+      "counterpart_symbol": "difference_work_item_carries_full_formal_fields",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "05ece0e1cfbba8dbdc5d65e66b47c6aff3053aa72e7f653bd6310f3e9eea606d",
+      "counterpart_function_sha256": "05ece0e1cfbba8dbdc5d65e66b47c6aff3053aa72e7f653bd6310f3e9eea606d",
+      "normalized_tokens_equal": true
+    },
+    {
+      "source": "backend/entities/src/integration_ops/w29_work_items.rs",
+      "counterpart": "backend/crates/erp-processes/src/integration_resolution/work_item_factory.rs",
+      "symbol": "factories_reject_unknown_difference_and_blank_owner",
+      "counterpart_symbol": "factories_reject_unknown_difference_and_blank_owner",
+      "review_kind": "original_test_body",
+      "source_function_sha256": "e1b694fd3c59d459369f0dedd4f45e71489959c4247127c44de3036ef5970bd6",
+      "counterpart_function_sha256": "e1b694fd3c59d459369f0dedd4f45e71489959c4247127c44de3036ef5970bd6",
+      "normalized_tokens_equal": true
+    }
+  ],
+  "normalization_scope": [
+    "whitespace/comments only outside string literals",
+    "rustfmt trailing parameter/call comma before closing parenthesis",
+    "public visibility: original pub(super) helpers now consumed across crate",
+    "explicit integration and application error namespace relocation",
+    "&impl authority to &dyn authority (same trait)",
+    "Database authority self to named adapter self.db",
+    "RM authority call to injected self.evidence"
+  ],
+  "normalization_exclusions": [
+    "no error strings/status/serde/action/order normalization",
+    "no scanner raw/allowlist changes"
+  ],
+  "source_test_count_this_owner": 12,
+  "source_test_count_delegated_task_decision": 5,
+  "new_tests_this_owner": 5,
+  "delegated_evidence": "/private/tmp/integration14-task-decision-result.json",
+  "test_execution": "not run by this agent; root owns Cargo and database gates"
+}

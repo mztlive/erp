@@ -1,0 +1,97 @@
+{
+  "input": "453cd48082793b8f40e5afa37d5d225a747fd1b0",
+  "tree": "/private/tmp/erp-domain-crate-14-integration",
+  "comparisons": [
+    {
+      "symbol": "connection_job",
+      "target": "backend/services/src/supplier_api/governance/jobs.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "create_health_job",
+      "target": "backend/services/src/supplier_api/governance/jobs.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "create_catalog_job",
+      "target": "backend/services/src/supplier_api/governance/jobs.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "job_view",
+      "target": "backend/services/src/supplier_api/governance/jobs.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "process_connection_job",
+      "target": "backend/crates/erp-processes/src/supplier_connection_execution/mod.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "start_health_job",
+      "target": "backend/crates/erp-processes/src/supplier_connection_execution/health.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "finish_health_job",
+      "target": "backend/crates/erp-processes/src/supplier_connection_execution/health.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "start_background_job",
+      "target": "backend/crates/erp-processes/src/supplier_connection_execution/catalog.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "finish_catalog_job",
+      "target": "backend/crates/erp-processes/src/supplier_connection_execution/catalog.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "symbol": "settle_health_failure",
+      "target": "backend/crates/erp-processes/src/supplier_connection_execution/failure.rs",
+      "normalized_body_identical": true
+    },
+    {
+      "source": "backend/services/src/work_item/facts.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 10
+    },
+    {
+      "source": "backend/services/src/workflow_compose.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 58
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/gateway.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 12
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/place.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 12
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/cancel.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 5
+    },
+    {
+      "source": "backend/services/src/supplier_fulfillment/refund_result.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 3
+    },
+    {
+      "source": "backend/crates/erp-read-models/src/workbench/facts.rs",
+      "all_original_functions_body_identical_after_path_normalization": true,
+      "original_function_declarations": 20
+    }
+  ],
+  "semantic_review_required": [
+    "process_health_job and process_catalog_job delegated to actual start/invoke/finish Port preserving old split",
+    "persist_health_failure_task builds original objects then actual three-write Port"
+  ],
+  "cargo_executed": false,
+  "real_database_verified": false
+}

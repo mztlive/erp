@@ -1,0 +1,259 @@
+{
+  "scope": "phase14/task_decision",
+  "tree": "/private/tmp/erp-domain-crate-14-integration",
+  "source_commit": "453cd48082793b8f40e5afa37d5d225a747fd1b0",
+  "tree_head": "cb159e5bf874e54254ea6fc447347627572d1a16",
+  "report": "/private/tmp/integration14-task-decision-contract.md",
+  "status": "implemented_static_review_only",
+  "cargo_run_by_this_worker": false,
+  "mongodb_verified": false,
+  "history_tests_modified": false,
+  "source_files": [
+    {
+      "path": "backend/services/src/integration_ops/task_decision/action.rs",
+      "sha256": "6664ecfd22274abfb846711af6dbe7fc5032776e3149fc5d2ae9708219b5e2ff",
+      "deleted": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/complete.rs",
+      "sha256": "e0e9522992255b891bbd736b798ef249eb699e8b88b584477eafbe083074e5ff",
+      "deleted": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/direct.rs",
+      "sha256": "09dface40133fe5520329a9c5c98d1a91e6ab0c549ae90a02662eb6684cad85a",
+      "deleted": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/guard.rs",
+      "sha256": "c1c8af41017ba55eba1fe93f0d954cdb72c78d1f5400a987e3550e5caa5b09ce",
+      "deleted": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/mod.rs",
+      "sha256": "21bab246823de02ab6108a9248b11d546bad8942d30b9ba61d2967db27c6bcb0",
+      "deleted": true
+    },
+    {
+      "path": "backend/services/src/integration_ops/task_decision/tests.rs",
+      "sha256": "315deb250edbb4d9292d095e67393d710379b85ce7779af88746c04f6f488d54",
+      "deleted": true
+    }
+  ],
+  "after_files": [
+    {
+      "path": "backend/crates/erp-integration/src/service/task_decision/action/tests.rs",
+      "sha256": "9318cc1b3d52bcd026ebb5e11a52a0217f07df9df793f12b0ba31163110010a7"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/task_decision/action.rs",
+      "sha256": "e9d55bcd45da75edb31412b4654a6d8ac00f15fe0c426bd80b2c395bd67647d6"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/task_decision/complete.rs",
+      "sha256": "9b37fc9c31c4dc63f6742d20caebb5f8099cbdafb2fdb406dd759d2dd6d99b1e"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/task_decision/direct.rs",
+      "sha256": "c50eeb12962facae2e62deef45b35d0961c73491deb257f297a436019a3a7fcd"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/task_decision/guard.rs",
+      "sha256": "e39c312bf446ba602049e6afbd57305f552e81cd0b7831cf494d02d078a33951"
+    },
+    {
+      "path": "backend/crates/erp-integration/src/service/task_decision/mod.rs",
+      "sha256": "6950c75ed6faf8abd2812e14e2a1ccff1f656d7d412d4920f1e68b0d04701f95"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/action.rs",
+      "sha256": "c8045d15561b168c37d5df43f87a95b3ccdcca8f4f25ad585a42e40cd27dc628"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/complete.rs",
+      "sha256": "d0b22b0dc4fe3953cc4ca3ddc8954f94f1938cba35ac2f3cf8d825e80a535aa2"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/direct.rs",
+      "sha256": "6fe675e318176b25b527fbda0850216764ab3117cbbd19cb74df2e64880c7545"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "sha256": "acc254842da51ffdbe388e5daa74561d47f9d971b5a6ab116d7f133588d386b1"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution.rs",
+      "sha256": "2552a09db3e1b4869dbac96ed3995767ab93b337ec932b5b472f46ca66332033"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/guard/tests.rs",
+      "sha256": "a2cef77ad08150f6eda41db5cde9cf6fc8961097fa3f3ac6a84a552607208a99"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/guard.rs",
+      "sha256": "9e0847ea7df0d66f1d8da2e019a4f9ff605fc60651524abd9def2054642f930f"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/mod.rs",
+      "sha256": "21c048cd63259db42b3175fda80f99f472142e67c1bf581acedb70d7323f1eae"
+    },
+    {
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs",
+      "sha256": "b469140f2f564b3e2ea0630be0a9edb53ce44b611db987b0548811f06558257f"
+    }
+  ],
+  "original_tests_token_equal": {
+    "receipt_never_contains_raw_idempotency_key": true,
+    "terminal_evidence_allows_explicit_resolve_without_completing_action": true,
+    "confirmed_no_result_allows_replay_only_for_error_task": true,
+    "versions_flow_typed_from_prepared_without_reparse": true,
+    "conclusion_and_append_are_owned_by_domain": true
+  },
+  "test_definitions": [
+    {
+      "name": "terminal_query_discovers_after_query_on_same_injected_executor",
+      "path": "backend/crates/erp-integration/src/service/task_decision/action/tests.rs",
+      "line": 100,
+      "original": false
+    },
+    {
+      "name": "authority_error_is_preserved_and_no_later_call_runs",
+      "path": "backend/crates/erp-integration/src/service/task_decision/action/tests.rs",
+      "line": 123,
+      "original": false
+    },
+    {
+      "name": "absent_or_unknown_original_does_not_discover_or_replay",
+      "path": "backend/crates/erp-integration/src/service/task_decision/action/tests.rs",
+      "line": 146,
+      "original": false
+    },
+    {
+      "name": "action_uses_one_executor_and_stops_at_every_failed_step",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "line": 119,
+      "original": false
+    },
+    {
+      "name": "completion_receipt_follows_task_write_and_precedes_result",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "line": 140,
+      "original": false
+    },
+    {
+      "name": "direct_task_guard_precedes_domain_read_and_each_failure_stops",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "line": 161,
+      "original": false
+    },
+    {
+      "name": "committed_receipt_bypasses_closed_task_and_preparation_path",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "line": 174,
+      "original": false
+    },
+    {
+      "name": "any_transaction_error_recovers_once_and_missing_receipt_keeps_original_error",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "line": 193,
+      "original": false
+    },
+    {
+      "name": "replay_read_error_stops_initially_or_replaces_transaction_error_on_recovery",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/execution/tests.rs",
+      "line": 219,
+      "original": false
+    },
+    {
+      "name": "receipt_identity_conflicts_precede_missing_or_unparseable_payload",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/guard/tests.rs",
+      "line": 25,
+      "original": false
+    },
+    {
+      "name": "receipt_missing_message_and_invalid_json_keep_distinct_internal_errors",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/guard/tests.rs",
+      "line": 43,
+      "original": false
+    },
+    {
+      "name": "same_key_different_payload_is_rejected_and_original_result_replays",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/guard/tests.rs",
+      "line": 54,
+      "original": false
+    },
+    {
+      "name": "receipt_never_contains_raw_idempotency_key",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs",
+      "line": 25,
+      "original": true
+    },
+    {
+      "name": "terminal_evidence_allows_explicit_resolve_without_completing_action",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs",
+      "line": 43,
+      "original": true
+    },
+    {
+      "name": "confirmed_no_result_allows_replay_only_for_error_task",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs",
+      "line": 58,
+      "original": true
+    },
+    {
+      "name": "versions_flow_typed_from_prepared_without_reparse",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs",
+      "line": 98,
+      "original": true
+    },
+    {
+      "name": "conclusion_and_append_are_owned_by_domain",
+      "path": "backend/crates/erp-processes/src/integration_resolution/task_decision/tests.rs",
+      "line": 112,
+      "original": true
+    }
+  ],
+  "test_counts": {
+    "original": 5,
+    "added": 12,
+    "total": 17,
+    "ignored": 0,
+    "executed_by_this_worker": 0
+  },
+  "receipt_wire_token_evidence": {
+    "ReceiptEnvelope": {
+      "token_equal": true,
+      "before_token_sha256": "fbb79838a22ed3c02f40e9586a464c2ffc08b132e9cccbac9aacf03912ed5175",
+      "after_token_sha256": "fbb79838a22ed3c02f40e9586a464c2ffc08b132e9cccbac9aacf03912ed5175",
+      "wire_source": "#[derive(Debug, Serialize, Deserialize)]\nstruct ReceiptEnvelope<T> {\n    #[serde(rename = \"f\")]\n    fingerprint: String,\n    #[serde(rename = \"r\")]\n    result: T,\n}"
+    },
+    "ActionReceiptMessage": {
+      "token_equal": true,
+      "before_token_sha256": "576f290f1ba941b3b5d25368d941ddc682561355e28d1e43b696612a34555160",
+      "after_token_sha256": "576f290f1ba941b3b5d25368d941ddc682561355e28d1e43b696612a34555160",
+      "wire_source": "#[derive(Debug, Serialize, Deserialize)]\nstruct ActionReceiptMessage {\n    #[serde(rename = \"o\")]\n    outcome: IntegrationActionOutcome,\n    #[serde(rename = \"b\", skip_serializing_if = \"Option::is_none\")]\n    business_result_reference: Option<String>,\n    #[serde(rename = \"e\", default, skip_serializing_if = \"Vec::is_empty\")]\n    verified_evidence: Vec<ControlledEvidenceRef>,\n}"
+    },
+    "CompletionReceiptMessage": {
+      "token_equal": true,
+      "before_token_sha256": "c1f6277d2c73e8884dbe884ff9c61a4e9b4e98584f775377d7b6f72a03eb2624",
+      "after_token_sha256": "c1f6277d2c73e8884dbe884ff9c61a4e9b4e98584f775377d7b6f72a03eb2624",
+      "wire_source": "#[derive(Debug, Serialize, Deserialize)]\nstruct CompletionReceiptMessage {\n    #[serde(rename = \"e\")]\n    terminal_evidence_reference: String,\n}"
+    },
+    "DirectReceiptMessage": {
+      "token_equal": true,
+      "before_token_sha256": "d2a02ba9cf030348ee2d049a9079b503697dcc167b3d208b0acc3639ec345354",
+      "after_token_sha256": "d2a02ba9cf030348ee2d049a9079b503697dcc167b3d208b0acc3639ec345354",
+      "wire_source": "#[derive(Debug, Serialize, Deserialize)]\nstruct DirectReceiptMessage {\n    #[serde(rename = \"s\")]\n    resulting_status: DirectReconciliationStatus,\n    #[serde(rename = \"t\")]\n    is_terminal: bool,\n    #[serde(rename = \"o\")]\n    outcome: IntegrationActionOutcome,\n    #[serde(rename = \"b\", skip_serializing_if = \"Option::is_none\")]\n    business_result_reference: Option<String>,\n}"
+    }
+  },
+  "missing_original_chinese_string_literals": [],
+  "required_registration": [
+    "erp_integration::service::task_decision (pub mod, A-owned)",
+    "erp_processes::integration_resolution::task_decision (private mod, B-owned)"
+  ],
+  "existing_root_registrations_observed": {
+    "domain": true,
+    "process": true
+  },
+  "additional_external_dependencies_in_domain": []
+}
