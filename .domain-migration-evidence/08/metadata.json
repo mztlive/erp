@@ -2,27 +2,34 @@
   "phase": "08",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": false,
+  "review_approved": true,
   "branch": "chore/domain-crate-08-inventory",
   "evidence_dir": ".domain-migration-evidence/08",
   "input_head": "bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca",
+  "implement_commits": [
+    "f122118d7d6eb9455421882976c90463a7c73012",
+    "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18"
+  ],
+  "implement_commit": "f122118d7d6eb9455421882976c90463a7c73012",
+  "integrator_commit": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
+  "head": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
   "unique_integration_owner": "chore/domain-crate-08-inventory integrator",
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "quality_passed": true,
   "unit_tests_passed": true,
   "remaining_issues": [],
-  "files_tsv_rows": 106,
+  "files_tsv_rows": 108,
   "path_changes": {
-    "counts": {
-      "A": 30,
-      "M": 38,
-      "R": 34,
-      "D": 4
-    },
-    "total": 106,
+    "add": 24,
+    "delete": 4,
+    "modify": 38,
+    "rename": 34,
+    "total": 100,
     "versus": "bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca",
-    "rename_detection": true
+    "rename_detection": true,
+    "evidence_rows": 108,
+    "note": "path_changes counts non-evidence paths vs input; files.tsv also lists evidence files"
   },
   "owned_repositories_moved": [
     "StockAdjustmentRepository",
@@ -39,7 +46,41 @@
   "no_deref": true,
   "no_type_alias": true,
   "autotests": false,
+  "workspace_members": 30,
+  "workspace_member_names": [
+    "application-core",
+    "bpm",
+    "cli",
+    "config",
+    "database",
+    "entities",
+    "entity-core",
+    "entity-macros",
+    "erp-audit",
+    "erp-catalog",
+    "erp-contract",
+    "erp-core",
+    "erp-customer",
+    "erp-identity",
+    "erp-import",
+    "erp-inventory",
+    "erp-party",
+    "erp-processes",
+    "erp-read-models",
+    "erp-supplier",
+    "erp-support",
+    "erp-warehouse",
+    "erp-workflow",
+    "id-generator",
+    "permission-macros",
+    "persistence-core",
+    "services",
+    "storage",
+    "test-support",
+    "web-api"
+  ],
   "kind_test_targets": 0,
+  "recorded_at": "2026-09-07T00:53:58Z",
   "unit_tests": {
     "command": "env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked",
     "exit_code": 0,
@@ -49,7 +90,8 @@
     "crates": 29,
     "mongodb_started": false,
     "include_ignored": false,
-    "log": ".domain-migration-evidence/08/unit-tests.log"
+    "log": ".domain-migration-evidence/08/unit-tests.log",
+    "source_log": "backend/logs/phase-08-qg-gates/04-test-lib.log"
   },
   "quality_gates": {
     "fmt": 0,
@@ -62,17 +104,57 @@
     "permissions": 0,
     "git-diff-check": 0,
     "all_exit_0": true,
-    "log": ".domain-migration-evidence/08/quality-gates.log"
+    "files_changed": [],
+    "log": ".domain-migration-evidence/08/quality-gates.log",
+    "source_dir": "backend/logs/phase-08-qg-gates",
+    "summary": "Phase 08 public gates from backend/ all exited 0. fmt/check/clippy/lib tests, BPM/service/domain/permissions scripts, and git diff --check passed. Logs under backend/logs/phase-08-qg-gates/. Lib unit tests passed with ERP_TEST_MONGO_URI unset; no MongoDB, crate tests, integration targets, or ignored tests were run. No lockfile or business-code changes from the quality-gate run. 3315 passed, 0 failed, 68 ignored. review_approved=true. Status 本地门禁通过. Never 已验收. 真实数据库运行未验证"
+  },
+  "contracts": {
+    "admin_routes": 369,
+    "error_codes": 21,
+    "indexes": 368,
+    "versus_phase_07_permissions_equal": true,
+    "versus_phase_07_index_names_keys_unique_equal": true,
+    "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
+    "comparison": ".domain-migration-evidence/08/contract-comparison.json",
+    "transaction": ".domain-migration-evidence/08/transaction-contract.json"
   },
   "compile": {
     "applicable": false,
     "note": "阶段 08 不执行编译收益复测；阈值在阶段 17 判定。真实数据库运行未验证。"
   },
   "toolchain": {
-    "rustc": "1.97.0 (2d8144b78 2026-07-07)",
-    "cargo": "1.97.0 (c980f4866 2026-06-30)",
-    "host": "aarch64-apple-darwin",
-    "profile": "dev"
+    "quality_gate_run": {
+      "rustc": "1.99.0-nightly (daf2e5e18 2026-07-13)",
+      "cargo": "1.99.0-nightly (59800466c 2026-07-07)",
+      "host": "aarch64-apple-darwin",
+      "profile": "dev"
+    }
   },
-  "implement_summary": "Phase 08 Inventory unique-cut repair on chore/domain-crate-08-inventory. inventory_adjustment::post calls erp_inventory::apply_posted_adjustment_in_transaction on the caller session; process-local post_adjustment_line / release_applicable_reservations / update_stock_adjustment / readable_stock_adjustment / load_stock_adjustment copies deleted. Header/line/movement facts go through InventoryService. Public gates passed (3315 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+  "shards": [
+    {
+      "shard": "all",
+      "branch": "chore/domain-crate-08-inventory",
+      "committed": true,
+      "commit_sha": "f122118d7d6eb9455421882976c90463a7c73012",
+      "summary": "Phase 08 inventory unique-cut on chore/domain-crate-08-inventory (f122118d7d6eb9455421882976c90463a7c73012). erp-inventory owns stock state/queries/in-txn writes; erp-processes/inventory_adjustment owns create/submit/cancel/post on one Executor. Old three-layer inventory modules deleted with no façade. Public gates passed (3315 passed, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+    },
+    {
+      "shard": "inventory",
+      "branch": "chore/domain-crate-08-inventory",
+      "committed": true,
+      "commit_sha": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
+      "summary": "Phase 08 unique-cut repair: post writes go through apply_posted_adjustment_in_transaction; process-local update/query copies deleted; InventoryService is the single query/update owner. Gates passed (3315/0/68). Status 本地门禁通过. 真实数据库运行未验证."
+    }
+  ],
+  "implement_summary": "Phase 08 inventory unique-cut on chore/domain-crate-08-inventory (f122118d). erp-inventory owns stock state/queries/in-txn writes; erp-processes/inventory_adjustment owns create/submit/cancel/post on one Executor. Old three-layer inventory modules deleted with no façade. Unique-cut repair (477fd5a4): post writes go through apply_posted_adjustment_in_transaction; process-local update/query copies deleted; InventoryService is the single query/update owner. Public gates passed (3315 passed, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证",
+  "old_source_clearance": {
+    "old_three_layer_inventory_absent": true,
+    "production_services_or_entities_inventory_hits": [],
+    "path_attribute_leftovers": [],
+    "process_local_post_helpers": [],
+    "historical_tests_still_reference_old_paths": true,
+    "historical_tests_archives_byte_for_byte": true,
+    "no_facade": true
+  }
 }

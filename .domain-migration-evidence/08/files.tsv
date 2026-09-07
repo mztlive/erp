@@ -1,109 +1,109 @@
-status	path
-A	.domain-migration-evidence/08/boundary.log
-A	.domain-migration-evidence/08/contract-comparison.json
-A	.domain-migration-evidence/08/files.tsv
-A	.domain-migration-evidence/08/input.json
-A	.domain-migration-evidence/08/metadata.json
-A	.domain-migration-evidence/08/quality-gates.log
-A	.domain-migration-evidence/08/transaction-contract.json
-A	.domain-migration-evidence/08/unit-tests.log
-M	backend/AGENTS.md
-M	backend/Cargo.lock
-M	backend/Cargo.toml
-M	backend/apps/web-api/Cargo.toml
-M	backend/apps/web-api/src/app_state.rs
-M	backend/apps/web-api/src/core/errors.rs
-M	backend/apps/web-api/src/core/handler/inventory/mod.rs
-A	backend/crates/erp-inventory/Cargo.toml
-R098	backend/services/src/inventory/dto.rs	backend/crates/erp-inventory/src/dto/inventory.rs
-A	backend/crates/erp-inventory/src/dto/mod.rs
-R080	backend/entities/src/inventory/approval_snapshot.rs	backend/crates/erp-inventory/src/entity/inventory/approval_snapshot.rs
-R095	backend/entities/src/inventory/mod.rs	backend/crates/erp-inventory/src/entity/inventory/mod.rs
-R098	backend/entities/src/inventory/stock_adjustment.rs	backend/crates/erp-inventory/src/entity/inventory/stock_adjustment.rs
-R095	backend/entities/src/inventory/stock_balance.rs	backend/crates/erp-inventory/src/entity/inventory/stock_balance.rs
-R098	backend/entities/src/inventory/stock_movement.rs	backend/crates/erp-inventory/src/entity/inventory/stock_movement.rs
-R099	backend/entities/src/inventory/stock_reservation.rs	backend/crates/erp-inventory/src/entity/inventory/stock_reservation.rs
-A	backend/crates/erp-inventory/src/entity/mod.rs
-A	backend/crates/erp-inventory/src/error.rs
-R099	backend/database/src/indexes/inventory.rs	backend/crates/erp-inventory/src/indexes/inventory.rs
-A	backend/crates/erp-inventory/src/indexes/mod.rs
-A	backend/crates/erp-inventory/src/lib.rs
-A	backend/crates/erp-inventory/src/ports/audit.rs
-A	backend/crates/erp-inventory/src/ports/authorization.rs
-A	backend/crates/erp-inventory/src/ports/catalog.rs
-A	backend/crates/erp-inventory/src/ports/fulfillment.rs
-A	backend/crates/erp-inventory/src/ports/mod.rs
-A	backend/crates/erp-inventory/src/ports/warehouse.rs
-A	backend/crates/erp-inventory/src/repository/bson_roundtrip.rs
-R096	backend/database/src/repository/extensions/inventory.rs	backend/crates/erp-inventory/src/repository/extensions/inventory.rs
-A	backend/crates/erp-inventory/src/repository/extensions/mod.rs
-R099	backend/database/src/repository/inventory/adjustment.rs	backend/crates/erp-inventory/src/repository/inventory/adjustment.rs
-R099	backend/database/src/repository/inventory/balance.rs	backend/crates/erp-inventory/src/repository/inventory/balance.rs
-R087	backend/database/src/repository/inventory/mod.rs	backend/crates/erp-inventory/src/repository/inventory/mod.rs
-R098	backend/database/src/repository/inventory/movement.rs	backend/crates/erp-inventory/src/repository/inventory/movement.rs
-R099	backend/database/src/repository/inventory/reservation.rs	backend/crates/erp-inventory/src/repository/inventory/reservation.rs
-R100	backend/database/src/repository/inventory/shared.rs	backend/crates/erp-inventory/src/repository/inventory/shared.rs
-A	backend/crates/erp-inventory/src/repository/mod.rs
-A	backend/crates/erp-inventory/src/repository/owned/mod.rs
-R083	backend/database/src/repository/owned/stock_adjustment.rs	backend/crates/erp-inventory/src/repository/owned/stock_adjustment.rs
-R083	backend/database/src/repository/owned/stock_adjustment_line.rs	backend/crates/erp-inventory/src/repository/owned/stock_adjustment_line.rs
-R084	backend/database/src/repository/owned/stock_balance.rs	backend/crates/erp-inventory/src/repository/owned/stock_balance.rs
-R083	backend/database/src/repository/owned/stock_movement.rs	backend/crates/erp-inventory/src/repository/owned/stock_movement.rs
-R083	backend/database/src/repository/owned/stock_reservation.rs	backend/crates/erp-inventory/src/repository/owned/stock_reservation.rs
-R061	backend/services/src/inventory/adjustment_query.rs	backend/crates/erp-inventory/src/service/inventory/adjustment_query.rs
-R076	backend/services/src/inventory/balance.rs	backend/crates/erp-inventory/src/service/inventory/balance.rs
-A	backend/crates/erp-inventory/src/service/inventory/mapping.rs
-A	backend/crates/erp-inventory/src/service/inventory/mod.rs
-R087	backend/services/src/inventory/movement.rs	backend/crates/erp-inventory/src/service/inventory/movement.rs
-R087	backend/services/src/inventory/reservation.rs	backend/crates/erp-inventory/src/service/inventory/reservation.rs
-A	backend/crates/erp-inventory/src/service/inventory/stock_write.rs
-A	backend/crates/erp-inventory/src/service/inventory/update.rs
-A	backend/crates/erp-inventory/src/service/mod.rs
-M	backend/crates/erp-processes/Cargo.toml
-A	backend/crates/erp-processes/src/adapters/inventory.rs
-M	backend/crates/erp-processes/src/adapters/mod.rs
-M	backend/crates/erp-processes/src/approval_dispatch/action_registry.rs
-M	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs
-R093	backend/services/src/inventory/adapter.rs	backend/crates/erp-processes/src/inventory_adjustment/adapter.rs
-R096	backend/services/src/inventory/start_approval/prepare.rs	backend/crates/erp-processes/src/inventory_adjustment/approval_prepare.rs
-R095	backend/services/src/inventory/approval_query.rs	backend/crates/erp-processes/src/inventory_adjustment/approval_query.rs
-R098	backend/services/src/inventory/cancel_approval.rs	backend/crates/erp-processes/src/inventory_adjustment/cancel_approval.rs
-R095	backend/services/src/inventory/adjustment_command.rs	backend/crates/erp-processes/src/inventory_adjustment/create.rs
-R094	backend/services/src/inventory/start_approval/mapping.rs	backend/crates/erp-processes/src/inventory_adjustment/mapping.rs
-A	backend/crates/erp-processes/src/inventory_adjustment/mod.rs
-R098	backend/services/src/inventory/start_approval/persist.rs	backend/crates/erp-processes/src/inventory_adjustment/persist.rs
-R098	backend/services/src/inventory/adjustment_post.rs	backend/crates/erp-processes/src/inventory_adjustment/post.rs
-A	backend/crates/erp-processes/src/inventory_adjustment/query.rs
-R088	backend/services/src/inventory/start_approval/tests.rs	backend/crates/erp-processes/src/inventory_adjustment/start_tests.rs
-R092	backend/services/src/inventory/adjustment_submit.rs	backend/crates/erp-processes/src/inventory_adjustment/submit.rs
-M	backend/crates/erp-processes/src/lib.rs
-M	backend/crates/erp-read-models/Cargo.toml
-M	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs
-M	backend/database/Cargo.toml
-M	backend/database/src/indexes/mod.rs
-M	backend/database/src/repository/extensions/mod.rs
-M	backend/database/src/repository/fulfillment/mod.rs
-D	backend/database/src/repository/inventory/aggregate.rs
-M	backend/database/src/repository/mod.rs
-M	backend/database/src/repository/owned/mod.rs
-M	backend/database/src/repository/purchase_order/coverage.rs
-M	backend/docs/superpowers/plans/domain-crate-migration/08-inventory.md
-M	backend/docs/superpowers/plans/domain-crate-migration/README.md
-M	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json
-M	backend/entities/Cargo.toml
-M	backend/entities/src/lib.rs
-M	backend/entities/src/purchase_order/coverage.rs
-M	backend/entities/src/purchase_order/sourcing_plan/stock.rs
-M	backend/entities/src/purchase_order/sourcing_plan/tests.rs
-M	backend/services/Cargo.toml
-M	backend/services/src/errors.rs
-M	backend/services/src/fulfillment/delivery_lines.rs
-M	backend/services/src/fulfillment/delivery_posting.rs
-M	backend/services/src/fulfillment/purchase_receipt_posting.rs
-D	backend/services/src/inventory/authorization.rs
-D	backend/services/src/inventory/mod.rs
-D	backend/services/src/inventory/start_approval.rs
-M	backend/services/src/lib.rs
-M	backend/services/src/purchase_order/creation_basis/query.rs
-M	backend/services/src/purchase_order/sourcing_create.rs
-M	backend/services/src/work_item/inventory_settlement_brief.rs
+action	path	note
+add	.domain-migration-evidence/08/boundary.log	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/contract-comparison.json	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/files.tsv	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/input.json	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/metadata.json	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/quality-gates.log	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/transaction-contract.json	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	.domain-migration-evidence/08/unit-tests.log	阶段 08 验收证据；review_approved=true；状态本地门禁通过；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/dto/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/entity/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/error.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/indexes/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/lib.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/ports/audit.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/ports/authorization.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/ports/catalog.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/ports/fulfillment.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/ports/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/ports/warehouse.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/repository/bson_roundtrip.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/repository/extensions/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/repository/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/repository/owned/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/service/inventory/mapping.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/service/inventory/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/service/inventory/stock_write.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/service/inventory/update.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-inventory/src/service/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/adapters/inventory.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/inventory_adjustment/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+add	backend/crates/erp-processes/src/inventory_adjustment/query.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+delete	backend/database/src/repository/inventory/aggregate.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/inventory/authorization.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/inventory/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+delete	backend/services/src/inventory/start_approval.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/AGENTS.md	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.lock	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/app_state.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/errors.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/apps/web-api/src/core/handler/inventory/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/adapters/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/approval_dispatch/action_registry.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/approval_dispatch/upgrade_subject.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-processes/src/lib.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/crates/erp-read-models/src/workbench/inventory_settlement_brief.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/indexes/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/extensions/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/fulfillment/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/owned/mod.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/database/src/repository/purchase_order/coverage.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/08-inventory.md	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/README.md	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/docs/superpowers/plans/domain-crate-migration/plan-manifest.json	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/lib.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/coverage.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/sourcing_plan/stock.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/entities/src/purchase_order/sourcing_plan/tests.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/Cargo.toml	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/errors.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/fulfillment/delivery_lines.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/fulfillment/delivery_posting.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/fulfillment/purchase_receipt_posting.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/lib.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/purchase_order/creation_basis/query.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/purchase_order/sourcing_create.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+modify	backend/services/src/work_item/inventory_settlement_brief.rs	phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/dto/inventory.rs	rename from backend/services/src/inventory/dto.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/entity/inventory/approval_snapshot.rs	rename from backend/entities/src/inventory/approval_snapshot.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/entity/inventory/mod.rs	rename from backend/entities/src/inventory/mod.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/entity/inventory/stock_adjustment.rs	rename from backend/entities/src/inventory/stock_adjustment.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/entity/inventory/stock_balance.rs	rename from backend/entities/src/inventory/stock_balance.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/entity/inventory/stock_movement.rs	rename from backend/entities/src/inventory/stock_movement.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/entity/inventory/stock_reservation.rs	rename from backend/entities/src/inventory/stock_reservation.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/indexes/inventory.rs	rename from backend/database/src/indexes/inventory.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/extensions/inventory.rs	rename from backend/database/src/repository/extensions/inventory.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/inventory/adjustment.rs	rename from backend/database/src/repository/inventory/adjustment.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/inventory/balance.rs	rename from backend/database/src/repository/inventory/balance.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/inventory/mod.rs	rename from backend/database/src/repository/inventory/mod.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/inventory/movement.rs	rename from backend/database/src/repository/inventory/movement.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/inventory/reservation.rs	rename from backend/database/src/repository/inventory/reservation.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/inventory/shared.rs	rename from backend/database/src/repository/inventory/shared.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/owned/stock_adjustment.rs	rename from backend/database/src/repository/owned/stock_adjustment.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/owned/stock_adjustment_line.rs	rename from backend/database/src/repository/owned/stock_adjustment_line.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/owned/stock_balance.rs	rename from backend/database/src/repository/owned/stock_balance.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/owned/stock_movement.rs	rename from backend/database/src/repository/owned/stock_movement.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/repository/owned/stock_reservation.rs	rename from backend/database/src/repository/owned/stock_reservation.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/service/inventory/adjustment_query.rs	rename from backend/services/src/inventory/adjustment_query.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/service/inventory/balance.rs	rename from backend/services/src/inventory/balance.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/service/inventory/movement.rs	rename from backend/services/src/inventory/movement.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-inventory/src/service/inventory/reservation.rs	rename from backend/services/src/inventory/reservation.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/adapter.rs	rename from backend/services/src/inventory/adapter.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/approval_prepare.rs	rename from backend/services/src/inventory/start_approval/prepare.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/approval_query.rs	rename from backend/services/src/inventory/approval_query.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/cancel_approval.rs	rename from backend/services/src/inventory/cancel_approval.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/create.rs	rename from backend/services/src/inventory/adjustment_command.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/mapping.rs	rename from backend/services/src/inventory/start_approval/mapping.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/persist.rs	rename from backend/services/src/inventory/start_approval/persist.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/post.rs	rename from backend/services/src/inventory/adjustment_post.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/start_tests.rs	rename from backend/services/src/inventory/start_approval/tests.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证
+rename	backend/crates/erp-processes/src/inventory_adjustment/submit.rs	rename from backend/services/src/inventory/adjustment_submit.rs；phase 08 unique-cut / integrator wiring；review_approved=true；禁止标记已验收；真实数据库运行未验证

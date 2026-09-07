@@ -2,6 +2,7 @@
   "phase": "08",
   "status": "本地门禁通过",
   "never_mark": "已验收",
+  "review_approved": true,
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "versus_phase_07": {
@@ -13,9 +14,14 @@
     "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
     "phase_07_permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
     "index_name_key_unique_equal": true,
+    "index_count": 368,
+    "index_count_phase_07": 368,
     "error_code_variants_equal": true,
     "error_code_count": 21,
-    "note": "权限生成物与阶段 07 哈希相等；HTTP 路径/方法/RBAC 未改。库存索引声明迁入 erp-inventory，名称/键/唯一性不变。ErrorCode 21 个变体不变。真实数据库运行未验证。"
+    "index_only_old": [],
+    "index_only_new": [],
+    "note": "权限生成物与阶段 07 哈希相等；HTTP 路径/方法/RBAC 未改。368 个索引名称/键/唯一性与阶段 07 相等（含迁入 erp-inventory 的声明；扫描时去掉 doc! 键列表尾逗号）。ErrorCode 21 个变体不变。真实数据库运行未验证。",
+    "index_key_normalization": "strip trailing commas in doc! key lists; names/uniqueness equal"
   },
   "http": {
     "permissions_generated_sha256": "84907d818f3781757827a93a7be4bc6b69237f6d211691c5af982a5520b6de96",
@@ -24,12 +30,2253 @@
   },
   "errors": {
     "error_code_count": 21,
+    "error_code_variants": [
+      "ApprovalPolicyNotRegistered",
+      "ApprovalProcessNotConfigured",
+      "ApprovalDraftSourceNotAvailable",
+      "ApprovalDefinitionNotDraft",
+      "ApprovalDefinitionVersionConflict",
+      "ApprovalDefinitionInvalid",
+      "ApprovalDefinitionBindingCorrupted",
+      "ApprovalAlreadyStarted",
+      "ApprovalTaskNotOpen",
+      "ApprovalTaskNotAssignedToActor",
+      "ApprovalTaskVersionConflict",
+      "ApprovalInstanceVersionConflict",
+      "ApprovalExecutionVersionConflict",
+      "ApprovalSubjectVersionConflict",
+      "ApprovalRejectReasonRequired",
+      "ApprovalInstanceBlocked",
+      "ApprovalResumeNotAllowedForBlocker",
+      "ApprovalCurrentApproverNotRecovered",
+      "ApprovalBlockedCancelNotAllowed",
+      "ApprovalGenericWorkItemMutationForbidden",
+      "ApprovalIdempotencyPayloadConflict"
+    ],
     "services_errors_sha256": "33a7eab7318bd8709412506d551d583dd9064b8747c841871bc833c7546d354c",
     "http_errors_sha256": "dacd1832b66dfedaa3e4dfddcd18586aeeb0f145d90aa48d4315dc0cb3daa01f",
     "inventory_errors_sha256": "ab3a8058f4887af7d66bd3941d2000eaa0af039bac997e989a4c1e169e05de4e",
     "note": "ErrorCode 变体与阶段 07 相等；erp-inventory 错误经 From 映射到原 services/web-api 错误类。真实数据库运行未验证"
   },
   "indexes": {
-    "note": "stock_* 索引从 database/src/indexes/inventory.rs 迁入 crates/erp-inventory/src/indexes/inventory.rs；集合名仍取 InventoryExt 关联常量。真实数据库运行未验证"
-  }
+    "index_count": 368,
+    "indexes": [
+      {
+        "file": "crates/erp-audit/src/indexes.rs",
+        "name": "uk_audit_logs_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-audit/src/indexes.rs",
+        "name": "idx_audit_logs_active_created",
+        "unique": false,
+        "keys": "\"deleted_at\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_product_categories_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_product_categories_category_code",
+        "unique": true,
+        "keys": "\"category_code\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_product_categories_tree",
+        "unique": false,
+        "keys": "\"parent_category_id\": 1, \"category_code\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_product_categories_status_tree",
+        "unique": false,
+        "keys": "\"status\": 1, \"parent_category_id\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_product_brands_brand_code",
+        "unique": true,
+        "keys": "\"brand_code\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_product_brands_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_unit_of_measures_unit_code",
+        "unique": true,
+        "keys": "\"unit_code\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_unit_of_measures_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_sku_attributes_attribute_code",
+        "unique": true,
+        "keys": "\"attribute_code\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_sku_attributes_status_type",
+        "unique": false,
+        "keys": "\"status\": 1, \"value_type\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_sku_attribute_values_attribute_value",
+        "unique": true,
+        "keys": "\"attribute_id\": 1, \"value_code\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_sku_attribute_values_attribute_sort",
+        "unique": false,
+        "keys": "\"attribute_id\": 1, \"sort_order\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_product_category_attributes_relation",
+        "unique": true,
+        "keys": "\"category_id\": 1, \"attribute_id\": 1, \"required_flag\": 1, \"sort_order\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_product_category_attributes_category",
+        "unique": false,
+        "keys": "\"category_id\": 1, \"sort_order\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_products_product_no",
+        "unique": true,
+        "keys": "\"product_no\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_products_status_kind",
+        "unique": false,
+        "keys": "\"status\": 1, \"product_kind\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_product_revisions_revision",
+        "unique": true,
+        "keys": "\"product_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_product_revision_medias_media",
+        "unique": true,
+        "keys": "\"product_revision_id\": 1, \"media_role\": 1, \"sort_order\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_skus_sku_no",
+        "unique": true,
+        "keys": "\"sku_no\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_skus_listing_status",
+        "unique": false,
+        "keys": "\"listing_status\": 1, \"status\": 1, \"product_id\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_skus_product_spec",
+        "unique": true,
+        "keys": "\"product_id\": 1, \"specification_signature\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_sku_revisions_revision",
+        "unique": true,
+        "keys": "\"sku_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_sku_revisions_barcode",
+        "unique": false,
+        "keys": "\"barcode\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_sku_revisions_search",
+        "unique": false,
+        "keys": "\"name\": 1, \"specification\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_sku_revision_attribute_values_relation",
+        "unique": true,
+        "keys": "\"sku_revision_id\": 1, \"sku_attribute_id\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_sku_revision_attribute_values_revision",
+        "unique": false,
+        "keys": "\"sku_revision_id\": 1, \"identity_position\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "idx_sku_revision_attribute_values_reverse",
+        "unique": false,
+        "keys": "\"sku_attribute_value_id\": 1, \"sku_revision_id\": 1"
+      },
+      {
+        "file": "crates/erp-catalog/src/indexes/catalog.rs",
+        "name": "uk_voucher_category_profile_revisions_revision",
+        "unique": true,
+        "keys": "\"sku_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-contract/src/indexes/contract.rs",
+        "name": "uk_contracts_contract_no",
+        "unique": true,
+        "keys": "\"contract_no\": 1"
+      },
+      {
+        "file": "crates/erp-contract/src/indexes/contract.rs",
+        "name": "idx_contracts_customer_status",
+        "unique": false,
+        "keys": "\"customer_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-contract/src/indexes/contract.rs",
+        "name": "uk_contract_revisions_contract_revision",
+        "unique": true,
+        "keys": "\"contract_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-contract/src/indexes/contract.rs",
+        "name": "idx_contract_revisions_validity",
+        "unique": false,
+        "keys": "\"contract_id\": 1, \"valid_to\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "uk_customer_accounts_party",
+        "unique": true,
+        "keys": "\"party_id\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "uk_customer_accounts_customer_no",
+        "unique": true,
+        "keys": "\"customer_no\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "idx_customer_accounts_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "uk_customer_assignments_window",
+        "unique": true,
+        "keys": "\"customer_id\": 1, \"user_id\": 1, \"assignment_role\": 1, \"valid_from\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "idx_customer_assignments_user",
+        "unique": false,
+        "keys": "\"user_id\": 1, \"valid_to\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "idx_customer_assignments_customer",
+        "unique": false,
+        "keys": "\"customer_id\": 1, \"assignment_role\": 1, \"valid_from\": 1"
+      },
+      {
+        "file": "crates/erp-customer/src/indexes/customer.rs",
+        "name": "uk_customer_profile_commands_idempotency_key",
+        "unique": true,
+        "keys": "\"idempotency_key\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "uk_accounts_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "uk_accounts_account",
+        "unique": true,
+        "keys": "\"account\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_accounts_kind_active_created",
+        "unique": false,
+        "keys": "\"kind\": 1, \"deleted_at\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "uk_roles_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_roles_active_enabled",
+        "unique": false,
+        "keys": "\"deleted_at\": 1, \"disabled\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_casbin_ptype_value0",
+        "unique": false,
+        "keys": "\"sec\": 1, \"ptype\": 1, \"values.0\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_casbin_ptype_value1",
+        "unique": false,
+        "keys": "\"sec\": 1, \"ptype\": 1, \"values.1\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "uk_permissions_resource_action",
+        "unique": true,
+        "keys": "\"resource\": 1, \"action\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_permissions_disabled",
+        "unique": false,
+        "keys": "\"disabled\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_user_roles_user_effective",
+        "unique": false,
+        "keys": "\"user_id\": 1, \"effective_from\": -1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "uk_data_scopes_subject_scope",
+        "unique": true,
+        "keys": "\"subject_type\": 1, \"subject_id\": 1, \"scope_type\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_data_scopes_scope_type",
+        "unique": false,
+        "keys": "\"scope_type\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "uk_audit_events_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_audit_events_actor_created",
+        "unique": false,
+        "keys": "\"actor_id\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_audit_events_object_created",
+        "unique": false,
+        "keys": "\"object_type\": 1, \"object_id\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_audit_events_created",
+        "unique": false,
+        "keys": "\"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-identity/src/indexes.rs",
+        "name": "idx_audit_events_request_id",
+        "unique": false,
+        "keys": "\"request_id\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "uk_legacy_import_batches_batch_no",
+        "unique": true,
+        "keys": "\"batch_no\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "idx_legacy_import_batches_reimport_warning",
+        "unique": false,
+        "keys": "\"source_file_hmac\": 1, \"source_object_set\": 1, \"baseline_date\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "uk_legacy_import_rows_batch_identity",
+        "unique": true,
+        "keys": "\"batch_id\": 1, \"source_object_type\": 1, \"source_row_key\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "idx_legacy_import_rows_process_queue",
+        "unique": false,
+        "keys": "\"parse_status\": 1, \"mapping_status\": 1, \"import_status\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "idx_legacy_import_rows_batch_id_created",
+        "unique": false,
+        "keys": "\"batch_id\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "uk_legacy_import_confirmations_scope_trial",
+        "unique": true,
+        "keys": "\"batch_id\": 1, \"confirmation_scope\": 1, \"trial_version\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "uk_legacy_import_confirmations_work_item",
+        "unique": true,
+        "keys": "\"work_item_id\": 1"
+      },
+      {
+        "file": "crates/erp-import/src/indexes/legacy_import.rs",
+        "name": "idx_legacy_import_confirmations_batch_status",
+        "unique": false,
+        "keys": "\"batch_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "uk_stock_movements_source",
+        "unique": true,
+        "keys": "\"source_document_id\": 1, \"source_line_id\": 1, \"movement_type\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "idx_stock_movements_ledger",
+        "unique": false,
+        "keys": "\"warehouse_id\": 1, \"sku_id\": 1, \"occurred_at\": 1, \"id\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "uk_stock_balances_dimension",
+        "unique": true,
+        "keys": "\"warehouse_id\": 1, \"sku_id\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "idx_stock_reservations_warehouse_sku_status",
+        "unique": false,
+        "keys": "\"warehouse_id\": 1, \"sku_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "idx_stock_reservations_sales_line_status",
+        "unique": false,
+        "keys": "\"sales_order_line_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "idx_stock_reservation_entries_reservation",
+        "unique": false,
+        "keys": "\"reservation_id\": 1, \"entry_type\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "uk_stock_adjustments_adjustment_no",
+        "unique": true,
+        "keys": "\"adjustment_no\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "idx_stock_adjustments_warehouse_status",
+        "unique": false,
+        "keys": "\"warehouse_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-inventory/src/indexes/inventory.rs",
+        "name": "idx_stock_adjustment_lines_adjustment",
+        "unique": false,
+        "keys": "\"stock_adjustment_id\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "uk_parties_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "uk_parties_party_no",
+        "unique": true,
+        "keys": "\"party_no\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "uk_parties_credit_code",
+        "unique": true,
+        "keys": "\"unified_credit_code\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_parties_kind_status",
+        "unique": false,
+        "keys": "\"party_kind\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "uk_party_revisions_party_revision",
+        "unique": true,
+        "keys": "\"party_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_party_revisions_names",
+        "unique": false,
+        "keys": "\"legal_name\": 1, \"short_name\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_party_contacts_party_status",
+        "unique": false,
+        "keys": "\"party_id\": 1, \"status\": 1, \"is_default\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_party_contacts_mobile_hmac",
+        "unique": false,
+        "keys": "\"mobile_query_hmac\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_party_addresses_party_type",
+        "unique": false,
+        "keys": "\"party_id\": 1, \"address_type\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_party_tax_profiles_party",
+        "unique": false,
+        "keys": "\"party_id\": 1, \"status\": 1, \"is_default\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "uk_party_bank_accounts_bank_account_no",
+        "unique": true,
+        "keys": "\"bank_account_no\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "uk_party_bank_accounts_party_hmac",
+        "unique": true,
+        "keys": "\"party_id\": 1, \"account_number_query_hmac\": 1"
+      },
+      {
+        "file": "crates/erp-party/src/indexes/party.rs",
+        "name": "idx_party_bank_accounts_party_status",
+        "unique": false,
+        "keys": "\"party_id\": 1, \"status\": 1, \"is_default\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_accounts_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_accounts_party",
+        "unique": true,
+        "keys": "\"party_id\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_accounts_supplier_no",
+        "unique": true,
+        "keys": "\"supplier_no\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_accounts_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_commercial_profile_revisions_supplier_revision",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_capabilities_supplier_code",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"capability_code\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_capabilities_selection",
+        "unique": false,
+        "keys": "\"capability_code\": 1, \"status\": 1, \"valid_to\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_capabilities_supplier_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_capability_revisions_identity",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"capability_code\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_qualifications_identity",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"qualification_type\": 1, \"certificate_no\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_qualifications_expiry",
+        "unique": false,
+        "keys": "\"valid_to\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_qualifications_supplier",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"qualification_type\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_qualifications_list_filter",
+        "unique": false,
+        "keys": "\"qualification_type\": 1, \"status\": 1, \"valid_to\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_qualification_revisions_identity",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"qualification_type\": 1, \"certificate_no\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_qualification_capabilities_link",
+        "unique": true,
+        "keys": "\"qualification_id\": 1, \"capability_id\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_rating_revisions_supplier_revision",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "idx_supplier_rating_revisions_history",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"valid_from\": 1, \"valid_to\": 1"
+      },
+      {
+        "file": "crates/erp-supplier/src/indexes/supplier.rs",
+        "name": "uk_supplier_profile_commands_idempotency_key",
+        "unique": true,
+        "keys": "\"idempotency_key\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "uk_bulk_selection_snapshots_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_bulk_selection_snapshots_created",
+        "unique": false,
+        "keys": "\"created_by\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_bulk_selection_snapshots_status_expires",
+        "unique": false,
+        "keys": "\"status\": 1, \"expires_at\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "uk_bulk_selection_items_target",
+        "unique": true,
+        "keys": "\"selection_snapshot_id\": 1, \"object_type\": 1, \"object_id\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_bulk_selection_items_result",
+        "unique": false,
+        "keys": "\"selection_snapshot_id\": 1, \"result_status\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "uk_background_jobs_no",
+        "unique": true,
+        "keys": "\"job_no\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "uk_background_jobs_request_id",
+        "unique": true,
+        "keys": "\"request_id\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_background_jobs_status_created",
+        "unique": false,
+        "keys": "\"status\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_background_jobs_domain",
+        "unique": false,
+        "keys": "\"domain_job_type\": 1, \"domain_job_id\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_background_jobs_requested_created",
+        "unique": false,
+        "keys": "\"requested_by\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "uk_background_job_items_no",
+        "unique": true,
+        "keys": "\"background_job_id\": 1, \"item_no\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/bulk_job.rs",
+        "name": "idx_background_job_items_status",
+        "unique": false,
+        "keys": "\"background_job_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/file_asset.rs",
+        "name": "uk_file_assets_storage_key",
+        "unique": true,
+        "keys": "\"storage_object_key\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/file_asset.rs",
+        "name": "idx_file_assets_scan_retention",
+        "unique": false,
+        "keys": "\"security_scan_status\": 1, \"retention_class\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/file_asset.rs",
+        "name": "idx_file_assets_expires_at",
+        "unique": false,
+        "keys": "\"expires_at\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/file_asset.rs",
+        "name": "uk_document_attachments_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/file_asset.rs",
+        "name": "idx_document_attachments_document",
+        "unique": false,
+        "keys": "\"document_id\": 1, \"created_at\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/file_asset.rs",
+        "name": "idx_document_attachments_asset",
+        "unique": false,
+        "keys": "\"file_asset_id\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "uk_source_systems_code",
+        "unique": true,
+        "keys": "\"code\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "idx_source_systems_type_status",
+        "unique": false,
+        "keys": "\"system_type\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "uk_external_identity_maps_identity",
+        "unique": true,
+        "keys": "\"source_system_id\": 1, \"object_type\": 1, \"external_id_key\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "idx_external_identity_maps_status",
+        "unique": false,
+        "keys": "\"mapping_status\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "uk_external_identity_targets_link",
+        "unique": true,
+        "keys": "\"external_identity_map_id\": 1, \"internal_object_type\": 1, \"internal_object_id\": 1, \"relation_role\": 1, \"valid_from\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "idx_external_identity_targets_lineage",
+        "unique": false,
+        "keys": "\"internal_object_type\": 1, \"internal_object_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-support/src/indexes/source_registry.rs",
+        "name": "idx_external_identity_targets_pending_conflict",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "crates/erp-warehouse/src/indexes/warehouse.rs",
+        "name": "uk_warehouses_warehouse_code",
+        "unique": true,
+        "keys": "\"warehouse_code\": 1"
+      },
+      {
+        "file": "crates/erp-warehouse/src/indexes/warehouse.rs",
+        "name": "idx_warehouses_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "crates/erp-warehouse/src/indexes/warehouse.rs",
+        "name": "uk_warehouse_revisions_revision",
+        "unique": true,
+        "keys": "\"warehouse_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "crates/erp-warehouse/src/indexes/warehouse.rs",
+        "name": "uk_warehouse_revisions_effective_from",
+        "unique": true,
+        "keys": "\"warehouse_id\": 1, \"effective_from\": 1"
+      },
+      {
+        "file": "crates/erp-warehouse/src/indexes/warehouse.rs",
+        "name": "uk_warehouse_sku_policies_start",
+        "unique": true,
+        "keys": "\"warehouse_id\": 1, \"sku_id\": 1, \"effective_from\": 1"
+      },
+      {
+        "file": "crates/erp-warehouse/src/indexes/warehouse.rs",
+        "name": "idx_warehouse_sku_policies_lookup",
+        "unique": false,
+        "keys": "\"warehouse_id\": 1, \"sku_id\": 1, \"effective_from\": 1, \"effective_to\": 1, \"status\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "uk_approval_subject_snapshots_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "uk_approval_subject_snapshots_instance",
+        "unique": true,
+        "keys": "\"approval_process_instance_id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "idx_approval_subject_snapshots_object",
+        "unique": false,
+        "keys": "\"document_type\": 1, \"business_object_id\": 1, \"subject_version\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "uk_approval_notification_outbox_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "uk_approval_notification_outbox_dedup",
+        "unique": true,
+        "keys": "\"dedup_key\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "idx_approval_notification_outbox_delivery",
+        "unique": false,
+        "keys": "\"delivery_status\": 1, \"next_attempt_at\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "idx_approval_notification_outbox_lease",
+        "unique": false,
+        "keys": "\"lease_until\": 1, \"delivery_status\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/approval_integration.rs",
+        "name": "idx_approval_notification_outbox_dead_letter",
+        "unique": false,
+        "keys": "\"delivery_status\": 1, \"dead_lettered_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_process_definitions_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_process_definitions_kind_version",
+        "unique": true,
+        "keys": "\"process_kind\": 1, \"definition_version\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_process_definitions_history",
+        "unique": false,
+        "keys": "\"process_kind\": 1, \"definition_version\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_node_definitions_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_node_definitions_definition_key",
+        "unique": true,
+        "keys": "\"process_definition_id\": 1, \"node_key\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_node_definitions_definition_order",
+        "unique": true,
+        "keys": "\"process_definition_id\": 1, \"display_order\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_node_definitions_definition",
+        "unique": false,
+        "keys": "\"process_definition_id\": 1, \"display_order\": 1, \"node_key\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_transition_definitions_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_transition_definitions_from_event",
+        "unique": true,
+        "keys": "\"process_definition_id\": 1, \"from_node_key\": 1, \"event\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_transition_definitions_definition",
+        "unique": false,
+        "keys": "\"process_definition_id\": 1, \"from_node_key\": 1, \"event\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_process_instances_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_process_instances_subject_history",
+        "unique": false,
+        "keys": "\"subject.subject_kind\": 1, \"subject.subject_id\": 1, \"started_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_process_instances_blocked",
+        "unique": false,
+        "keys": "\"status\": 1, \"blocked_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_process_instances_started_by",
+        "unique": false,
+        "keys": "\"started_by\": 1, \"started_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_process_instances_updated",
+        "unique": false,
+        "keys": "\"updated_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_process_instances_status_updated",
+        "unique": false,
+        "keys": "\"status\": 1, \"updated_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_node_executions_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_node_executions_instance_no",
+        "unique": true,
+        "keys": "\"process_instance_id\": 1, \"execution_no\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_node_executions_round_node",
+        "unique": false,
+        "keys": "\"process_instance_id\": 1, \"round_no\": 1, \"node_key\": 1, \"execution_no\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_node_executions_round",
+        "unique": false,
+        "keys": "\"process_instance_id\": 1, \"round_no\": 1, \"execution_no\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "idx_approval_node_executions_assignee",
+        "unique": false,
+        "keys": "\"assignee_participant_id\": 1, \"status\": 1, \"activated_at\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_instance_assignees_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_instance_assignees_instance_node",
+        "unique": true,
+        "keys": "\"process_instance_id\": 1, \"node_key\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_command_receipts_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/bpm.rs",
+        "name": "uk_approval_command_receipts_idempotency",
+        "unique": true,
+        "keys": "\"command_kind\": 1, \"scope_id\": 1, \"idempotency_key\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "uk_business_documents_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "uk_document_relations_link",
+        "unique": true,
+        "keys": "\"from_document_id\": 1, \"to_document_id\": 1, \"relation_type\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "idx_document_relations_reverse",
+        "unique": false,
+        "keys": "\"to_document_id\": 1, \"relation_type\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "uk_document_participants_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "idx_document_participants_document_user",
+        "unique": false,
+        "keys": "\"document_id\": 1, \"participant_user_id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "idx_document_participants_user",
+        "unique": false,
+        "keys": "\"participant_user_id\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "uk_workflow_actions_id",
+        "unique": true,
+        "keys": "\"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "idx_workflow_actions_document_created",
+        "unique": false,
+        "keys": "\"document_id\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/document_registry.rs",
+        "name": "idx_workflow_actions_actor_created",
+        "unique": false,
+        "keys": "\"actor_id\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_mine",
+        "unique": false,
+        "keys": "\"status\": 1, \"owner_user_id\": 1, \"due_at\": 1, \"id\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_pending_approval",
+        "unique": false,
+        "keys": "\"status\": 1, \"owner_user_id\": 1, \"assigned_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_managed",
+        "unique": false,
+        "keys": "\"status\": 1, \"owner_organization_id\": 1, \"owner_user_id\": 1, \"due_at\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_responsibility_history",
+        "unique": false,
+        "keys": "\"status\": 1, \"responsibility_actor_ids\": 1, \"due_at\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_procurement_object_history",
+        "unique": false,
+        "keys": "\"business_object_type\": 1, \"business_object_id\": 1, \"work_item_type\": 1, \"updated_at\": -1, \"created_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_completed_history",
+        "unique": false,
+        "keys": "\"status\": 1, \"completed_by\": 1, \"completed_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_work_items_closed_history",
+        "unique": false,
+        "keys": "\"status\": 1, \"closed_by\": 1, \"closed_at\": -1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_finance_responsibility_list",
+        "unique": false,
+        "keys": "\"deleted_at\": 1, \"operation\": 1, \"status\": 1, \"scope\": 1, \"created_at\": 1"
+      },
+      {
+        "file": "crates/erp-workflow/src/indexes/work_item.rs",
+        "name": "idx_finance_responsibility_owner",
+        "unique": false,
+        "keys": "\"deleted_at\": 1, \"owner_user_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/cost.rs",
+        "name": "uk_cost_entries_identity",
+        "unique": true,
+        "keys": "\"source_fact_type\": 1, \"source_document_id\": 1, \"source_line_id\": 1, \"source_version\": 1, \"cost_stage\": 1, \"cost_type\": 1"
+      },
+      {
+        "file": "database/src/indexes/cost.rs",
+        "name": "idx_cost_entries_profit",
+        "unique": false,
+        "keys": "\"cost_scope\": 1, \"cost_stage\": 1"
+      },
+      {
+        "file": "database/src/indexes/cost.rs",
+        "name": "idx_cost_entries_stage_time",
+        "unique": false,
+        "keys": "\"cost_stage\": 1, \"occurred_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/cost.rs",
+        "name": "idx_cost_entries_supplier",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"cost_stage\": 1"
+      },
+      {
+        "file": "database/src/indexes/cost.rs",
+        "name": "idx_cost_allocations_entry",
+        "unique": false,
+        "keys": "\"cost_entry_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/cost.rs",
+        "name": "idx_cost_allocations_sales_order",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"sales_order_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_purchase_receipts_receipt_no",
+        "unique": true,
+        "keys": "\"receipt_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_purchase_receipts_po_status_posted",
+        "unique": false,
+        "keys": "\"purchase_order_id\": 1, \"status\": 1, \"posted_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_purchase_receipt_lines_header_line",
+        "unique": true,
+        "keys": "\"purchase_receipt_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_deliveries_delivery_no",
+        "unique": true,
+        "keys": "\"delivery_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_deliveries_sales_order_status",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_deliveries_tracking_no",
+        "unique": false,
+        "keys": "\"tracking_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_delivery_lines_header_line",
+        "unique": true,
+        "keys": "\"delivery_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_electronic_deliveries_fulfillment_no",
+        "unique": true,
+        "keys": "\"fulfillment_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_electronic_deliveries_line_occurred",
+        "unique": false,
+        "keys": "\"sales_order_line_id\": 1, \"occurred_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_service_fulfillments_fulfillment_no",
+        "unique": true,
+        "keys": "\"fulfillment_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_service_fulfillments_line_occurred",
+        "unique": false,
+        "keys": "\"sales_order_line_id\": 1, \"occurred_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_customer_acceptances_acceptance_no",
+        "unique": true,
+        "keys": "\"acceptance_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_customer_acceptances_sales_order_accepted",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"accepted_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "uk_customer_acceptance_lines_header_line",
+        "unique": true,
+        "keys": "\"customer_acceptance_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_acceptance_fulfillment_allocations_acceptance_line",
+        "unique": false,
+        "keys": "\"customer_acceptance_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/fulfillment.rs",
+        "name": "idx_acceptance_fulfillment_allocations_fulfillment_fact",
+        "unique": false,
+        "keys": "\"fulfillment_fact_type\": 1, \"fulfillment_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "uk_inbox_messages_identity",
+        "unique": true,
+        "keys": "\"source_system_id\": 1, \"source_event_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "uk_inbox_messages_business_fact",
+        "unique": true,
+        "keys": "\"message_type\": 1, \"business_fact_key\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "idx_inbox_messages_backlog",
+        "unique": false,
+        "keys": "\"status\": 1, \"received_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "uk_integration_error_tasks_message_class",
+        "unique": true,
+        "keys": "\"message_id\": 1, \"error_class\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "idx_integration_error_tasks_work_queue",
+        "unique": false,
+        "keys": "\"status\": 1, \"owner_role\": 1, \"created_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "uk_reconciliation_differences_object",
+        "unique": true,
+        "keys": "\"business_object_type\": 1, \"business_object_id\": 1, \"difference_type\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "idx_reconciliation_differences_object_time",
+        "unique": false,
+        "keys": "\"business_object_type\": 1, \"created_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "uk_reconciliation_difference_resolutions_no",
+        "unique": true,
+        "keys": "\"reconciliation_difference_id\": 1, \"resolution_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/integration_ops.rs",
+        "name": "idx_reconciliation_difference_resolutions_difference",
+        "unique": false,
+        "keys": "\"reconciliation_difference_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "uk_payable_accounts_source",
+        "unique": true,
+        "keys": "\"source_type\": 1, \"source_document_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payable_accounts_aging",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "uk_payable_entries_identity",
+        "unique": true,
+        "keys": "\"payable_account_id\": 1, \"source_fact_type\": 1, \"source_document_id\": 1, \"source_revision_id\": 1, \"entry_type\": 1, \"source_sequence\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payable_entries_account_due",
+        "unique": false,
+        "keys": "\"payable_account_id\": 1, \"due_date\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payable_entries_account_direction_due",
+        "unique": false,
+        "keys": "\"payable_account_id\": 1, \"direction\": 1, \"due_date\": 1, \"id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payable_entries_source",
+        "unique": false,
+        "keys": "\"source_fact_type\": 1, \"source_document_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "uk_payable_entry_offsets_decrease",
+        "unique": true,
+        "keys": "\"decrease_entry_id\": 1, \"offset_sequence\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payable_entry_offsets_increase",
+        "unique": false,
+        "keys": "\"increase_entry_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "uk_supplier_payments_no",
+        "unique": true,
+        "keys": "\"payment_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_supplier_payments_supplier_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "uk_payment_allocations_payment_seq",
+        "unique": true,
+        "keys": "\"supplier_payment_id\": 1, \"allocation_seq\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payment_allocations_entry_time",
+        "unique": false,
+        "keys": "\"payable_entry_id\": 1, \"allocated_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_payment_allocations_reverse",
+        "unique": false,
+        "keys": "\"reverses_allocation_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "uk_purchase_invoice_allocations_invoice_seq",
+        "unique": true,
+        "keys": "\"invoice_id\": 1, \"allocation_seq\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_purchase_invoice_allocations_account",
+        "unique": false,
+        "keys": "\"payable_account_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_purchase_invoice_allocations_account_page",
+        "unique": false,
+        "keys": "\"payable_account_id\": 1, \"created_at\": 1, \"id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_purchase_invoice_allocations_invoice_page",
+        "unique": false,
+        "keys": "\"invoice_id\": 1, \"created_at\": 1, \"id\": 1"
+      },
+      {
+        "file": "database/src/indexes/payable.rs",
+        "name": "idx_purchase_invoice_allocations_reverse",
+        "unique": false,
+        "keys": "\"reverses_allocation_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/procurement_responsibility.rs",
+        "name": "idx_procurement_responsibility_list",
+        "unique": false,
+        "keys": "\"deleted_at\": 1, \"status\": 1, \"rule_type\": 1, \"created_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/procurement_responsibility.rs",
+        "name": "idx_procurement_responsibility_owner",
+        "unique": false,
+        "keys": "\"deleted_at\": 1, \"owner_user_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_orders_creation_basis",
+        "unique": true,
+        "keys": "\"creation_basis_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "idx_purchase_orders_creation_scope",
+        "unique": false,
+        "keys": "\"sales_order_revision_id\": 1, \"supplier_id\": 1, \"purchase_type\": 1, \"payment_term_code\": 1, \"fulfillment_responsibility\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "idx_purchase_orders_supplier_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "idx_purchase_orders_sales_status",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_order_submissions_order_no",
+        "unique": true,
+        "keys": "\"purchase_order_id\": 1, \"submission_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "idx_purchase_order_submissions_order_status_posted",
+        "unique": false,
+        "keys": "\"purchase_order_id\": 1, \"status\": 1, \"submitted_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_order_submission_lines_order_line",
+        "unique": true,
+        "keys": "\"purchase_order_submission_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_order_revisions_order_no",
+        "unique": true,
+        "keys": "\"purchase_order_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_order_revision_lines_revision_line",
+        "unique": true,
+        "keys": "\"purchase_order_revision_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_line_sales_allocations_link",
+        "unique": true,
+        "keys": "\"purchase_order_revision_line_id\": 1, \"sales_order_revision_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "idx_purchase_line_sales_allocations_sales_line",
+        "unique": false,
+        "keys": "\"sales_order_revision_line_id\": 1, \"purchase_order_revision_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "idx_purchase_change_orders_order_status",
+        "unique": false,
+        "keys": "\"purchase_order_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_change_submissions_order_no",
+        "unique": true,
+        "keys": "\"purchase_change_order_id\": 1, \"submission_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_change_submission_lines_order_line",
+        "unique": true,
+        "keys": "\"purchase_change_submission_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "uk_purchase_orders_purchase_no",
+        "unique": true,
+        "keys": "\"purchase_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/purchase_order.rs",
+        "name": "probe",
+        "unique": true,
+        "keys": "\"a\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receivable_accounts_sales_order",
+        "unique": true,
+        "keys": "\"sales_order_id\": 1, \"account_seq\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receivable_accounts_aging",
+        "unique": false,
+        "keys": "\"counterparty_party_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receivable_accounts_customer",
+        "unique": false,
+        "keys": "\"customer_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receivable_entries_identity",
+        "unique": true,
+        "keys": "\"receivable_account_id\": 1, \"source_fact_type\": 1, \"source_document_id\": 1, \"source_revision_id\": 1, \"entry_type\": 1, \"source_sequence\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receivable_entries_account_due",
+        "unique": false,
+        "keys": "\"receivable_account_id\": 1, \"due_date\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receivable_entries_source",
+        "unique": false,
+        "keys": "\"source_fact_type\": 1, \"source_document_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receivable_funds_reviews_account_no",
+        "unique": true,
+        "keys": "\"receivable_account_id\": 1, \"review_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receivable_funds_reviews_work_item",
+        "unique": true,
+        "keys": "\"work_item_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receivable_funds_reviews_supersedes",
+        "unique": true,
+        "keys": "\"supersedes_review_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receivable_entry_offsets_decrease",
+        "unique": true,
+        "keys": "\"decrease_entry_id\": 1, \"offset_sequence\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receivable_entry_offsets_increase",
+        "unique": false,
+        "keys": "\"increase_entry_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_customer_receipts_no",
+        "unique": true,
+        "keys": "\"receipt_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_customer_receipts_party_status",
+        "unique": false,
+        "keys": "\"counterparty_party_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_receipt_allocations_receipt_seq",
+        "unique": true,
+        "keys": "\"customer_receipt_id\": 1, \"allocation_seq\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receipt_allocations_entry_time",
+        "unique": false,
+        "keys": "\"receivable_entry_id\": 1, \"allocated_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_receipt_allocations_reverse",
+        "unique": false,
+        "keys": "\"reverses_allocation_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_invoices_coded",
+        "unique": true,
+        "keys": "\"invoice_direction\": 1, \"normalized_code\": 1, \"normalized_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_invoices_party_status",
+        "unique": false,
+        "keys": "\"party_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_invoices_original",
+        "unique": false,
+        "keys": "\"original_invoice_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "uk_sales_invoice_allocations_invoice_seq",
+        "unique": true,
+        "keys": "\"invoice_id\": 1, \"allocation_seq\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_sales_invoice_allocations_account",
+        "unique": false,
+        "keys": "\"receivable_account_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/receivable.rs",
+        "name": "idx_sales_invoice_allocations_reverse",
+        "unique": false,
+        "keys": "\"reverses_allocation_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "uk_sales_return_cases_no",
+        "unique": true,
+        "keys": "\"return_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_sales_return_cases_order_status",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_sales_return_cases_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_sales_return_lines_case",
+        "unique": false,
+        "keys": "\"sales_return_case_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_sales_return_lines_order_line",
+        "unique": false,
+        "keys": "\"sales_order_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "uk_purchase_return_orders_no",
+        "unique": true,
+        "keys": "\"purchase_return_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_purchase_return_orders_po_status",
+        "unique": false,
+        "keys": "\"purchase_order_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_purchase_return_lines_order",
+        "unique": false,
+        "keys": "\"purchase_return_order_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_purchase_return_lines_rev_line",
+        "unique": false,
+        "keys": "\"purchase_order_revision_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "uk_customer_refunds_no",
+        "unique": true,
+        "keys": "\"refund_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_customer_refunds_customer_status",
+        "unique": false,
+        "keys": "\"customer_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_customer_refunds_original",
+        "unique": false,
+        "keys": "\"original_receipt_id\": 1, \"original_receivable_entry_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "uk_supplier_refunds_no",
+        "unique": true,
+        "keys": "\"refund_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_supplier_refunds_supplier_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_supplier_refunds_original",
+        "unique": false,
+        "keys": "\"original_payment_id\": 1, \"original_payable_entry_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "uk_receipt_reversals_no",
+        "unique": true,
+        "keys": "\"reversal_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_receipt_reversals_original",
+        "unique": false,
+        "keys": "\"original_customer_receipt_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "uk_payment_reversals_no",
+        "unique": true,
+        "keys": "\"reversal_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/returns.rs",
+        "name": "idx_payment_reversals_original",
+        "unique": false,
+        "keys": "\"original_supplier_payment_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_orders_order_no",
+        "unique": true,
+        "keys": "\"order_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_orders_customer_status_created",
+        "unique": false,
+        "keys": "\"customer_id\": 1, \"commercial_status\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_orders_review_status_created",
+        "unique": false,
+        "keys": "\"review_status\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_orders_created_by_created",
+        "unique": false,
+        "keys": "\"created_by\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_lines_order_line",
+        "unique": true,
+        "keys": "\"sales_order_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_working_copies_order_purpose",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"working_purpose\": 1, \"updated_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_working_copies_status_updated",
+        "unique": false,
+        "keys": "\"status\": 1, \"updated_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_working_copy_lines_copy_line",
+        "unique": true,
+        "keys": "\"working_copy_id\": 1, \"sales_order_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_submissions_order_submission_no",
+        "unique": true,
+        "keys": "\"sales_order_id\": 1, \"submission_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_submissions_order_submitted",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"submitted_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_submissions_status_created",
+        "unique": false,
+        "keys": "\"status\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_submission_lines_submission_line",
+        "unique": true,
+        "keys": "\"submission_id\": 1, \"sales_order_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_revisions_order_revision_no",
+        "unique": true,
+        "keys": "\"sales_order_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_revisions_order_content_hash",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"content_hash\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_revisions_order_effective",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"effective_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_revision_lines_revision_line",
+        "unique": true,
+        "keys": "\"sales_order_revision_id\": 1, \"sales_order_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "idx_sales_order_revision_lines_due",
+        "unique": false,
+        "keys": "\"sales_order_revision_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_goods_service_line_revisions_line",
+        "unique": true,
+        "keys": "\"revision_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_order.rs",
+        "name": "uk_sales_order_voucher_line_revisions_line",
+        "unique": true,
+        "keys": "\"revision_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_review.rs",
+        "name": "idx_sales_change_orders_order_status",
+        "unique": false,
+        "keys": "\"sales_order_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_review.rs",
+        "name": "uk_sales_change_submissions_order_submission_no",
+        "unique": true,
+        "keys": "\"sales_change_order_id\": 1, \"submission_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/sales_review.rs",
+        "name": "idx_sales_change_submissions_order_submitted",
+        "unique": false,
+        "keys": "\"sales_change_order_id\": 1, \"submitted_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/sales_review.rs",
+        "name": "uk_sales_change_submission_lines_submission_line",
+        "unique": true,
+        "keys": "\"sales_change_submission_id\": 1, \"sales_order_line_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_connections_connection_code",
+        "unique": true,
+        "keys": "\"connection_code\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "idx_supplier_api_connections_supplier_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "idx_supplier_api_connections_environment_status_health",
+        "unique": false,
+        "keys": "\"environment\": 1, \"status\": 1, \"last_health_result\": 1, \"updated_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_business_confirmations_operation",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"operation_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_business_confirmations_idempotency",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"confirmed_by\": 1, \"idempotency_key_hash\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "idx_supplier_api_business_confirmations_latest",
+        "unique": false,
+        "keys": "\"connection_id\": 1, \"capability_code\": 1, \"confirmed_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_health_runs_background_job",
+        "unique": true,
+        "keys": "\"background_job_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_health_runs_idempotency",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"requested_by\": 1, \"idempotency_key_hash\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "idx_supplier_api_health_runs_latest",
+        "unique": false,
+        "keys": "\"connection_id\": 1, \"created_at\": -1, \"id\": -1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_command_receipts_idempotency",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"action\": 1, \"actor_id\": 1, \"idempotency_key_hash\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_api.rs",
+        "name": "uk_supplier_api_capabilities_connection_capability",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"capability_code\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_fulfillment_orders_order_no",
+        "unique": true,
+        "keys": "\"fulfillment_order_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_fulfillment_orders_connection_external",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"external_order_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_fulfillment_orders_supplier_status_created",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"fulfillment_status\": 1, \"created_at\": -1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_fulfillment_orders_external_order_no",
+        "unique": false,
+        "keys": "\"external_order_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_fulfillment_orders_supplier_completed",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"completed_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_fulfillment_items_order",
+        "unique": false,
+        "keys": "\"supplier_fulfillment_order_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_order_actions_idempotency_key",
+        "unique": true,
+        "keys": "\"idempotency_key\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_order_actions_order",
+        "unique": false,
+        "keys": "\"supplier_fulfillment_order_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_order_action_lines_action_line_no",
+        "unique": true,
+        "keys": "\"supplier_order_action_id\": 1, \"line_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_order_status_histories_connection_event",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"external_event_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_refund_facts_connection_refund",
+        "unique": true,
+        "keys": "\"connection_id\": 1, \"external_refund_no\": 1, \"external_refund_version\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_refund_facts_inbox_message",
+        "unique": true,
+        "keys": "\"inbox_message_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_refund_facts_order",
+        "unique": false,
+        "keys": "\"supplier_fulfillment_order_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "idx_supplier_refund_facts_supplier_refunded",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"refunded_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_refund_allocations_fact_no",
+        "unique": true,
+        "keys": "\"supplier_refund_fact_id\": 1, \"allocation_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_fulfillment.rs",
+        "name": "uk_supplier_refund_allocations_reverse_source",
+        "unique": true,
+        "keys": "\"reverses_allocation_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "uk_supplier_offerings_supplier_sku",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"supplier_sku_code\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "idx_supplier_offerings_sku_status",
+        "unique": false,
+        "keys": "\"sku_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "idx_supplier_offerings_supplier_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "idx_supplier_offerings_source_connection",
+        "unique": false,
+        "keys": "\"source_connection_id\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "idx_supplier_offerings_source_status",
+        "unique": false,
+        "keys": "\"source_type\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "uk_supplier_offering_revisions_offering_no",
+        "unique": true,
+        "keys": "\"supplier_offering_id\": 1, \"revision_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "idx_supplier_offering_revisions_validity",
+        "unique": false,
+        "keys": "\"supplier_offering_id\": 1, \"valid_from\": -1, \"valid_to\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "uk_supplier_offering_availabilities_offering",
+        "unique": true,
+        "keys": "\"supplier_offering_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "idx_supplier_offering_availabilities_freshness",
+        "unique": false,
+        "keys": "\"availability_status\": 1, \"source_updated_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_offering.rs",
+        "name": "uk_supplier_offering_commands_idempotency_key",
+        "unique": true,
+        "keys": "\"idempotency_key\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_source_evidence_request",
+        "unique": true,
+        "keys": "\"request_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_source_evidence_period_version",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"period_start\": 1, \"period_end\": 1, \"period_policy_id\": 1, \"period_policy_version\": 1, \"source_version\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "idx_supplier_settlement_source_evidence_latest",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"period_start\": 1, \"period_end\": 1, \"period_policy_id\": 1, \"period_policy_version\": 1, \"source_version\": -1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_difference_evidence_request",
+        "unique": true,
+        "keys": "\"request_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "idx_supplier_settlement_difference_evidence_difference",
+        "unique": false,
+        "keys": "\"difference_id\": 1, \"provided_at\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_statements_statement_no",
+        "unique": true,
+        "keys": "\"statement_no\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_statements_supplier_external_bill",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"external_bill_no\": 1, \"external_bill_version\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_statements_supplier_period_confirmed",
+        "unique": true,
+        "keys": "\"supplier_id\": 1, \"period_start\": 1, \"period_end\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "idx_supplier_settlement_statements_supplier_period_status",
+        "unique": false,
+        "keys": "\"supplier_id\": 1, \"period_start\": 1, \"period_end\": 1, \"status\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "uk_supplier_settlement_items_statement_fulfillment_item",
+        "unique": true,
+        "keys": "\"statement_id\": 1, \"supplier_fulfillment_item_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "idx_supplier_settlement_differences_statement_item",
+        "unique": false,
+        "keys": "\"statement_item_id\": 1"
+      },
+      {
+        "file": "database/src/indexes/supplier_settlement.rs",
+        "name": "idx_supplier_settlement_differences_status",
+        "unique": false,
+        "keys": "\"status\": 1"
+      }
+    ],
+    "note": "扫描 backend 下 indexes 模块；stock_* 索引已迁入 crates/erp-inventory/src/indexes/inventory.rs。真实数据库运行未验证"
+  },
+  "dto": {
+    "inventory_dto": "crates/erp-inventory/src/dto/inventory.rs",
+    "sha256": "645f6469fcae15fc2666360eb39258bb2b12031aca2ba2a4d146907e1ed83bf9",
+    "note": "HTTP DTO 字段名与 serde 保持原契约。真实数据库运行未验证"
+  },
+  "recorded_at": "2026-09-07T00:53:58Z",
+  "source_dir": "backend/logs/phase-08-qg-gates"
 }

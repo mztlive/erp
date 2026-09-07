@@ -1,12 +1,19 @@
 {
   "phase": "08",
-  "recorded_at": "2026-09-07T00:00:00Z",
+  "recorded_at": "2026-09-07T00:53:58Z",
   "evidence_dir": ".domain-migration-evidence/08",
   "input_head": "bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca",
+  "implement_commits": [
+    "f122118d7d6eb9455421882976c90463a7c73012",
+    "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18"
+  ],
+  "implement_commit": "f122118d7d6eb9455421882976c90463a7c73012",
+  "integrator_commit": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
+  "head": "477fd5a4be6dd081d4f5e52dd2c1913094f0cf18",
   "branch": "chore/domain-crate-08-inventory",
   "status": "本地门禁通过",
   "never_mark": "已验收",
-  "review_approved": false,
+  "review_approved": true,
   "disclaimer": "真实数据库运行未验证",
   "real_database_verified": false,
   "git_at_start": {
@@ -53,10 +60,23 @@
     "apps/web-api/src/main.rs"
   ],
   "section_6_callers_still_bind_old_services": false,
+  "workspace_member_count": 30,
   "kind_test_targets": 0,
   "historical_tests_archives_byte_for_byte": true,
   "quality_passed": true,
   "unit_tests_passed": true,
   "compile_measurement": "not applicable for phase 08; threshold judged in phase 17",
-  "note": "前序输入为阶段 07 本地门禁通过提交 bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca。verify_plan.py --sources 因规划快照漂移失败，不是 08 完成信号。公共门禁全部 exit 0（3315 lib tests, 0 failed, 68 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
+  "path_changes": {
+    "add": 24,
+    "delete": 4,
+    "modify": 38,
+    "rename": 34,
+    "total": 100,
+    "versus": "bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca",
+    "rename_detection": true,
+    "evidence_rows": 108,
+    "note": "path_changes counts non-evidence paths vs input; files.tsv also lists evidence files"
+  },
+  "files_tsv_rows": 108,
+  "note": "前序输入为阶段 07 本地门禁通过提交 bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca。verify_plan.py --sources 因规划快照漂移失败，不是 08 完成信号。review_approved=true。公共门禁全部 exit 0（3315 lib tests, 0 failed, 68 ignored）。状态为本地门禁通过。不得标记已验收。真实数据库运行未验证"
 }

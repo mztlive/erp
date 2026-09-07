@@ -10,7 +10,7 @@
 | 执行目录 | 仓库内 backend；源路径均相对此目录 |
 | 目标 crate | `erp-inventory` |
 | 执行负责人 | chore/domain-crate-08-inventory integrator |
-| 输入/输出提交 | 前序 `bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca` / 实现提交见 `.domain-migration-evidence/08/metadata.json` |
+| 输入/输出提交 | 前序 `bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca` / 实现提交 `f122118d7d6eb9455421882976c90463a7c73012`；覆盖修复 `477fd5a4be6dd081d4f5e52dd2c1913094f0cf18`（证据见 `.domain-migration-evidence/08/metadata.json`） |
 | 依据 | [设计契约](../../specs/2026-09-03-domain-crate-migration-design.md)、[公共执行合同](execution-contract.md) |
 
 ## 2. 阶段目标
@@ -152,12 +152,12 @@ git diff --check
 | 证据 | 必填结果 | 初始状态 |
 | --- | --- | --- |
 | 输入基线 | 前序本地门禁通过 `bbd8a5ab4cbd45d09b1aeb4d75a83adb5de74dca`；分支 `chore/domain-crate-08-inventory`；source-map phase=08 行 33；owned types 5 | 已采集 `.domain-migration-evidence/08/input.json` |
-| 文件与符号 | 见 `.domain-migration-evidence/08/files.tsv`；5 owned EntityRepository 迁入 erp-inventory；post/prepare/cancel/submit 根用例迁入 erp-processes/inventory_adjustment；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/08/files.tsv` |
-| 依赖 | erp-inventory 仅依赖基础；无旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/08/boundary.log` |
-| 旧实现清零 | 源目录、根导出、调用方搜索：`services::inventory`/`entities::inventory` 生产清零 | 已采集 `.domain-migration-evidence/08/boundary.log` |
+| 文件与符号 | 相对输入 100 路径变化（24 add / 4 delete / 38 modify / 34 rename）；5 owned EntityRepository 迁入 erp-inventory；post/prepare/cancel/submit 根用例迁入 erp-processes/inventory_adjustment；历史 tests/ 字节不变 | 已采集 `.domain-migration-evidence/08/files.tsv` |
+| 依赖 | 30 个成员；无 kind=test；erp-inventory 仅依赖基础且无旧三层回边；组合层允许依赖旧三层 | 已采集 `.domain-migration-evidence/08/boundary.log` |
+| 旧实现清零 | 源目录、根导出、调用方搜索：`services::inventory`/`entities::inventory` 生产清零；历史 tests/ 仍引用旧路径且字节不变 | 已采集 `.domain-migration-evidence/08/boundary.log` |
 | 测试 | `env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked`；3315 passed / 0 failed / 68 ignored；exit 0 | 已执行 `.domain-migration-evidence/08/unit-tests.log` |
-| 协议与数据 | 权限生成物与阶段 07 哈希相等；索引迁入 erp-inventory 声明不变 | 已采集 `.domain-migration-evidence/08/contract-comparison.json` |
-| 事务合同 | 同一 Executor、inventory 事务内写入、processes 根编排；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/08/transaction-contract.json` |
-| 公共门禁 | fmt/check/clippy/lib tests/bpm/service/domain/permissions/git-diff-check 全部 exit 0 | 已执行 `.domain-migration-evidence/08/quality-gates.log` |
+| 协议与数据 | 369 条管理路由；21 个 ErrorCode；368 条索引；权限生成物与阶段 07 哈希相等 | 已采集 `.domain-migration-evidence/08/contract-comparison.json` |
+| 事务合同 | Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 inventory_adjustment 同一 Executor；真实数据库运行未验证 | 已采集 `.domain-migration-evidence/08/transaction-contract.json` |
+| 公共门禁 | fmt/check/clippy/test/bpm/service/domain/permissions/git-diff-check 全部 exit 0；review_approved=true；状态为本地门禁通过 | 已执行 `.domain-migration-evidence/08/quality-gates.log` |
 | 编译收益 | 阶段 08 不执行编译收益复测；阈值在阶段 17 判定 | 不适用 |
-| 阶段提交 | 见 metadata.json；不得标记已验收 | 实现提交待 git |
+| 阶段提交 | 实现提交 `f122118d7d6eb9455421882976c90463a7c73012`；覆盖修复 `477fd5a4be6dd081d4f5e52dd2c1913094f0cf18`；证据目录 `.domain-migration-evidence/08/`；review_approved=true；状态本地门禁通过；禁止标记已验收 | 已写入 `.domain-migration-evidence/08/metadata.json` |

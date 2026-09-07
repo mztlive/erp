@@ -2,22 +2,47 @@
   "phase": "08",
   "status": "本地门禁通过",
   "never_mark": "已验收",
+  "review_approved": true,
   "real_database_verified": false,
   "disclaimer": "真实数据库运行未验证",
   "mongodb_started": false,
   "erp_test_mongo_uri": "unset",
   "executor": {
     "file": "crates/persistence-core/src/executor.rs",
+    "sha256": "d7f18681920bb0f7356687953043ea004f2c96b0a3219f4cb8a46242a7303a2d",
     "no_transaction_session": "None",
     "client_session_session": "Some(self)",
     "nested_transactions": "forbidden",
-    "external_io_holds_session": false
+    "external_io_holds_session": false,
+    "unchanged_versus_phase_07": true
+  },
+  "transactional": {
+    "file": "crates/persistence-core/src/transaction.rs",
+    "sha256": "3fa042ed3d5baaa9914f55566fd961c40d58ebcd9a7f58f0e67497bdabdb47ed",
+    "read_concern": "snapshot",
+    "write_concern": "majority",
+    "unknown_commit_timeout_secs": 120,
+    "failed_session_reuse": "forbidden",
+    "unchanged_versus_phase_07": true
+  },
+  "run_audited": {
+    "file": "crates/erp-processes/src/audit/transaction.rs",
+    "sha256": "daae5edfd64c4e70bd11e28abb80d400e7da03f8c49114ff426bf3377ed67fb7",
+    "order": [
+      "write(db, session)",
+      "audit_logs().create(&audit, session)"
+    ],
+    "external_io_in_write": "forbidden",
+    "same_executor": true,
+    "note": "run_audited 仅在 erp-processes。inventory_adjustment 过账在调用方 Executor 会话内写入库存与审计；create/submit 使用 Client::with_transaction 同一 session。真实数据库运行未验证"
   },
   "inventory": {
     "stock_writes": "crates/erp-inventory/src/service/inventory/stock_write.rs apply_posted_adjustment_in_transaction",
+    "sha256": "39306eaa7fc5c3a8ee5c6b355904affd54889f1ad88ee31528c7b87e6b5e13c2",
     "in_txn": true,
     "opens_nested_transaction": false,
-    "holds_session_across_external_io": false
+    "holds_session_across_external_io": false,
+    "note": "库存写入留在 erp-inventory 事务内方法，不另开事务。真实数据库运行未验证"
   },
   "inventory_adjustment": {
     "process": "crates/erp-processes/src/inventory_adjustment",
@@ -26,8 +51,21 @@
       "approval_prepare.rs",
       "cancel_approval.rs",
       "submit.rs",
-      "create.rs"
+      "create.rs",
+      "query.rs",
+      "persist.rs",
+      "adapter.rs"
     ],
+    "sha256": {
+      "post.rs": "917adc2b1bc4d68ac31d31b1b1b44b1db1eaf9472fe1f8187bebe994bb00ba22",
+      "approval_prepare.rs": "cbf93a849f69a3ee55475217ad65888fd735852016dd1ca4ada4fa76b21c4582",
+      "cancel_approval.rs": "fae449622dd2610c73cc9326120526b57fb82e4f3a3ea4136f8cf9a6c66e244f",
+      "submit.rs": "f76e334cff0829bce9419be1230b0cf877e0b8a525f974728c6276b9ec9e6f98",
+      "create.rs": "2cefe963c8aabda6653e183df36f9c461c1644bbe93369602a68ae1fbc08b7c4",
+      "query.rs": "edde353d57045938368725de668a2114be3c35351f0551afd44a87a81843ce10",
+      "persist.rs": "be7d21f36dcf57235a9d8f9801532e5aa6c8636bd1ce188972bff7899feb3408",
+      "adapter.rs": "b2674c6092a6935bacfd743cd28a67f0217fc60c802449c5741364d39d05c196"
+    },
     "root_transaction": "caller Executor for approval-runtime post/cancel; Client::with_transaction for submit/create",
     "same_executor": true,
     "no_nested_transactions": true,
@@ -40,7 +78,26 @@
       "StockAdjustmentPost": "InventoryAdjustmentService::post_stock_adjustment(context, actor, executor)",
       "StockAdjustmentCancelApproval": "cancel_stock_adjustment_approval_in_transaction(..., executor)",
       "second_txn": false
-    }
+    },
+    "note": "跨域原子流程复用同一个 Executor；库存写入留在 erp-inventory 事务内方法。真实数据库运行未验证"
   },
-  "note": "跨域原子流程复用同一个 Executor；库存写入留在 erp-inventory 事务内方法。真实数据库运行未验证"
+  "owned_repositories_moved": {
+    "count": 5,
+    "types": [
+      "StockAdjustmentRepository",
+      "StockAdjustmentLineRepository",
+      "StockBalanceRepository",
+      "StockMovementRepository",
+      "StockReservationRepository"
+    ],
+    "compose": "persistence_core::Repository",
+    "no_deref": true,
+    "no_type_alias": true,
+    "no_inherent_impl_on_foreign_repository": true,
+    "no_entity_bson": true
+  },
+  "source_contains_with_transaction": true,
+  "real_database_rollback_concurrency": "未验证",
+  "note": "静态源码合同：Executor/NoTransaction、snapshot+majority、erp-processes run_audited 与 inventory_adjustment 根事务同一 Executor。真实数据库运行未验证",
+  "recorded_at": "2026-09-07T00:53:58Z"
 }
