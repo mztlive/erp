@@ -2,12 +2,6 @@
   "rule": "文本副本仅规范化尾部空白；原字节保留在gzip附件",
   "files": [
     {
-      "path": "fmt.log",
-      "raw_attachment": "fmt.log.raw.gz",
-      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "normalized_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
-    },
-    {
       "path": "dto-static-comparison.json",
       "raw_attachment": "dto-static-comparison.json.raw.gz",
       "raw_sha256": "3c562ab6bc4def1db5da95c39fd9fc1e627ac69735ee27ed61f78b933323630c",
