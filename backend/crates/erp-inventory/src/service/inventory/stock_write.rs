@@ -122,6 +122,7 @@ async fn post_adjustment_line(
             }
         }
     }
+    // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
     if !db
         .stock_balances()
         .apply_last_movement(&balance.base.id, &movement.base.id, session)
@@ -162,6 +163,8 @@ async fn release_applicable_reservations(
         {
             continue;
         }
+        // 同步余额预占（释放量从 reserved 转入 available），否则后续
+        // deduct_available 会因可用量不足而误拒盘亏/损坏过账。
         if !db
             .stock_balances()
             .release_reserved(balance_id, reservation.reserved_quantity, session)

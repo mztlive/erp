@@ -1,6 +1,4 @@
 use erp_core::common::time::Instant;
-use erp_core::ids::StockAdjustmentId;
-use erp_inventory::InventoryExt;
 use erp_inventory::StockAdjustmentUpdate;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -61,7 +59,7 @@ impl InventoryAdjustmentService {
         }
         let adapter = stock_adjustment_adapter()?;
         let subject = stock_adjustment_subject_ref(id)?;
-        let mut adjustment = self.load_stock_adjustment(id).await?;
+        let mut adjustment = self.inventory().load_stock_adjustment(id).await?;
         start_approval::ensure_stock_adjustment_submit_authorized_with_executor(
             &self.db,
             &self.rbac,
@@ -93,11 +91,7 @@ impl InventoryAdjustmentService {
         })?;
         let binding = load_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let mut lines = self
-            .db
-            .inventory()
-            .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(id.to_string())], &mut NoTransaction)
-            .await?;
+        let mut lines = self.inventory().load_adjustment_lines(id).await?;
         let line_updates = build_adjustment_line_updates(&req.lines)?;
         adjustment.apply_line_updates(&mut lines, &line_updates, true)?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;

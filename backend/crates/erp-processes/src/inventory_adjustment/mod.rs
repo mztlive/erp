@@ -52,6 +52,11 @@ impl InventoryAdjustmentService {
         self.object_read = object_read;
         self
     }
+
+    /// 库存领域服务，供流程读取调整单表头、明细与过账流水。
+    pub(super) fn inventory(&self) -> erp_inventory::InventoryService {
+        crate::adapters::inventory_service(self.db.clone(), self.rbac.clone())
+    }
 }
 
 /// Process module name.

@@ -101,7 +101,7 @@ impl InventoryAdjustmentService {
         let instance = load_cancel_instance(&self.db, &req.approval_process_instance_id).await?;
         ensure_cancel_instance_subject(&instance, id, req.expected_subject_version)?;
         let authorization = ensure_cancel_authorized(self, &instance, actor).await?;
-        let mut adjustment = self.load_stock_adjustment(id).await?;
+        let mut adjustment = self.inventory().load_stock_adjustment(id).await?;
         ensure_expected_version("库存调整单", req.expected_version, adjustment.base.version)?;
         if adjustment.approval_subject_version != req.expected_subject_version {
             return Err(Error::ConflictError(

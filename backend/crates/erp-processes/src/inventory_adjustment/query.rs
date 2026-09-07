@@ -1,14 +1,11 @@
-use erp_inventory::InventoryExt;
-use erp_inventory::StockAdjustment;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::NoTransaction;
 
 use super::adapter::require_frozen_binding;
 use super::approval_query::{self, load_approval_binding};
 use super::InventoryAdjustmentService;
-use crate::adapters::authorize_inventory;
 use application_core::AuditActor;
 use erp_inventory::StockAdjustmentDetailView;
-use services::{Error, Result};
+use services::Result;
 
 impl InventoryAdjustmentService {
     /// 查询库存调整单详情（表头 + 明细 + 过账流水）。
@@ -47,17 +44,10 @@ impl InventoryAdjustmentService {
         actor: &AuditActor,
         approval_instance: Option<(&str, u32)>,
     ) -> Result<StockAdjustmentDetailView> {
-        let adjustment = self.readable_stock_adjustment(id, actor).await?;
-        let lines = self
-            .db
-            .inventory()
-            .adjustment_lines_by_adjustment_ids(&[adjustment.base.id.clone().into()], &mut NoTransaction)
-            .await?;
-        let movements = self
-            .db
-            .inventory()
-            .movements_for_source_document(id, &mut NoTransaction)
-            .await?;
+        let inventory = self.inventory();
+        let adjustment = inventory.readable_stock_adjustment(id, actor).await?;
+        let lines = inventory.load_adjustment_lines(&adjustment.base.id).await?;
+        let movements = inventory.load_movements_for_source_document(id).await?;
         let binding = load_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?;
         let approval = match approval_instance {
@@ -80,46 +70,5 @@ impl InventoryAdjustmentService {
             lines: lines.into_iter().map(Into::into).collect(),
             posted_movements: movements.into_iter().map(Into::into).collect(),
         })
-    }
-
-    /// 在同一快照内加载表头并验证对象读取范围；拒绝结果隐藏资源存在性。
-    async fn readable_stock_adjustment(&self, id: &str, actor: &AuditActor) -> Result<StockAdjustment> {
-        let db = self.db.clone();
-        let rbac = self.rbac.clone();
-        let id = id.to_string();
-        let actor = actor.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let authorization = authorize_inventory(&db, &rbac, &actor, session).await?;
-                    let adjustment = db
-                        .inventory()
-                        .stock_adjustment(&id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                    if !authorization.actor_is_active()
-                        || !authorization
-                            .read_scope()
-                            .covers(adjustment.warehouse_id.as_ref())
-                    {
-                        return Err(Error::NotFound("库存调整单不存在".to_string()));
-                    }
-                    Ok::<_, Error>(adjustment)
-                })
-            })
-            .await
-    }
-
-    /// 按主键读取库存调整单。
-    ///
-    /// # 错误
-    /// 不存在时返回 `NotFound`。
-    pub(super) async fn load_stock_adjustment(&self, id: &str) -> Result<StockAdjustment> {
-        self.db
-            .inventory()
-            .stock_adjustment(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))
     }
 }

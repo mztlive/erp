@@ -31,6 +31,11 @@
     "root_transaction": "caller Executor for approval-runtime post/cancel; Client::with_transaction for submit/create",
     "same_executor": true,
     "no_nested_transactions": true,
+    "posted_adjustment_writes": "erp_inventory::apply_posted_adjustment_in_transaction on caller session after runtime/approval validation",
+    "no_process_local_post_adjustment_line": true,
+    "no_process_local_release_applicable_reservations": true,
+    "update_stock_adjustment": "InventoryService only; HTTP uses inventory_service()",
+    "query_helpers": "InventoryService::readable_stock_adjustment / load_stock_adjustment / load_adjustment_lines / load_movements_for_source_document",
     "approval_action_registry": {
       "StockAdjustmentPost": "InventoryAdjustmentService::post_stock_adjustment(context, actor, executor)",
       "StockAdjustmentCancelApproval": "cancel_stock_adjustment_approval_in_transaction(..., executor)",

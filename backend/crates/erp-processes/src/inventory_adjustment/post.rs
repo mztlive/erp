@@ -1,21 +1,12 @@
-use std::str::FromStr;
-
 use erp_audit::AuditExt;
-use erp_core::common::source::SourceType;
-use erp_core::common::time::Instant;
-use erp_core::ids::{StockAdjustmentId, StockMovementId, StockReservationEntryId};
-use erp_core::money::Quantity;
+use erp_core::ids::StockAdjustmentId;
 use erp_inventory::InventoryExt;
-use erp_inventory::{
-    MovementDirection, ReservationEntryType, StockAdjustment, StockAdjustmentLine, StockMovement,
-    StockMovementData, StockReservationEntry, StockReservationEntryData,
-};
+use erp_inventory::StockAdjustment;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::work_item::{AssignmentSource, WorkItemStatus, WorkItemType};
 use erp_workflow::ApprovalIntegrationExt;
 use erp_workflow::BpmExt;
 use erp_workflow::WorkItemExt;
-use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -95,16 +86,8 @@ async fn post_stock_adjustment_write(
         .inventory()
         .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
         .await?;
-    if lines.is_empty() {
-        return Err(Error::ValidationError("库存调整单没有明细，无法过账".to_string()));
-    }
-    let occurred_at = Instant::now();
-    for line in &lines {
-        adjustment.reason_type.ensure_direction(line.direction)?;
-        post_adjustment_line(db, session, &adjustment, line, &occurred_at, actor).await?;
-    }
-    adjustment.mark_posted()?;
-    db.stock_adjustments().update(&mut adjustment, session).await?;
+    erp_inventory::apply_posted_adjustment_in_transaction(db, &mut adjustment, &lines, actor, session)
+        .await?;
     let audit = actor.clone().resource_log(
         "stock_adjustment.post",
         "stock_adjustment",
@@ -218,184 +201,6 @@ async fn validate_post_runtime_context(
         || task.owner_organization_id != snapshot.payload.responsible_org_id
     {
         return Err(Error::ConflictError("库存调整审批任务上下文已变化".to_string()));
-    }
-    Ok(())
-}
-
-/// 过账单条调整明细（流水 + 余额 + 适用预占释放，位于调用方事务内）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `adjustment` - 调整单表头
-/// * `line` - 调整明细
-/// * `occurred_at` - 过账业务时间
-/// * `actor` - 审计操作人（记录人身份）
-///
-/// # 返回
-/// 无返回值；流水/余额/预占写入失败时返回错误。
-///
-/// # 错误
-/// 余额缺失、可用量不足或写入失败时返回错误。
-async fn post_adjustment_line(
-    db: &Database,
-    session: &mut mongodb::ClientSession,
-    adjustment: &StockAdjustment,
-    line: &StockAdjustmentLine,
-    occurred_at: &Instant,
-    actor: &AuditActor,
-) -> Result<()> {
-    let movement_type = adjustment.reason_type.movement_type();
-    let movement = StockMovement::new(
-        StockMovementId::new(next_id()),
-        StockMovementData {
-            warehouse_id: adjustment.warehouse_id.clone(),
-            sku_id: line.sku_id.clone(),
-            movement_type,
-            direction: line.direction,
-            quantity: line.quantity,
-            source_document_id: adjustment.base.id.clone(),
-            source_line_id: Some(line.base.id.clone()),
-            reversal_of_movement_id: None,
-            fact_no: next_id(),
-            occurred_at: adjustment.occurred_at.unwrap_or(*occurred_at),
-            recorded_at: *occurred_at,
-            recorded_by: actor.id().to_string(),
-            source_type: SourceType::Erp,
-            source_reference: None,
-            reason_code: Some(adjustment.reason_type.as_str().to_string()),
-            reason_text: adjustment.note.clone(),
-        },
-    )?;
-    db.stock_movements().create(&movement, session).await?;
-
-    let balance = db
-        .inventory()
-        .balance_for_dimensions(&adjustment.warehouse_id, &line.sku_id, session)
-        .await?
-        .ok_or_else(|| {
-            Error::BusinessLogicError(format!(
-                "库存余额不存在（仓库 {}，SKU {}），请先建立期初或入库",
-                adjustment.warehouse_id.as_ref(),
-                line.sku_id.as_ref()
-            ))
-        })?;
-    match line.direction {
-        MovementDirection::Increase => {
-            if !db
-                .stock_balances()
-                .increase_on_hand(&balance.base.id, line.quantity, session)
-                .await?
-            {
-                return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
-            }
-        }
-        MovementDirection::Decrease => {
-            release_applicable_reservations(
-                db,
-                session,
-                &adjustment.warehouse_id,
-                &line.sku_id,
-                &balance.base.id,
-                line,
-            )
-            .await?;
-            if !db
-                .stock_balances()
-                .deduct_available(&balance.base.id, line.quantity, session)
-                .await?
-            {
-                return Err(Error::BusinessLogicError(
-                    "可用库存不足，无法过账库存调整".to_string(),
-                ));
-            }
-        }
-    }
-    // 余额记录最后流水（台账「最后变动」列），与数量增减同事务
-    if !db
-        .stock_balances()
-        .apply_last_movement(&balance.base.id, &movement.base.id, session)
-        .await?
-    {
-        return Err(Error::BusinessLogicError("库存余额行不存在".to_string()));
-    }
-    Ok(())
-}
-
-/// 释放调整仓库/SKU 上的适用预占（盘亏/损坏扣减前）。
-///
-/// 按预占建立时间顺序整体释放（预占释放只支持全额释放，§6.7），释放总量
-/// 不超过本明细扣减数量；释放的同时写预占释放流水并同步余额预占。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `warehouse_id` - 调整仓库
-/// * `sku_id` - 调整 SKU
-/// * `balance_id` - 库存余额主键（同步释放预占）
-/// * `line` - 调整明细（来源单据引用）
-///
-/// # 返回
-/// 无返回值。
-///
-/// # 错误
-/// 释放写入失败时返回错误。
-async fn release_applicable_reservations(
-    db: &Database,
-    session: &mut mongodb::ClientSession,
-    warehouse_id: &erp_core::ids::WarehouseId,
-    sku_id: &erp_core::ids::SkuId,
-    balance_id: &str,
-    line: &StockAdjustmentLine,
-) -> Result<()> {
-    let reservations = db
-        .inventory()
-        .oldest_operable_reservations(warehouse_id, sku_id, session)
-        .await?;
-    let mut released_total = Quantity::from_str("0").unwrap();
-    let target = line.quantity.to_decimal();
-    for reservation in reservations {
-        if released_total.to_decimal() >= target {
-            break;
-        }
-        let remaining = reservation.reserved_quantity.to_decimal();
-        if remaining <= Quantity::from_str("0").unwrap().to_decimal() {
-            continue;
-        }
-        if !db
-            .stock_reservations()
-            .release_quantity(&reservation.base.id, reservation.reserved_quantity, session)
-            .await?
-        {
-            continue;
-        }
-        // 同步余额预占（释放量从 reserved 转入 available），否则后续
-        // deduct_available 会因可用量不足而误拒盘亏/损坏过账。
-        if !db
-            .stock_balances()
-            .release_reserved(balance_id, reservation.reserved_quantity, session)
-            .await?
-        {
-            return Err(Error::BusinessLogicError(
-                "库存余额预占与预占记录不一致，无法过账库存调整".to_string(),
-            ));
-        }
-        db.stock_reservation_entries()
-            .create(
-                &StockReservationEntry::new(
-                    StockReservationEntryId::new(next_id()),
-                    StockReservationEntryData {
-                        reservation_id: reservation.base.id.clone().into(),
-                        entry_type: ReservationEntryType::Release,
-                        quantity: reservation.reserved_quantity,
-                        source_document_id: line.stock_adjustment_id.to_string(),
-                    },
-                )?,
-                session,
-            )
-            .await?;
-        released_total = Quantity::try_from(released_total.to_decimal() + remaining)
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     }
     Ok(())
 }

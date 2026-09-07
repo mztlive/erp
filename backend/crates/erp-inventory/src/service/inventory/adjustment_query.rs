@@ -1,5 +1,6 @@
-use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine};
+use crate::entity::inventory::{StockAdjustment, StockAdjustmentLine, StockMovement};
 use crate::repository::InventoryExt;
+use erp_core::ids::StockAdjustmentId;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
@@ -133,6 +134,43 @@ impl InventoryService {
             .stock_adjustment(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))
+    }
+
+    /// 按调整单主键读取全部明细。
+    ///
+    /// # 参数
+    /// * `adjustment_id` - 调整单主键
+    ///
+    /// # 返回
+    /// 返回该调整单的明细集合。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    pub async fn load_adjustment_lines(&self, adjustment_id: &str) -> Result<Vec<StockAdjustmentLine>> {
+        let id = StockAdjustmentId::new(adjustment_id.to_string());
+        Ok(self
+            .db
+            .inventory()
+            .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&id), &mut NoTransaction)
+            .await?)
+    }
+
+    /// 按来源单据读取过账流水。
+    ///
+    /// # 参数
+    /// * `document_id` - 来源单据主键
+    ///
+    /// # 返回
+    /// 返回该来源单据产生的库存流水。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    pub async fn load_movements_for_source_document(&self, document_id: &str) -> Result<Vec<StockMovement>> {
+        Ok(self
+            .db
+            .inventory()
+            .movements_for_source_document(document_id, &mut NoTransaction)
+            .await?)
     }
 }
 

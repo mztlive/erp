@@ -74,5 +74,5 @@
     "host": "aarch64-apple-darwin",
     "profile": "dev"
   },
-  "implement_summary": "Phase 08 Inventory unique-cut on chore/domain-crate-08-inventory. erp-inventory owns stock balance/movement/reservation/adjustment state, queries and in-txn stock writes; erp-processes/inventory_adjustment owns create/submit/cancel/post on one Executor. Old three-layer modules deleted with no façade. Public gates passed (3315 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
+  "implement_summary": "Phase 08 Inventory unique-cut repair on chore/domain-crate-08-inventory. inventory_adjustment::post calls erp_inventory::apply_posted_adjustment_in_transaction on the caller session; process-local post_adjustment_line / release_applicable_reservations / update_stock_adjustment / readable_stock_adjustment / load_stock_adjustment copies deleted. Header/line/movement facts go through InventoryService. Public gates passed (3315 lib tests, 0 failed, 68 ignored). Status 本地门禁通过. Never 已验收. 真实数据库运行未验证."
 }

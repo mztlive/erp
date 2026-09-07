@@ -1,6 +1,11 @@
 === fmt ===
 FMT_EXIT:0
 === check ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+CHECK_EXIT:0
+=== clippy ===
     Checking erp-inventory v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-inventory)
     Checking entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
     Checking database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
@@ -10,17 +15,12 @@ FMT_EXIT:0
     Checking erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
     Checking cli v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/cli)
     Checking web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.93s
-warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
-note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
-CHECK_EXIT:0
-=== clippy ===
-    Checking erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
-    Checking web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.77s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.56s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
 CLIPPY_EXIT:0
+=== unit-tests ===
+UNIT_EXIT:0
 === bpm ===
 检查 BPM crate 与成员 manifest…
 检查 bpm 依赖图…
@@ -48,15 +48,15 @@ DOMAIN_EXIT:0
    Compiling entities v0.1.0 (/Users/huangjiajiang/Development/erp/backend/entities)
    Compiling database v0.1.0 (/Users/huangjiajiang/Development/erp/backend/database)
    Compiling services v0.1.0 (/Users/huangjiajiang/Development/erp/backend/services)
-   Compiling erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
    Compiling erp-read-models v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-read-models)
+   Compiling erp-processes v0.1.0 (/Users/huangjiajiang/Development/erp/backend/crates/erp-processes)
    Compiling web-api v0.1.0 (/Users/huangjiajiang/Development/erp/backend/apps/web-api)
 warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
   |
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `web-api` (bin "web-api") generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 10s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 33.10s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
 检查生成物: /Users/huangjiajiang/Development/erp/erp-client/lib/permissions.generated.ts
