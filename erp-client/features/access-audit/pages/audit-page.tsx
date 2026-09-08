@@ -14,6 +14,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { PolicyBanner } from "@/features/access-audit/components/policy-banner"
 import { AccessListToolbar } from "@/features/access-audit/components/access-list-toolbar"
 import { AccessPreviewSheets } from "@/features/access-audit/components/access-preview-sheets"
 import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-access-audit-page"
@@ -42,7 +43,6 @@ export function AuditPage() {
 
     const data = page.data
     const rows = data?.auditEvents ?? []
-    const auditPolicy = data?.governancePolicies.auditAccessPolicy
     const coverage =
         data?.auditCoverageFrom && data.auditCoverageTo
             ? `覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")}。`
@@ -92,14 +92,8 @@ export function AuditPage() {
                 </div>
             </ListWorkspaceHeader>
 
-            {auditPolicy?.state === "MISSING" ? (
-                <Alert variant="info">
-                    <TriangleAlertIcon aria-hidden="true" />
-                    <AlertTitle>审计查询窗口受限</AlertTitle>
-                    <AlertDescription>
-                        审计访问策略尚未配置，当前只提供保守窗口内的查询，导出已禁用。
-                    </AlertDescription>
-                </Alert>
+            {data ? (
+                <PolicyBanner policies={data.governancePolicies} view="audit" />
             ) : null}
 
             {page.actionError ? (

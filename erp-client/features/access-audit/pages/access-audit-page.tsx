@@ -43,7 +43,7 @@ export function AccessAuditPage() {
                 <ListWorkspaceHeader
                     eyebrow="系统"
                     title="权限配置"
-                    description="查看角色、授权与有效权限来源。"
+                    description="管理角色的操作权限、数据范围与绑定账号。"
                 />
                 <FormalActionResult
                     status="blocked"
@@ -97,7 +97,7 @@ export function AccessAuditPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="权限配置"
-                description="查看角色、授权与有效权限来源。"
+                description="管理角色的操作权限、数据范围与绑定账号。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -120,7 +120,7 @@ export function AccessAuditPage() {
                         id="operations-access-config-manage-accounts"
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => page.routerPush("/system/accounts")}
                     >
                         <UsersIcon className="size-3.5" aria-hidden="true" />

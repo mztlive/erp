@@ -14,6 +14,7 @@ import {
     ListWorkSurface,
     ListWorkspaceFilterBar,
     ListWorkspaceHeader,
+    ListWorkspaceViews,
     ListWorkspaceInlineFilter,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
@@ -176,10 +177,9 @@ export function ApprovalProcessesPage() {
         return (
             <PageScaffold
                 density="compact"
-                className={`${styles.page} bg-muted/15 [&_form]:w-full`}
+                className={`${styles.page} [&_form]:w-full`}
             >
                 <ListWorkspaceHeader
-                    className="pb-5 md:pb-5"
                     eyebrow="系统"
                     title="审批流程配置"
                     description="设置各类单据的审批流程，发布后用于新建单据。"
@@ -208,10 +208,9 @@ export function ApprovalProcessesPage() {
         return (
             <PageScaffold
                 density="compact"
-                className={`${styles.page} bg-muted/15 [&_form]:w-full`}
+                className={`${styles.page} [&_form]:w-full`}
             >
                 <ListWorkspaceHeader
-                    className="pb-5 md:pb-5"
                     eyebrow="系统"
                     title="审批流程配置"
                     description="设置各类单据的审批流程，发布后用于新建单据。"
@@ -228,24 +227,20 @@ export function ApprovalProcessesPage() {
     return (
         <PageScaffold
             density="compact"
-            className={`${styles.page} bg-muted/15 [&_form]:w-full`}
+            className={`${styles.page} [&_form]:w-full`}
         >
             <ListWorkspaceHeader
-                className="pb-5 md:pb-5"
                 eyebrow="系统"
                 title="审批流程配置"
                 description="设置各类单据的审批流程，发布后用于新建单据。"
             />
 
             <ListWorkSurface
-                toolbarClassName="pt-3 pb-1"
                 views={
-                    <div
-                        className="flex flex-wrap items-center gap-1"
-                        role="group"
-                        aria-label="审批配置快捷筛选"
-                    >
-                        {[
+                    <ListWorkspaceViews
+                        ariaLabel="审批配置快捷筛选"
+                        hint="选择单据类型查看审批流程"
+                        items={[
                             {
                                 key: "all",
                                 label: "全部",
@@ -274,40 +269,24 @@ export function ApprovalProcessesPage() {
                                 status: "ALL",
                                 count: items.length - required.length,
                             },
-                        ].map((view) => (
-                            <Button
-                                key={view.key}
-                                id={`governance-approval-processes-catalog-view-${view.key}`}
-                                size="sm"
-                                variant={
-                                    urlState.policy === view.policy &&
-                                    urlState.status === view.status
-                                        ? "secondary"
-                                        : "ghost"
-                                }
-                                aria-pressed={
-                                    urlState.policy === view.policy &&
-                                    urlState.status === view.status
-                                }
-                                className="gap-2 rounded-lg"
-                                onClick={() =>
-                                    replaceState({
-                                        ...urlState,
-                                        policy: view.policy as CatalogUrlState["policy"],
-                                        status: view.status as CatalogUrlState["status"],
-                                        page: 1,
-                                    })
-                                }
-                            >
-                                {view.label}
-                                {catalogQuery.isSuccess ? (
-                                    <span className="text-xs tabular-nums text-muted-foreground">
-                                        {view.count}
-                                    </span>
-                                ) : null}
-                            </Button>
-                        ))}
-                    </div>
+                        ].map((view) => ({
+                            id: `governance-approval-processes-catalog-view-${view.key}`,
+                            label: view.label,
+                            count: catalogQuery.isSuccess
+                                ? view.count
+                                : undefined,
+                            active:
+                                urlState.policy === view.policy &&
+                                urlState.status === view.status,
+                            onClick: () =>
+                                replaceState({
+                                    ...urlState,
+                                    policy: view.policy as CatalogUrlState["policy"],
+                                    status: view.status as CatalogUrlState["status"],
+                                    page: 1,
+                                }),
+                        }))}
+                    />
                 }
                 ariaLabel="审批流程单据类型目录"
                 toolbar={

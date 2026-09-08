@@ -157,7 +157,7 @@ export function PermissionOptionsPanel({
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
-                <InputGroup className="min-w-[14rem] flex-1">
+                <InputGroup className="w-full sm:ml-auto sm:max-w-sm">
                     <InputGroupAddon>
                         <SearchIcon aria-hidden="true" />
                     </InputGroupAddon>
@@ -172,7 +172,7 @@ export function PermissionOptionsPanel({
                 </InputGroup>
             </div>
 
-            <div className="grid min-h-0 gap-3 md:grid-cols-[11rem_minmax(0,1fr)]">
+            <div className="grid min-h-0 gap-5 border-t border-border pt-4 md:grid-cols-[11rem_minmax(0,1fr)]">
                 <nav
                     aria-label="权限分组目录"
                     className="hidden max-h-[32rem] flex-col overflow-y-auto border-r border-border pr-3 md:flex"
@@ -188,7 +188,7 @@ export function PermissionOptionsPanel({
                                 aria-current={isActive ? "true" : undefined}
                                 onClick={() => jumpToGroup(group.name)}
                                 className={cn(
-                                    "flex shrink-0 items-baseline justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                                    "flex shrink-0 items-baseline justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2",
                                     isActive
                                         ? "bg-muted font-medium text-foreground"
                                         : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -215,7 +215,7 @@ export function PermissionOptionsPanel({
                 <div
                     ref={scrollRef}
                     onScroll={handleScroll}
-                    className="flex max-h-[32rem] min-w-0 flex-col gap-4 overflow-y-auto px-3"
+                    className="relative flex max-h-[32rem] min-w-0 flex-col gap-5 overflow-y-auto pl-0 pr-3"
                 >
                     {visibleGroups.length === 0 ? (
                         <p className="py-6 text-center text-xs text-muted-foreground">
@@ -260,8 +260,9 @@ function PermissionMatrixSection({
     onToggle,
     id,
 }: PermissionMatrixSectionProps) {
-    const fallbackId = React.useId()
-    const baseId = id ?? fallbackId
+    const baseId =
+        id ??
+        `governance-admin-permission-group-${permissionGroupSegment(group.name)}`
     const groupState = checkedState(group.codes, selectedSet)
 
     return (
@@ -303,10 +304,17 @@ function PermissionMatrixSection({
                     全选
                 </label>
             </div>
-            <Table className="min-w-[32rem]" data-density="compact">
+            <Table
+                className="table-fixed"
+                style={{
+                    width: `${12 + group.actions.length * 6}rem`,
+                    minWidth: "100%",
+                }}
+                data-density="compact"
+            >
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="sticky left-0 z-30 w-full">
+                        <TableHead className="sticky left-0 z-30 w-48">
                             对象
                         </TableHead>
                         {group.actions.map((action, columnIndex) => {
@@ -317,7 +325,7 @@ function PermissionMatrixSection({
                                 <TableHead
                                     key={action}
                                     data-align="center"
-                                    className="align-bottom"
+                                    className="w-24 align-bottom"
                                 >
                                     <button
                                         id={`${baseId}-action-${toAutomationIdSegment(action)}-toggle`}
@@ -347,7 +355,7 @@ function PermissionMatrixSection({
                             <TableRow key={row.resource}>
                                 <TableHead
                                     scope="row"
-                                    className="sticky left-0 z-10 w-full bg-card font-normal text-foreground"
+                                    className="sticky left-0 z-10 w-48 bg-card font-normal text-foreground"
                                 >
                                     <label
                                         htmlFor={`${baseId}-${row.resource}`}

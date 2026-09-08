@@ -94,15 +94,13 @@ function hasStructuredFilters(
     )
 }
 
-/** 更多筛选面板内的已生效条件（结果在常用区，不计入）。 */
+/** 更多筛选面板内的已生效条件（时间与结果在常用区，不计入）。 */
 function hasMoreFilters(
     applied: AccessAppliedFilters,
     view: AccessView,
 ): boolean {
     if (view !== "audit") return false
     return Boolean(
-        applied.from ||
-        applied.to ||
         applied.action ||
         applied.actorId ||
         applied.traceId ||
@@ -172,8 +170,7 @@ export function useAccessListFilters({
         const error = auditDateRangeError(from, to)
         setFilterError(error)
         if (error) {
-            // 校验失败：不写 URL、不收起面板，展开以展示错误（§5.5）
-            setPanelOpen(true)
+            // 日期错误直接显示在常用条件区；保留其它筛选的展开状态。
             return
         }
         patchFilterUrl({
@@ -190,18 +187,15 @@ export function useAccessListFilters({
         setPanelOpen(false)
     }, [draft, patchFilterUrl])
 
-    /** 只清除更多条件草稿；保留关键词、结果与已生效查询。 */
+    /** 只清除更多条件草稿；保留关键词、时间、结果与已生效查询。 */
     const resetMoreFilters = React.useCallback(() => {
         setDraft((current) => ({
             ...current,
-            from: "",
-            to: "",
             action: "all",
             actorId: "",
             traceId: "",
             objectId: "",
         }))
-        setFilterError(null)
     }, [])
 
     /** 清除全部：草稿、错误、面板与全部筛选参数同时重置；保留视图与详情/导航上下文。 */

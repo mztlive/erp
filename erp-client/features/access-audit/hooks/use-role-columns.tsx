@@ -2,22 +2,21 @@
 
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Trash2Icon } from "lucide-react"
+import { MoreHorizontalIcon, Trash2Icon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { AccessColumnsInput } from "@/features/access-audit/hooks/access-columns-input"
 import type { RoleRow } from "@/features/access-audit/types"
 
-/**
- * 角色列表列。
- *
- * 四列：角色（含首字锚点与数据范围小字）／权限（纯数字右对齐）／
- * 主要模块（纯文本）／绑定账号（可跳转的链接数字）。
- * 逐条权限编码留给有效权限面板（整行点击打开）；后端没有的字段
- * （组织、风险、角色状态）不占列。
- */
+/** 角色列表按身份、操作权限、数据范围、关联账号组织，详细来源沿用行预览。 */
 function useRoleColumns({
     router,
     rowFocusRef,
@@ -27,120 +26,74 @@ function useRoleColumns({
         () => [
             {
                 id: "identity",
-                header: "角色",
+                header: "角色名称",
+                size: 220,
+                cell: ({ row }) => (
+                    <span className="text-sm font-medium">
+                        {row.original.name}
+                    </span>
+                ),
+            },
+            {
+                id: "perms",
+                header: "操作权限",
+                size: 320,
                 cell: ({ row }) => {
                     const role = row.original
-                    const scopeLine =
-                        role.dataScopeSummary === "—"
-                            ? null
-                            : role.dataScopeSummary
+                    const names = role.permissionGroups.map(
+                        (group) => group.name,
+                    )
+                    const summary = names.slice(0, 3).join("、")
                     return (
-                        <div
-                            className="flex min-w-[10rem] items-center gap-2"
-                            title={`编码 ${role.roleCode}`}
-                        >
-                            <span
-                                aria-hidden="true"
-                                className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground"
+                        <div className="min-w-0 space-y-1">
+                            {role.allPermissions ? (
+                                <Badge variant="warning">全部权限</Badge>
+                            ) : (
+                                <span className="text-sm">
+                                    <span className="num font-medium">
+                                        {role.permissionCount}
+                                    </span>{" "}
+                                    项权限
+                                </span>
+                            )}
+                            <p
+                                className="max-w-[24rem] truncate text-xs text-muted-foreground"
+                                title={names.join("、")}
                             >
-                                {role.name.slice(0, 1)}
-                            </span>
-                            <div className="min-w-0">
-                                <div className="truncate text-sm font-medium">
-                                    {role.name}
-                                </div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                    {scopeLine ?? (
-                                        <span className="font-mono text-[11px]">
-                                            {role.roleCode}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
+                                {role.allPermissions
+                                    ? "可访问全部模块"
+                                    : summary
+                                      ? `${summary}${names.length > 3 ? ` 等 ${names.length} 个模块` : ""}`
+                                      : "尚未配置操作权限"}
+                            </p>
                         </div>
                     )
                 },
             },
             {
-                id: "perms",
-                header: () => <span className="block text-right">权限</span>,
-                cell: ({ row }) => {
-                    const role = row.original
-                    if (role.allPermissions) {
-                        return (
-                            <div className="flex justify-end">
-                                <Badge variant="warning">全部权限</Badge>
-                            </div>
-                        )
-                    }
-                    return (
-                        <span
-                            className="num block text-right text-sm font-medium"
-                            title={
-                                role.permissionCount === 0
-                                    ? "无权限条目"
-                                    : `共 ${role.permissionCount} 项权限`
-                            }
-                        >
-                            {role.permissionCount}
-                        </span>
-                    )
-                },
-            },
-            {
-                id: "modules",
-                header: "主要模块",
-                cell: ({ row }) => {
-                    const role = row.original
-                    if (role.allPermissions) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                全部模块
-                            </span>
-                        )
-                    }
-                    if (role.permissionGroups.length === 0) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                —
-                            </span>
-                        )
-                    }
-                    const names = role.permissionGroups.map(
-                        (group) => group.name,
-                    )
-                    const full = role.permissionGroups
-                        .map((group) => `${group.name} ${group.count}`)
-                        .join(" · ")
-                    const visible = names.slice(0, 2).join("、")
-                    return (
-                        <span
-                            className="block max-w-[16rem] truncate text-sm"
-                            title={full}
-                        >
-                            {visible}
-                            {names.length > 2 ? (
-                                <span className="text-xs text-muted-foreground">
-                                    {` +${names.length - 2}`}
-                                </span>
-                            ) : null}
-                        </span>
-                    )
-                },
+                id: "scope",
+                header: "数据范围",
+                size: 180,
+                cell: ({ row }) => (
+                    <span
+                        className="block max-w-[16rem] truncate text-sm"
+                        title={row.original.dataScopeSummary}
+                    >
+                        {row.original.dataScopeSummary}
+                    </span>
+                ),
             },
             {
                 id: "accounts",
                 header: "绑定账号",
+                size: 130,
                 cell: ({ row }) => {
                     const role = row.original
-                    if (role.boundAccountCount === 0) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                —
-                            </span>
-                        )
-                    }
-                    return (
+                    return role.boundAccountCount === 0 ? (
+                        <span className="text-sm text-muted-foreground">
+                            未绑定
+                        </span>
+                    ) : (
                         <Button
                             id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-accounts`}
                             type="button"
@@ -154,24 +107,25 @@ function useRoleColumns({
                                 )
                             }
                         >
-                            {role.boundAccountCount}
+                            {role.boundAccountCount} 个账号
                         </Button>
                     )
                 },
             },
             {
                 id: "actions",
-                header: "操作",
+                header: () => <span className="block text-right">操作</span>,
+                size: 110,
                 cell: ({ row }) => {
                     const role = row.original
-
+                    const segment = toAutomationIdSegment(role.id)
                     return (
                         <div className="flex items-center justify-end gap-1">
                             <Button
-                                id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-edit`}
+                                id={`operations-access-roles-row-${segment}-edit`}
                                 type="button"
                                 size="xs"
-                                variant="outline"
+                                variant="ghost"
                                 ref={(el) => {
                                     rowFocusRef.current.set(role.id, el)
                                 }}
@@ -181,24 +135,36 @@ function useRoleColumns({
                             >
                                 编辑
                             </Button>
-                            <Button
-                                id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-delete`}
-                                type="button"
-                                size="xs"
-                                variant="destructive"
-                                onClick={() =>
-                                    setDeletingRole({
-                                        id: role.id,
-                                        name: role.name,
-                                    })
-                                }
-                            >
-                                <Trash2Icon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                                删除
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    id={`operations-access-roles-row-${segment}-more`}
+                                    render={
+                                        <Button
+                                            type="button"
+                                            size="icon-xs"
+                                            variant="ghost"
+                                            aria-label={`${role.name} 更多操作`}
+                                        />
+                                    }
+                                >
+                                    <MoreHorizontalIcon aria-hidden="true" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                        id={`operations-access-roles-row-${segment}-delete`}
+                                        variant="destructive"
+                                        onClick={() =>
+                                            setDeletingRole({
+                                                id: role.id,
+                                                name: role.name,
+                                            })
+                                        }
+                                    >
+                                        <Trash2Icon aria-hidden="true" />
+                                        删除角色
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     )
                 },

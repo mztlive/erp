@@ -152,7 +152,7 @@ export function DefinitionEditor({
                 void form.handleSubmit()
             }}
         >
-            <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-col gap-5 py-5">
                 {readOnly ? (
                     <Alert>
                         <AlertTitle>此版本只读</AlertTitle>
@@ -248,7 +248,7 @@ export function DefinitionEditor({
                     )}
                 </form.Subscribe>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-muted/20 px-4 py-3">
+            <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card py-4">
                 {readOnly ? (
                     <span />
                 ) : saveState === "idle" ? (

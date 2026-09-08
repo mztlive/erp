@@ -19,13 +19,14 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
         () => [
             {
                 id: "time",
+                size: 175,
                 header: "时间",
                 cell: ({ row }) => (
                     <span
                         className="num whitespace-nowrap text-xs"
                         title={formatDateTime(row.original.recordedAt, "full")}
                     >
-                        {formatDateTime(row.original.recordedAt, "monthDay")}
+                        {formatDateTime(row.original.recordedAt, "full")}
                     </span>
                 ),
             },
@@ -37,22 +38,20 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                         <div className="text-sm font-medium">
                             {row.original.actorLabel}
                         </div>
-                        <div className="truncate font-mono text-[11px] text-muted-foreground">
-                            {row.original.actorId}
-                        </div>
                     </div>
                 ),
             },
             {
                 id: "action",
-                header: "动作",
+                header: "操作",
                 cell: ({ row }) => (
                     <span className="text-sm">{row.original.actionLabel}</span>
                 ),
             },
             {
                 id: "object",
-                header: "对象",
+                size: 240,
+                header: "操作对象",
                 cell: ({ row }) => (
                     <div className="min-w-[8rem]">
                         <div className="truncate text-sm">
@@ -94,14 +93,15 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
             },
             {
                 id: "actions",
-                header: "查看",
+                size: 85,
+                header: () => <span className="block text-right">查看</span>,
                 cell: ({ row }) => (
                     <div className="flex justify-end">
                         <Button
                             id={`operations-audit-events-row-${toAutomationIdSegment(row.original.auditEventId)}-detail`}
                             type="button"
                             size="xs"
-                            variant="outline"
+                            variant="ghost"
                             ref={(el) => {
                                 rowFocusRef.current.set(
                                     row.original.auditEventId,

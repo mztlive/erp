@@ -84,6 +84,7 @@ const ACTION_LABEL: Record<string, string> = {
     create: "新建",
     update: "修改",
     edit: "编辑",
+    manage: "管理",
     update_role: "调整角色",
     register: "登记",
     submit: "提交",

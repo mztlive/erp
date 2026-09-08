@@ -13,6 +13,10 @@ import {
     surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -85,7 +89,10 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
 
     if (rolesQuery.isPending) {
         return (
-            <PageScaffold density="compact">
+            <PageScaffold
+                density="compact"
+                className={listWorkspaceStyles.page}
+            >
                 <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
                 <div className="h-16 animate-pulse rounded-lg bg-muted" />
                 <div className="h-96 animate-pulse rounded-lg bg-muted" />
@@ -95,7 +102,10 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
 
     if (rolesQuery.isError) {
         return (
-            <PageScaffold density="compact">
+            <PageScaffold
+                density="compact"
+                className={listWorkspaceStyles.page}
+            >
                 <PageHeader title={isEdit ? "编辑角色" : "新建角色"} />
                 <BusinessFailureState
                     error={rolesQuery.error}
@@ -118,7 +128,10 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
 
     if (isEdit && !role) {
         return (
-            <PageScaffold density="compact">
+            <PageScaffold
+                density="compact"
+                className={listWorkspaceStyles.page}
+            >
                 <PageHeader title="编辑角色" />
                 <BusinessFailureState
                     kind="system"
@@ -225,50 +238,39 @@ function RoleForm({
     })
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
+            <ListWorkspaceHeader
+                eyebrow="系统 / 权限配置"
                 title={isEdit ? "编辑角色" : "新建角色"}
                 description={
                     isEdit
-                        ? "调整角色名称与权限；保存后立即对绑定该角色的账号生效。"
-                        : "创建角色并勾选权限；权限决定该角色可访问的页面与可执行的动作。"
+                        ? `调整角色名称与操作权限${boundAccounts !== null ? `，保存后对 ${boundAccounts} 个绑定账号生效` : ""}。`
+                        : "设置角色名称，再按业务模块选择可执行的操作。"
                 }
-                metadata={
-                    isEdit && boundAccounts !== null ? (
-                        <span className="text-xs text-muted-foreground">
-                            绑定账号{" "}
-                            <span className="num">{boundAccounts}</span> 个
-                        </span>
-                    ) : null
-                }
-                actions={
-                    <Button
-                        id="governance-admin-role-form-back"
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => router.push(ROLES_LIST_HREF)}
-                    >
-                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                        返回角色列表
-                    </Button>
-                }
-            />
+            >
+                <Button
+                    id="governance-admin-role-form-back"
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => router.push(ROLES_LIST_HREF)}
+                >
+                    <ArrowLeftIcon className="size-4" aria-hidden="true" />
+                    返回角色列表
+                </Button>
+            </ListWorkspaceHeader>
 
             <form
-                className={cn(
-                    surfacePanelClassName,
-                    "flex min-w-0 flex-col overflow-hidden",
-                )}
+                className={cn(surfacePanelClassName, "flex min-w-0 flex-col")}
                 onSubmit={(e) => {
                     e.preventDefault()
                     void form.handleSubmit()
                 }}
             >
-                <div className="flex flex-col gap-6 py-5">
+                <div className="flex flex-col gap-6 pb-5">
                     <FieldGroup className="gap-4">
-                        <div className="flex flex-wrap items-end gap-3">
+                        <div className="flex flex-wrap items-end gap-4 border-b border-border pb-6">
                             <form.AppField
                                 name="name"
                                 children={(field) => (
@@ -327,7 +329,7 @@ function RoleForm({
                                     <Field
                                         data-invalid={isInvalid || undefined}
                                     >
-                                        <FieldLabel>权限</FieldLabel>
+                                        <FieldLabel>操作权限</FieldLabel>
                                         <PermissionOptionsPanel
                                             id="governance-admin-role-form-permissions"
                                             selected={selected}

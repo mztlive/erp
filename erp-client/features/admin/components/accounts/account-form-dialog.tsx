@@ -195,7 +195,7 @@ export function AccountFormDialog({
                                 <field.TextField
                                     id={`${id}-password`}
                                     label={isEdit ? "新密码" : "密码"}
-                                    required
+                                    required={!isEdit}
                                     type="password"
                                     placeholder={
                                         isEdit ? "留空则不修改" : "6-32 个字符"
@@ -217,14 +217,20 @@ export function AccountFormDialog({
                                 )
                                 return (
                                     <Field
+                                        className="border-t border-border pt-4"
                                         data-invalid={isInvalid || undefined}
                                     >
                                         <FieldLabel>
-                                            角色
+                                            角色分配
                                             <span className="text-destructive">
                                                 *
                                             </span>
                                         </FieldLabel>
+                                        <p className="text-xs leading-5 text-muted-foreground">
+                                            {selected.length
+                                                ? `已选择：${selected.map((roleId) => roleOptions.find((role) => role.id === roleId)?.name ?? "角色信息待确认").join("、")}`
+                                                : "选择该账号需要使用的角色。"}
+                                        </p>
                                         <RoleOptionsPanel
                                             id={`${id}-roles`}
                                             options={roleOptions}
@@ -258,7 +264,7 @@ export function AccountFormDialog({
                             <AlertDescription>{submitError}</AlertDescription>
                         </Alert>
                     ) : null}
-                    <DialogFooter>
+                    <DialogFooter className="border-t border-border pt-4">
                         <Button
                             id={`${id}-cancel`}
                             type="button"

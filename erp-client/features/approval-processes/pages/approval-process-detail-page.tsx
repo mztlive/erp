@@ -11,6 +11,10 @@ import {
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -18,6 +22,7 @@ import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { cn } from "@/lib/utils"
 
 import { CreateDraftDialog } from "../components/create-draft-dialog"
+import { DefinitionReadView } from "../components/definition-read-view"
 import { DefinitionEditor } from "../components/definition-editor"
 import { PublishDialog } from "../components/publish-dialog"
 import { RetireDialog } from "../components/retire-dialog"
@@ -239,28 +244,12 @@ export function ApprovalProcessDetailPage({
         !(urlState.view === "draft" && !draft)
 
     return (
-        <PageScaffold density="compact">
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <Button
-                        id="governance-approval-processes-detail-back"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        render={<Link href="/system/approval-processes" />}
-                    >
-                        返回目录
-                    </Button>
-                }
-            />
-
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="text-xl font-semibold tracking-tight">
-                            {typeTitle}
-                        </h1>
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
+            <ListWorkspaceHeader
+                eyebrow="系统 / 审批流程配置"
+                title={typeTitle}
+                description={
+                    <span className="flex flex-wrap items-center gap-2">
                         {detailQuery.data ? (
                             <StatusBadge
                                 tone={definitionStatusTone(
@@ -289,62 +278,61 @@ export function ApprovalProcessDetailPage({
                                 )}
                             </span>
                         ) : null}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                        {catalogItem
-                            ? approvalRequirementLabel(
-                                  catalogItem.approval_requirement,
-                              )
-                            : "审批流程"}
-                        {" · "}
-                        已发布{" "}
-                        {published
-                            ? versionLabel(published.definition_version)
-                            : "—"}
-                        {" · "}
-                        草稿{" "}
-                        {draft ? versionLabel(draft.definition_version) : "—"}
-                    </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    {canCreate ? (
-                        <Button
-                            id="governance-approval-processes-detail-create-draft"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCreateOpen(true)}
-                        >
-                            新建草稿
-                        </Button>
-                    ) : null}
-                    {canPublish && draft && urlState.view === "draft" ? (
-                        <Button
-                            id="governance-approval-processes-detail-publish"
-                            type="button"
-                            size="sm"
-                            onClick={() => setPublishOpen(true)}
-                        >
-                            发布
-                        </Button>
-                    ) : null}
-                    {canRetire && published ? (
-                        <Button
-                            id="governance-approval-processes-detail-retire"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setRetireOpen(true)}
-                        >
-                            退役
-                        </Button>
-                    ) : null}
-                </div>
-            </div>
 
-            <div
-                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+                        <span>
+                            {catalogItem
+                                ? approvalRequirementLabel(
+                                      catalogItem.approval_requirement,
+                                  )
+                                : "审批流程"}
+                        </span>
+                    </span>
+                }
             >
+                <Button
+                    id="governance-approval-processes-detail-back"
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    render={<Link href="/system/approval-processes" />}
+                >
+                    返回目录
+                </Button>
+                {canCreate ? (
+                    <Button
+                        id="governance-approval-processes-detail-create-draft"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCreateOpen(true)}
+                    >
+                        新建草稿
+                    </Button>
+                ) : null}
+                {canPublish && draft && urlState.view === "draft" ? (
+                    <Button
+                        id="governance-approval-processes-detail-publish"
+                        type="button"
+                        size="sm"
+                        onClick={() => setPublishOpen(true)}
+                    >
+                        发布
+                    </Button>
+                ) : null}
+                {canRetire && published ? (
+                    <Button
+                        id="governance-approval-processes-detail-retire"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setRetireOpen(true)}
+                    >
+                        退役
+                    </Button>
+                ) : null}
+            </ListWorkspaceHeader>
+
+            <div className={cn(surfacePanelClassName, "min-w-0")}>
                 <Tabs
                     value={urlState.view}
                     onValueChange={(next) => {
@@ -367,6 +355,11 @@ export function ApprovalProcessDetailPage({
                             className="flex-none"
                         >
                             当前版本
+                            {published ? (
+                                <span className="num text-xs text-muted-foreground">
+                                    {versionLabel(published.definition_version)}
+                                </span>
+                            ) : null}
                         </TabsTrigger>
                         <TabsTrigger
                             id="governance-approval-processes-detail-tab-draft"
@@ -374,6 +367,11 @@ export function ApprovalProcessDetailPage({
                             className="flex-none"
                         >
                             草稿
+                            {draft ? (
+                                <span className="num text-xs text-muted-foreground">
+                                    {versionLabel(draft.definition_version)}
+                                </span>
+                            ) : null}
                         </TabsTrigger>
                         <TabsTrigger
                             id="governance-approval-processes-detail-tab-history"
@@ -471,18 +469,22 @@ export function ApprovalProcessDetailPage({
                 ) : null}
 
                 {showEditor && detailQuery.data ? (
-                    <DefinitionEditor
-                        id="governance-approval-processes-detail-editor"
-                        detail={detailQuery.data}
-                        lockVersion={
-                            lockVersion ||
-                            detailQuery.data.definition_lock_version
-                        }
-                        onLockVersionChange={(next) => {
-                            setLockVersion(next)
-                            void detailQuery.refetch()
-                        }}
-                    />
+                    detailQuery.data.status === "DRAFT" ? (
+                        <DefinitionEditor
+                            id="governance-approval-processes-detail-editor"
+                            detail={detailQuery.data}
+                            lockVersion={
+                                lockVersion ||
+                                detailQuery.data.definition_lock_version
+                            }
+                            onLockVersionChange={(next) => {
+                                setLockVersion(next)
+                                void detailQuery.refetch()
+                            }}
+                        />
+                    ) : (
+                        <DefinitionReadView detail={detailQuery.data} />
+                    )
                 ) : null}
             </div>
 

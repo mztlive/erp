@@ -32,6 +32,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { AccountPermissionsSheet } from "@/features/admin/components/accounts/account-permissions-sheet"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
 import type { AccountDraft } from "@/features/admin/components/accounts/account-form-dialog"
 import { DeleteAdminDialog } from "@/features/admin/components/accounts/delete-admin-dialog"
@@ -69,6 +70,12 @@ export function AccountsPage() {
     const [searchDraft, setSearchDraft] = React.useState(keyword)
     const [accountForm, setAccountForm] =
         React.useState<AccountFormState | null>(null)
+    const [permissionAccount, setPermissionAccount] =
+        React.useState<AdminAccount | null>(null)
+    const [permissionsOpen, setPermissionsOpen] = React.useState(false)
+    const permissionReturnId = React.useRef<string | null>(null)
+    const editAfterPermissionsClose = React.useRef(false)
+
     const [deletingAccount, setDeletingAccount] = React.useState<{
         id: string
         account: string
@@ -102,13 +109,14 @@ export function AccountsPage() {
         () => [
             {
                 id: "identity",
+                size: 240,
                 header: "账号",
                 cell: ({ row }) => (
                     <div className="min-w-[9rem]">
                         <div className="font-medium">
                             {row.original.name || row.original.account}
                         </div>
-                        <div className="font-mono text-xs text-muted-foreground">
+                        <div className="mt-1 text-xs text-muted-foreground">
                             {row.original.account}
                         </div>
                     </div>
@@ -116,14 +124,16 @@ export function AccountsPage() {
             },
             {
                 id: "roles",
+                size: 300,
                 header: "角色",
                 cell: ({ row }) =>
                     row.original.role_ids
-                        .map((id) => roleNameById.get(id) ?? id)
+                        .map((id) => roleNameById.get(id) ?? "角色信息待确认")
                         .join("、") || "—",
             },
             {
                 id: "createdAt",
+                size: 190,
                 header: "创建时间",
                 cell: ({ row }) => (
                     <span className="num text-xs text-muted-foreground">
@@ -138,7 +148,8 @@ export function AccountsPage() {
             },
             {
                 id: "actions",
-                header: "操作",
+                size: 100,
+                header: () => <span className="block text-right">操作</span>,
                 cell: ({ row }) => {
                     const account = row.original
                     const segment = toAutomationIdSegment(account.id)
@@ -148,7 +159,7 @@ export function AccountsPage() {
                                 id={`governance-admin-accounts-row-${segment}-edit`}
                                 type="button"
                                 size="xs"
-                                variant="outline"
+                                variant="ghost"
                                 onClick={() =>
                                     setAccountForm({
                                         mode: "edit",
@@ -183,14 +194,14 @@ export function AccountsPage() {
                                 >
                                     <DropdownMenuItem
                                         id={`governance-admin-accounts-row-${segment}-permissions`}
-                                        onClick={() =>
-                                            router.push(
-                                                `/system/access-audit?subjectType=USER&subjectId=${account.id}`,
-                                            )
-                                        }
+                                        onClick={() => {
+                                            permissionReturnId.current = `governance-admin-accounts-row-${segment}-more`
+                                            setPermissionAccount(account)
+                                            setPermissionsOpen(true)
+                                        }}
                                     >
                                         <ShieldCheckIcon aria-hidden="true" />
-                                        查看有效权限
+                                        查看权限
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         id={`governance-admin-accounts-row-${segment}-delete`}
@@ -212,7 +223,7 @@ export function AccountsPage() {
                 },
             },
         ],
-        [roleNameById, router],
+        [roleNameById],
     )
 
     const hasSearch = keyword.trim().length > 0
@@ -237,14 +248,14 @@ export function AccountsPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="账号管理"
-                description="维护登录账号与初始角色绑定。"
+                description="管理成员登录账号与角色分配。"
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
                         id="governance-admin-accounts-permission-config"
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => router.push("/system/access-audit")}
                     >
                         <ShieldCheckIcon
@@ -355,6 +366,35 @@ export function AccountsPage() {
                         }
                     />
                 }
+            />
+
+            <AccountPermissionsSheet
+                account={permissionAccount}
+                open={permissionsOpen}
+                onOpenChange={setPermissionsOpen}
+                onAdjustRoles={() => {
+                    editAfterPermissionsClose.current = true
+                    setPermissionsOpen(false)
+                }}
+                onClosed={() => {
+                    if (
+                        editAfterPermissionsClose.current &&
+                        permissionAccount
+                    ) {
+                        editAfterPermissionsClose.current = false
+                        setAccountForm({
+                            mode: "edit",
+                            account: {
+                                ...permissionAccount,
+                                role_ids: [...permissionAccount.role_ids],
+                            },
+                        })
+                    } else if (permissionReturnId.current) {
+                        document
+                            .getElementById(permissionReturnId.current)
+                            ?.focus({ preventScroll: true })
+                    }
+                }}
             />
 
             {accountForm ? (

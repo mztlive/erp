@@ -7,6 +7,7 @@ import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
+    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { DateRangePicker } from "@/components/ui/date-picker"
@@ -25,7 +26,6 @@ export type AccessAppliedChip = Readonly<{
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 const MORE_CHIP_KEYS: readonly AccessFilterKey[] = [
-    "time",
     "action",
     "actorId",
     "traceId",
@@ -125,39 +125,55 @@ function AccessListToolbar({
             resetMoreButtonId="operations-audit-toolbar-reset-filters"
             commonFilters={
                 showMore ? (
-                    <FixedOptionRadioFilter
-                        id="operations-audit-toolbar-filter-result"
-                        label="结果"
-                        variant="quiet"
-                        value={draft.result}
-                        onValueChange={(value) => updateDraft("result", value)}
-                        options={RESULT_FILTER_RADIO_OPTIONS}
-                    />
+                    <>
+                        <ListWorkspaceInlineFilter
+                            htmlFor="operations-audit-toolbar-date-range"
+                            label="时间范围"
+                        >
+                            <DateRangePicker
+                                id="operations-audit-toolbar-date-range"
+                                className="w-full sm:w-72"
+                                value={{
+                                    from: draft.from,
+                                    to: draft.to,
+                                }}
+                                onValueChange={(next) => {
+                                    updateDraft("from", next?.from ?? "")
+                                    updateDraft("to", next?.to ?? "")
+                                }}
+                                placeholder="选择审计时间范围"
+                                aria-invalid={Boolean(filterError)}
+                                aria-describedby={
+                                    filterError ? dateErrorId : undefined
+                                }
+                            />
+                        </ListWorkspaceInlineFilter>
+                        <FixedOptionRadioFilter
+                            id="operations-audit-toolbar-filter-result"
+                            label="结果"
+                            variant="quiet"
+                            value={draft.result}
+                            onValueChange={(value) =>
+                                updateDraft("result", value)
+                            }
+                            options={RESULT_FILTER_RADIO_OPTIONS}
+                        />
+                        {filterError ? (
+                            <p
+                                id={dateErrorId}
+                                className="text-xs text-destructive"
+                                role="alert"
+                            >
+                                {filterError}
+                            </p>
+                        ) : null}
+                    </>
                 ) : undefined
             }
             morePanel={
                 showMore ? (
                     <div className="grid min-w-0 gap-5">
                         <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            <ListWorkspaceFilterField
-                                htmlFor="operations-audit-toolbar-date-range"
-                                label="时间范围"
-                                className="sm:col-span-2"
-                            >
-                                <DateRangePicker
-                                    id="operations-audit-toolbar-date-range"
-                                    className="w-full"
-                                    value={{
-                                        from: draft.from,
-                                        to: draft.to,
-                                    }}
-                                    onValueChange={(next) => {
-                                        updateDraft("from", next?.from ?? "")
-                                        updateDraft("to", next?.to ?? "")
-                                    }}
-                                    placeholder="选择审计时间范围"
-                                />
-                            </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
                                 htmlFor="operations-audit-toolbar-action"
                                 label="动作"
@@ -236,15 +252,6 @@ function AccessListToolbar({
                                 />
                             </ListWorkspaceFilterField>
                         </div>
-                        {filterError ? (
-                            <p
-                                id={dateErrorId}
-                                className="text-xs text-destructive"
-                                role="alert"
-                            >
-                                {filterError}
-                            </p>
-                        ) : null}
                     </div>
                 ) : undefined
             }
