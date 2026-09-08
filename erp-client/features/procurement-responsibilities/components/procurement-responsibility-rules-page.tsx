@@ -504,6 +504,7 @@ export function ProcurementResponsibilityRulesPage() {
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
+                className="pb-4 md:pb-4"
                 eyebrow="基础资料"
                 title="采购责任规则"
                 description="维护销售实物行到采购负责人的分配规则；越具体的规则优先命中。"
@@ -565,6 +566,7 @@ export function ProcurementResponsibilityRulesPage() {
             >
                 <ListWorkSurface
                     ariaLabel="采购责任规则列表"
+                    toolbarClassName="pt-0 pb-3"
                     table={
                         <DataTable
                             id="procurement-responsibility-rules-table"

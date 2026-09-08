@@ -435,6 +435,7 @@ export function FinanceResponsibilityRulesPage() {
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
+                className="pb-4 md:pb-4"
                 eyebrow="财务"
                 title="财务责任配置"
                 description="为供应商付款和客户销项开票指定具体负责人；指定往来方优先，默认规则兜底。"
@@ -486,6 +487,7 @@ export function FinanceResponsibilityRulesPage() {
             >
                 <ListWorkSurface
                     ariaLabel="财务责任规则列表"
+                    toolbarClassName="pt-0 pb-3"
                     table={
                         <DataTable
                             id="finance-responsibilities-rules-table"
