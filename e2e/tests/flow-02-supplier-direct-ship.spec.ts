@@ -128,7 +128,7 @@ async function closeSession(session: Session) {
     await session.context.close()
 }
 
-async function expectToast(page: Page, title: string) {
+async function expectToast(page: Page, title: string | RegExp) {
     await expect(
         page.locator('[data-slot="toast"]').filter({ hasText: title }),
     ).toBeVisible({ timeout: 20000 })
@@ -136,7 +136,7 @@ async function expectToast(page: Page, title: string) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first()
         if ((await dismiss.count()) === 0) break
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
@@ -260,7 +260,7 @@ async function ensureProcurementDispatcher(page: Page) {
 
 async function assertInventoryUntouched(page: Page) {
     await gotoHeading(page, "/inventory", "库存台账")
-    await expect(page.getByRole("tab", { name: "余额" })).toBeVisible({
+    await expect(page.getByRole("button", { name: /^余额(?: \d+)?$/ })).toBeVisible({
         timeout: 20000,
     })
     await expect(
@@ -488,7 +488,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await expect(sourcing).toHaveValue(new RegExp("供应商直发"))
         await expect(sourcing).not.toHaveValue(WAREHOUSE_OPTION)
         await expect(page.getByText("不适用")).toBeVisible()
-        await expect(page.getByPlaceholder("选择目标仓")).toHaveCount(0)
+        await expect(page.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0)
 
         await page.locator("#procurement-orders-create-preview").click()
         const preview = page.getByRole("dialog", { name: "预览供给分配" })
@@ -516,8 +516,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await gotoHeading(page, "/procurement/orders", "采购单")
         const poTable = page.locator("#procurement-orders-list-table")
         await expect(page.getByText("1 条").first()).toBeVisible({ timeout: 20000 })
-        // 列表接口不返回履约责任，前端硬编码展示为入仓（见 purchase-order-mapping
-        // “缺口：列表无履约责任”），直发证明以下游供应商直发表单为准，此处不断言类型格。
+        await expect(poTable.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({ timeout: 20000 })
         await expect(poTable.getByText("草稿")).not.toBeVisible()
         await expect(poTable.getByText("审批中")).toBeVisible({ timeout: 20000 })
         purchaseOrderNo = (
@@ -544,7 +543,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await gotoHeading(page, "/procurement/orders", "采购单")
         const poTable = page.locator("#procurement-orders-list-table")
         await expect(poTable.getByText("已生效")).toBeVisible({ timeout: 20000 })
-        // 类型格硬编码入仓（同步骤 7 注释），直发以下游供应商直发表单为准。
+        await expect(poTable.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({ timeout: 20000 })
         await expect(poTable.getByText(purchaseOrderNo).first()).toBeVisible()
         await closeSession(session)
     }
@@ -623,8 +622,14 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await page.locator("#fulfillment-operations-work-surface-confirm").click()
         const confirm = page.getByRole("alertdialog", { name: "确认发货？" })
         await expect(confirm).toBeVisible({ timeout: 20000 })
+        const posted = page.waitForResponse(response =>
+            response.request().method() === "POST" && /\/deliveries\/[^/]+\/post$/.test(response.url()),
+        )
         await confirm.locator("#fulfillment-operations-workspace-confirm-confirm").click()
-        await expect(page.getByText("已发货")).toBeVisible({ timeout: 20000 })
+        const postedResponse = await posted
+        expect(postedResponse.ok(), "供应商直发必须已由后端确认后才能关闭会话").toBeTruthy()
+        expect((await postedResponse.json()).data.status).toBe("SHIPPED")
+        await expect(confirm).toBeHidden({ timeout: 20000 })
         await closeSession(session)
     }
 
@@ -653,7 +658,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await assertInventoryUntouched(page)
         await gotoHeading(page, "/procurement/orders", "采购单")
         const poTable = page.locator("#procurement-orders-list-table")
-        // 类型格硬编码入仓（同步骤 7 注释），不断言类型格；直发已由供应商直发表单证明。
+        await expect(poTable.getByText("实物 / 供应商直发", { exact: true })).toBeVisible({ timeout: 20000 })
         await expect(poTable.getByText("已生效")).toBeVisible({ timeout: 20000 })
         await expect(poTable.getByText(purchaseOrderNo).first()).toBeVisible({ timeout: 20000 })
         await closeSession(session)

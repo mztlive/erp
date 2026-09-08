@@ -7,7 +7,7 @@ use crate::mongo_ops;
 use crate::Executor;
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::{
-    bson::{doc, serialize_to_document, Document},
+    bson::{deserialize_from_slice, doc, serialize_to_vec, Document},
     options::FindOptions,
     Database,
 };
@@ -229,7 +229,7 @@ where
 
         let metadata = write_metadata(entity.base())?;
         let filter = active_cas_filter(entity.base(), metadata);
-        let mut document = serialize_to_document(&*entity)?;
+        let mut document = persisted_document(&*entity)?;
         document.insert("version", metadata.next_version_bson);
         document.insert("updated_at", metadata.updated_at_bson);
 
@@ -551,9 +551,21 @@ where
     }
 }
 
+/// 更新与 MongoDB 插入使用相同的非 human-readable BSON 形态，保持数值原生类型。
+///
+/// # 参数
+/// * `value` - 待写入的实体快照
+/// # 返回
+/// 返回可用于 `$set` 的原生 BSON 文档。
+/// # 错误
+/// 实体无法编码为 BSON 或解码为文档时返回序列化错误。
+fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
+    Ok(deserialize_from_slice(&serialize_to_vec(value)?)?)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{apply_write_result, write_metadata_at, Pagination};
+    use super::{apply_write_result, persisted_document, write_metadata_at, Pagination};
     use crate::errors::Error;
     use entity_core::BaseModel;
 
@@ -566,6 +578,41 @@ mod tests {
         fn page_and_size(&self) -> (u64, u64) {
             (self.page, self.page_size)
         }
+    }
+
+    #[test]
+    fn update_document_preserves_optional_decimal_wire_type() {
+        use mongodb::bson::{Bson, Decimal128};
+        use serde::{Serialize, Serializer};
+        use std::str::FromStr;
+
+        struct Quantity;
+        impl Serialize for Quantity {
+            fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+                if serializer.is_human_readable() {
+                    serializer.serialize_str("260")
+                } else {
+                    Decimal128::from_str("260").unwrap().serialize(serializer)
+                }
+            }
+        }
+        #[derive(Serialize)]
+        struct Availability {
+            available_quantity: Option<Quantity>,
+        }
+        let document = persisted_document(&Availability {
+            available_quantity: Some(Quantity),
+        })
+        .unwrap();
+        assert!(matches!(
+            document.get("available_quantity"),
+            Some(Bson::Decimal128(_))
+        ));
+        let absent = persisted_document(&Availability {
+            available_quantity: None,
+        })
+        .unwrap();
+        assert_eq!(absent.get("available_quantity"), Some(&Bson::Null));
     }
 
     #[test]

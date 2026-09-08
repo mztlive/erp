@@ -60,8 +60,9 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,
         purchaseType: mapPurchaseType(String(row.purchase_type)),
-        // 缺口：列表无履约责任
-        fulfillmentResponsibility: "WAREHOUSE",
+        fulfillmentResponsibility: mapFulfillment(
+            String(row.fulfillment_responsibility),
+        ),
         paymentTermCode: row.payment_term_code ?? "",
         paymentTermLabel: paymentTermLabel(row.payment_term_code ?? ""),
         ownerUserId: row.owner_user_id ?? undefined,
@@ -130,6 +131,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         "fulfillment",
     )
     const approval = mapPurchaseOrderApproval(center.approval)
+    const hasActiveChange = (center.changes ?? []).some(
+        (change) => change.status === "DRAFT" || change.status === "IN_APPROVAL",
+    )
 
     return {
         identity: {
@@ -234,11 +238,13 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         approval,
         allowedActions: Array.from(
             new Set([
-                ...deriveAllowedActions(status),
+                ...deriveAllowedActions(status).filter((action) => !hasActiveChange || action !== "START_CHANGE"),
                 ...(approval?.allowedActions ?? []),
             ]),
         ),
-        actionBlockers: [],
+        actionBlockers: hasActiveChange
+            ? [{ action: "START_CHANGE", code: "CHANGE_IN_PROGRESS", message: "已有进行中的采购变更，请先处理现有变更。" }]
+            : [],
         fieldVisibility: {},
     }
 }

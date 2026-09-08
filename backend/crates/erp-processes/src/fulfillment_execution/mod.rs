@@ -3,6 +3,7 @@
 pub mod customer_acceptance;
 mod delivery;
 mod delivery_posting;
+mod electronic_confirm;
 mod electronic_delivery;
 mod purchase_context;
 mod purchase_receipt;

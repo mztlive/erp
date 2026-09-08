@@ -294,11 +294,12 @@ impl WorkItemType {
     /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
     ///
     /// # 返回
-    /// 供给分配、履约操作、付款与开票执行返回 `true`；这些任务不依赖团队池或创建人回退。
+    /// 冻结单人审批、供给分配、履约操作、付款与开票执行返回 `true`；这些任务不依赖团队池或创建人回退。
     pub fn uses_explicit_owner_authorization(self) -> bool {
         matches!(
             self,
-            Self::ProcurementOrderCreation
+            Self::DocumentApproval
+                | Self::ProcurementOrderCreation
                 | Self::FulfillmentOperation
                 | Self::CustomerAcceptanceRegistration
                 | Self::SupplierPaymentExecution

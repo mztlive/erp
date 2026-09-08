@@ -149,7 +149,7 @@ export function SalesOrderCreateHeaderFields({
                                         id="sales-orders-create-header-receivable-due-date"
                                         label="应收到期日"
                                         required
-                                        description="运营通过后按此日期形成应收；该日期不能早于提交日"
+                                        description="审批生效后按此日期形成应收；该日期不能早于提交日"
                                     />
                                 )}
                             </form.AppField>

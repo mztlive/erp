@@ -38,6 +38,8 @@ pub struct PartyRow {
 pub struct PartyFilter {
     /// 主体编号模糊匹配（字面量正则，忽略大小写）；`None` 表示不筛选。
     pub keyword: Option<String>,
+    /// 当前名称匹配的主体身份；与编号关键词按 OR 组合，分页前生效。
+    pub matching_name_ids: Vec<PartyId>,
     /// 主体类型；`None` 表示不筛选。
     pub party_kind: Option<PartyKind>,
     /// 启停状态；`None` 表示不筛选。
@@ -59,7 +61,19 @@ impl QueryFilter for PartyFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut filter, "party_no", self.keyword.as_deref());
+        let mut number = Document::new();
+        insert_literal_regex_filter(&mut number, "party_no", self.keyword.as_deref());
+        if self.matching_name_ids.is_empty() {
+            filter.extend(number);
+        } else {
+            let mut clauses = vec![
+                doc! { "id": { "$in": self.matching_name_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } },
+            ];
+            if !number.is_empty() {
+                clauses.push(number);
+            }
+            filter.insert("$or", clauses);
+        }
         if let Some(party_kind) = self.party_kind {
             filter.insert("party_kind", party_kind.as_str());
         }
@@ -255,7 +269,8 @@ mod tests {
 
     #[test]
     fn party_filter_applies_keyword_regex_and_status() {
-        let filter = PartyFilter {
+        let mut filter = PartyFilter {
+            matching_name_ids: Vec::new(),
             keyword: Some("P-20".to_string()),
             party_kind: Some(PartyKind::Enterprise),
             status: Some(PartyStatus::Active),
@@ -272,5 +287,28 @@ mod tests {
         let keyword = document.get_document("party_no").unwrap();
         assert_eq!(keyword.get_str("$regex").unwrap(), r"P\-20");
         assert_eq!(keyword.get_str("$options").unwrap(), "i");
+        filter.matching_name_ids = vec![erp_core::ids::PartyId::new("party-name-match")];
+        let named = filter.to_doc();
+        assert_eq!(named.get_str("status").unwrap(), "active");
+        assert_eq!(named.get_str("party_kind").unwrap(), "enterprise");
+        assert_eq!(named.get_i64("deleted_at").unwrap(), 0);
+        assert!(!named.contains_key("party_no"));
+        let clauses = named.get_array("$or").unwrap();
+        assert_eq!(clauses.len(), 2);
+        assert_eq!(
+            clauses[0]
+                .as_document()
+                .unwrap()
+                .get_document("id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap()[0]
+                .as_str(),
+            Some("party-name-match")
+        );
+        filter.matching_name_ids.clear();
+        filter.keyword = None;
+        assert!(!filter.to_doc().contains_key("$or"));
+        assert!(!filter.to_doc().contains_key("party_no"));
     }
 }

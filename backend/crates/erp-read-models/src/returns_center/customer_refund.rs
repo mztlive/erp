@@ -126,10 +126,16 @@ impl ReturnsReadService {
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),
         };
-        Ok(customer_refund_view_from_facts(
-            CustomerRefundListFacts::from_refund(&refund),
-            binding.as_ref(),
-        ))
+        let mut view =
+            customer_refund_view_from_facts(CustomerRefundListFacts::from_refund(&refund), binding.as_ref());
+        view.approval = super::approval::load_runtime(
+            &self.db,
+            erp_workflow::entity::document_registry::DocumentType::CustomerRefund,
+            &id,
+            view.approval,
+        )
+        .await?;
+        Ok(view)
     }
 }
 

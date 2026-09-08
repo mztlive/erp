@@ -130,6 +130,7 @@ mod tests {
             Ok(PaymentTermFact {
                 canonical_code: "POSTPAY_NET30".to_string(),
                 prepay_gate: false,
+                prepay_minimum_ratio: None,
                 days_after_delivery: Some(30),
             })
         }

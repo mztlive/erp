@@ -1,7 +1,6 @@
 use erp_audit::AuditExt;
-use erp_core::ids::ElectronicDeliveryId;
 use erp_fulfillment::entity::fulfillment::ElectronicDelivery;
-use erp_procurement::repository::PurchaseOrderExt;
+use erp_fulfillment::service::FulfillmentService;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
@@ -19,11 +18,9 @@ use erp_workflow::service::approval::business_adapter::{adapter_spec_of, Binding
 use erp_workflow::service::approval::policy::{policy_of, DocumentApprovalPolicy};
 use erp_workflow::service::document_registry::new_registered_document;
 
-use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::FulfillmentProcess;
 use erp_fulfillment::dto::{CreateElectronicDeliveryRequest, ElectronicDeliveryView};
 use erp_fulfillment::service::electronic_delivery_crypto::electronic_delivery_draft_from_request;
-use erp_fulfillment::service::FulfillmentService;
 
 impl FulfillmentProcess {
     /// 创建电子交付记录（草稿）。
@@ -69,93 +66,6 @@ impl FulfillmentProcess {
         )
         .await?;
         Ok(record.into())
-    }
-
-    /// 确认电子交付（草稿 → 已确认；§8.1.5 + §6.7 跨集合事务）。
-    ///
-    /// 在同一事务内：校验采购单可履约与 `PREPAY` 门槛、校验采购销售分配的
-    /// 有效性（采购行归属当前生效版本、销售行归属本明细）、迁移记录状态、写
-    /// 审计。重复确认由状态守卫（仅草稿）防护。
-    ///
-    /// # 参数
-    /// * `id` - 记录主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回确认后的记录视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 记录/采购单/分配不存在
-    /// * `ConflictError` - 状态不允许确认或重复确认
-    /// * `BusinessLogicError` - 门槛未满足或分配无效
-    /// * `OutcomeUnknown` - 提交结果无法确认
-    #[tracing::instrument(
-        name = "fulfillment.electronic_delivery_confirm",
-        skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "electronic_delivery_confirm"
-        )
-    )]
-    pub async fn confirm_electronic_delivery(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<ElectronicDeliveryView> {
-        let record_id = ElectronicDeliveryId::new(id.to_string());
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let confirmed = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let mut record = FulfillmentService::new(db.clone())
-                        .prepare_electronic_confirmation(&record_id, session)
-                        .await?;
-                    let po = db
-                        .purchase_orders()
-                        .find_by_id(record.purchase_order_id.as_ref(), session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
-                    ensure_po_fulfillable(&po)?;
-                    ensure_prepay_gate(&db, session, &po).await?;
-                    ensure_allocation_valid(
-                        &db,
-                        session,
-                        &po,
-                        &record.purchase_line_sales_allocation_id,
-                        &record.sales_order_line_id,
-                    )
-                    .await?;
-                    FulfillmentService::new(db.clone())
-                        .persist_electronic_confirmation(&mut record, session)
-                        .await?;
-                    super::task::complete_fulfillment_task(
-                        &db,
-                        super::task::FulfillmentTaskObject::ElectronicDelivery(&record),
-                        actor.id(),
-                        session,
-                    )
-                    .await?;
-                    super::customer_acceptance::task::ensure_customer_acceptance_task(
-                        &db,
-                        &po.sales_order_id,
-                        super::customer_acceptance::task::CustomerAcceptanceTaskReason::DeliveryAvailable,
-                        session,
-                    )
-                    .await?;
-                    let audit = actor.resource_log(
-                        "electronic_delivery.confirm",
-                        "electronic_delivery",
-                        record_id.to_string(),
-                    )?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<ElectronicDelivery, crate::Error>(record)
-                })
-            })
-            .await?;
-        Ok(confirmed.into())
     }
 }
 
@@ -353,8 +263,7 @@ mod electronic_delivery_no_approval_tests {
     };
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
-    use erp_core::common::source::SourceType;
-    use erp_core::common::time::Instant;
+    use erp_core::common::{source::SourceType, time::Instant};
     use erp_core::ids::{
         ElectronicDeliveryId, PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId,
     };

@@ -239,7 +239,7 @@ async function fetchExactOperationQueue(
     operationType: FulfillmentOperationType,
 ): Promise<FulfillmentQueueView> {
     try {
-        const operation = await loadExactOperation(
+        let operation = await loadExactOperation(
             filters.operationId!,
             operationType,
         )
@@ -258,6 +258,36 @@ async function fetchExactOperationQueue(
         const matchesFilters =
             hasFrozenIdentity &&
             matchOperation(operation, filters, [operationType])
+        if (matchesFilters) {
+            const gatePage = decodeFulfillmentQueuePage(
+                await apiGet<unknown>("/admin/work-items/fulfillment-queue", {
+                    operation_id: filters.operationId,
+                    operation_types: operationType,
+                    page: 1,
+                    page_size: 1,
+                    timezone: "Asia/Shanghai",
+                }),
+            )
+            const responsibility = gatePage.items.find(
+                (row) =>
+                    row.operation_id === filters.operationId &&
+                    row.operation_type === operationType,
+            )
+            if (!responsibility) {
+                return exactOperationQueueView(
+                    filters,
+                    role,
+                    operationType,
+                    undefined,
+                    "NO_OPERATIONS",
+                )
+            }
+            // W01 单任务入口也必须使用服务端冻结条件及正式核销净额，不能沿用详情的默认门槛。
+            operation = {
+                ...operation,
+                gate: fulfillmentQueueItemToOperation(responsibility).gate,
+            }
+        }
         return exactOperationQueueView(
             filters,
             role,

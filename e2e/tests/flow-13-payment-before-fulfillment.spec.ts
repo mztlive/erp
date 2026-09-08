@@ -8,15 +8,13 @@
  *       cangchu（入库 / 仓发）
  *       fukuan（W01 供应商付款任务确认入账；SupplierPayment=NO_APPROVAL）
  *
- * 文档-代码差异（测试以代码为准）:
+ * 验收约定：
  * - 文档写「先款后货时，付款完成后发货」；种子供应商狮峰茶叶为 PREPAY_50，
  *   门禁按有效已核销付款达到比例门槛即可履约，不必等应付全部结清。
  *   本流程仍由出纳把付款任务待付一次付清，同时满足任务完成与门槛。
  * - 文档 7.3.1 把「创建采购单」和「提交审批」画成两步；代码在供给分配确认同一事务内建单并立即提交。
  * - 客户侧本单用「货到 15 天」，与供应商「先款 50%」对照：客户账期不放开采购履约。
- * - 采购单列表硬编码履约责任为入仓、paymentGate 为 NOT_APPLICABLE；详情履约责任来自对象中心。
- * - 采购单对象中心未投影 prepayment_gate，概览不展示「先款后货门禁」卡片；W01 按单据精确加载时
- *   门禁默认 NOT_APPLICABLE（「无先款要求」）。真正拦截在确认命令：backend ensure_prepay_gate。
+ * - W01 必须按采购生效版本的冻结比例及有效付款净额展示先款门槛。
  * - W09 /fulfillment 只重定向到 W01；履约确认只在工作台原地处理。
  * - 履约主按钮是「确认入库 / 确认发货」，禁止用「过账」匹配。
  * - 开发目录无 VIRTUAL SKU（电子交付）；卡券 VOUCHER 不能走普通采购单。
@@ -43,8 +41,8 @@ const WAREHOUSE_CODE = "BJ-TZ-01";
 const SALES_QTY = "1";
 const PAYMENT_TERM_CUSTOMER = "货到 15 天";
 const PAYMENT_TERM_SUPPLIER = "先款 50%";
-const INBOUND_OPTION = `${SUPPLIER_SHORT} · 入仓`;
-const DIRECT_OPTION = `${SUPPLIER_SHORT} · 供应商直发`;
+const INBOUND_OPTION = "杭州狮峰茶叶有限公司 · 入仓";
+const DIRECT_OPTION = "杭州狮峰茶叶有限公司 · 供应商直发";
 const RECEIPT_PNG = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "base64",
@@ -131,7 +129,7 @@ async function expectToast(page: Page, title: string | RegExp) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first();
         if (!(await dismiss.count())) break;
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
@@ -146,11 +144,8 @@ async function chooseOption(page: Page, input: Locator, option: string | RegExp,
         await input.fill(query);
     }
     const listed = page.getByRole("option", { name: option }).first();
-    if (await listed.count()) {
-        await listed.click();
-        return;
-    }
-    await page.locator('[data-slot="combobox-item"]').filter({ hasText: option }).first().click();
+    await expect(listed).toBeVisible({ timeout: UI_TIMEOUT });
+    await listed.click();
 }
 
 async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string) {
@@ -227,7 +222,7 @@ async function openWorkspaceTask(
     const task = list.getByRole("button", { name }).first();
     await expect(task).toBeVisible({ timeout: UI_TIMEOUT });
     await task.click();
-    await expect(page.getByLabel(/当前/)).toBeVisible({ timeout: UI_TIMEOUT });
+    await expect(page.getByRole("region", { name: "当前工作台任务", exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
 }
 
 async function approveCurrentDocument(page: Page) {
@@ -358,8 +353,8 @@ async function chooseSourcing(
     if (warehouse) {
         const warehouseInput = row.locator('[id$="-warehouse"]');
         await expect(warehouseInput).toBeVisible({ timeout: UI_TIMEOUT });
-        // 仓库下拉按仓库代码精确筛选，填代码后按名称选择选项。
-        await chooseOption(page, warehouseInput, warehouse, WAREHOUSE_CODE);
+        // 仓库列表接口以仓库代码标识选项。
+        await chooseOption(page, warehouseInput, WAREHOUSE_CODE, WAREHOUSE_CODE);
     } else {
         await expect(row.getByText("不适用")).toBeVisible({ timeout: UI_TIMEOUT });
     }
@@ -386,7 +381,7 @@ async function assertPurchaseOrderPrepayFacts(page: Page, responsibility: Purcha
     const goFulfill = page.getByRole("link", { name: "去交付与代发" }).or(
         page.getByRole("button", { name: "去交付与代发" }),
     );
-    expect((await closed.count()) + (await goFulfill.count())).toBeGreaterThan(0);
+    await expect(closed.or(goFulfill)).toBeVisible({ timeout: UI_TIMEOUT });
 }
 
 async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<PurchaseRef[]> {
@@ -395,9 +390,9 @@ async function readPurchaseOrders(page: Page, salesOrderNo: string): Promise<Pur
     await search.fill(salesOrderNo);
     await search.press("Enter");
     await expect(page.getByText("2 条")).toBeVisible({ timeout: UI_TIMEOUT });
-    await expect(page.getByText("草稿")).toHaveCount(0);
+    await expect(page.getByRole("table").getByText("草稿", { exact: true })).toHaveCount(0);
     await expect(page.getByText(PAYMENT_TERM_SUPPLIER).first()).toBeVisible({ timeout: UI_TIMEOUT });
-    const links = page.getByRole("link", { name: /打开采购单/ });
+    const links = page.getByRole("button", { name: /打开采购单/ });
     await expect(links).toHaveCount(2, { timeout: UI_TIMEOUT });
     const hrefs = await links.evaluateAll((nodes) =>
         nodes
@@ -434,7 +429,7 @@ async function openFulfillmentTask(page: Page, salesOrderNo: string) {
 
 async function assertFulfillmentCannotComplete(page: Page, kind: "入库" | "代发") {
     if (kind === "入库") {
-        await expect(page.getByLabel("入库表单").or(page.getByText("入库作业"))).toBeVisible({
+        await expect(page.getByLabel("入库表单")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByLabel("供应商直发表单")).toHaveCount(0);
@@ -448,31 +443,10 @@ async function assertFulfillmentCannotComplete(page: Page, kind: "入库" | "代
     const confirm = page.locator("#fulfillment-operations-work-surface-confirm");
     await expect(confirm).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(confirm).toHaveText(kind === "入库" ? "确认入库" : "确认发货");
+    await expect(confirm).toBeDisabled({ timeout: UI_TIMEOUT });
     const gate = page.locator("#prepayment-gate");
-    if (await gate.count()) {
-        const allowed = await gate.getAttribute("data-allowed");
-        if (allowed === "false") {
-            await gate.hover();
-            await expect(page.getByText(/先款未到|暂时不能|履约已阻断|作业先决条件尚未满足/)).toBeVisible({
-                timeout: UI_TIMEOUT,
-            });
-        }
-    }
-    if (await confirm.isDisabled()) {
-        await expect(confirm).toBeDisabled();
-        return;
-    }
-    await confirm.click();
-    const dialog = page
-        .getByRole("alertdialog")
-        .or(page.getByRole("dialog"))
-        .filter({ hasText: kind === "入库" ? "确认入库" : "确认发货" });
-    await expect(dialog.first()).toBeVisible({ timeout: UI_TIMEOUT });
-    await dialog.getByRole("button", { name: kind === "入库" ? "确认入库" : "确认发货" }).click();
-    await expect(page.getByText(/先款后货|未达.*门槛|请先完成付款|没有生效/)).toBeVisible({
-        timeout: UI_TIMEOUT,
-    });
-    await page.keyboard.press("Escape");
+    await expect(gate).toHaveAttribute("data-allowed", "false", { timeout: UI_TIMEOUT });
+
 }
 
 async function fillReceiptDraft(page: Page) {
@@ -501,10 +475,11 @@ async function payPurchaseOrder(page: Page, purchaseNo: string) {
     await page.goto("/workspace?family=finance");
     await searchWorkspace(page, purchaseNo);
     const list = page.getByRole("list", { name: "待办列表" });
-    await expect(list.getByRole("button", { name: /供应商付款处理/ })).toBeVisible({
+    const task = list.getByRole("button", { name: new RegExp(`供应商付款处理.*${purchaseNo.slice(0, 10)}.*${purchaseNo.slice(-6)}`) });
+    await expect(task).toHaveCount(1, {
         timeout: UI_TIMEOUT,
     });
-    await list.getByRole("button", { name: /供应商付款处理/ }).first().click();
+    await task.click();
     await expect(page.getByLabel("当前付款任务")).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(page.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
         timeout: UI_TIMEOUT,
@@ -579,7 +554,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await customerDialog.locator("#customers-form-submit").click();
         await expectToast(page, "客户已创建");
         await expect(customerDialog).toBeHidden({ timeout: UI_TIMEOUT });
-        await expect(page.getByText(customerName).first()).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.getByRole("link", { name: `先款${stamp}`, exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
 
         // 2) 上传合同 PDF
         await gotoHeading(page, "/sales/contracts", /^合同$/);
@@ -689,8 +664,12 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(preview.getByText("本次不占用现有库存").or(preview.getByText("将按供应商创建 2 张采购单"))).toBeVisible();
         await expect(preview.getByText("现有库存分配")).toHaveCount(0);
         await expect(preview.getByText(PAYMENT_TERM_SUPPLIER).first()).toBeVisible();
-        await expect(preview.getByText("入仓").first()).toBeVisible();
-        await expect(preview.getByText("供应商直发").first()).toBeVisible();
+        const previewChoices = preview.getByRole("navigation", { name: "将创建的采购单" }).getByRole("button");
+        await expect(previewChoices).toHaveCount(2);
+        await previewChoices.filter({ hasText: WAREHOUSE_CODE }).click();
+        await expect(preview.getByText("入仓", { exact: true })).toBeVisible();
+        await previewChoices.filter({ hasNotText: WAREHOUSE_CODE }).click();
+        await expect(preview.getByText("供应商直发", { exact: true })).toBeVisible();
         await preview.getByRole("button", { name: /确认提交 2 张采购单/ }).click();
         const confirmAlloc = page.getByRole("alertdialog").filter({ hasText: "确认供给分配" });
         await expect(confirmAlloc).toBeVisible({ timeout: UI_TIMEOUT });
@@ -710,7 +689,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 2 笔/, {
             timeout: UI_TIMEOUT,
         });
-        await expect(page.getByText("草稿")).toHaveCount(0);
+        await expect(page.getByRole("table").getByText("草稿", { exact: true })).toHaveCount(0);
 
         // 6) 财务审批两张采购单生效，形成付款任务；履约仍被先款拦住
         page = await switchTo("caiwu");
@@ -730,7 +709,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await searchWorkspace(page, salesOrderNo);
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
         await openFulfillmentTask(page, salesOrderNo);
-        await expect(page.getByText(customerName).first()).toBeVisible();
+        await expect(page.getByLabel("当前履约任务").getByRole("heading", { name: new RegExp(salesOrderNo) })).toBeVisible();
         await assertFulfillmentCannotComplete(page, "入库");
 
         page = await switchTo("caigou");
@@ -738,7 +717,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await searchWorkspace(page, salesOrderNo);
         await expect(page.getByRole("button", { name: /电子交付|线下服务/ })).toHaveCount(0);
         await openFulfillmentTask(page, salesOrderNo);
-        await expect(page.getByText(customerName).first()).toBeVisible();
+        await expect(page.getByLabel("当前履约任务").getByRole("heading", { name: new RegExp(salesOrderNo) })).toBeVisible();
         await assertFulfillmentCannotComplete(page, "代发");
 
         // 8) 出纳先付清入仓采购单：仅入库门禁放开，代发仍阻断
@@ -748,13 +727,13 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await payPurchaseOrder(page, inboundPo);
         await page.goto("/workspace?family=finance");
         await searchWorkspace(page, inboundPo);
-        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0, {
+        await expect(page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: new RegExp(`供应商付款处理.*${inboundPo.slice(0, 10)}.*${inboundPo.slice(-6)}`) })).toHaveCount(0, {
             timeout: UI_TIMEOUT,
         });
 
         page = await switchTo("cangchu");
         await openFulfillmentTask(page, salesOrderNo);
-        await expect(page.getByLabel("入库表单").or(page.getByText("入库作业"))).toBeVisible({
+        await expect(page.getByLabel("入库表单")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await fillReceiptDraft(page);
@@ -787,7 +766,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         // 10) 入库确认后仓发
         page = await switchTo("cangchu");
         await openFulfillmentTask(page, salesOrderNo);
-        await expect(page.getByLabel("入库表单").or(page.getByText("入库作业"))).toBeVisible({
+        await expect(page.getByLabel("入库表单")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await fillReceiptDraft(page);
@@ -795,37 +774,12 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认入库？", "确认入库");
 
-        const shipForm = page.getByLabel("公司仓发表单");
-        if (await shipForm.isVisible().catch(() => false)) {
-            await chooseOption(
-                page,
-                page.locator("#fulfillment-operations-ship-form-carrier"),
-                "顺丰速运",
-                "顺丰",
-            );
-            await page.locator("#fulfillment-operations-ship-form-tracking-no").fill(`WH${trackingNo}`);
-            await page.locator("#fulfillment-operations-work-surface-confirm").click();
-            await confirmFormal(page, "确认发货？", "确认发货");
-        } else {
-            await page.goto("/workspace?family=fulfillment");
-            await searchWorkspace(page, salesOrderNo);
-            const shipTask = page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /履约处理/ });
-            if (await shipTask.count()) {
-                await shipTask.first().click();
-                await expect(page.getByLabel("公司仓发表单")).toBeVisible({ timeout: UI_TIMEOUT });
-                await chooseOption(
-                    page,
-                    page.locator("#fulfillment-operations-ship-form-carrier"),
-                    "顺丰速运",
-                    "顺丰",
-                );
-                await page
-                    .locator("#fulfillment-operations-ship-form-tracking-no")
-                    .fill(`WH${trackingNo}`);
-                await page.locator("#fulfillment-operations-work-surface-confirm").click();
-                await confirmFormal(page, "确认发货？", "确认发货");
-            }
-        }
+        await openFulfillmentTask(page, salesOrderNo);
+        await expect(page.getByLabel("公司仓发表单")).toBeVisible({ timeout: UI_TIMEOUT });
+        await chooseOption(page, page.locator("#fulfillment-operations-ship-form-carrier"), "顺丰速运", "顺丰");
+        await page.locator("#fulfillment-operations-ship-form-tracking-no").fill(`WH${trackingNo}`);
+        await page.locator("#fulfillment-operations-work-surface-confirm").click();
+        await confirmFormal(page, "确认发货？", "确认发货");
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);

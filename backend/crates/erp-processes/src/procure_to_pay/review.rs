@@ -539,6 +539,16 @@ impl FormalizedPurchaseEffects {
                 session,
             )
             .await?;
+        } else if self.order.fulfillment_responsibility == FulfillmentResponsibility::Electronic {
+            super::electronic_drafts::create_electronic_drafts(
+                db,
+                &self.order,
+                &self.revision_lines,
+                &self.allocations_by_line,
+                actor_id,
+                session,
+            )
+            .await?;
         } else if self.order.fulfillment_responsibility == FulfillmentResponsibility::Service {
             create_service_fulfillment_draft_for_order(
                 db,

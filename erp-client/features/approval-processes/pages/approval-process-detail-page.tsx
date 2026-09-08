@@ -261,7 +261,16 @@ export function ApprovalProcessDetailPage({
                         <h1 className="text-xl font-semibold tracking-tight">
                             {typeTitle}
                         </h1>
-                        {catalogItem ? (
+                        {detailQuery.data ? (
+                            <StatusBadge
+                                tone={definitionStatusTone(
+                                    detailQuery.data.status,
+                                )}
+                                label={definitionStatusLabel(
+                                    detailQuery.data.status,
+                                )}
+                            />
+                        ) : catalogItem ? (
                             <StatusBadge
                                 tone={configurationStatusTone(
                                     catalogItem.configuration_status,
@@ -272,6 +281,13 @@ export function ApprovalProcessDetailPage({
                                     catalogItem.approval_requirement,
                                 )}
                             />
+                        ) : null}
+                        {detailQuery.data ? (
+                            <span className="text-xs text-muted-foreground">
+                                {versionLabel(
+                                    detailQuery.data.definition_version,
+                                )}
+                            </span>
                         ) : null}
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -366,23 +382,6 @@ export function ApprovalProcessDetailPage({
                         >
                             历史版本
                         </TabsTrigger>
-                        {detailQuery.data ? (
-                            <div className="ml-auto flex items-center gap-2 py-0.5">
-                                <StatusBadge
-                                    tone={definitionStatusTone(
-                                        detailQuery.data.status,
-                                    )}
-                                    label={definitionStatusLabel(
-                                        detailQuery.data.status,
-                                    )}
-                                />
-                                <span className="text-xs text-muted-foreground">
-                                    {versionLabel(
-                                        detailQuery.data.definition_version,
-                                    )}
-                                </span>
-                            </div>
-                        ) : null}
                     </TabsList>
                 </Tabs>
 

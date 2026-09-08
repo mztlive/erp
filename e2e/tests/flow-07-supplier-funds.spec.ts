@@ -101,7 +101,7 @@ async function expectToast(page: Page, title: string | RegExp): Promise<void> {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first();
         if ((await dismiss.count()) === 0) break;
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
@@ -231,7 +231,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await page.goto("/sales/orders?mode=create");
     await expect(page.getByText("单据头")).toBeVisible({ timeout: 20_000 });
     // 上传合同按钮与占位 div 重复 id：按角色点击避开严格模式。
-    await page.getByRole("button", { name: "上传合同 PDF" }).click();
+    await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click();
     const uploadContract = page.getByRole("dialog", { name: "上传合同 PDF" });
     await expect(uploadContract).toBeVisible({ timeout: 20_000 });
     await uploadContract
@@ -463,15 +463,12 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
                 res.request().method() === "POST" &&
                 res.url().includes("/admin/supplier-payments/commit"),
             { timeout: 60_000 },
-        )
-        .then(
-            (res) => res.ok(),
-            () => false,
         );
     await payConfirm.locator("#supplier-payables-payment-submit-confirm-confirm").click();
-    await expect(await commit1).toBe(true);
+    const firstResponse = await commit1;
+    expect(firstResponse.ok()).toBeTruthy();
+    expect((await firstResponse.json()).data).toMatchObject({ status: "posted", amount: flow.firstAmount, allocated_total: flow.firstAmount, unallocated_amount: "0.00" });
     await expectToast(fukuanPage, "付款已登记");
-    await expect(fukuanPage.getByText(/已过账并核销/).first()).toBeVisible({ timeout: 20_000 });
 
     await expect(fukuanPage.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
         timeout: 20_000,
@@ -497,13 +494,11 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
                 res.request().method() === "POST" &&
                 res.url().includes("/admin/supplier-payments/commit"),
             { timeout: 60_000 },
-        )
-        .then(
-            (res) => res.ok(),
-            () => false,
         );
     await payConfirm2.locator("#supplier-payables-payment-submit-confirm-confirm").click();
-    await expect(await commit2).toBe(true);
+    const secondResponse = await commit2;
+    expect(secondResponse.ok()).toBeTruthy();
+    expect((await secondResponse.json()).data).toMatchObject({ status: "posted", amount: flow.restAmount, allocated_total: flow.restAmount, unallocated_amount: "0.00" });
     await expectToast(fukuanPage, "付款已登记");
 
     await gotoWorkspace(fukuanPage);
@@ -600,13 +595,9 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
                 res.request().method() === "POST" &&
                 res.url().includes("/admin/purchase-invoice-allocations"),
             { timeout: 60_000 },
-        )
-        .then(
-            (res) => res.ok(),
-            () => false,
         );
     await invoiceConfirm.locator("#supplier-payables-invoice-allocate-confirm-confirm").click();
-    await expect(await invoiceCommit).toBe(true);
+    expect((await invoiceCommit).ok()).toBeTruthy();
     await expect(caiwuPage.getByText("进项发票已登记").first()).toBeVisible({ timeout: 20_000 });
     await caiwuPage.locator("#supplier-payables-allocation-result-close").click();
     await switchSupplierView(caiwuPage, "purchase_invoice");

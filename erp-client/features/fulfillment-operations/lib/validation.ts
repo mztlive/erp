@@ -213,6 +213,15 @@ export function clientValidation(
         }
     }
     if (draft.type === "ELECTRONIC") {
+        if (!draft.evidenceFile) {
+            issues.push({
+                id: "el-evidence",
+                label: "交付凭证",
+                message: "请上传交付凭证",
+                targetId:
+                    "fulfillment-operations-electronic-form-evidence-input",
+            })
+        }
         if (!draft.result) {
             issues.push({
                 id: "el-result",

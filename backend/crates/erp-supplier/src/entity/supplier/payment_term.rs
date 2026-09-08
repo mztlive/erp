@@ -138,6 +138,20 @@ impl SupplierPaymentTerm {
         matches!(self, Self::Prepay100 | Self::Prepay50 | Self::Prepay30)
     }
 
+    /// 返回受控先款条件的最低付款比例，供采购冻结履约门槛。
+    pub fn prepay_minimum_ratio(self) -> Option<erp_core::money::Rate> {
+        let percent = match self {
+            Self::Prepay100 => 100,
+            Self::Prepay50 => 50,
+            Self::Prepay30 => 30,
+            _ => return None,
+        };
+        Some(
+            erp_core::money::Rate::try_from(rust_decimal::Decimal::new(percent, 2))
+                .expect("受控百分比不超过 Rate 精度"),
+        )
+    }
+
     /// 返回以最晚预计交付日为基准的账期天数。
     ///
     /// # 返回

@@ -239,6 +239,43 @@ fn split_pointer_ids(
     (submissions, revisions)
 }
 
+/// 在采购分页前解析来源销售单号和供应商名称命中的稳定身份。
+///
+/// # 参数
+/// * `db` - 数据库句柄
+/// * `keyword` - 列表查询关键词
+/// * `executor` - 调用方执行器
+/// # 返回
+/// 返回销售单和供应商身份集合；无关键词时不查询。
+/// # 错误
+/// 任一拥有领域查询失败时返回仓储错误。
+/// # 约束
+/// 外域名称只由拥有领域读取，不在采购仓储内查询销售或主体集合。
+pub(crate) async fn keyword_reference_ids(
+    db: &Database,
+    keyword: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<(Vec<SalesOrderId>, Vec<SupplierAccountId>)> {
+    use erp_party::PartyExt;
+    use erp_supplier::SupplierExt;
+    let Some(keyword) = keyword.filter(|value| !value.trim().is_empty()) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let sales_ids = db
+        .sales_orders()
+        .matching_ids_by_number(keyword, executor)
+        .await?;
+    let party_ids = db
+        .party()
+        .matching_current_party_ids_by_name(keyword, executor)
+        .await?;
+    let supplier_ids = db
+        .supplier_accounts()
+        .matching_ids_by_parties(&party_ids, executor)
+        .await?;
+    Ok((sales_ids, supplier_ids))
+}
+
 #[cfg(test)]
 mod tests {
     use erp_core::ids::{SalesOrderId, SupplierAccountId};
@@ -264,6 +301,8 @@ mod tests {
             sales_order_id: SalesOrderId::new(sales_order_id),
             supplier_id: SupplierAccountId::new(supplier_id),
             purchase_type: PurchaseType::Physical,
+            fulfillment_responsibility:
+                erp_procurement::entity::purchase_order::FulfillmentResponsibility::Warehouse,
             payment_term_code: "NET-30".to_string(),
             created_by: "buyer-1".to_string(),
             owner_user_id: owner.map(str::to_string),
@@ -365,6 +404,8 @@ mod isolation_tests {
     fn list_filter() -> PurchaseOrderFilter {
         PurchaseOrderFilter {
             purchase_no: None,
+            keyword_sales_order_ids: Vec::new(),
+            keyword_supplier_ids: Vec::new(),
             sales_order_id: None,
             supplier_id: None,
             status: None,

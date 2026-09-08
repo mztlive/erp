@@ -59,6 +59,45 @@ pub async fn load_document_approval(
     Ok(view)
 }
 
+/// 加载采购变更详情的绑定流程、当前实例和有界历史。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `id` - 采购变更单主键
+/// * `binding` - 创建时冻结的审批定义绑定
+/// * `status` - 采购变更业务状态
+///
+/// # 返回
+/// 返回审批事实；未提交时实例为空，单据动作仍由变更状态决定。
+///
+/// # 错误
+/// 主体非法、绑定定义缺失或仓储读取失败时返回错误。
+pub(super) async fn load_change_document_approval(
+    db: &Database,
+    id: &str,
+    binding: Option<&ApprovalDefinitionBinding>,
+    status: erp_procurement::entity::purchase_order::PurchaseChangeOrderStatus,
+) -> Result<DocumentApprovalView> {
+    let mut view = super::approval::change::document_approval_view(binding, None, status);
+    if let Some(binding) = binding {
+        let graph = load_bound_definition_graph(db, binding).await?;
+        view.definition = Some(super::approval::order::definition_view_from_binding(
+            binding,
+            Some(&graph),
+        ));
+    }
+    let subject = erp_workflow::entity::approval_integration::subject_ref_for(
+        erp_workflow::entity::document_registry::DocumentType::PurchaseChangeOrder,
+        id,
+    )
+    .map_err(|error| crate::Error::ValidationError(error.to_string()))?;
+    let runtime = load_runtime(db, &subject).await?;
+    view.instance = runtime.instance;
+    view.recent_history = runtime.recent_history;
+    view.history_page = runtime.history_page;
+    Ok(view)
+}
+
 /// 已投影的运行事实。
 struct LoadedRuntime {
     instance: Option<DocumentApprovalInstanceView>,

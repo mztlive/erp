@@ -20,7 +20,7 @@
  *    进项红票在供应商往来发票行；均不出现审批实例。
  * 8. 销售单主状态页文案可能是「审核中」而非文档「审批中」；开票完成态是「已开齐」不是「已完成」；
  *    退款入账徽标是「已过账」，按钮不用「过账」。
- * 9. 验收确认层标题是「确认验收？」、确认按钮「确认验收」，不是旧文案「确认客户验收」。
+ * 9. 验收确认层使用当前「确认客户验收」入口。
  * 10. 供给分配确认同一事务创建并立即提交采购单，不得留下未提交草稿。
  */
 import { existsSync } from "node:fs";
@@ -47,7 +47,7 @@ const FLOW_TIMEOUT = 15 * 60 * 1000;
 const SKU_KEYWORD = "龙井";
 const SKU_NAME = "狮峰明前龙井礼盒";
 const SUPPLIER_SHORT = "狮峰茶叶";
-const DIRECT_OPTION = `${SUPPLIER_SHORT} · 供应商直发`;
+const DIRECT_OPTION = "杭州狮峰茶叶有限公司 · 供应商直发";
 const SALES_QTY = "2";
 const REJECT_QTY = "1";
 const FACT_ONLY_NOTICE =
@@ -164,7 +164,7 @@ async function expectToast(page: Page, title: string | RegExp) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first();
         if (!(await dismiss.count())) break;
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
@@ -626,7 +626,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             .first();
         await expect(sourcingOption).toBeVisible({ timeout: UI_TIMEOUT });
         await chooseOption(page, sourcingOption, DIRECT_OPTION);
-        await expect(page.getByPlaceholder("选择目标仓")).toHaveCount(0);
+        await expect(page.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0);
         await page.locator("#procurement-orders-create-preview").click();
         const previewDialog = page.getByRole("dialog", { name: "预览供给分配" });
         await expect(previewDialog).toBeVisible({ timeout: UI_TIMEOUT });
@@ -670,7 +670,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(poTable.getByText("供应商直发")).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(poTable.getByText("草稿")).toHaveCount(0);
         purchaseOrderNo = (
-            (await poTable.getByRole("link", { name: /打开采购单/ }).textContent()) ?? ""
+            (await poTable.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
         ).trim();
         expect(purchaseOrderNo.length).toBeGreaterThan(0);
 
@@ -705,8 +705,11 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             }
         }
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
+        const shipped = page.waitForResponse(response => response.request().method() === "POST" && /\/deliveries\/[^/]+\/post$/.test(response.url()));
         await confirmFormal(page, "确认发货？", "确认发货");
-        await expect(page.getByText("已发货").first()).toBeVisible({ timeout: UI_TIMEOUT });
+        const shippedResponse = await shipped;
+        expect(shippedResponse.ok()).toBeTruthy();
+        expect((await shippedResponse.json()).data.status).toBe("SHIPPED");
 
         // 11) 销售登记部分拒收（1 件拒收 + 1 件通过，整件拒收不能记入验收）
         page = await switchTo("xiaoshou");
@@ -726,9 +729,9 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(acceptanceDialog.getByText(FACT_ONLY_NOTICE)).toBeVisible();
         await expect(acceptanceDialog.getByRole("button", { name: /创建退货|另开退货/ })).toHaveCount(0);
         await acceptanceDialog.locator("#sales-orders-acceptance-register-submit").click();
-        const acceptConfirm = page.getByRole("alertdialog").filter({ hasText: /确认验收/ });
+        const acceptConfirm = page.getByRole("alertdialog", { name: "确认客户验收", exact: true });
         await expect(acceptConfirm).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(acceptConfirm.getByText(/拒收/)).toBeVisible();
+        await expect(acceptConfirm).toContainText("拒收");
         const acceptConfirmBtn = acceptConfirm.locator("#sales-orders-acceptance-confirm-confirm");
         if (await acceptConfirmBtn.count()) {
             await acceptConfirmBtn.click();
@@ -748,7 +751,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: customerName })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible();
+        await expect(orderTitleRow(page, customerName).getByText("履约中", { exact: true })).toBeVisible();
         await expect(orderTitleRow(page, customerName).getByText("已关闭")).toHaveCount(0);
         await expect(page.getByText("改单中")).toHaveCount(0);
         await assertNoReturnCreateUi(page);
@@ -759,10 +762,10 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
 
         page = await switchTo("caigou");
         await page.goto("/procurement/orders");
-        await expect(page.getByRole("link", { name: /打开采购单/ }).first()).toBeVisible({
+        await expect(page.getByRole("button", { name: /打开采购单/ }).first()).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await page.getByRole("link", { name: /打开采购单/ }).first().click();
+        await page.getByRole("button", { name: /打开采购单/ }).first().click();
         await expect(page.getByRole("tab", { name: "变更与异常" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
@@ -822,11 +825,15 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: /提交回款|确认提交回款/ })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        const receiptCommitted = page.waitForResponse(response =>
+            response.request().method() === "POST" && response.url().endsWith("/admin/customer-receipts/commit"),
+        );
         await page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click();
-        await expect(page.getByRole("heading", { name: "回款已提交审批" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        receiptNo = await factValue(page, "回款单号");
+        const receiptResponse = await receiptCommitted;
+        expect(receiptResponse.ok()).toBeTruthy();
+        const receiptResult = (await receiptResponse.json()).data;
+        expect(receiptResult.status).toBe("IN_APPROVAL");
+        receiptNo = receiptResult.receipt_no;
         expect(receiptNo.length).toBeGreaterThan(2);
 
         page = await switchTo("caiwu");
@@ -860,10 +867,11 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        const committed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/invoices/commit"), { timeout: UI_TIMEOUT });
         await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click();
-        await expect(page.getByRole("heading", { name: "销项发票已登记并分配" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
+        expect((await committed).ok()).toBeTruthy();
+        await page.goto(`/finance/customer-accounts?view=sales_invoice&q=${encodeURIComponent(salesInvoiceNo)}`);
+        await expect(page.getByRole("row").filter({ hasText: salesInvoiceNo })).toContainText("已登记", { timeout: UI_TIMEOUT });
         await expect(page.getByRole("button", { name: /选择流程|通过|驳回/ })).toHaveCount(0);
 
         // 15) 出纳按原回款发起客户退款 → 销售领导 → 财务总监
@@ -875,7 +883,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await page.locator("#customer-receivables-view-receipt").click();
         await page.locator("#customer-receivables-toolbar-search").fill(receiptNo);
         await page.locator("#customer-receivables-toolbar-search").press("Enter");
-        const receiptRow = page.getByRole("row", { name: new RegExp(escapeRe(receiptNo)) });
+        const receiptRow = page.getByRole("row").filter({ hasText: receiptNo });
         await expect(receiptRow).toBeVisible({ timeout: UI_TIMEOUT });
         await receiptRow.getByRole("button", { name: "预览" }).click();
         await expect(page.getByRole("heading", { name: receiptNo })).toBeVisible({
@@ -891,11 +899,13 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: /提交退款|确认提交退款/ })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        const refundCommitted = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/customer-refunds/commit"));
         await page.locator("#customer-receivables-refund-submit-confirm-dialog-confirm").click();
-        await expect(page.getByRole("heading", { name: "退款已提交审批" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        customerRefundNo = await factValue(page, "退款单号");
+        const refundResponse = await refundCommitted;
+        expect(refundResponse.ok()).toBeTruthy();
+        const refundResult = (await refundResponse.json()).data;
+        expect(refundResult.status).toBe("IN_APPROVAL");
+        customerRefundNo = refundResult.refund_no;
         expect(customerRefundNo.length).toBeGreaterThan(2);
 
         page = await switchTo("lisiyong");
@@ -911,14 +921,14 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await page.locator("#customer-receivables-view-receipt").click();
         await page.locator("#customer-receivables-toolbar-search").fill(receiptNo);
         await page.locator("#customer-receivables-toolbar-search").press("Enter");
-        await expect(page.getByRole("row", { name: new RegExp(escapeRe(receiptNo)) })).toBeVisible({
+        await expect(page.getByRole("row").filter({ hasText: receiptNo })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(
-            page.getByRole("row", { name: new RegExp(escapeRe(receiptNo)) }).getByText("已过账"),
+            page.getByRole("row").filter({ hasText: receiptNo }).getByText("已过账", { exact: true }),
         ).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(
-            page.getByRole("row", { name: new RegExp(escapeRe(receiptNo)) }).getByText("已冲正"),
+            page.getByRole("row").filter({ hasText: receiptNo }).getByText("已冲正"),
         ).toHaveCount(0);
 
         // 16) 开票人登记销项红票：原蓝票保留
@@ -930,7 +940,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await page.locator("#customer-receivables-view-sales_invoice").click();
         await page.locator("#customer-receivables-toolbar-search").fill(salesInvoiceNo);
         await page.locator("#customer-receivables-toolbar-search").press("Enter");
-        const invoiceRow = page.getByRole("row", { name: new RegExp(escapeRe(salesInvoiceNo)) });
+        const invoiceRow = page.getByRole("row").filter({ hasText: salesInvoiceNo });
         await expect(invoiceRow).toBeVisible({ timeout: UI_TIMEOUT });
         await invoiceRow.getByRole("button", { name: "预览" }).click();
         await page.locator("#customer-receivables-preview-invoice-red").click();
@@ -945,17 +955,23 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             }
         }
         await redDialog.locator("#customer-receivables-reverse-reason").fill("客户拒收，开具销项红票");
+        const salesRedIssued = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/red-issue"));
         await redDialog.locator("#customer-receivables-reverse-confirm").click();
+        const salesRedResponse = await salesRedIssued;
+        expect(salesRedResponse.ok()).toBeTruthy();
+        const salesRedResult = (await salesRedResponse.json()).data;
+        expect(salesRedResult.invoice_kind).toBe("red");
+        expect(salesRedResult.unallocated_amount).toMatch(/^0(?:\.0+)?$/);
         await expect(page.getByText(/反向记录已追加|已登记独立红票/).first()).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByRole("button", { name: /选择流程|通过|驳回/ })).toHaveCount(0);
         await page.goto("/finance/customer-accounts?view=sales_invoice");
         await page.locator("#customer-receivables-view-sales_invoice").click();
-        await page.locator("#customer-receivables-toolbar-search").fill(salesInvoiceNo);
+        await page.locator("#customer-receivables-toolbar-search").fill("");
         await page.locator("#customer-receivables-toolbar-search").press("Enter");
-        await expect(page.getByText("蓝票").first()).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(page.getByText("红票").first()).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.getByRole("row").filter({ hasText: salesInvoiceNo }).getByText("蓝票")).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.getByRole("row").filter({ hasText: salesRedResult.invoice_no })).toContainText("红票", { timeout: UI_TIMEOUT });
 
         // 17) 出纳完成供应商付款（若履约前未付完），形成原付款事实
         page = await switchTo("fukuan");
@@ -988,24 +1004,22 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         const poolSelect = page
             .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-select"]')
             .first();
-        if (await poolSelect.count()) {
-            if (!(await poolSelect.isChecked())) {
-                await page.locator("#supplier-payables-allocation-pool-select-all").click();
-            }
+        await expect(poolSelect).toBeVisible({ timeout: UI_TIMEOUT });
+        if (!(await poolSelect.isChecked())) {
+            await page.locator("#supplier-payables-allocation-pool-select-all").click();
         }
-        const fillAll = page.locator("#supplier-payables-allocation-pool-fill-all");
-        if (await fillAll.count()) {
-            await fillAll.click();
-        }
+        await page.locator("#supplier-payables-allocation-pool-fill-all").click();
         const allocatedInput = page
             .locator('[id^="supplier-payables-allocation-pool-row-"][id$="-amount"]')
             .first();
-        if (await allocatedInput.count()) {
-            const allocated = await allocatedInput.inputValue();
-            if (allocated) {
-                await page.locator("#supplier-payables-allocation-form-gross-amount").fill(allocated);
-            }
-        }
+        await expect(allocatedInput).toHaveValue(/.+/, { timeout: UI_TIMEOUT });
+        const allocated = await allocatedInput.inputValue();
+        const grossCents = Math.round(Number(allocated) * 100);
+        expect(grossCents).toBeGreaterThan(0);
+        const netCents = Math.round(grossCents / 1.13);
+        await page.locator("#supplier-payables-allocation-form-gross-amount").fill(allocated);
+        await page.locator("#supplier-payables-allocation-form-net-amount").fill((netCents / 100).toFixed(2));
+        await page.locator("#supplier-payables-allocation-form-tax-amount").fill(((grossCents - netCents) / 100).toFixed(2));
         await page.locator("#supplier-payables-allocation-form-invoice-no").fill(purchaseInvoiceNo);
         await page.locator("#supplier-payables-allocation-form-submit").click();
         const invoiceConfirm = page.getByRole("alertdialog").filter({
@@ -1035,11 +1049,13 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: /提交退款|确认提交退款/ })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        const supplierRefundCommitted = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/supplier-refunds/commit"));
         await page.locator("#supplier-payables-refund-submit-confirm-confirm").click();
-        await expect(page.getByRole("heading", { name: "退款已提交审批" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        supplierRefundNo = await factValue(page, "退款单号");
+        const supplierRefundResponse = await supplierRefundCommitted;
+        expect(supplierRefundResponse.ok()).toBeTruthy();
+        const supplierRefundResult = (await supplierRefundResponse.json()).data;
+        expect(supplierRefundResult.status).toBe("IN_APPROVAL");
+        supplierRefundNo = supplierRefundResult.refund_no;
         expect(supplierRefundNo.length).toBeGreaterThan(2);
 
         page = await switchTo("caigou");
@@ -1050,16 +1066,18 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await openWorkspaceTask(page, "供应商退款审批", supplierRefundNo || SUPPLIER_SHORT, "approval");
         await approveCurrentDocument(page);
 
-        // 20) 开票人登记进项红票；若开票人无 W12 红票按钮则记录为代码缺口（页面仍不得出现审批）
+        // 20) 开票人必须完成进项红票登记，页面不得出现审批动作
         page = await switchTo("kaipiao");
         await page.goto("/finance/supplier-accounts?view=purchase_invoice");
         const supplierHeading = page.getByRole("heading", { name: "供应商往来" });
-        if (await supplierHeading.isVisible({ timeout: UI_TIMEOUT }).catch(() => false)) {
+        await expect(supplierHeading).toBeVisible({ timeout: UI_TIMEOUT });
+        {
             await page.locator("#supplier-payables-view-tabs-trigger-purchase-invoice").click();
             await page.locator("#supplier-payables-toolbar-search").fill(purchaseInvoiceNo);
             await page.locator("#supplier-payables-toolbar-search").press("Enter");
             const purchaseRed = page.getByRole("button", { name: "红票" }).first();
-            if (await purchaseRed.isVisible().catch(() => false)) {
+            await expect(purchaseRed).toBeVisible({ timeout: UI_TIMEOUT });
+            {
                 await purchaseRed.click();
                 const purchaseRedDlg = page.getByRole("dialog", { name: "进项红票" });
                 await expect(purchaseRedDlg).toBeVisible({ timeout: UI_TIMEOUT });
@@ -1083,12 +1101,12 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByRole("heading", { name: customerName })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible();
+        await expect(orderTitleRow(page, customerName).getByText("履约中", { exact: true })).toBeVisible();
         await expect(page.getByText("改单中")).toHaveCount(0);
         await assertNoReturnCreateUi(page);
-        await expect(page.getByText("蓝票").or(page.getByText(salesInvoiceNo)).first()).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
+        await page.getByRole("tab", { name: /^票款/ }).click();
+        // 全额红冲后销售单仅展示仍有效的分配；原蓝票和红票已在财务台账核验。
+        await expect(page.getByText("还没有核到本单的销项发票。")).toBeVisible({ timeout: UI_TIMEOUT });
         await page.goto("/workspace");
         await assertNoReturnApprovalTasks(page);
     } finally {

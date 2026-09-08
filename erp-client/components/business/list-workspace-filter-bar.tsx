@@ -162,6 +162,7 @@ export function ListWorkspaceFilterBar({
             aria-label={formAriaLabel}
             onSubmit={(event) => {
                 event.preventDefault()
+                event.stopPropagation()
                 onSubmit()
             }}
         >

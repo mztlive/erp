@@ -71,7 +71,13 @@ impl ReturnsReadService {
             occurred_at: refund.occurred_at,
             version: refund.base.version,
             created_at: refund.base.created_at,
-            approval: supplier_refund_approval_view(binding.as_ref(), None, refund.status),
+            approval: super::approval::load_runtime(
+                &self.db,
+                erp_workflow::entity::document_registry::DocumentType::SupplierRefund,
+                &id,
+                supplier_refund_approval_view(binding.as_ref(), None, refund.status),
+            )
+            .await?,
         })
     }
 }

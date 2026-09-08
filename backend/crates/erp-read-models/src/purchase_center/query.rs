@@ -45,7 +45,16 @@ impl PurchaseOrderReadService {
     ) -> Result<PageView<PurchaseOrderListItemView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let (keyword_sales_order_ids, keyword_supplier_ids) =
+            super::repository::list_facts::keyword_reference_ids(
+                &self.db,
+                query.q.as_deref(),
+                &mut NoTransaction,
+            )
+            .await?;
         let filter = PurchaseOrderFilter {
+            keyword_sales_order_ids,
+            keyword_supplier_ids,
             purchase_no: query.q,
             sales_order_id: query.sales_order_id.map(erp_core::ids::SalesOrderId::new),
             supplier_id: query.supplier_id.map(erp_core::ids::SupplierAccountId::new),
@@ -89,6 +98,7 @@ impl PurchaseOrderReadService {
                     supplier_id: row.supplier_id.to_string(),
                     supplier_name,
                     purchase_type: row.purchase_type,
+                    fulfillment_responsibility: row.fulfillment_responsibility,
                     payment_term_code: row.payment_term_code.clone(),
                     owner_name,
                     owner_user_id,

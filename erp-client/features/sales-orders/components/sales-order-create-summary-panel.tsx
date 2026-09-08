@@ -27,7 +27,7 @@ export function SalesOrderCreateSummaryPanel({
                     values.nature === "card_voucher" ? "卡券" : "实物/服务"
                 const nextStep =
                     values.nature === "card_voucher"
-                        ? "提交后进入销售领导 → 运营两级审批"
+                        ? "提交后按已绑定的审批流程办理"
                         : "提交后进入审批"
                 return (
                     <div className={cn(surfacePanelClassName, "space-y-4")}>

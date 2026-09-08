@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vitest"
+import { createPortal } from "react-dom"
 
 import {
     ListSearchField,
@@ -8,6 +9,28 @@ import {
 } from "@/components/business/list-workspace"
 
 afterEach(cleanup)
+
+test("弹窗中的查询不会冒泡提交外层业务表单", () => {
+    const search = vi.fn()
+    const submitDocument = vi.fn()
+    render(
+        <form onSubmit={submitDocument}>
+            {createPortal(
+                <ListWorkspaceFilterBar
+                    idPrefix="picker-search"
+                    formAriaLabel="选品查询"
+                    onSubmit={search}
+                    resultStatus="共 0 条"
+                    search={<input aria-label="商品" />}
+                />,
+                document.body,
+            )}
+        </form>,
+    )
+    fireEvent.submit(screen.getByRole("form", { name: "选品查询" }))
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(submitDocument).not.toHaveBeenCalled()
+})
 
 test("主行提供查询和更多筛选，常用条件常驻，更多面板与已生效标签按口径展示", () => {
     const onSubmit = vi.fn()

@@ -236,7 +236,7 @@ async function dismissToasts(page: Page): Promise<void> {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first()
         if ((await dismiss.count()) === 0) break
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
@@ -680,7 +680,7 @@ async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) 
         if (await confirm.isVisible().catch(() => false)) await confirm.click()
     }
     await expect(
-        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限|操作未成功/),
+        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/),
     ).toBeVisible({ timeout: LONG })
 }
 

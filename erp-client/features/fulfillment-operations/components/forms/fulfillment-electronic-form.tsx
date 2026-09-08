@@ -2,6 +2,7 @@
 
 import { OptionCombobox } from "@/components/business"
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
+import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type {
@@ -40,7 +41,7 @@ export function FulfillmentElectronicForm({
         <section className="space-y-3" aria-label="电子交付表单">
             <h3 className="text-sm font-semibold">电子交付</h3>
             <p className="text-xs text-muted-foreground">
-                卡号卡密只显示打码内容，不会存进系统。填了「失败」就不能再改。
+                填写接收人或交付渠道并上传交付凭证，请勿填写卡号卡密。确认后通过冲正更正。
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -50,8 +51,13 @@ export function FulfillmentElectronicForm({
                     <Input
                         id="fulfillment-operations-electronic-form-recipient"
                         value={draft.recipientMasked}
-                        disabled
-                        readOnly
+                        disabled={disabled}
+                        onChange={(event) =>
+                            onChange({
+                                ...draft,
+                                recipientMasked: event.target.value,
+                            })
+                        }
                     />
                 </div>
                 <div className="space-y-1.5">
@@ -90,6 +96,23 @@ export function FulfillmentElectronicForm({
                     />
                 </div>
             </div>
+            <FileUpload
+                idPrefix="fulfillment-operations-electronic-form-evidence"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                multiple={false}
+                disabled={disabled}
+                density="compact"
+                label="上传交付凭证"
+                description="上传已脱敏的交付记录图片，支持 JPG、PNG、WebP"
+                previewSelectedImage
+                selectedImageFile={draft.evidenceFile ?? null}
+                onFilesSelected={(files) =>
+                    onChange({ ...draft, evidenceFile: files[0] })
+                }
+                onPreviewRemove={() =>
+                    onChange({ ...draft, evidenceFile: undefined })
+                }
+            />
             {draft.lines.map((line, i) => {
                 const src = operation.lines.find(
                     (l) => l.salesOrderLineId === line.salesOrderLineId,

@@ -1,26 +1,10 @@
 /**
- * 流程: [flow-19] 生效后作废释放库存预占
- * 文档: docs/erp-phase-1.md §7.4（预占只能通过变更、作废、采购退货或库存调整释放）
- *       + §10.2（已出库事实不回退；本 spec 停在仓发出库前）
- *
- * 账号: admin（采购责任默认调度人） / cangchu（盘盈、仓发草稿核对） / caiwu（库存调整审批）
- *       xiaoshou（客户/合同/销售单/作废） / caigou（采购确认、供给分配）
- *
- * 文档-代码差异（以代码为准）:
- * 1. 文档允许「销售单作废」释放现有库存预占；销售单状态机只允许 DRAFT→VOIDED，
- *    EFFECTIVE 为终态，POST /admin/sales-orders/{id}/void 对已生效单会冲突。
- *    详情页没有「作废」按钮（与 flow-05 一致），本流程沿用该 HTTP 命令作废。
- * 2. 库存台账「明确不提供释放预占入口」；预占释放目前只在盘亏/损坏过账与仓发消耗。
- *    销售变更生效、销售单作废均未写预占释放。
- * 3. 发货单状态机只有 草稿→已发货（→已签收/已冲正），没有作废/关闭草稿；
- *    文档「仓发草稿关闭或作废」在代码里没有对应迁移。
- * 4. 库存调整 POSTED 徽标是「已过账」；盘盈/仓发按钮分别是「提交审批/确认提交」
- *    「确认发货」，不用「过账」匹配按钮。
- * 5. 盘盈必须挂已有 stock_balance（「请先建立期初或入库」）。空台账只插入数量 0
- *    的维度行，可用量仍由仓储盘盈 + 财务审批产生。
- * 6. 工作台审批类型文案按单据细分：销售单审批 / 库存调整单审批；供给分配为「待供给分配」。
- * 7. 销售单 related.fulfillments 前端写死 0，不能用「交付 N 笔」判断仓发草稿；
- *    仓发草稿以 W01「履约处理」+ GET /admin/deliveries 为准。
+ * 流程: [flow-19] 已生效销售单禁止直接作废。
+ * 验收口径: 按当前销售单状态机，只有草稿允许转为作废；已生效单请求必须返回
+ * HTTP 422 / BUSINESS_RULE_BLOCKED，销售单、库存预占及仓发草稿必须保持不变。
+ * 场景: 仓储盘盈、财务审批后，销售单全部使用现有库存供给；全程不得生成采购单。
+ * 操作: 通过 ERP 页面建立业务事实；详情页无作废按钮，使用 HTTP 验证拒绝契约。
+ * 仓发任务必须继续可用，但本用例不得确认发货或消耗库存预占。
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -59,9 +43,6 @@ const CONTRACT_PDF = path.resolve(process.cwd(), "fixtures/sample-contract.pdf")
 const MINIMAL_PDF = Buffer.from(
     "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000068 00000 n \n0000000125 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n210\n%%EOF\n",
 );
-
-const VOID_HTTP_NOTE =
-    "销售单详情无「作废」按钮；已生效作废走 POST /admin/sales-orders/{id}/void（文档 §7.4，代码目前只允许草稿）";
 
 type LoginName = "xiaoshou" | "caigou" | "cangchu" | "caiwu" | "admin";
 type Session = { context: BrowserContext; page: Page };
@@ -164,7 +145,7 @@ async function expectToast(page: Page, title: string | RegExp) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first();
         if (!(await dismiss.count())) break;
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
@@ -418,12 +399,11 @@ function balanceRow(page: Page): Locator {
         .filter({ hasText: new RegExp(`${WAREHOUSE_NAME}|${WAREHOUSE_CODE}`) });
 }
 
-function reservationRow(page: Page, salesOrderNo: string): Locator {
+function reservationRow(page: Page, salesOrderLineId: string): Locator {
     return page
         .locator("#inventory-ledger-reservation-table")
         .getByRole("row")
-        .filter({ hasText: SKU_CODE })
-        .filter({ hasText: salesOrderNo });
+        .filter({ hasText: salesOrderLineId });
 }
 
 async function searchInventory(page: Page, query: string) {
@@ -450,13 +430,15 @@ async function assertBalanceNumbers(
     await expect(row).toContainText(expected.available);
 }
 
+const apiTokens = new Map<LoginName, Promise<string>>();
+
 async function tokenOf(login: LoginName): Promise<string> {
-    const cred = accountCred(login);
-    try {
-        return await apiLogin(cred.account as never);
-    } catch {
-        return await apiLogin(login as never);
+    let token = apiTokens.get(login);
+    if (!token) {
+        token = apiLogin(accountCred(login));
+        apiTokens.set(login, token);
     }
+    return token;
 }
 
 async function listBalances(token: string): Promise<StockBalance[]> {
@@ -597,9 +579,9 @@ async function fetchSalesOrder(
 }
 
 /**
- * 详情页没有作废按钮。沿用 flow-05 的 HTTP 命令；文档要求对已生效单释放预占。
+ * 详情页不得暴露作废入口，直接调用命令同样必须拒绝且不改变单据。
  */
-async function voidEffectiveSalesOrder(page: Page, salesOrderId: string) {
+async function assertEffectiveVoidRejected(page: Page, salesOrderId: string) {
     await expect(page.getByRole("button", { name: /作废/ })).toHaveCount(0);
     const detail = await fetchSalesOrder(page, salesOrderId);
     const version = Number(detail.version ?? 1);
@@ -615,19 +597,21 @@ async function voidEffectiveSalesOrder(page: Page, salesOrderId: string) {
         },
     );
     const bodyText = await response.text();
-    expect(
-        response.ok(),
-        `${VOID_HTTP_NOTE}; HTTP ${response.status()} ${bodyText}`,
-    ).toBeTruthy();
+    expect(response.status(), bodyText).toBe(422);
+    const body = JSON.parse(bodyText);
+    expect(body.code).toBe("BUSINESS_RULE_BLOCKED");
+    expect(body.errorMessage).toContain("Effective → Voided");
+    expect(body.success).toBe(false);
+    expect(await fetchSalesOrder(page, salesOrderId)).toEqual(detail);
     await page.reload();
 }
 
-test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓发草稿不再履约、零采购单", async ({
+test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持、零采购单", async ({
     browser,
 }) => {
     test.setTimeout(FLOW_TIMEOUT);
     const stamp = Date.now().toString(36).toUpperCase();
-    const customerName = `E2E作废释放客户${stamp}`;
+    const customerName = `E2E拒绝作废客户${stamp}`;
     const contractNo = `HT-E2E-VOID-${stamp}`;
     const dueDate = plusDaysIso(21);
     let session: Session | undefined;
@@ -665,7 +649,7 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
             .fill("flow-19 作废释放预占盘盈");
         await adjustDialog.locator("#inventory-adjustment-dialog-submit").click();
         await confirmFormal(page, /确认提交库存调整|提交库存调整/, "确认提交");
-        await expectToast(page, "调整已提交审批");
+        await expect(page.getByRole("heading", { name: "调整已提交审批", exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(adjustDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
         // 2) caiwu 审批库存调整，余额才增加
@@ -703,7 +687,7 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
         await customerDialog.locator("#customers-form-submit").click();
         await expectToast(page, "客户已创建");
         await expect(customerDialog).toBeHidden({ timeout: UI_TIMEOUT });
-        await expect(page.getByText(customerName).first()).toBeVisible({
+        await expect(page.getByRole("link", { name: `作废释放${stamp}`, exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
 
@@ -880,6 +864,9 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
         await expect(page.getByText("改单中")).toHaveCount(0);
         await expect(orderTitleRow(page, customerName).getByText("已关闭")).toHaveCount(0);
 
+        const effectiveOrder = await fetchSalesOrder(page, salesOrderId);
+        const effectiveLines = effectiveOrder.lines as Array<{ id: string }>;
+        expect(effectiveLines).toHaveLength(1);
         page = await switchTo("cangchu");
         await assertBalanceNumbers(page, {
             onHand: GAIN_QTY,
@@ -888,7 +875,11 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
         });
         await expect(balanceRow(page)).toContainText("有预占");
         await page.locator("#inventory-ledger-view-reservation").click();
-        const activeReservation = reservationRow(page, salesOrderNo);
+        const reservationFacts = await listReservations(await tokenOf("cangchu"));
+        expect(reservationFacts).toHaveLength(1);
+        const reservedLineId = reservationFacts[0].sales_order_line_id;
+        expect(reservedLineId).toBe(effectiveLines[0].id);
+        const activeReservation = reservationRow(page, reservedLineId!);
         await expect(activeReservation).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(activeReservation).toContainText("有效");
         await expect(activeReservation).toContainText("已释放 0");
@@ -916,36 +907,34 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
         ).toBeVisible({ timeout: UI_TIMEOUT });
         // 本 spec 停在出库前：不点确认发货
 
-        // 7) xiaoshou 作废已生效销售单（无 UI 按钮，走 HTTP）
+        // 7) 已生效单直接作废必须被拒绝，销售单保持不变
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
         await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await voidEffectiveSalesOrder(page, salesOrderId);
+        await assertEffectiveVoidRejected(page, salesOrderId);
         await expect(page.getByRole("heading", { name: customerName })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(orderTitleRow(page, customerName).getByText("已作废")).toBeVisible({
+        await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(page.getByText("本单已作废，不再进入履约或结案。")).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
+        await expect(page.getByText("本单已作废，不再进入履约或结案。")).toHaveCount(0);
         await expect(orderTitleRow(page, customerName).getByText("已关闭")).toHaveCount(0);
-        await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled();
+        await expect(page.locator("#sales-orders-detail-start-change")).toBeEnabled();
         await expect(page.getByText("改单中")).toHaveCount(0);
         await expect(page.getByRole("button", { name: /作废/ })).toHaveCount(0);
         await page.getByRole("tab", { name: /采购/ }).click();
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
             timeout: UI_TIMEOUT,
         });
-        const voided = await fetchSalesOrder(page, salesOrderId);
+        const unchanged = await fetchSalesOrder(page, salesOrderId);
         expect(
-            String(voided.commercial_status ?? voided.commercialStatus ?? "").toUpperCase(),
-        ).toBe("VOIDED");
+            String(unchanged.commercial_status ?? unchanged.commercialStatus ?? "").toUpperCase(),
+        ).toBe("EFFECTIVE");
 
-        // 8) 预占释放、available 恢复、账面现存不变（未出库，事实不回退）
+        // 8) 拒绝请求不得释放或消耗预占，也不得改变库存余额
         page = await switchTo("cangchu");
         await expect
             .poll(async () => {
@@ -960,48 +949,43 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
                     ? `${row.on_hand_quantity}/${row.reserved_quantity}/${row.available_quantity}`
                     : "";
             }, { timeout: UI_TIMEOUT })
-            .toBe(`${GAIN_QTY}/0/${GAIN_QTY}`);
+            .toBe(`${GAIN_QTY}/${SALE_QTY}/${AFTER_RESERVE_AVAILABLE}`);
         await assertBalanceNumbers(page, {
             onHand: GAIN_QTY,
-            reserved: "0",
-            available: GAIN_QTY,
+            reserved: SALE_QTY,
+            available: AFTER_RESERVE_AVAILABLE,
         });
         await page.locator("#inventory-ledger-view-reservation").click();
-        const released = reservationRow(page, salesOrderNo);
-        await expect(released).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(released).toContainText("已释放");
-        await expect(released).not.toContainText("有效");
-        await expect(released).not.toContainText("已消耗");
+        const retained = reservationRow(page, reservedLineId!);
+        await expect(retained).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(retained).toContainText("已释放 0");
+        await expect(retained).toContainText("有效");
+        await expect(retained).toContainText("已消耗 0");
         await page.locator("#inventory-ledger-view-movement").click();
         await expect(page.getByText("仓库发出")).toHaveCount(0);
         await expect(page.getByText("仓发出库")).toHaveCount(0);
         await expect(page.getByText("采购入库")).toHaveCount(0);
 
         const reservations = await listReservations(await tokenOf("cangchu"));
-        expect(
-            reservations.some((row) => String(row.status).toUpperCase() === "RELEASED"),
-        ).toBe(true);
-        expect(
-            reservations.some((row) => String(row.status).toUpperCase() === "ACTIVE"),
-        ).toBe(false);
+        expect(reservations).toEqual(reservationFacts);
+        expect(reservations.every((row) => String(row.status).toUpperCase() === "ACTIVE"))
+            .toBe(true);
 
-        // 9) 仓发草稿关闭或作废，不得再履约；已出库事实不存在故无需回退
+        // 9) 原仓发草稿及任务必须保留，仍可办理发货，但本用例不执行发货
         const deliveriesAfterVoid = await listDeliveries(
             await tokenOf("cangchu"),
             salesOrderId,
         );
-        expect(
-            deliveriesAfterVoid.some((row) => row.status === "SHIPPED"),
-            "出库前作废不得出现已发货事实",
-        ).toBe(false);
-        expect(
-            deliveriesAfterVoid.filter((row) => row.status === "DRAFT"),
-            "仓发草稿应关闭或作废，不得仍为可确认草稿",
-        ).toHaveLength(0);
-        await expectNoWorkspaceTask(page, "履约处理", customerName, "fulfillment");
-        await expectNoWorkspaceTask(page, "履约处理", salesOrderNo, "fulfillment");
+        expect(deliveriesAfterVoid).toEqual(deliveriesBeforeVoid);
+        expect(deliveriesAfterVoid.every((row) => row.status === "DRAFT")).toBe(true);
+        await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+        await expect(page.getByLabel("公司仓发表单")).toBeVisible({ timeout: UI_TIMEOUT });
+        await chooseOption(page, page.getByLabel("承运方"), "顺丰速运");
+        await page.getByLabel("物流单号").fill(`SF19-${stamp}`);
+        await expect(page.locator("#fulfillment-operations-work-surface-confirm"))
+            .toBeEnabled({ timeout: UI_TIMEOUT });
 
-        // 10) 全程不得建采购单、不得关闭、不得开变更单、作废本身不得出现审批实例
+        // 10) 全程不得建采购单、不得关闭、不得开变更单、被拒绝的作废请求不得出现审批实例
         page = await switchTo("caigou");
         await page.goto("/procurement/orders");
         await expect(page.getByText("暂无采购单")).toBeVisible({ timeout: UI_TIMEOUT });
@@ -1014,11 +998,11 @@ test("flow-19 现有库存预占后作废已生效销售单：预占释放、仓
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
-        await expect(orderTitleRow(page, customerName).getByText("已作废")).toBeVisible({
+        await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled();
-        await expect(page.getByText("已关闭")).toHaveCount(0);
+        await expect(page.locator("#sales-orders-detail-start-change")).toBeEnabled();
+        await expect(orderTitleRow(page, customerName).getByText("已关闭")).toHaveCount(0);
         await expect(page.getByRole("button", { name: "过账" })).toHaveCount(0);
         await expectNoWorkspaceTask(page, "客户验收登记", salesOrderNo, "fulfillment");
         await expectNoWorkspaceTask(page, "销售变更单审批", salesOrderNo, "approval");

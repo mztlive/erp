@@ -418,7 +418,7 @@ impl ElectronicDelivery {
     /// # 错误
     /// 状态无效或销售明细关联不一致时返回错误。
     pub fn acceptance_quantity(&self, sales_order_line_id: &SalesOrderLineId) -> Result<Quantity> {
-        if !self.status.is_acceptance_eligible() {
+        if !self.status.is_acceptance_eligible() || self.result == FulfillmentResult::Failure {
             return Err(Error::from("电子交付事实状态无效"));
         }
         if self.sales_order_line_id != *sales_order_line_id {
@@ -447,6 +447,35 @@ impl ElectronicDelivery {
         if let Some(evidence_attachment_id) = update.evidence_attachment_id {
             self.evidence_attachment_id = evidence_attachment_id;
         }
+        Ok(())
+    }
+
+    /// 在正式确认前原子写入交付事实；数量必须等于冻结分配。
+    ///
+    /// # 参数
+    /// * `data` - 当前身份与已加密、已校验凭证的交付事实
+    ///
+    /// # 返回
+    /// 校验全部成功后写入事实，不改变身份、数量与版本。
+    ///
+    /// # 错误
+    /// 非草稿、数量不匹配、对象或指纹非法时拒绝，保留原草稿。
+    pub fn apply_confirmation(&mut self, data: ElectronicDeliveryData) -> Result<()> {
+        self.ensure_editable()?;
+        if data.quantity != self.quantity {
+            return Err(Error::from("交付数量必须与采购销售分配数量一致"));
+        }
+        if data.evidence_attachment_id.is_none() {
+            return Err(Error::from("确认电子交付必须提供交付凭证"));
+        }
+        let validated = Self::new(ElectronicDeliveryId::new(self.base.id.clone()), data)?;
+        self.recipient_snapshot = validated.recipient_snapshot;
+        self.recipient_snapshot_fingerprint = validated.recipient_snapshot_fingerprint;
+        self.result = validated.result;
+        self.evidence_attachment_id = validated.evidence_attachment_id;
+        self.fact.occurred_at = validated.fact.occurred_at;
+        self.fact.recorded_at = validated.fact.recorded_at;
+        self.fact.recorded_by = validated.fact.recorded_by;
         Ok(())
     }
 
@@ -563,6 +592,44 @@ pub(crate) mod tests {
         assert_eq!(delivery.status, ElectronicDeliveryState::Confirmed);
         delivery.reverse().unwrap();
         assert_eq!(delivery.status, ElectronicDeliveryState::Reversed);
+    }
+
+    #[test]
+    fn failed_delivery_cannot_be_accepted() {
+        let mut facts = data();
+        facts.result = FulfillmentResult::Failure;
+        let mut record = ElectronicDelivery::new(ElectronicDeliveryId::new("failed-ed"), facts).unwrap();
+        record.confirm().unwrap();
+        assert!(record.acceptance_quantity(&record.sales_order_line_id).is_err());
+    }
+
+    #[test]
+    fn confirmation_writes_facts_and_rejects_mutation_after_confirmation() {
+        let mut record = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-confirm"), data()).unwrap();
+        let original = serde_json::to_value(&record).unwrap();
+        let mut invalid = data();
+        invalid.quantity = Quantity::from_str("3").unwrap();
+        assert!(record.apply_confirmation(invalid).is_err());
+        assert_eq!(serde_json::to_value(&record).unwrap(), original);
+        let mut invalid = data();
+        invalid.evidence_attachment_id = None;
+        assert!(record.apply_confirmation(invalid).is_err());
+        assert_eq!(serde_json::to_value(&record).unwrap(), original);
+        let mut submitted = data();
+        submitted.recipient_snapshot = "encrypted-confirmed-recipient".into();
+        submitted.occurred_at = Instant::from_unix_secs(1_700_000_020);
+        submitted.evidence_attachment_id = Some(FileAssetId::new("confirmed-evidence"));
+        record.apply_confirmation(submitted).unwrap();
+        assert_eq!(record.recipient_snapshot, "encrypted-confirmed-recipient");
+        assert_eq!(record.fact.occurred_at.unix_secs(), 1_700_000_020);
+        assert_eq!(
+            record.evidence_attachment_id.as_ref().unwrap().as_ref(),
+            "confirmed-evidence"
+        );
+        record.confirm().unwrap();
+        let confirmed = serde_json::to_value(&record).unwrap();
+        assert!(record.apply_confirmation(data()).is_err());
+        assert_eq!(serde_json::to_value(&record).unwrap(), confirmed);
     }
 
     /// 失败路径：必填空、超长、指纹格式非法、数量越界、时间倒挂。

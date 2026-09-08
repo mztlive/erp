@@ -1,5 +1,7 @@
 //! 逆向资金单据的只读审批摘要。
 mod customer_refund;
+mod runtime;
+pub(super) use runtime::load_runtime;
 mod payment_reversal;
 mod receipt_reversal;
 mod supplier_refund;
@@ -10,7 +12,6 @@ pub(super) use payment_reversal::payment_reversal_approval_view;
 pub(super) use receipt_reversal::receipt_reversal_approval_view;
 pub(super) use supplier_refund::supplier_refund_approval_view;
 /// 详情最近审批历史条数上限。完整历史走分页端点。
-#[cfg(test)]
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
 /// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。

@@ -10,9 +10,7 @@
  *    成功 toast「已从现有库存建立 N 条销售预留并生成仓发草稿，无需采购。」
  * 2. 库存调整状态徽标是「已过账」；提交按钮是「提交审批 / 确认提交」，
  *    仓发按钮是「确认发货」，不用「过账」匹配按钮。
- * 3. 盘盈不能作为第一笔流水：创建/过账库存调整都要求已有 stock_balance
- *    （「请先建立期初或入库」）。空台账文案指向「导入与期初」，但导入页空态
- *    没有新建批次入口。本流程仍走盘盈；若台账无余额行会失败（见 risks）。
+ * 3. 盘盈前准备零数量仓库/SKU 维度；实际盘盈数量必须由审批产生，不能预写可用库存。
  * 4. 工作台队列类型：flow-01 用「待供给分配」搜索；后端 WorkItemType label
  *    为「供给分配」。选任务兼容两者。
  * 5. 销售单提交后页头徽标可能是「审批中」或「审核中」；商业状态生效后为「已生效」。
@@ -30,6 +28,7 @@ import {
     type Page,
 } from "@playwright/test";
 
+import { ensureZeroBalanceDimension, singleSalesLineId } from "../helpers/inventory";
 import { ACCOUNTS } from "../helpers/accounts";
 import { loginViaUi, newLoggedInContext } from "../helpers/login";
 
@@ -108,7 +107,7 @@ async function expectToast(page: Page, title: string | RegExp) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first();
         if (!(await dismiss.count())) break;
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
@@ -379,6 +378,8 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         let page = await switchTo("admin");
         await ensureDefaultProcurementOwner(page);
 
+        await ensureZeroBalanceDimension("BJ-TZ-01", SKU_CODE);
+
         // 1) cangchu 盘盈准备指定仓库 + SKU 可用库存
         page = await switchTo("cangchu");
         await searchInventory(page, SKU_CODE);
@@ -403,7 +404,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             .fill("flow-11 现有库存仓发盘盈");
         await adjustDialog.locator("#inventory-adjustment-dialog-submit").click();
         await confirmFormal(page, /确认提交库存调整|提交库存调整/, "确认提交");
-        await expectToast(page, "调整已提交审批");
+        await expect(page.getByRole("heading", { name: "调整已提交审批", exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(adjustDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
         // 2) caiwu 审批库存调整，余额才增加
@@ -441,7 +442,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await customerDialog.locator("#customers-form-submit").click();
         await expectToast(page, "客户已创建");
         await expect(customerDialog).toBeHidden({ timeout: UI_TIMEOUT });
-        await expect(page.getByText(customerName).first()).toBeVisible({
+        await expect(page.getByRole("link", { name: `库存仓发${stamp}`, exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
 
@@ -612,6 +613,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         });
         await expect(page.getByText("改单中")).toHaveCount(0);
 
+        const salesLineId = await singleSalesLineId(salesOrderId);
         page = await switchTo("cangchu");
         await assertBalanceNumbers(page, {
             onHand: GAIN_QTY,
@@ -623,8 +625,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         const reservation = page
             .locator("#inventory-ledger-reservation-table")
             .getByRole("row")
-            .filter({ hasText: SKU_CODE })
-            .filter({ hasText: salesOrderNo });
+            .filter({ hasText: salesLineId });
         await expect(reservation).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(reservation).toContainText("有效");
         await expect(page.getByRole("button", { name: /入库/ })).toHaveCount(0);
@@ -663,8 +664,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         const consumed = page
             .locator("#inventory-ledger-reservation-table")
             .getByRole("row")
-            .filter({ hasText: SKU_CODE })
-            .filter({ hasText: salesOrderNo });
+            .filter({ hasText: salesLineId });
         await expect(consumed).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(consumed).toContainText("已消耗");
         await page.locator("#inventory-ledger-view-movement").click();
@@ -674,13 +674,14 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(page.getByText("仓库发出").first()).toBeVisible();
         await expect(page.getByText("采购入库")).toHaveCount(0);
 
-        // 8) xiaoshou 登记客户验收（无审批）；未回款不得关闭、不得开变更单
+        // 8) xiaoshou 登记客户验收（无审批）；未回款不得关闭，生效后仍通过变更单纠正
         page = await switchTo("xiaoshou");
         await openWorkspaceTask(page, "客户验收登记", salesOrderNo);
         await page.locator("#sales-orders-acceptance-register-open").click();
         const acceptanceDialog = page.getByRole("dialog", { name: "登记客户验收" });
         await expect(acceptanceDialog).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(acceptanceDialog.getByRole("button", { name: "通过" })).toHaveCount(0);
+        // 验收结果本身包含“通过”选项；无审批应检查审批动作。
+        await expect(acceptanceDialog.getByRole("button", { name: /提交审批|选择审批流程/ })).toHaveCount(0);
         await acceptanceDialog.locator("#sales-orders-acceptance-register-submit").click();
         await confirmFormal(page, "确认客户验收", "确认本次验收");
 
@@ -690,7 +691,8 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         });
         await expect(orderTitleRow(page, customerName).getByText("已关闭")).toHaveCount(0);
         await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible();
-        await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled();
+        // §10.2 允许生效后通过变更单调整；已出库事实须保留，不等于禁止发起变更。
+        await expect(page.locator("#sales-orders-detail-start-change")).toBeEnabled();
         await expect(page.getByText("改单中")).toHaveCount(0);
 
         // 9) 全程不得出现采购单、供应商付款、采购入库

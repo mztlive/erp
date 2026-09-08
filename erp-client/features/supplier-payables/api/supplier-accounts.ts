@@ -43,7 +43,7 @@ import {
     SOURCE_TYPE_LABEL,
 } from "@/features/supplier-payables/types"
 import { fetchPartyOption } from "@/features/entity-selectors/api/parties"
-import { fetchSupplierOption } from "@/features/entity-selectors/api/suppliers"
+import { fetchSupplierOption, fetchSupplierPartyId } from "@/features/entity-selectors/api/suppliers"
 import {
     businessLabelOrPlaceholder,
     MISSING_SUPPLIER_NAME,
@@ -56,6 +56,9 @@ import {
 export async function fetchSupplierAccounts(
     query: SupplierAccountsQuery,
 ): Promise<SupplierAccountsListView> {
+    const invoicePartyId = query.supplierId
+        ? await fetchSupplierPartyId(query.supplierId)
+        : undefined
     const [payPage, paymentPage, invPage] = await Promise.all([
         apiGet<Page<BackendPayableAccount>>("/admin/payable-accounts", {
             supplier_id: query.supplierId,
@@ -68,7 +71,7 @@ export async function fetchSupplierAccounts(
         }),
         apiGet<Page<BackendSupplierPayment>>("/admin/supplier-payments", {
             supplier_id: query.supplierId,
-            payment_no: query.q?.trim() || undefined,
+            q: query.q?.trim() || undefined,
             page: 1,
             page_size: LIST_PAGE_SIZE,
             sort_by: "paid_at",
@@ -76,7 +79,7 @@ export async function fetchSupplierAccounts(
         }),
         apiGet<Page<BackendInvoice>>("/admin/invoices", {
             invoice_direction: "purchase",
-            party_id: query.supplierId,
+            party_id: invoicePartyId,
             invoice_no: query.q?.trim() || undefined,
             page: 1,
             page_size: LIST_PAGE_SIZE,

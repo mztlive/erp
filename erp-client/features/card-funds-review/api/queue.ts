@@ -42,7 +42,7 @@ async function loadWorkItems(
                 : undefined,
         query: query.q,
         sort: "priority_due",
-        queueContextId: query.queueContextId,
+        // 此页面合并两类任务；页面上下文不是单类工作项查询的后端上下文。
         currentWorkItemId: query.currentWorkItemId,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         page: 1,
@@ -84,16 +84,9 @@ async function projectItem(
         )
     }
 
-    if (!account.work_item) {
-        throw new Error(
-            "该应收账户暂时无法复核，请刷新后重试；如仍失败，请联系支持人员。",
-        )
-    }
-    const projectedWorkItem = mapWorkItemDto(account.work_item)
-    if (
-        projectedWorkItem.workItemId !== wi.workItemId ||
-        projectedWorkItem.businessObjectId !== accountId
-    ) {
+    // 详情以 work_item_id 重验任务归属和版本；任务责任来自已鉴权的独立任务投影。
+    const projectedWorkItem = wi
+    if (account.id !== accountId) {
         throw new Error("任务资料已发生变化，请刷新任务列表后重试。")
     }
     const reviewType = account.active_review_type
@@ -106,6 +99,10 @@ async function projectItem(
         reviewType === "SYNC_DELTA"
             ? ("CARD_FUNDS_DELTA_REVIEW" as const)
             : ("CARD_FUNDS_REVIEW" as const)
+
+    if (projectedWorkItem.workItemType !== workItemType) {
+        throw new Error("任务复核类型已发生变化，请刷新任务列表后重试。")
+    }
 
     const responsibilityActions = projectedWorkItem.allowedActions.filter(
         (action): action is "REASSIGN" => action === "REASSIGN",

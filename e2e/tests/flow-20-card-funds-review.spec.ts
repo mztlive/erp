@@ -7,12 +7,11 @@
  *       fukuan 登记回款、caiwu 审批入账；kaipiao 在 W01 登记销项发票；
  *       admin 探查 W18。
  *
- * 前置条件与跳过策略（商城移除后）：
+ * 前置条件（商城移除后）：
  * - 卡券销售单由 ERP 直接创建，无需目标商城与外部身份映射。
- * - 若无卡券类目或提交失败：断言「未派生应收 / 无 CARD_FUNDS_REVIEW」，
- *   登记 annotation 后结束，不走复核/回款/开票。
+ * - 若无卡券类目或提交失败，用例必须失败；不得将未执行票款闭环计为通过。
  *
- * 文档-代码差异（以代码为准）:
+ * 当前 ERP 入口的展示与任务约定：
  * 1. 文档 §9.3.1 要求回款/开票进度在复核未完成时标注「待复核」；销售单摘要
  *    mapCollection/mapInvoicing 只有未收/部分回款/已结清与未开/部分开票/已开齐。
  *    待复核展示在应收台账 reviewStatusLabel（期初待复核/同步差额待复核）。
@@ -105,21 +104,7 @@ test.describe("flow-20 卡券销售单票款复核", () => {
             })
 
             if (!created.ok) {
-                test.info().annotations.push({
-                    type: "skip-strategy",
-                    description: created.reason,
-                })
-
-                // 提交未完成前禁止派生应收，也不得出现期初复核任务。
-                const caiwu = await openRole(browser, extra, "caiwu")
-                await assertNoCardFundsReview(caiwu.page, legalName)
-                await assertReceivableNotDerived(caiwu.page, legalName)
-                await caiwu.context.close()
-
-                const caigou = await openRole(browser, extra, "caigou")
-                await assertNoProcurementTask(caigou.page, legalName)
-                await caigou.context.close()
-                return
+                throw new Error(`卡券票款全流程前置失败，复核、回款和开票尚未执行：${created.reason}`)
             }
 
             const { id: orderId, orderNo } = created
@@ -166,20 +151,7 @@ test.describe("flow-20 卡券销售单票款复核", () => {
                 customerName: legalName,
                 label: "期初待复核",
             })
-            await caiwuLedger.page.goto("/analytics/customer-quality")
-            const qualityHeading = caiwuLedger.page.getByRole("heading", {
-                name: "客户经营质量",
-            })
-            await expect(qualityHeading).toBeVisible({ timeout: LONG })
-            const periodBlocked = await caiwuLedger.page
-                .getByRole("heading", { name: "请选择统计期间" })
-                .isVisible()
-                .catch(() => false)
-            if (!periodBlocked) {
-                await expect(
-                    caiwuLedger.page.getByText(/票款复核不足|票款未复核|卡券票款复核进度/),
-                ).toBeVisible({ timeout: LONG })
-            }
+            // 票款可靠性在下方 W01 卡券复核任务核对；统计期间缺失不能替代复核状态。
             await caiwuLedger.context.close()
 
             // ── 6. 财务总监在 W01 原地完成 CARD_FUNDS_REVIEW（从 0 起）──
@@ -187,6 +159,7 @@ test.describe("flow-20 卡券销售单票款复核", () => {
             await completeOpeningReviewFromZero(caiwuReview.page, {
                 orderNo,
                 customerName: legalName,
+                contractNo,
             })
             await assertReceivableReviewStatus(caiwuReview.page, {
                 orderNo,
@@ -424,11 +397,17 @@ async function uploadContract(
     await expect(page.locator("#card-contracts-upload-settlement-party")).not.toHaveValue("", {
         timeout: LONG,
     })
+    const uploaded = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/contracts/upload"), { timeout: 60_000 })
     await page.locator("#card-contracts-upload-submit").click()
+    const response = await uploaded
+    expect(response.ok(), await response.text()).toBe(true)
+    const fileId = (await response.json()).data.file_asset_id
+    expect(fileId).toBeTruthy()
     await expect(page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" })).toBeHidden({
         timeout: LONG,
     })
-    await expect(page.getByText(input.contractNo)).toBeVisible({ timeout: LONG })
+    await expect(page.getByRole("button", { name: `打开合同 ${input.contractNo}`, exact: true })).toBeVisible({ timeout: LONG })
+    return fileId as string
 }
 
 // ─── W18 探查 ────────────────────────────────────────────────────────────
@@ -438,7 +417,7 @@ async function probeImports(page: Page): Promise<void> {
     await expect(page.getByRole("heading", { name: "导入与期初" })).toBeVisible({
         timeout: LONG,
     })
-    await expect(page.getByText(/还没有导入批次|当前环境还没有导入批次/)).toBeVisible({
+    await expect(page.getByText("还没有导入批次", { exact: true })).toBeVisible({
         timeout: LONG,
     })
 }
@@ -494,8 +473,8 @@ async function tryCreateVoucherSalesOrder(
     await pickCalendarDay(page, "sales-orders-create-header-fulfillment-deadline", today)
     await pickCalendarDay(page, "sales-orders-create-header-receivable-due-date", today)
 
-    const lineTable = page.locator("#sales-orders-create-line-items")
-    const category = lineTable.getByPlaceholder("搜索卡券类目")
+    const lineTable = page.getByRole("table", { name: "销售单创建明细" })
+    const category = lineTable.getByRole("combobox", { name: "商品", exact: true })
     await expect(category).toBeVisible({ timeout: TIMEOUT })
     await category.click()
     await category.fill(VOUCHER_NAME)
@@ -506,7 +485,7 @@ async function tryCreateVoucherSalesOrder(
         }
     }
     const voucherOption = page.getByRole("option", { name: new RegExp(escapeRe(VOUCHER_NAME)) })
-    if (!(await voucherOption.isVisible({ timeout: LONG }).catch(() => false))) {
+    if (!(await voucherOption.waitFor({ state: "visible", timeout: LONG }).then(() => true).catch(() => false))) {
         return {
             ok: false,
             reason: `卡券类目「${VOUCHER_NAME}」不可选，无法从 UI 创建卡券销售单。`,
@@ -523,7 +502,7 @@ async function tryCreateVoucherSalesOrder(
         timeout: TIMEOUT,
     })
     await expect(
-        page.getByText(/提交后进入销售领导 → 运营/),
+        page.getByRole("dialog", { name: "提交销售单" }).getByText(/提交后按已绑定的审批流程办理/),
     ).toBeVisible({ timeout: TIMEOUT })
     await page.locator("#sales-orders-submit-confirm-confirm").click()
 
@@ -617,13 +596,18 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string)
     await expect(approve).toBeVisible({ timeout: LONG })
     await approve.click()
     await expect(page.getByRole("heading", { name: "确认通过" })).toBeVisible({ timeout: TIMEOUT })
+    const decision = page.waitForResponse(response =>
+        response.request().method() === "POST" && response.url().includes("/approval-decisions"),
+        { timeout: LONG },
+    )
     await page.getByRole("button", { name: "确认通过" }).click()
+    expect((await decision).ok()).toBeTruthy()
     await expect(page.getByRole("heading", { name: "确认通过" })).toBeHidden({ timeout: LONG })
 }
 
 async function completeOpeningReviewFromZero(
     page: Page,
-    input: { orderNo: string; customerName: string },
+    input: { orderNo: string; customerName: string; contractNo: string },
 ) {
     await openWorkspaceFamily(page, "finance")
     await searchWorkspace(page, input.orderNo)
@@ -640,20 +624,31 @@ async function completeOpeningReviewFromZero(
     })
     await expect(page.getByText(/尚无回款\/发票/)).toBeVisible({ timeout: TIMEOUT })
 
-    await page.locator("#card-contracts-funds-review-decision-ev-doc").fill(`EV-OPEN-${input.orderNo}`)
-    await page.locator("#card-contracts-funds-review-decision-ev-ref").fill("期初无历史票款，从 0 起核对")
+    // 正式合同允许“凭证文件或证据说明”；未扫描的上传文件不能当作可用证据资产。
+    await page.locator("#card-contracts-funds-review-decision-ev-ref").fill(
+        `期初核对：本次 ERP 新建销售单 ${input.orderNo}，合同 ${input.contractNo}；应收台账无历史回款和发票，从 0 起。`,
+    )
     const zero = page.locator("#card-contracts-funds-review-decision-zero")
     await expect(zero).toBeEnabled({ timeout: TIMEOUT })
     await zero.click()
     await expect(page.getByRole("heading", { name: "确认无历史票款，从 0 起" })).toBeVisible({
         timeout: TIMEOUT,
     })
+    const reviewResponse = page.waitForResponse((response) =>
+        response.request().method() === "POST" && response.url().endsWith("/admin/receivable-funds-reviews"),
+    )
     await page.getByRole("button", { name: "确认从 0 起并完成" }).click()
+    const response = await reviewResponse
+    expect(response.ok(), await response.text()).toBeTruthy()
+    const result = (await response.json()).data
+    expect(result.work_item_status).toBe("COMPLETED")
+    expect(result.business_result.review_result).toBe("APPROVED")
+    expect(result.business_result.conclusion).toBe("NO_HISTORY_FROM_ZERO")
+    expect(result.business_result.review_no).toBeGreaterThan(0)
     await expect(page.getByRole("heading", { name: "确认无历史票款，从 0 起" })).toBeHidden({
         timeout: LONG,
     })
-    await expect(page.getByText(/复核通过 · 复核号/)).toBeVisible({ timeout: LONG })
-    await expect(page.getByText("无历史票款，从 0 起")).toBeVisible({ timeout: TIMEOUT })
+
 }
 
 async function assertNoCardFundsReview(page: Page, hint: string) {
@@ -696,7 +691,7 @@ async function assertReceivableReviewStatus(
     const row = page.getByRole("row").filter({ hasText: input.orderNo })
     await expect(row).toBeVisible({ timeout: LONG })
     await expect(row.getByText(input.label)).toBeVisible({ timeout: TIMEOUT })
-    await expect(row.getByText(input.customerName)).toBeVisible({ timeout: TIMEOUT })
+    await expect(row).toContainText(input.customerName, { timeout: TIMEOUT })
     if (input.label === "期初待复核") {
         await expect(page.locator("#customer-receivables-metrics-unallocated-invoice")).toContainText(
             /卡券待复核/,
@@ -796,7 +791,7 @@ async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) 
         if (await confirm.isVisible().catch(() => false)) await confirm.click()
     }
     await expect(
-        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限|操作未成功/),
+        page.getByText(/提交人不得审批自己的单据|当前账号没有执行此操作的权限/),
     ).toBeVisible({ timeout: LONG })
 }
 
@@ -817,7 +812,8 @@ async function registerSalesInvoiceFromWorkspace(page: Page, orderNo: string, am
     await expect(page.getByLabel("当前开票任务")).toBeVisible({ timeout: LONG })
     await expect(page.getByRole("heading", { name: /核销 · / })).toBeVisible({ timeout: LONG })
 
-    await page.locator("#customer-receivables-session-invoice-no").fill(`FP${Date.now()}`)
+    const invoiceNo = `FP${Date.now()}`
+    await page.locator("#customer-receivables-session-invoice-no").fill(invoiceNo)
     await page.locator("#customer-receivables-session-gross-amount").fill(amount)
     const item = page
         .locator("section")
@@ -837,8 +833,10 @@ async function registerSalesInvoiceFromWorkspace(page: Page, orderNo: string, am
     await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeVisible({
         timeout: TIMEOUT,
     })
+    const committed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/invoices/commit"), { timeout: LONG })
     await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click()
-    await expect(page.getByRole("heading", { name: "销项发票已登记并分配" })).toBeVisible({
-        timeout: LONG,
-    })
+    expect((await committed).ok()).toBeTruthy()
+    await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeHidden({ timeout: LONG })
+    await page.goto(`/finance/customer-accounts?view=sales_invoice&q=${encodeURIComponent(invoiceNo)}`)
+    await expect(page.getByRole("row").filter({ hasText: invoiceNo })).toBeVisible({ timeout: LONG })
 }

@@ -524,6 +524,8 @@ pub struct SupplierPaymentBankReceiptView {
 /// 供应商付款单列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierPaymentListParams {
+    /// 付款单号或供应商名称关键词。
+    pub q: Option<String>,
     /// 付款单号模糊筛选。
     pub payment_no: Option<String>,
     /// 收款供应商筛选。
@@ -545,6 +547,8 @@ pub struct SupplierPaymentListParams {
 /// 归一化后的供应商付款单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupplierPaymentListQuery {
+    /// 付款单号或供应商名称关键词。
+    pub q: Option<String>,
     /// 付款单号模糊筛选。
     pub payment_no: Option<String>,
     /// 收款供应商筛选。
@@ -567,6 +571,7 @@ impl SupplierPaymentListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_PAYMENT_SORT_FIELDS)?;
         Ok(SupplierPaymentListQuery {
+            q: normalized_text(self.q.as_deref()),
             payment_no: normalized_text(self.payment_no.as_deref()),
             supplier_id: self.supplier_id.clone(),
             status: self.status,
@@ -782,6 +787,7 @@ mod tests {
     #[test]
     fn payment_and_allocation_list_params_normalize() {
         let payment = SupplierPaymentListParams {
+            q: Some(" 狮峰 ".to_string()),
             payment_no: Some(" PAY-1 ".to_string()),
             supplier_id: None,
             status: Some(SupplierPaymentStatus::Posted),
@@ -792,6 +798,7 @@ mod tests {
         };
         let query = payment.normalized().unwrap();
         assert_eq!(query.payment_no.as_deref(), Some("PAY-1"));
+        assert_eq!(query.q.as_deref(), Some("狮峰"));
         assert_eq!(query.status, Some(SupplierPaymentStatus::Posted));
 
         let allocations = PurchaseInvoiceAllocationListParams {

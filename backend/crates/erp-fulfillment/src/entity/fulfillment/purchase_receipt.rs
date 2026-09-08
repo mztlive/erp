@@ -81,6 +81,11 @@ impl PurchaseFulfillmentEligibility {
         if !snapshot.prepay_gate {
             return Ok(());
         }
+        if snapshot.prepay_minimum_amount.is_none() && snapshot.prepay_minimum_ratio.is_none() {
+            return Err(Error::from(
+                "该采购单的先款条件缺少冻结门槛，请先通过采购变更补齐",
+            ));
+        }
         if snapshot
             .prepay_minimum_amount
             .is_some_and(|minimum| effective_paid.to_decimal() < minimum.to_decimal())
@@ -961,6 +966,17 @@ pub(crate) mod tests {
             &ratio_only,
             Amount::from_str("100.00").unwrap(),
             Amount::from_str("74.99").unwrap(),
+        )
+        .is_err());
+        let missing_threshold = PaymentTermSnapshot {
+            prepay_gate: true,
+            prepay_minimum_amount: None,
+            prepay_minimum_ratio: None,
+        };
+        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+            &missing_threshold,
+            Amount::from_str("100.00").unwrap(),
+            Amount::from_str("100.00").unwrap(),
         )
         .is_err());
         let gate_disabled = PaymentTermSnapshot {

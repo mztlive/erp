@@ -4,17 +4,15 @@
  * 账号: admin（目录补齐）→ xiaoshou（客户/合同/销售单/验收）
  *       → caigou（采购确认、供给分配、电子交付）→ caiwu（采购单审批）
  *
- * 文档-代码差异（测试按代码走）：
- * 1. 电子交付确认只 POST version/expected_source_version/idempotency_key，
- *    表单的对象/数量/结果/时间不随确认命令提交；无凭证上传入口。
- * 2. 采购单最终通过只为入仓/直发/服务生成履约草稿，未实现 Electronic 草稿。
- * 3. 开发目录种子无 VIRTUAL SKU（仅实物/卡券/线下服务），本 spec 在 UI 上幂等补齐。
- * 4. 电子交付「交付对象」只读且前端常为空，客户端校验会拦住「确认交付」。
+ * 验收：采购生效生成电子交付任务；采购提交对象、实际时间、结果与图片凭证；
+ *       销售登记客户验收。交付不走审批，不影响自有库存。
+ * 目录种子无 VIRTUAL SKU 时，通过 UI 补齐本流程使用的商品。
  */
 import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { payOnlySupplierTask } from '../helpers/payments'
 import { ACCOUNTS } from '../helpers/accounts'
 import { loginViaUi, newLoggedInContext } from '../helpers/login'
 
@@ -90,7 +88,7 @@ async function dismissToasts(page: Page) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first()
         if ((await dismiss.count()) === 0) break
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
@@ -252,7 +250,7 @@ async function ensureProcurementDispatcher(page: Page) {
 
 async function ensureVirtualCategory(page: Page) {
     await page.goto('/master-data/categories')
-    await expect(page.getByRole('heading', { name: '基础资料 · 商品分类' })).toBeVisible({ timeout: 20000 })
+    await expect(page.getByRole('heading', { name: '商品分类', exact: true })).toBeVisible({ timeout: 20000 })
     // 分类树在标题之后加载，先等列表接口返回再判断，避免重复创建触发 409。
     await page
         .waitForResponse(
@@ -277,7 +275,7 @@ async function ensureVirtualCategory(page: Page) {
 
 async function ensureVirtualProduct(page: Page) {
     await page.goto('/master-data/products')
-    await expect(page.getByRole('heading', { name: /商品列表/ })).toBeVisible({ timeout: 20000 })
+    await expect(page.getByRole('heading', { name: '商品列表', exact: true, level: 1 })).toBeVisible({ timeout: 20000 })
     const search = page.locator('#master-data-products-list-toolbar-search-input')
     if (await search.count()) {
         await search.fill(VIRTUAL_PRODUCT_NO)
@@ -308,14 +306,13 @@ async function ensureVirtualProduct(page: Page) {
     await chooseComboboxById(page, `${basicId}-unit-combobox`, /张/)
     await chooseComboboxById(page, `${basicId}-category-combobox`, VIRTUAL_CATEGORY_NAME)
     await chooseComboboxById(page, `${basicId}-brand-combobox`, /福尚云/)
-    await page.getByRole('tab', { name: '规格与 SKU' }).click()
-    // 页签点击触发锚点导航（#product-section-sku），等导航落定后再填 SKU 行。
-    await expect(page).toHaveURL(/#product-section-sku/, { timeout: 20000 })
-    // SKU 编码/名称/主图改到行内「编辑详情」对话框维护，价格仍在表格行内直接填写。
-    await page.getByRole('button', { name: '编辑详情' }).click()
+    // SKU 与商品资料同页编辑，使用稳定分区定位。
+    await page.locator('#product-section-sku').scrollIntoViewIfNeeded()
+    // SKU 编码/名称/主图改到行内「编辑资料」对话框维护，价格仍在表格行内直接填写。
+    await page.getByRole('button', { name: '编辑资料' }).click()
     const skuDialog = page.getByRole('dialog', { name: 'SKU 资料' })
     await expect(skuDialog).toBeVisible({ timeout: 20000 })
-    await skuDialog.getByLabel('默认规格 产品编码').fill(VIRTUAL_SKU_NO)
+    await skuDialog.getByLabel('默认规格 SKU 编码').fill(VIRTUAL_SKU_NO)
     await skuDialog.getByLabel('默认规格 SKU 名称').fill(VIRTUAL_PRODUCT_NAME)
     await skuDialog.getByRole('button', { name: '完成编辑' }).click()
     await expect(skuDialog).toBeHidden({ timeout: 20000 })
@@ -356,7 +353,7 @@ async function ensureVirtualProduct(page: Page) {
     if (await page.getByText('资料已被他人更新').count()) return
     await expectToast(page, '已新建')
     await expect(page).toHaveURL(/\/master-data\/products\/(?!new)/, { timeout: 20000 })
-    await expect(page.getByRole('tab', { name: '规格与 SKU' })).toBeVisible({ timeout: 20000 })
+    await expect(page.getByRole('heading', { name: '规格与 SKU', exact: true })).toBeVisible({ timeout: 20000 })
 }
 
 async function ensureVirtualOfferingAndListing(page: Page) {
@@ -408,7 +405,7 @@ async function ensureVirtualOfferingAndListing(page: Page) {
     }
 
     await page.goto('/master-data/products')
-    await expect(page.getByRole('heading', { name: /商品列表/ })).toBeVisible({ timeout: 20000 })
+    await expect(page.getByRole('heading', { name: '商品列表', exact: true, level: 1 })).toBeVisible({ timeout: 20000 })
     const search = page.locator('#master-data-products-list-toolbar-search-input')
     await search.fill(VIRTUAL_PRODUCT_NO)
     await search.press('Enter')
@@ -613,23 +610,44 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
+        const { context, page } = await openSession(browser, 'fukuan')
+        try {
+            await payOnlySupplierTask(page)
+        } finally { await context.close() }
+    }
+
+    {
         const { context, page } = await openSession(browser, 'caigou')
         try {
             await page.goto('/procurement/orders')
             await expect(page.getByRole('heading', { name: '采购单', exact: true })).toBeVisible({ timeout: 20000 })
             await expect(page.getByText('已生效').first()).toBeVisible({ timeout: 20000 })
-            // 列表行类型/履约格无履约责任字段，固定显示「虚拟 / 入仓」：不断言电子交付。
-            // 电子交付路由已在供给分配（履约方案下拉值为电子交付）与采购单来源销售单中证明。
-            await expect(page.getByText('虚拟 / 入仓').first()).toBeVisible({ timeout: 20000 })
+            // 采购列表必须展示单据真实履约责任，虚拟商品不得误标为入仓。
+            await expect(page.getByRole('table').getByText('虚拟 / 电子交付', { exact: true })).toBeVisible({ timeout: 20000 })
             await expect(page.getByText('虚拟').first()).toBeVisible()
             await expect(page.getByRole('button', { name: '通过' })).toHaveCount(0)
             await expect(page.getByText('选择流程')).toHaveCount(0)
 
-            // 产品缺口：采购单审批通过后，后端不为电子交付行创建履约草稿/任务，
-            // 前端也没有新建电子交付记录的入口（POST /admin/electronic-deliveries 无调用方）。
-            // 此处断言当前行为——履约工作台无待办；缺口补上后恢复下述交付与验收步骤。
             await gotoWorkspace(page, 'family=fulfillment&type=FULFILLMENT_OPERATION')
-            await expect(page.getByText('当前筛选没有待办')).toBeVisible({ timeout: 30000 })
+            await openWorkspaceTask(page, /履约处理/)
+            await expect(page.getByLabel('电子交付表单')).toBeVisible({ timeout: 30000 })
+            await expect(page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
+            await page.locator('#fulfillment-operations-electronic-form-recipient').fill('E2E 客户企业邮箱收件人')
+            await page.locator('#fulfillment-operations-electronic-form-evidence-input').setInputFiles({ name: 'electronic-delivery.png', mimeType: 'image/png', buffer: PNG_1X1 })
+            await chooseComboboxById(page, 'fulfillment-operations-electronic-form-result', '成功')
+            const quantity = await page.getByLabel('交付数量', { exact: true }).inputValue()
+            expect(Number(quantity)).toBeGreaterThan(0)
+            await page.locator('#fulfillment-operations-work-surface-confirm').click()
+            const confirm = page.getByRole('alertdialog', { name: '确认交付？' })
+            await expect(confirm).toBeVisible({ timeout: 20000 })
+            const responsePromise = page.waitForResponse(response => response.request().method() === 'POST' && /\/admin\/electronic-deliveries\/[^/]+\/confirm$/.test(response.url()))
+            await confirm.getByRole('button', { name: '确认交付', exact: true }).click()
+            const response = await responsePromise
+            const body = await response.json()
+            expect(response.ok(), JSON.stringify(body)).toBeTruthy()
+            expect(body.data).toMatchObject({ status: 'CONFIRMED', result: 'SUCCESS', quantity })
+            await expect(confirm).toBeHidden({ timeout: 20000 })
+
         } finally {
             await context.close()
         }
@@ -638,12 +656,21 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     {
         const { context, page } = await openSession(browser, 'xiaoshou')
         try {
-            // 同上缺口：没有电子交付记录就不会产生客户验收任务，断言验收入口为空。
             await gotoWorkspace(page, 'family=fulfillment&type=CUSTOMER_ACCEPTANCE_REGISTRATION')
-            await expect(page.getByText('当前筛选没有待办')).toBeVisible({ timeout: 30000 })
+            await openWorkspaceTask(page, /客户验收登记/)
+            await page.locator('#sales-orders-acceptance-register-open').click()
+            await expect(page.getByRole('dialog', { name: '登记客户验收' })).toBeVisible({ timeout: 20000 })
+            await expect(page.getByText('电子交付').first()).toBeVisible()
+            await page.locator('#sales-orders-acceptance-register-submit').click()
+            await expect(page.getByRole('heading', { name: '确认客户验收' })).toBeVisible({ timeout: 20000 })
+            await page.locator('#sales-orders-acceptance-confirm-confirm').click()
+            await expectToast(page, '客户验收已登记')
+            await expect(page.getByRole('dialog', { name: '登记客户验收' })).toBeHidden({ timeout: 20000 })
 
             await page.goto(`/sales/orders/${salesOrderId}`)
-            // 验收未发生（同上缺口）：只核对采购侧计数，不触碰验收页签。
+            await page.getByRole('tab', { name: '验收', exact: true }).click()
+            await expect(page.getByText(/已通过.*已交付/)).toBeVisible({ timeout: 20000 })
+            await expect(page.locator('#sales-orders-acceptance-register-open')).toHaveCount(0)
             await page.getByRole('tab', { name: '采购' }).click()
             await expect(page.getByTestId('sales-order-purchase-status')).toContainText(/采购单 1 笔/)
             await expect(page.getByTestId('sales-order-purchase-status')).not.toContainText(/现有库存/)

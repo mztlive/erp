@@ -266,6 +266,12 @@ pub struct FulfillmentQueueItemView {
     pub tracking_no: Option<String>,
     /// 先决条件状态。
     pub gate_state: FulfillmentQueueGateState,
+    /// 冻结付款条件要求的最低金额。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gate_required_amount: Option<String>,
+    /// 正式付款核销 APPLY 减 REVERSE 的净金额。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gate_effective_paid_amount: Option<String>,
 }
 
 /// W09 作业类型跨页指标。
@@ -533,6 +539,8 @@ fn map_item(row: FulfillmentQueueItemRow) -> Result<FulfillmentQueueItemView> {
         carrier: row.carrier,
         tracking_no: row.tracking_no,
         gate_state,
+        gate_required_amount: row.gate_required_amount,
+        gate_effective_paid_amount: row.gate_effective_paid_amount,
     })
 }
 

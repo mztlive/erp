@@ -278,7 +278,7 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::PurchaseChangeOrder,
         business_object_type: "purchase_change_order",
-        read_permission: "purchase_order:detail",
+        read_permission: "purchase_change_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,

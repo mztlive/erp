@@ -114,8 +114,8 @@ async function dismissToasts(page: Page) {
   for (let i = 0; i < 5; i += 1) {
     const dismiss = page
       .locator('[data-slot="toast"]')
-      .getByRole('button', { name: 'Dismiss' })
-      .first()
+      .getByRole('button', { name: '关闭提示' })
+      .last()
     if ((await dismiss.count()) === 0) break
     await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
   }
@@ -222,10 +222,12 @@ async function refreshWorkspace(page: Page) {
   if (await refresh.isVisible()) await refresh.click()
 }
 
-async function searchWorkspace(page: Page, query: string) {
+async function clearWorkspaceSearch(page: Page) {
   const search = page.locator('#workspace-queue-toolbar-search-input')
-  await search.fill(query)
+  // 服务履约任务挂在采购单上，来源销售单号不能作为当前任务接口的关键字筛选。
+  await search.fill('')
   await search.press('Enter')
+  await page.getByRole('button', { name: '刷新', exact: true }).click()
 }
 
 async function openInboxTask(
@@ -237,7 +239,7 @@ async function openInboxTask(
   await refreshWorkspace(page)
   await page.locator('#workspace-queue-scope-inbox').click()
   await page.locator(`#workspace-family-nav-${family}`).click()
-  if (query) await searchWorkspace(page, query)
+  if (query) await clearWorkspaceSearch(page)
   const task = page.getByRole('button', { name }).first()
   if ((await task.count()) === 0 && query) {
     const search = page.locator('#workspace-queue-toolbar-search-input')
@@ -429,16 +431,16 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 负向：提交人不得审批自己的销售单
     await refreshWorkspace(sales.page)
     await sales.page.locator('#workspace-queue-scope-started').click()
-    await searchWorkspace(sales.page, orderNo)
+    await clearWorkspaceSearch(sales.page)
     await expect(sales.page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
 
     // 负向：采购确认通过前不得履约、不得供给分配、不得关闭
     await refreshWorkspace(procurement.page)
     await procurement.page.locator('#workspace-family-nav-fulfillment').click()
-    await searchWorkspace(procurement.page, orderNo)
+    await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /履约处理|客户验收登记/ })).toHaveCount(0)
     await procurement.page.locator('#workspace-family-nav-procurement').click()
-    await searchWorkspace(procurement.page, orderNo)
+    await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /待供给分配/ })).toHaveCount(0)
 
     // 5. 采购在 W01 原地通过销售单审批（采购确认节点不选供给、不录入成本）
@@ -469,7 +471,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 负向：销售单刚生效时不得履约（须先完成供给分配且采购单生效）
     await refreshWorkspace(procurement.page)
     await procurement.page.locator('#workspace-family-nav-fulfillment').click()
-    await searchWorkspace(procurement.page, orderNo)
+    await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /履约处理/ })).toHaveCount(0)
 
     // 6. 供给分配：线下服务只能推荐采购，不得分配现有库存；确认后立即提交采购单
@@ -544,14 +546,14 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await gotoHeading(procurement.page, '/procurement/orders', '采购单')
     await procurement.page.locator('#procurement-orders-list-search').fill(orderNo)
     await procurement.page.locator('#procurement-orders-list-search').press('Enter')
-    await expect(procurement.page.getByText('审批中').first()).toBeVisible({ timeout: TIMEOUT })
+    await expect(procurement.page.getByRole('table').getByText('审批中', { exact: true }).first()).toBeVisible({ timeout: TIMEOUT })
     await expect(procurement.page.getByText('线下服务').first()).toBeVisible()
-    await expect(procurement.page.getByText('草稿', { exact: true })).toHaveCount(0)
+    await expect(procurement.page.getByRole('table').getByText('草稿', { exact: true })).toHaveCount(0)
 
     // 负向：采购单生效前仍不得服务履约
     await refreshWorkspace(procurement.page)
     await procurement.page.locator('#workspace-family-nav-fulfillment').click()
-    await searchWorkspace(procurement.page, orderNo)
+    await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /履约处理/ })).toHaveCount(0)
 
     // 7. 财务总监审批采购单（caigou 提交，caiwu 审批）
@@ -562,23 +564,23 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await gotoHeading(procurement.page, '/procurement/orders', '采购单')
     await procurement.page.locator('#procurement-orders-list-search').fill(orderNo)
     await procurement.page.locator('#procurement-orders-list-search').press('Enter')
-    await expect(procurement.page.getByText('已生效').first()).toBeVisible({ timeout: TIMEOUT })
-    await expect(procurement.page.getByText('草稿', { exact: true })).toHaveCount(0)
+    await expect(procurement.page.getByRole('table').getByText('已生效', { exact: true }).first()).toBeVisible({ timeout: TIMEOUT })
+    await expect(procurement.page.getByRole('table').getByText('草稿', { exact: true })).toHaveCount(0)
 
     // 8. 采购登记服务履约（对象由销售明细锁定；时间/地点/结果/凭证）
     await refreshWorkspace(procurement.page)
     // 工作台轮询可能在填写期间把任务面板刷掉（family 切回全部、表单卸载）：整个填写包三轮重试，
     // 每轮先确保面板打开再重填（覆盖写等幂，草稿存在也不怕）。
     for (let attempt = 0; ; attempt += 1) {
-      if ((await procurement.page.getByRole('heading', { name: `线下服务 · ${orderNo}` }).count()) === 0) {
+      if ((await procurement.page.getByLabel('线下服务表单').count()) === 0) {
         await procurement.page.locator('#workspace-family-nav-fulfillment').click()
-        await searchWorkspace(procurement.page, orderNo)
+        await clearWorkspaceSearch(procurement.page)
         await expect(procurement.page.getByRole('button', { name: /履约处理/ }).first()).toBeVisible({
           timeout: TIMEOUT,
         })
         await procurement.page.getByRole('button', { name: /履约处理/ }).first().click()
-        // 页内另有一个 sr-only 的「线下服务」标题：用带单号的全名精确命中任务标题。
-        await expect(procurement.page.getByRole('heading', { name: `线下服务 · ${orderNo}` })).toBeVisible({
+        // 任务标题使用采购单身份，实际履约表单必须为线下服务。
+        await expect(procurement.page.getByLabel('线下服务表单')).toBeVisible({
           timeout: TIMEOUT,
         })
       }

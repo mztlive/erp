@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { projectPayable, projectPayment } from "./mappers"
+import { projectInvoice, projectPayable, projectPayment } from "./mappers"
 
 const paymentBase = {
     id: "pay-1",
@@ -117,5 +117,23 @@ describe("projectPayable", () => {
         expect(row.supplierName).toBe("供应商名称待补全")
         expect(row.sourceDocumentNo).toBe("采购单号待补全")
         expect(row.sourceHref).toBe("/procurement/orders/po-secret")
+    })
+})
+
+
+describe("projectInvoice", () => {
+    const invoice = {
+        id: "inv-1", invoice_direction: "purchase", invoice_kind: "blue" as const,
+        party_id: "party-1", invoice_no: "INV-1", invoice_date: "2026-09-07",
+        gross_amount: "113.00", net_amount: "100.00", tax_amount: "13.00",
+        status: "registered", version: 1, allocated_total: "113.00",
+        unallocated_amount: "0.00", allocations: [],
+    }
+    test("已登记蓝票提供列表采用的红票动作", () => {
+        expect(projectInvoice(invoice).allowedActions).toContain("RED_INVOICE")
+    })
+    test("红票和已红冲蓝票不提供重复红冲动作", () => {
+        expect(projectInvoice({ ...invoice, invoice_kind: "red" }).allowedActions).not.toContain("RED_INVOICE")
+        expect(projectInvoice({ ...invoice, status: "red_invoiced" }).allowedActions).not.toContain("RED_INVOICE")
     })
 })

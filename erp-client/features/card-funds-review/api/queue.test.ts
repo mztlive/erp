@@ -8,7 +8,7 @@ import {
 import { apiGet } from "@/lib/api"
 
 import type { BackendReceivableAccount } from "./dto"
-import { fetchFocusedCardFundsReviewTask } from "./queue"
+import { fetchCardFundsReviewQueue, fetchFocusedCardFundsReviewTask } from "./queue"
 
 vi.mock("@/lib/api", () => ({ apiGet: vi.fn() }))
 vi.mock("@/features/work-items", () => ({
@@ -63,7 +63,6 @@ const account = {
     funds_fact_version: "ffv:empty",
     receipt_facts: [],
     invoice_facts: [],
-    work_item: {} as never,
     active_review_type: "OPENING",
     allowed_actions: ["APPROVE", "REJECT"],
     action_blockers: [],
@@ -87,5 +86,27 @@ describe("fetchFocusedCardFundsReviewTask", () => {
         })
         expect(view.context.queueContextId).toBe("focused-card-funds:wi-13")
         expect(view.current?.workItem.workItemId).toBe("wi-13")
+        expect(view.current?.workItem.allowedActions).toContain("APPROVE")
     })
+    it("应收详情与冻结任务对象不一致时阻止处理", async () => {
+        vi.mocked(apiGet).mockResolvedValue({ ...account, id: "different-account" } as never)
+        await expect(fetchFocusedCardFundsReviewTask("wi-13")).rejects.toThrow("任务资料已发生变化")
+    })
+    it("应收复核类型与冻结任务类型不一致时阻止处理", async () => {
+        vi.mocked(apiGet).mockResolvedValue({ ...account, active_review_type: "SYNC_DELTA" } as never)
+        await expect(fetchFocusedCardFundsReviewTask("wi-13")).rejects.toThrow("任务复核类型已发生变化")
+    })
+
+})
+
+
+it("卡券复核合并队列不向单类任务查询传入页面上下文", async () => {
+    vi.clearAllMocks()
+    vi.mocked(listWorkItems).mockResolvedValue({ items: [] } as never)
+    const view = await fetchCardFundsReviewQueue({ scope: "mine", type: "all", status: "OPEN", due: "all", queueContextId: "queue:card-funds-review:mine" })
+    expect(listWorkItems).toHaveBeenCalledTimes(2)
+    for (const [query] of vi.mocked(listWorkItems).mock.calls) {
+        expect(query).not.toHaveProperty("queueContextId")
+    }
+    expect(view.tasks).toEqual([])
 })

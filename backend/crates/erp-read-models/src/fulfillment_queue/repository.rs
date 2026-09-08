@@ -4,6 +4,8 @@
 //! 作为权限范围，再关联四类履约草稿、来源采购/销售单和仓库。聚合在服务端完成
 //! 筛选、指标和分页；客户端不得逐页拉取四个单据列表后自行拼接。
 
+mod prepayment;
+
 use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
 use erp_workflow::WorkItemExt;
 use futures_util::TryStreamExt;
@@ -88,6 +90,8 @@ pub struct FulfillmentQueueItemRow {
     pub carrier: Option<String>,
     pub tracking_no: Option<String>,
     pub gate_state: String,
+    pub gate_required_amount: Option<String>,
+    pub gate_effective_paid_amount: Option<String>,
 }
 
 /// 作业类型跨页计数。
@@ -266,6 +270,9 @@ fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Result<Vec<Doc
                 }
             }
         },
+        prepayment::revision_lookup(),
+        prepayment::payments_lookup(),
+        prepayment::facts(),
         sales_order_lookup(),
         warehouse_lookup(),
         doc! {
@@ -279,13 +286,7 @@ fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Result<Vec<Doc
                         { "$arrayElemAt": ["$_sales_orders.settlement_party_id", 0] },
                     ]
                 },
-                "gate_state": {
-                    "$cond": [
-                        { "$eq": ["$operation.operation_type", "WAREHOUSE_SHIP"] },
-                        "SATISFIED",
-                        "NOT_APPLICABLE",
-                    ]
-                },
+                "gate_state": prepayment::state(),
                 "_priority_rank": {
                     "$switch": {
                         "branches": [
@@ -595,7 +596,7 @@ fn purchase_order_lookup() -> Document {
                         "$expr": { "$eq": ["$id", "$$purchase_order_id"] },
                     }
                 },
-                { "$project": { "_id": 0, "id": 1, "purchase_no": 1, "sales_order_id": 1 } },
+                { "$project": { "_id": 0, "id": 1, "purchase_no": 1, "sales_order_id": 1, "current_revision_id": 1 } },
             ],
             "as": "_purchase_orders",
         }
@@ -723,6 +724,8 @@ fn item_projection() -> Document {
         "carrier": "$operation.carrier",
         "tracking_no": "$operation.tracking_no",
         "gate_state": 1,
+        "gate_required_amount": { "$toString": prepayment::required_amount() },
+        "gate_effective_paid_amount": { "$toString": "$_gate_paid" },
     }
 }
 

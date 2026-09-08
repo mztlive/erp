@@ -16,27 +16,61 @@ describe("fetchFulfillmentQueue W01 exact object query", () => {
     })
 
     it("loads one receipt detail by frozen id without scanning lists", async () => {
-        apiGetMock.mockResolvedValue({
-            receipt: {
-                id: "receipt/1",
-                receipt_no: "PR-001",
-                purchase_order_id: "po-1",
-                warehouse_id: "warehouse-1",
-                status: "DRAFT",
-                version: 3,
-                created_at: 1_700_000_000,
-            },
-            lines: [
-                {
-                    id: "receipt-line-1",
-                    line_no: 1,
-                    purchase_order_revision_line_id: "po-line-1",
-                    received_quantity: "2",
-                    qualified_quantity: "2",
-                    rejected_quantity: "0",
-                    quality_result: "QUALIFIED",
+        apiGetMock.mockImplementation(async (path) => {
+            if (path === "/admin/work-items/fulfillment-queue")
+                return {
+                    items: [
+                        {
+                            work_item_id: "wi-1",
+                            task_version: "2",
+                            source_version: "3",
+                            owner_role: "warehouse_inbound_handler",
+                            owner_organization_id: "warehouse-1",
+                            priority: "normal",
+                            reason_code: "PURCHASE_RECEIPT_READY",
+                            impact_summary: "入库待确认",
+                            operation_id: "receipt/1",
+                            operation_type: "RECEIPT",
+                            business_object_type: "purchase_receipt",
+                            summary: "PR-001",
+                            edit_version: 3,
+                            due_at: 1700000000,
+                            gate_state: "BLOCKED",
+                            gate_required_amount: "430.00",
+                            gate_effective_paid_amount: "100.00",
+                        },
+                    ],
+                    total: 1,
+                    page: 1,
+                    page_size: 1,
+                    queue_context_id: "exact-1",
+                    visible_types: ["RECEIPT"],
+                    metrics: [],
+                    warehouse_options: [],
+                    as_of: 1700000100,
+                }
+            return {
+                receipt: {
+                    id: "receipt/1",
+                    receipt_no: "PR-001",
+                    purchase_order_id: "po-1",
+                    warehouse_id: "warehouse-1",
+                    status: "DRAFT",
+                    version: 3,
+                    created_at: 1_700_000_000,
                 },
-            ],
+                lines: [
+                    {
+                        id: "receipt-line-1",
+                        line_no: 1,
+                        purchase_order_revision_line_id: "po-line-1",
+                        received_quantity: "2",
+                        qualified_quantity: "2",
+                        rejected_quantity: "0",
+                        quality_result: "QUALIFIED",
+                    },
+                ],
+            }
         })
 
         const view = await fetchFulfillmentQueue({
@@ -49,7 +83,20 @@ describe("fetchFulfillmentQueue W01 exact object query", () => {
         expect(apiGetMock).toHaveBeenCalledWith(
             "/admin/purchase-receipts/receipt%2F1",
         )
+        expect(apiGetMock).toHaveBeenCalledWith(
+            "/admin/work-items/fulfillment-queue",
+            expect.objectContaining({
+                operation_id: "receipt/1",
+                operation_types: "RECEIPT",
+                page_size: 1,
+            }),
+        )
         expect(view.operations).toHaveLength(1)
+        expect(view.operations[0]?.gate).toMatchObject({
+            state: "BLOCKED",
+            requiredAmount: "430.00",
+            effectivePaidAmount: "100.00",
+        })
         expect(view.current?.operationId).toBe("receipt/1")
         expect(view.current?.lines).toHaveLength(1)
         expect(view.emptyReason).toBeUndefined()
@@ -113,7 +160,9 @@ describe("fetchFulfillmentQueue server pagination", () => {
                             purchase_order_no: "PO-001",
                             warehouse_id: "warehouse-1",
                             warehouse_label: "WH-001",
-                            gate_state: "NOT_APPLICABLE",
+                            gate_state: "BLOCKED",
+                            gate_required_amount: "430.00",
+                            gate_effective_paid_amount: "100.00",
                         },
                     ],
                     total: 41,
@@ -192,5 +241,10 @@ describe("fetchFulfillmentQueue server pagination", () => {
             position: 21,
         })
         expect(view.operations).toHaveLength(1)
+        expect(view.operations[0]?.gate).toMatchObject({
+            state: "BLOCKED",
+            requiredAmount: "430.00",
+            effectivePaidAmount: "100.00",
+        })
     })
 })

@@ -538,6 +538,47 @@ fn supplier_account_id_duplicate_pipeline() -> Vec<Document> {
     ]
 }
 
+/// 供应商名称查询的最小身份投影。
+#[derive(Deserialize)]
+struct SupplierSearchId {
+    id: String,
+}
+
+impl SupplierAccountRepository<'_> {
+    /// 读取命中主体名称的未删除供应商身份。
+    ///
+    /// # 参数
+    /// * `party_ids` - 主体领域返回的名称匹配身份
+    /// * `executor` - 调用方执行器
+    /// # 返回
+    /// 返回供应商稳定身份；空输入返回空集合。
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    pub async fn matching_ids_by_parties(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        if party_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "party_id": { "$in": party_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } };
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SupplierSearchId>(),
+            filter,
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "_id": 0 })
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| SupplierAccountId::new(row.id))
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{sort_doc, SupplierAccountFilter};

@@ -46,7 +46,7 @@ export function AdjustmentDialog({
         >
             <DialogContent
                 closeButtonId="inventory-adjustment-dialog-close"
-                className="sm:max-w-lg"
+                className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
             >
                 <DialogHeader>
                     <DialogTitle>发起库存调整</DialogTitle>

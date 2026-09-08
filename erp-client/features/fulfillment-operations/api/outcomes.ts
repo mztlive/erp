@@ -116,7 +116,7 @@ export function formalFromElectronic(
     operationId: string,
 ): FulfillmentFormalOutcome {
     const posted = stripElectronicDeliveryApprovalField(electronic)
-    const failed = posted.result === "FAILED"
+    const failed = posted.result === "FAILURE"
     return {
         kind: "POSTED",
         operationId,

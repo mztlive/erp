@@ -1,7 +1,8 @@
 //! `purchase_order` 采购主表仓储：列表投影查询与按采购单号身份查询。
 
 use crate::entity::purchase_order::{
-    ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
+    FulfillmentResponsibility, ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus,
+    PurchaseType,
 };
 use crate::repository::owned::PurchaseOrderRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
@@ -31,6 +32,8 @@ pub struct PurchaseOrderRow {
     pub supplier_id: SupplierAccountId,
     /// 采购类型。
     pub purchase_type: PurchaseType,
+    /// 冻结的履约责任。
+    pub fulfillment_responsibility: FulfillmentResponsibility,
     /// 付款条件代码。
     pub payment_term_code: String,
     /// 创建人账号 ID（只读审计事实，不得作为责任回退来源）。
@@ -72,6 +75,10 @@ struct PurchaseOrderNoRow {
 pub struct PurchaseOrderFilter {
     /// 采购单号模糊匹配（字面量、忽略大小写）；`None` 表示不筛选。
     pub purchase_no: Option<String>,
+    /// 与采购单号进行 OR 匹配的来源销售单身份，由消费方查询拥有领域后传入。
+    pub keyword_sales_order_ids: Vec<SalesOrderId>,
+    /// 与采购单号进行 OR 匹配的供应商身份，由消费方查询拥有领域后传入。
+    pub keyword_supplier_ids: Vec<SupplierAccountId>,
     /// 来源销售单；`None` 表示不筛选。
     pub sales_order_id: Option<SalesOrderId>,
     /// 供应商；`None` 表示不筛选。
@@ -95,7 +102,20 @@ impl QueryFilter for PurchaseOrderFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut filter, "purchase_no", self.purchase_no.as_deref());
+        if !self.keyword_sales_order_ids.is_empty() || !self.keyword_supplier_ids.is_empty() {
+            let mut number = Document::new();
+            insert_literal_regex_filter(&mut number, "purchase_no", self.purchase_no.as_deref());
+            let mut clauses = vec![
+                doc! { "sales_order_id": { "$in": self.keyword_sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } },
+                doc! { "supplier_id": { "$in": self.keyword_supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } },
+            ];
+            if !number.is_empty() {
+                clauses.push(number);
+            }
+            filter.insert("$or", clauses);
+        } else {
+            insert_literal_regex_filter(&mut filter, "purchase_no", self.purchase_no.as_deref());
+        }
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
         }
@@ -322,6 +342,7 @@ fn purchase_order_projection() -> Document {
         "sales_order_id": 1,
         "supplier_id": 1,
         "purchase_type": 1,
+        "fulfillment_responsibility": 1,
         "payment_term_code": 1,
         "created_by": 1,
         "owner_user_id": 1,
@@ -348,6 +369,8 @@ mod tests {
     #[test]
     fn filter_applies_optional_fields_and_deleted_filter() {
         let filter = PurchaseOrderFilter {
+            keyword_sales_order_ids: Vec::new(),
+            keyword_supplier_ids: Vec::new(),
             purchase_no: Some("PO-2026".to_string()),
             sales_order_id: None,
             supplier_id: Some(SupplierAccountId::new("sup-1")),
@@ -375,9 +398,47 @@ mod tests {
         assert_eq!(regex.get_str("$options").unwrap(), "i");
     }
 
+    /// 关键词三路 OR 匹配不得冲掉状态、供应商和软删除的 AND 约束。
+    #[test]
+    fn keyword_matches_references_before_paging_and_preserves_filters() {
+        let mut filter = PurchaseOrderFilter {
+            purchase_no: Some("XS.1".into()),
+            keyword_sales_order_ids: vec![SalesOrderId::new("sales-1")],
+            keyword_supplier_ids: vec![SupplierAccountId::new("supplier-1")],
+            sales_order_id: None,
+            supplier_id: Some(SupplierAccountId::new("supplier-2")),
+            status: Some(PurchaseOrderStatus::InApproval),
+            page: 2,
+            page_size: 1,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        let document = filter.to_doc();
+        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(document.get_str("supplier_id").unwrap(), "supplier-2");
+        assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");
+        assert!(!document.contains_key("purchase_no"));
+        assert_eq!(
+            document.get_array("$or").unwrap(),
+            &vec![
+                doc! { "sales_order_id": { "$in": ["sales-1"] } }.into(),
+                doc! { "supplier_id": { "$in": ["supplier-1"] } }.into(),
+                doc! { "purchase_no": { "$regex": r"XS\.1", "$options": "i" } }.into(),
+            ]
+        );
+        filter.keyword_sales_order_ids.clear();
+        filter.keyword_supplier_ids.clear();
+        let unmatched_references = filter.to_doc();
+        assert!(!unmatched_references.contains_key("$or"));
+        assert!(unmatched_references.contains_key("purchase_no"));
+        filter.purchase_no = None;
+        assert!(!filter.to_doc().contains_key("purchase_no"));
+    }
+
     #[test]
     fn projection_includes_payment_term_and_current_owner() {
         let document = super::purchase_order_projection();
+        assert_eq!(document.get_i32("fulfillment_responsibility").unwrap(), 1);
         assert_eq!(document.get_i32("payment_term_code").unwrap(), 1);
         assert_eq!(document.get_i32("created_by").unwrap(), 1);
         assert_eq!(document.get_i32("owner_user_id").unwrap(), 1);
@@ -414,6 +475,8 @@ mod tests {
     #[test]
     fn filter_omits_absent_fields() {
         let filter = PurchaseOrderFilter {
+            keyword_sales_order_ids: Vec::new(),
+            keyword_supplier_ids: Vec::new(),
             purchase_no: None,
             sales_order_id: None,
             supplier_id: None,

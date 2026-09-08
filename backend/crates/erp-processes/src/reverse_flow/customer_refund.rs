@@ -380,6 +380,7 @@ enum RefundPostingStep {
     Finance,
     Refund,
     Audit,
+    SalesProgress,
 }
 #[async_trait::async_trait]
 trait RefundPostingSteps: Send {
@@ -393,6 +394,7 @@ async fn execute_refund_posting(
         RefundPostingStep::Finance,
         RefundPostingStep::Refund,
         RefundPostingStep::Audit,
+        RefundPostingStep::SalesProgress,
     ] {
         steps.apply(step, executor).await?;
     }
@@ -419,6 +421,26 @@ impl RefundPostingSteps for MongoRefundPosting<'_> {
                 erp_returns::service::ReturnsService::new(db.clone())
                     .persist_posted_customer_refund(refund, session)
                     .await?;
+            }
+            RefundPostingStep::SalesProgress => {
+                let receipt_id = erp_returns::service::ReturnsService::customer_refund_receipt_id(refund)?;
+                let sales =
+                    erp_finance::service::receivable::receipt_reversal::receipt_allocation_sales_order_ids(
+                        db,
+                        &receipt_id,
+                        session,
+                    )
+                    .await?;
+                for sales_id in sales {
+                    crate::order_to_cash::progress::update_sales_order_money_progress(
+                        db,
+                        session,
+                        &sales_id,
+                        actor_id.to_string(),
+                        None,
+                    )
+                    .await?;
+                }
             }
             RefundPostingStep::Audit => {
                 let audit = actor.clone().resource_log(
@@ -800,7 +822,8 @@ mod posting_contract_tests {
             [
                 RefundPostingStep::Finance,
                 RefundPostingStep::Refund,
-                RefundPostingStep::Audit
+                RefundPostingStep::Audit,
+                RefundPostingStep::SalesProgress
             ]
         );
     }
@@ -810,6 +833,7 @@ mod posting_contract_tests {
             RefundPostingStep::Finance,
             RefundPostingStep::Refund,
             RefundPostingStep::Audit,
+            RefundPostingStep::SalesProgress,
         ];
         for (index, step) in order.iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };

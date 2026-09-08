@@ -325,6 +325,8 @@ pub struct AuditReceiptFact {
 /// 供应商受控付款条件解析后的采购消费事实。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaymentTermFact {
+    /// 提供方受控先款条件的最低比例。
+    pub prepay_minimum_ratio: Option<Rate>,
     /// 提供方规范化的受控代码。
     pub canonical_code: String,
     /// 先款门禁。

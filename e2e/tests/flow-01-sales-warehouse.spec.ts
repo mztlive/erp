@@ -14,6 +14,7 @@
 import path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
+import { payOnlySupplierTask } from "../helpers/payments";
 import { ACCOUNTS } from "../helpers/accounts";
 import { loginViaUi, newLoggedInContext } from "../helpers/login";
 
@@ -102,7 +103,7 @@ async function expectToast(page: Page, title: string | RegExp) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first();
         if (!(await dismiss.count())) break;
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined);
@@ -551,15 +552,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             /暂时不能|先款未到/.test((await gate.innerText()) ?? "")
         ) {
             page = await switchTo("fukuan");
-            await openWorkspaceTask(page, "供应商付款处理", customerName, "finance");
-            await expect(page.getByLabel("付款金额")).toBeVisible({ timeout: UI_TIMEOUT });
-            const payAmount = page.locator("#supplier-payables-allocation-form-amount");
-            if (!(await payAmount.inputValue())) {
-                await payAmount.fill("1");
-            }
-            await page.locator("#supplier-payables-allocation-form-bank-reference").fill(`BR${stamp}`);
-            await page.locator("#supplier-payables-allocation-form-submit").click();
-            await confirmFormal(page, "确认付款", "确认付款");
+            await payOnlySupplierTask(page);
             page = await switchTo("cangchu");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
         }

@@ -24,6 +24,7 @@ export type BackendListItem = {
     supplier_id: string
     supplier_name: string
     purchase_type: PurchaseType | string
+    fulfillment_responsibility: FulfillmentResponsibility | string
     payment_term_code?: string | null
     owner_user_id?: string | null
     owner_name?: string | null

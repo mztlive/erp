@@ -10,7 +10,7 @@
  * 3. 文档「采购确认履约影响 / 财务复核」已收敛为 SalesChangeOrder 的 DOCUMENT_APPROVAL 两节点；
  *    退役类型 SALES_CHANGE_IMPACT_REVIEW / SALES_CHANGE_FINANCE_REVIEW 不再进入 W01。
  * 4. 驳回不改业务状态：销售单保持「审批中」，仍禁止发起改单。
- * 5. 改单提交确认框恒显示"尚未展示审批路线"兜底：服务端定义绑定不下发节点，
+ * 5. 改单提交确认框展示创建时冻结的审批路线，
  *    路线正确性由后继两节点审批实际流转覆盖验证。
  */
 import fs from "node:fs"
@@ -116,28 +116,15 @@ async function openWorkspaceApprovals(page: Page) {
         timeout: TIMEOUT,
     })
     await page.locator("#workspace-family-nav-approval").click()
+    // 其他账号刚提交的任务不在本浏览器缓存中，使用工作台刷新入口重新读取队列。
+    await page.getByRole("button", { name: "刷新", exact: true }).click()
 }
 
 async function selectApprovalTask(page: Page, title: RegExp) {
-    // 审批生效异步落定：轮询重载最多 2 分钟等任务出现，避免提交后即查的竞态。
-    const deadline = Date.now() + 120_000
-    for (;;) {
-        const task = page.getByRole("button", { name: title }).first()
-        if (await task.isVisible().catch(() => false)) {
-            await task.click()
-            break
-        }
-        if (Date.now() > deadline) {
-            await expect(task).toBeVisible({ timeout: TIMEOUT })
-            await task.click()
-            break
-        }
-        await page.reload()
-        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-            timeout: TIMEOUT,
-        })
-        await page.locator("#workspace-family-nav-approval").click()
-    }
+    // 等待当前队列加载，禁止不停刷新取消尚未完成的任务查询。
+    const task = page.getByRole("button", { name: title }).first()
+    await expect(task).toBeVisible({ timeout: 40_000 })
+    await task.click()
     await expect(
         page.getByRole("button", { name: "通过" }).or(page.getByRole("button", { name: "驳回" })).first(),
     ).toBeVisible({ timeout: TIMEOUT })
@@ -185,7 +172,7 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
         timeout: TIMEOUT,
     })
 
-    await page.getByRole("button", { name: "上传合同 PDF" }).click()
+    await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click()
     const upload = page.getByRole("dialog", { name: "上传合同 PDF" })
     await expect(upload).toBeVisible({ timeout: TIMEOUT })
     await upload.locator("#card-contracts-upload-pdf-input").setInputFiles(contractPdfPath())
@@ -369,9 +356,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await sales.page.locator("#sales-orders-change-submit").click()
             const changeSubmit = sales.page.getByRole("alertdialog", { name: /提交改单/ })
             await expect(changeSubmit).toBeVisible({ timeout: TIMEOUT })
-            // 产品缺口（已记入报告，不修产品）：单据详情的定义绑定不含节点
-            // （definition_view_from_binding 写死 nodes 为空），确认框恒显示
-            // "尚未展示审批路线"兜底。这里只确认可提交，路线正确性由后继两节点审批覆盖。
+            await expect(changeSubmit.getByText("采购确认履约影响 → 财务复核金额与应收", { exact: true })).toBeVisible()
             await changeSubmit.locator("#sales-orders-change-submit-confirm-confirm").click()
             await expect(sales.page.getByText("改单已提交审批")).toBeVisible({
                 timeout: TIMEOUT,

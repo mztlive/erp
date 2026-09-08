@@ -34,6 +34,27 @@ pub struct CreateElectronicDeliveryRequest {
     pub evidence_attachment_id: Option<FileAssetId>,
 }
 
+/// 电子交付正式确认命令；对象、时间、结果、数量与凭证一次提交。
+#[derive(Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmElectronicDeliveryRequest {
+    /// 当前草稿版本。
+    #[validate(range(min = 1))]
+    pub version: u64,
+    /// 交付对象；组合层加密后写入，禁止写日志。
+    #[validate(custom(function = "non_blank"))]
+    pub recipient_snapshot: String,
+    /// 实际交付数量，须等于冻结分配数量。
+    pub quantity: Quantity,
+    /// 交付结果。
+    pub result: FulfillmentResult,
+    /// 实际交付时间（秒）。
+    #[validate(range(min = 1))]
+    pub occurred_at: i64,
+    /// 已登记凭证或本次上传的临时引用。
+    pub evidence_attachment_id: FileAssetId,
+}
+
 /// 电子交付记录列表视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ElectronicDeliveryView {

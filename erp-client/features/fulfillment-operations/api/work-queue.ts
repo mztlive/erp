@@ -47,6 +47,8 @@ const queueItemSchema = z
         carrier: z.string().optional(),
         tracking_no: z.string().optional(),
         gate_state: z.enum(["SATISFIED", "BLOCKED", "NOT_APPLICABLE"]),
+        gate_required_amount: z.string().optional(),
+        gate_effective_paid_amount: z.string().optional(),
     })
     .strict()
 
@@ -161,6 +163,8 @@ export function fulfillmentQueueItemToOperation(
         source,
         gate: {
             state: row.gate_state,
+            requiredAmount: row.gate_required_amount,
+            effectivePaidAmount: row.gate_effective_paid_amount,
             message:
                 row.gate_state === "SATISFIED"
                     ? "作业先决条件已满足"

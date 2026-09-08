@@ -61,6 +61,9 @@ pub fn build_line_eligibilities(sources: &EligibilitySources<'_>) -> Result<Vec<
         }
     }
     for record in sources.electronic {
+        if record.acceptance_quantity(&record.sales_order_line_id).is_err() {
+            continue;
+        }
         if let Some(facts) = facts_by_line.get_mut(&record.sales_order_line_id.to_string()) {
             facts.push(AcceptanceFactEligibility::from_fact(
                 &record.base.id,

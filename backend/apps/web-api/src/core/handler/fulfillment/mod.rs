@@ -10,14 +10,15 @@ use axum::{
     Extension, Json,
 };
 use erp_fulfillment::dto::{
-    CommitCustomerAcceptanceRequest, ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest,
-    CreateDeliveryRequest, CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest,
-    CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView, CustomerAcceptanceListParams,
-    CustomerAcceptanceView, DeliveryDetailView, DeliveryListParams, DeliveryView,
-    ElectronicDeliveryListParams, ElectronicDeliveryView, PageView, PostCustomerAcceptanceRequest,
-    PostDeliveryRequest, PostPurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptListParams,
-    PurchaseReceiptView, ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams,
-    ServiceFulfillmentView, UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
+    CommitCustomerAcceptanceRequest, ConfirmElectronicDeliveryRequest, ConfirmServiceFulfillmentRequest,
+    CreateCustomerAcceptanceRequest, CreateDeliveryRequest, CreateElectronicDeliveryRequest,
+    CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView,
+    CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView, DeliveryListParams,
+    DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView, PageView,
+    PostCustomerAcceptanceRequest, PostDeliveryRequest, PostPurchaseReceiptRequest,
+    PurchaseReceiptDetailView, PurchaseReceiptListParams, PurchaseReceiptView,
+    ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams, ServiceFulfillmentView,
+    UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
 };
 use erp_fulfillment::service::FulfillmentService;
 use erp_processes::fulfillment_execution::FulfillmentProcess;
@@ -422,10 +423,29 @@ pub async fn electronic_delivery_confirm(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    mut multipart: Multipart,
 ) -> Result<ElectronicDeliveryView> {
-    let view = process(&state).confirm_electronic_delivery(&id, &actor).await?;
-
-    Ok(ApiResponse::ok_with_data(view))
+    let (req, files) =
+        extract_command_with_asset_files::<ConfirmElectronicDeliveryRequest>(&mut multipart).await?;
+    validate_evidence_upload(req.evidence_attachment_id.as_ref(), &files)?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
+    let result = erp_processes::confirm_electronic_delivery_with_assets(
+        process(&state),
+        id,
+        req,
+        pending.clone(),
+        actor,
+    )
+    .await;
+    match result {
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
 }
 
 #[permission_macros::permission(
@@ -566,8 +586,12 @@ fn validate_service_evidence_upload(
     req: &ConfirmServiceFulfillmentRequest,
     files: &[PendingAssetFile],
 ) -> std::result::Result<(), Error> {
+    validate_evidence_upload(req.evidence_attachment_id.as_ref(), files)
+}
+
+fn validate_evidence_upload(reference: &str, files: &[PendingAssetFile]) -> std::result::Result<(), Error> {
     let mut expected = Vec::new();
-    let reference = req.evidence_attachment_id.to_string();
+    let reference = reference.to_string();
     if reference.starts_with("pending-file:") {
         expected.push(reference);
     }
@@ -963,5 +987,29 @@ mod tests {
         };
         assert!(validate_service_evidence_upload(&request, &[image]).is_ok());
         assert!(validate_service_evidence_upload(&request, &[]).is_err());
+    }
+    #[test]
+    fn electronic_confirmation_requires_facts_and_matching_evidence() {
+        let fields = serde_json::json!({ "version": 1, "recipient_snapshot": "客户企业邮箱", "result": "SUCCESS", "quantity": "2", "occurred_at": 1_700_000_000, "evidence_attachment_id": "pending-file:electronic-evidence" });
+        let request: super::ConfirmElectronicDeliveryRequest =
+            serde_json::from_value(fields.clone()).unwrap();
+        let image = PendingAssetFile {
+            reference: "pending-file:electronic-evidence".into(),
+            file: crate::core::handler::file_asset::AssetFile {
+                file_name: "delivery.png".into(),
+                content_type: "image/png".into(),
+                content: vec![1],
+            },
+        };
+        assert!(super::validate_evidence_upload(
+            request.evidence_attachment_id.as_ref(),
+            std::slice::from_ref(&image)
+        )
+        .is_ok());
+        assert!(super::validate_evidence_upload(request.evidence_attachment_id.as_ref(), &[]).is_err());
+        assert!(super::validate_evidence_upload("pending-file:unrelated", &[image]).is_err());
+        let mut missing = fields;
+        missing.as_object_mut().unwrap().remove("recipient_snapshot");
+        assert!(serde_json::from_value::<super::ConfirmElectronicDeliveryRequest>(missing).is_err());
     }
 }

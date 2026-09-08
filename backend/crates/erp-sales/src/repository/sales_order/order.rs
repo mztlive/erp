@@ -452,6 +452,45 @@ fn sales_order_projection() -> Document {
     }
 }
 
+/// 仅投影销售单身份，供跨域列表关键词匹配使用。
+#[derive(Deserialize)]
+struct SalesSearchId {
+    id: String,
+}
+
+impl SalesOrderRepository<'_> {
+    /// 按销售单号字面量匹配未删除单据身份。
+    ///
+    /// # 参数
+    /// * `keyword` - 忽略大小写的单号关键词
+    /// * `executor` - 调用方执行器
+    /// # 返回
+    /// 返回全部命中身份，供消费方在分页前组合筛选。
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    pub async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderId>> {
+        if keyword.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut filter, "order_no", Some(keyword));
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesSearchId>(),
+            filter,
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "_id": 0 })
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| SalesOrderId::new(row.id)).collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

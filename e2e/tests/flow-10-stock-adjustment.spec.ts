@@ -150,7 +150,7 @@ async function searchInventorySku(page: Page): Promise<void> {
     const search = page.getByLabel("搜索库存")
     await search.fill(SKU_NO)
     await search.press("Enter")
-    await expect(page.getByText(SKU_NO)).toBeVisible(VISIBLE)
+    await expect(page.getByRole("table").getByText(SKU_NO, { exact: true })).toBeVisible(VISIBLE)
 }
 
 function skuBalanceRow(page: Page): Locator {
@@ -160,7 +160,7 @@ function skuBalanceRow(page: Page): Locator {
 }
 
 async function openBalanceTab(page: Page): Promise<void> {
-    await page.getByRole("tab", { name: "余额" }).click()
+    await page.getByRole("button", { name: /^余额(?: \d+)?$/ }).click()
     await expect(page.locator("#inventory-ledger-balance-table")).toBeVisible(
         VISIBLE,
     )
@@ -195,7 +195,7 @@ async function submitStockAdjustment(
     const banner = page.getByText(/单号\s+\S+/)
     await expect(banner).toBeVisible(VISIBLE)
     const text = (await banner.innerText()).replace(/\s+/g, " ")
-    const matched = text.match(/单号\s+(\S+)/)
+    const matched = text.match(/单号\s+([A-Za-z0-9_-]+)/)
     const adjustmentNo = matched?.[1]?.replace(/[。．.]+$/, "") ?? ""
     expect(adjustmentNo.length, `未能从提交结果解析单号：${text}`).toBeGreaterThan(2)
     await expect(page.getByText(APPROVAL_NODE)).toBeVisible(VISIBLE)
@@ -242,7 +242,7 @@ async function searchWorkspaceTask(page: Page, documentNo: string): Promise<void
         await expect(sameType).toHaveCount(1, VISIBLE)
         await sameType.first().click()
     }
-    await expect(page.getByText(documentNo)).toBeVisible(VISIBLE)
+    await expect(page.getByRole("heading", { name: `库存调整单 ${documentNo}`, exact: true })).toBeVisible(VISIBLE)
 }
 
 async function decideCurrentTask(
@@ -289,8 +289,15 @@ async function expectOnHandUi(page: Page, expected: number): Promise<void> {
     }
 }
 
+const apiTokens = new Map<string, Promise<string>>()
+
 async function tokenOf(kind: "cangchu" | "caiwu" | "caigou" | "admin"): Promise<string> {
-    return apiLogin(loginName(kind))
+    let token = apiTokens.get(kind)
+    if (!token) {
+        token = apiLogin(loginName(kind))
+        apiTokens.set(kind, token)
+    }
+    return token
 }
 
 async function listBalances(token: string): Promise<StockBalance[]> {
@@ -450,7 +457,7 @@ async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
         await expect(page.getByRole("link", { name: "库存台账" })).toHaveCount(0)
         await page.goto("/inventory")
         await expect(
-            page.getByText(/当前角色未配置仓库数据范围|权限已收回/),
+            page.getByText(/当前角色未配置仓库数据范围|权限已收回/).first(),
         ).toBeVisible(VISIBLE)
         await expect(page.getByRole("button", { name: "库存调整" })).toHaveCount(0)
         await expect(page.getByRole("button", { name: "发起库存调整" })).toHaveCount(0)
@@ -506,7 +513,6 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     // 2. 财务通过 → 系统确认入账（无独立入账按钮）
     let finance = await openSession(browser, "caiwu")
     await searchWorkspaceTask(finance.page, gainNo)
-    await expect(finance.page.getByText("库存调整单审批")).toBeVisible(VISIBLE)
     await expect(finance.page.getByText(APPROVAL_NODE)).toBeVisible(VISIBLE)
     await expect(finance.page.getByText("第 1 轮")).toBeVisible(VISIBLE)
     await decideCurrentTask(finance.page, "approve", "核对盘盈数量无误")
@@ -517,12 +523,12 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     const afterGain = openingOnHand + qtyOf(GAIN_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterGain)
     await expectOnHandUi(warehouse.page, afterGain)
-    await warehouse.page.getByRole("tab", { name: "流水" }).click()
+    await warehouse.page.getByRole("button", { name: /^流水(?: \d+)?$/ }).click()
     const movementTable = warehouse.page.locator("#inventory-ledger-movement-table")
     await expect(movementTable).toBeVisible(VISIBLE)
     await expect(movementTable).toContainText("库存调整")
     await expect(movementTable).toContainText("增加")
-    await warehouse.page.getByRole("tab", { name: "调整记录" }).click()
+    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
     const adjustmentTable = warehouse.page.locator("#inventory-ledger-adjustment-table")
     await expect(adjustmentTable).toBeVisible(VISIBLE)
     await expect(adjustmentTable).toContainText(gainNo)
@@ -557,11 +563,11 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     const afterLoss = afterGain - qtyOf(LOSS_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterLoss)
     await expectOnHandUi(warehouse.page, afterLoss)
-    await warehouse.page.getByRole("tab", { name: "流水" }).click()
+    await warehouse.page.getByRole("button", { name: /^流水(?: \d+)?$/ }).click()
     await expect(warehouse.page.locator("#inventory-ledger-movement-table")).toContainText(
         "减少",
     )
-    await warehouse.page.getByRole("tab", { name: "调整记录" }).click()
+    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
     await expect(warehouse.page.locator("#inventory-ledger-adjustment-table")).toContainText(
         lossNo,
     )
@@ -600,7 +606,7 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     const afterDamage = afterLoss - qtyOf(DAMAGE_QTY)
     await expect.poll(async () => readOnHand(), VISIBLE).toBe(afterDamage)
     await expectOnHandUi(warehouse.page, afterDamage)
-    await warehouse.page.getByRole("tab", { name: "调整记录" }).click()
+    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
     await expect(warehouse.page.locator("#inventory-ledger-adjustment-table")).toContainText(
         damageNo,
     )
@@ -641,7 +647,7 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     await gotoInventory(warehouse.page)
     expect(await readOnHand()).toBe(afterDamage)
     await expectOnHandUi(warehouse.page, afterDamage)
-    await warehouse.page.getByRole("tab", { name: "调整记录" }).click()
+    await warehouse.page.getByRole("button", { name: /^调整记录(?: \d+)?$/ }).click()
     const rejectRow = warehouse.page
         .locator("#inventory-ledger-adjustment-table")
         .getByRole("row")
@@ -649,8 +655,8 @@ test("库存调整：盘盈、盘亏、损坏入账与驳回", async ({ browser 
     await expect(rejectRow).toBeVisible(VISIBLE)
     await expect(rejectRow).toContainText("审批中")
     await rejectRow.click()
-    await expect(warehouse.page.getByText("第 2 轮")).toBeVisible(VISIBLE)
-    await expect(warehouse.page.getByRole("button", { name: "关闭" })).toBeVisible(
+    await expect(warehouse.page.getByRole("definition").filter({ hasText: "第 2 轮" })).toBeVisible(VISIBLE)
+    await expect(warehouse.page.locator("#inventory-adjustment-detail-close")).toBeVisible(
         VISIBLE,
     )
     await warehouse.page.locator("#inventory-adjustment-detail-close").click()

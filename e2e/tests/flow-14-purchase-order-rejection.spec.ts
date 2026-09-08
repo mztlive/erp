@@ -284,7 +284,7 @@ async function expectToast(page: Page, title: string | RegExp): Promise<void> {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first()
         if (!(await dismiss.count())) break
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
@@ -301,16 +301,8 @@ async function chooseOption(
         await input.fill(option)
     }
     const listed = page.getByRole("option", { name: option }).first()
-    if (await listed.count()) {
-        await expect(listed).toBeVisible(VISIBLE)
-        await listed.click()
-        return
-    }
-    await page
-        .locator('[data-slot="combobox-item"]')
-        .filter({ hasText: option })
-        .first()
-        .click()
+    await expect(listed).toBeVisible(VISIBLE)
+    await listed.click()
 }
 
 async function pickCalendarDay(page: Page, trigger: Locator, isoDate: string): Promise<void> {
@@ -413,7 +405,7 @@ async function rejectCurrentDocument(page: Page, reason: string): Promise<void> 
     await pane.getByRole("button", { name: "驳回", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "确认驳回" })
     await expect(dialog).toBeVisible(VISIBLE)
-    await expect(dialog.getByText("确认驳回后将重启审批流程。")).toBeVisible()
+    await expect(dialog.getByText(/确认后将驳回，并从第一节点开始下一轮审批/)).toBeVisible()
     await dialog.getByLabel("驳回原因").fill(reason)
     await dialog.getByRole("button", { name: "确认驳回" }).click()
     await expect(dialog).toBeHidden(VISIBLE)
@@ -526,7 +518,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
 
         await page.goto("/sales/orders?mode=create")
         await expect(page.getByText("单据头")).toBeVisible(VISIBLE)
-        await page.getByRole("button", { name: "上传合同 PDF" }).click()
+        await page.getByRole("button", { name: "上传合同 PDF", exact: true }).click()
         const contractDialog = page.getByRole("dialog", { name: "上传合同 PDF" })
         await expect(contractDialog).toBeVisible(VISIBLE)
         await contractDialog.locator("#card-contracts-upload-pdf-input").setInputFiles(contractFile())
@@ -545,8 +537,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
             await chooseOption(page, contractPayment, /货到 15 天|按合同约定/)
         }
         await contractDialog.locator("#card-contracts-upload-submit").click()
-        await expectToast(page, "合同 PDF 已归档")
         await expect(contractDialog).toBeHidden(VISIBLE)
+        await expect(page.getByText(`${contractNo}@v1`, { exact: true }).first()).toBeVisible(VISIBLE)
         await expect(page.getByText(customerName).first()).toBeVisible(VISIBLE)
 
         await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
@@ -587,7 +579,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByRole("heading", { name: customerName })).toBeVisible(VISIBLE)
         await expect(documentHeader(page).getByText("审批中")).toBeVisible(VISIBLE)
         salesOrderNo = await readDocumentNumber(page)
-        await expect(page.getByText(/采购单 0 笔/)).toBeVisible()
+        await page.getByRole("tab", { name: /^采购/ }).click()
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 0 笔", VISIBLE)
 
         // 2) 采购确认节点：只通过/驳回，不选源
         page = await switchTo("caigou")
@@ -613,20 +606,14 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.getByTestId("purchase-create-match-best").click()
         await expectToast(page, /已重新分配供给|没有可匹配的供给方案/)
 
-        const warehouseField = page.getByLabel(/采购入库目标仓/)
-        if ((await warehouseField.count()) === 0) {
-            const sourcing = page.getByLabel(/履约方案/)
-            await sourcing.click()
-            const inbound = page
-                .getByRole("option", { name: /入仓/ })
-                .or(page.locator('[data-slot="combobox-item"]').filter({ hasText: "入仓" }))
-            await expect(inbound.first()).toBeVisible(VISIBLE)
-            await inbound.first().click()
-        }
-        await expect(page.getByLabel(/采购入库目标仓/)).toBeVisible(VISIBLE)
-        if (await page.getByPlaceholder("选择目标仓").count()) {
-            await chooseOption(page, page.getByLabel(/采购入库目标仓/), WAREHOUSE_CODE)
-        }
+        const sourcing = page.getByRole("combobox", { name: /^履约方案，/ })
+        await sourcing.click()
+        const inbound = page.getByRole("option", { name: /入仓/ }).first()
+        await expect(inbound).toBeVisible(VISIBLE)
+        await inbound.click()
+        const warehouseField = page.getByRole("combobox", { name: "仓库", exact: true })
+        await expect(warehouseField).toBeVisible(VISIBLE)
+        await chooseOption(page, warehouseField, WAREHOUSE_CODE)
         await fillEmptyDatePickers(page, dueDate)
         await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText("1 张")
         await expect(page.getByText("将建立库存预留").locator("xpath=..")).toContainText("0 条")
@@ -656,7 +643,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
             await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible(VISIBLE)
             await page.locator("#procurement-orders-list-search").fill(salesOrderNo)
             await page.locator("#procurement-orders-list-search").press("Enter")
-            const fallbackOpen = page.getByRole("link", { name: /打开采购单/ })
+            const fallbackOpen = page.getByRole("button", { name: /打开采购单/ })
             await expect(fallbackOpen).toBeVisible(VISIBLE)
             await fallbackOpen.click()
             await expect(page).toHaveURL(/\/procurement\/orders\/[^/?#]+/, VISIBLE)
@@ -681,8 +668,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         page = await switchTo("xiaoshou")
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expect(documentHeader(page).getByText("已生效")).toBeVisible(VISIBLE)
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 1 笔")
         await page.getByRole("tab", { name: /^采购/ }).click()
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 1 笔")
         await expect(page.getByText("草稿")).toHaveCount(0)
         // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示审批中。
         await expect(page.getByTestId("sales-order-purchase-count-only")).toContainText("已创建 1 张采购单")
@@ -710,9 +697,9 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         )
         const roundTwo = approvalPane(page)
         await expect(roundTwo.getByText("第 2 轮")).toBeVisible(VISIBLE)
-        await expect(roundTwo.getByText("财务总监审批")).toBeVisible(VISIBLE)
+        await expect(roundTwo.getByText("财务总监审批").first()).toBeVisible(VISIBLE)
         await expect(roundTwo.getByText("最近驳回")).toBeVisible(VISIBLE)
-        await expect(roundTwo.getByText(REJECT_REASON)).toBeVisible(VISIBLE)
+        await expect(roundTwo.getByText(REJECT_REASON).first()).toBeVisible(VISIBLE)
 
         // 5) 驳回后：不生效、不形成应付、内容不变、禁止变更单/履约/付款
         page = await switchTo("caigou")
@@ -720,13 +707,13 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByRole("heading", { name: "采购单", exact: true })).toBeVisible(VISIBLE)
         await page.locator("#procurement-orders-list-search").fill(salesOrderNo)
         await page.locator("#procurement-orders-list-search").press("Enter")
-        const openPo = page.getByRole("link", { name: new RegExp(`打开采购单 ${snap.purchaseNo}`) })
+        const openPo = page.getByRole("button", { name: new RegExp(`打开采购单 ${snap.purchaseNo}`) })
         await expect(openPo).toBeVisible(VISIBLE)
         await openPo.click()
         await expect(page).toHaveURL(/\/procurement\/orders\/[^/?#]+/, VISIBLE)
         purchaseHref = page.url().split("?")[0] ?? page.url()
         await expect(documentHeader(page).getByText("审批中").first()).toBeVisible(VISIBLE)
-        await expect(documentHeader(page).getByText("版本 尚未生效")).toBeVisible(VISIBLE)
+        await expect(documentHeader(page)).toContainText(/版本\s*尚未生效/, VISIBLE)
         await expect(documentHeader(page).getByText("已生效")).toHaveCount(0)
         await expect(documentHeader(page).getByText("未付")).toBeVisible()
         await expect(documentHeader(page).getByText("未开始")).toBeVisible()
@@ -745,7 +732,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByText("第 2 轮").first()).toBeVisible(VISIBLE)
         await expect(page.getByText("财务总监审批").first()).toBeVisible(VISIBLE)
         await expect(page.getByText("最近驳回")).toBeVisible(VISIBLE)
-        await expect(page.getByText(REJECT_REASON)).toBeVisible(VISIBLE)
+        await expect(page.getByText(REJECT_REASON).first()).toBeVisible(VISIBLE)
         await expect(page.getByText("已驳回").first()).toBeVisible()
         await expect(page.getByText("第 1 轮").first()).toBeVisible()
 

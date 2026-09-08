@@ -25,7 +25,7 @@ export async function dismissToasts(page: Page): Promise<void> {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first()
         if (!(await dismiss.count())) return
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined)

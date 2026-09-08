@@ -73,6 +73,10 @@ pub struct SettlementBatchResult {
 pub struct ReceivableAccountFilter {
     /// 主键、销售单、客户或往来主体关键字；`None` 表示不筛选。
     pub keyword: Option<String>,
+    /// 关键词命中的来源销售单身份；由组合查询解析。
+    pub keyword_sales_order_ids: Vec<SalesOrderId>,
+    /// 关键词命中的往来主体身份；由组合查询解析。
+    pub keyword_party_ids: Vec<PartyId>,
     /// 子账主键；`None` 表示不筛选。
     pub account_id: Option<ReceivableAccountId>,
     /// 企业客户经营归属；`None` 表示不筛选。
@@ -101,7 +105,7 @@ impl QueryFilter for ReceivableAccountFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(keyword) = self.keyword.as_deref() {
-            let alternatives = ["id", "sales_order_id", "customer_id", "counterparty_party_id"]
+            let mut alternatives = ["id", "sales_order_id", "customer_id", "counterparty_party_id"]
                 .into_iter()
                 .map(|field| {
                     let mut alternative = Document::new();
@@ -109,6 +113,12 @@ impl QueryFilter for ReceivableAccountFilter {
                     alternative
                 })
                 .collect::<Vec<_>>();
+            if !self.keyword_sales_order_ids.is_empty() {
+                alternatives.push(doc! { "sales_order_id": { "$in": self.keyword_sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } });
+            }
+            if !self.keyword_party_ids.is_empty() {
+                alternatives.push(doc! { "counterparty_party_id": { "$in": self.keyword_party_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } });
+            }
             filter.insert("$or", alternatives);
         }
         if let Some(account_id) = &self.account_id {
@@ -796,7 +806,7 @@ mod tests {
     use crate::entity::receivable::ReceivableAccountStatus;
     use crate::repository::owned::ReceivableAccountRepository;
     use crate::repository::ReceivableExt;
-    use erp_core::ids::{CustomerAccountId, PartyId};
+    use erp_core::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use erp_core::money::Amount;
     use mongodb::bson::{doc, Bson};
     use persistence_core::NoTransaction;
@@ -805,8 +815,10 @@ mod tests {
 
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {
-        let filter = ReceivableAccountFilter {
+        let mut filter = ReceivableAccountFilter {
             keyword: None,
+            keyword_sales_order_ids: Vec::new(),
+            keyword_party_ids: Vec::new(),
             account_id: None,
             customer_id: Some(CustomerAccountId::new("cust-1")),
             counterparty_party_id: Some(PartyId::new("party-1")),
@@ -823,6 +835,24 @@ mod tests {
         assert_eq!(document.get_str("customer_id").unwrap(), "cust-1");
         assert_eq!(document.get_str("counterparty_party_id").unwrap(), "party-1");
         assert_eq!(document.get_str("status").unwrap(), "open");
+
+        filter.keyword = Some("XS.1".to_string());
+        filter.keyword_sales_order_ids = vec![SalesOrderId::new("sales-1")];
+        filter.keyword_party_ids = vec![PartyId::new("party-1")];
+        let searched = filter.to_doc();
+        let alternatives = searched.get_array("$or").unwrap();
+        assert_eq!(alternatives.len(), 6);
+        assert_eq!(
+            alternatives[4],
+            Bson::Document(doc! { "sales_order_id": { "$in": ["sales-1"] } })
+        );
+        assert_eq!(
+            alternatives[5],
+            Bson::Document(doc! { "counterparty_party_id": { "$in": ["party-1"] } })
+        );
+        assert_eq!(searched.get_str("customer_id").unwrap(), "cust-1");
+        assert_eq!(searched.get_str("status").unwrap(), "open");
+        assert_eq!(searched.get_i64("deleted_at").unwrap(), 0);
     }
 
     #[test]

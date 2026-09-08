@@ -7,6 +7,7 @@ pub(crate) fn parse(code: &str) -> erp_core::Result<PaymentTermFact> {
     Ok(PaymentTermFact {
         canonical_code: term.code().to_string(),
         prepay_gate: term.prepay_gate(),
+        prepay_minimum_ratio: term.prepay_minimum_ratio(),
         days_after_delivery: term.days_after_delivery(),
     })
 }
@@ -35,6 +36,27 @@ mod tests {
             assert_eq!(fact.canonical_code, canonical);
             assert_eq!(fact.prepay_gate, gate);
             assert_eq!(fact.days_after_delivery, days);
+        }
+    }
+
+    /// 无人工门槛参数时也必须冻结受控比例，避免先款条件被零门槛绕过。
+    #[test]
+    fn new_purchase_snapshots_freeze_provider_prepayment_ratios() {
+        for (code, ratio) in [
+            ("PREPAY_100", Some("1")),
+            ("PREPAY_50", Some("0.5")),
+            ("PREPAY_30", Some("0.3")),
+            ("POSTPAY_NET30", None),
+            ("CASH_ON_APPROVAL", None),
+        ] {
+            let term = parse(code).unwrap();
+            let snapshot =
+                PaymentTermSnapshot::new(term.canonical_code, term.prepay_gate, None, None, parse_snapshot)
+                    .unwrap();
+            assert_eq!(
+                snapshot.prepay_minimum_ratio,
+                ratio.map(|value| value.parse().unwrap())
+            );
         }
     }
 

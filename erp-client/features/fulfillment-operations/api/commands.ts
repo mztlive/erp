@@ -151,15 +151,41 @@ export async function postFulfillmentOperation(
                     message: "交付明细不能为空",
                 }
             }
-            // ElectronicDelivery 为 NO_APPROVAL，确认后丢弃误带的审批绑定。
+            const occurredAt = isoToUnixSecs(draft.occurredAt)
+            if (occurredAt == null || !draft.evidenceFile) {
+                return {
+                    status: "failed",
+                    code: "VALIDATION_BLOCKED",
+                    message: "请填写实际交付时间并上传交付凭证",
+                }
+            }
+            const evidenceReference = "pending-file:electronic-evidence"
+            const form = new FormData()
+            form.append(
+                "command",
+                JSON.stringify({
+                    version: input.expectedDocumentVersion,
+                    recipient_snapshot: draft.recipientMasked.trim(),
+                    quantity: line.quantity,
+                    result:
+                        draft.result === "FAILED"
+                            ? "FAILURE"
+                            : draft.result === "PARTIAL"
+                              ? "PARTIAL_SUCCESS"
+                              : "SUCCESS",
+                    occurred_at: occurredAt,
+                    evidence_attachment_id: evidenceReference,
+                }),
+            )
+            form.append(
+                evidenceReference,
+                draft.evidenceFile,
+                draft.evidenceFile.name,
+            )
             const confirmed = stripElectronicDeliveryApprovalField(
-                await apiPost<BackendElectronicDelivery>(
+                await apiPostForm<BackendElectronicDelivery>(
                     `/admin/electronic-deliveries/${encodeURIComponent(input.operationId)}/confirm`,
-                    {
-                        version: input.expectedDocumentVersion,
-                        expected_source_version: input.expectedSourceVersion,
-                        idempotency_key: input.idempotencyKey,
-                    },
+                    form,
                 ),
             )
             return {

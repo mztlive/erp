@@ -77,7 +77,17 @@ impl PurchaseOrderReadService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-        Ok(change_list_view(change, self.load_change_binding(id).await?))
+        let binding = self.load_change_binding(id).await?;
+        let approval = super::super::approval_query::load_change_document_approval(
+            &self.db,
+            id,
+            binding.as_ref(),
+            change.stable.status,
+        )
+        .await?;
+        let mut view = change_list_view(change, binding);
+        view.approval = approval;
+        Ok(view)
     }
 
     /// 读取变更单创建时冻结的审批绑定。未注册时返回空绑定。

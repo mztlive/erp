@@ -105,6 +105,7 @@ pub async fn purchase_order_create(
     Json(req): Json<CreatePurchaseOrderFromBasisRequest>,
 ) -> Result<CreatePurchaseOrderResult> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .create_from_basis(req, &actor)
         .await?;
 
@@ -133,6 +134,7 @@ pub async fn purchase_order_create_from_sourcing(
     Json(req): Json<CreatePurchaseOrdersFromSourcingRequest>,
 ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .create_from_sourcing(req, &actor)
         .await?;
 
@@ -163,6 +165,7 @@ pub async fn purchase_order_save_draft(
     Json(req): Json<SavePurchaseOrderDraftRequest>,
 ) -> Result<SavePurchaseOrderDraftResult> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .save_draft(&id, req, &actor)
         .await?;
 
@@ -193,6 +196,7 @@ pub async fn purchase_order_void(
     Json(req): Json<VoidPurchaseOrderRequest>,
 ) -> Result<VoidPurchaseOrderResult> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .void_draft(&id, req, &actor)
         .await?;
 
@@ -223,6 +227,7 @@ pub async fn purchase_order_submit(
     Json(req): Json<SubmitPurchaseOrderRequest>,
 ) -> Result<SubmitPurchaseOrderResult> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .submit(&id, req, &actor)
         .await?;
 
@@ -253,6 +258,7 @@ pub async fn purchase_order_cancel_approval(
     Json(req): Json<CancelPurchaseOrderApprovalRequest>,
 ) -> Result<()> {
     PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .cancel_approval(&id, req, &actor)
         .await?;
 
@@ -311,6 +317,7 @@ pub async fn purchase_change_create(
     Json(req): Json<StartPurchaseChangeRequest>,
 ) -> Result<StartPurchaseChangeResult> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .start_change(&id, req, &actor)
         .await?;
 
@@ -341,6 +348,7 @@ pub async fn purchase_change_submit(
     Json(req): Json<SubmitPurchaseChangeRequest>,
 ) -> Result<PurchaseChangeOrderView> {
     let view = PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .submit_change_view(&id, req, &actor)
         .await?;
 
@@ -400,6 +408,7 @@ pub async fn purchase_change_cancel_approval(
     Json(req): Json<CancelPurchaseChangeApprovalRequest>,
 ) -> Result<()> {
     PurchaseOrderProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .cancel_change_approval(&id, req, &actor)
         .await?;
 
@@ -460,6 +469,24 @@ pub async fn purchase_change_detail(
 
 #[cfg(test)]
 mod tests {
+    /// HTTP 构造审批命令时必须同时接入授权源和对象读取端口，禁止退回未接线默认值。
+    #[test]
+    fn approval_commands_wire_object_read_port() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let constructors: Vec<_> = production
+            .split("PurchaseOrderProcess::with_rbac(")
+            .skip(1)
+            .collect();
+        assert!(!constructors.is_empty());
+        for constructor in constructors {
+            let statement = constructor.split(';').next().expect("构造语句");
+            assert!(statement.contains(".with_object_read(state.approval_object_read())"));
+        }
+    }
+
     /// 采购变更 HTTP 只走统一提交、撤回、生效与详情，客户端不得选定义。
     #[test]
     fn purchase_change_http_uses_unified_ports() {

@@ -591,7 +591,6 @@ impl StockAdjustment {
             if line.stock_adjustment_id.as_ref() != self.base.id.as_str() {
                 return Err(Error::from("明细行不属于该调整单"));
             }
-            self.reason_type.ensure_direction(line.direction)?;
         }
         let mut seen = HashSet::with_capacity(updates.len());
         let mut changed = Vec::with_capacity(updates.len());
@@ -611,6 +610,9 @@ impl StockAdjustment {
         }
         if require_all && seen.len() != staged.len() {
             return Err(Error::from("提交必须包含全部调整明细"));
+        }
+        for line in &staged {
+            self.reason_type.ensure_direction(line.direction)?;
         }
         lines.clone_from_slice(&staged);
         Ok(changed)
@@ -1157,6 +1159,24 @@ mod tests {
             .apply_line_updates(&mut lines, &[], false)
             .is_err());
         assert_eq!(lines, original, "原因变更必须重验全部既有方向");
+
+        let gain_updates = vec![
+            StockAdjustmentLineUpdate::new("al-1", "3", Some(MovementDirection::Increase)).unwrap(),
+            StockAdjustmentLineUpdate::new("al-2", "4", Some(MovementDirection::Increase)).unwrap(),
+        ];
+        assert!(gain_adjustment
+            .apply_line_updates(&mut lines, &gain_updates[..1], false)
+            .is_err());
+        assert_eq!(lines, original, "未更新行的方向仍须与新原因一致");
+        gain_adjustment
+            .apply_line_updates(&mut lines, &gain_updates, true)
+            .unwrap();
+        assert!(lines
+            .iter()
+            .all(|line| line.direction == MovementDirection::Increase));
+        assert_eq!(lines[0].quantity.to_string(), "3");
+        assert_eq!(lines[1].quantity.to_string(), "4");
+        lines.clone_from(&original);
 
         let incomplete = vec![StockAdjustmentLineUpdate::new("al-1", "3", None).unwrap()];
         assert!(adjustment

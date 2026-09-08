@@ -259,8 +259,11 @@ export function electronicToOperation(
                 nowIso().slice(0, 16),
             recipientMasked: "",
             result:
-                (electronic.result as "SUCCESS" | "PARTIAL" | "FAILED") ||
-                "SUCCESS",
+                electronic.result === "FAILURE"
+                    ? "FAILED"
+                    : electronic.result === "PARTIAL_SUCCESS"
+                      ? "PARTIAL"
+                      : "SUCCESS",
             lines: [
                 {
                     salesOrderLineId: electronic.sales_order_line_id,

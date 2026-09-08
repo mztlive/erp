@@ -3,7 +3,7 @@
 use super::ReceivableService;
 use crate::dto::receivable::{InvoiceListParams, InvoiceView, PageView, SortDir};
 use crate::entity::payable::PurchaseInvoiceAllocation;
-use crate::entity::receivable::{AllocationAction, InvoiceDirection, SalesInvoiceAllocation};
+use crate::entity::receivable::{AllocationAction, InvoiceDirection, InvoiceKind, SalesInvoiceAllocation};
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::service::receivable::mapping::zero_amount;
 use crate::{Error, Result};
@@ -112,7 +112,7 @@ impl ReceivableService {
                 version: row.version,
                 created_at: row.created_at,
                 allocated_total,
-                unallocated_amount: row.gross_amount.checked_sub(allocated_total),
+                unallocated_amount: unallocated_amount(row.invoice_kind, row.gross_amount, allocated_total),
                 allocations,
             });
         }
@@ -191,7 +191,11 @@ impl ReceivableService {
             status: invoice.stable.status(),
             version: invoice.base.version,
             created_at: invoice.base.created_at,
-            unallocated_amount: invoice.gross_amount.checked_sub(allocated_total),
+            unallocated_amount: unallocated_amount(
+                invoice.invoice_kind,
+                invoice.gross_amount,
+                allocated_total,
+            ),
             allocated_total,
             allocations: views,
         })
@@ -271,4 +275,41 @@ fn purchase_allocation_view(
         })
         .collect();
     (net, views)
+}
+
+/// 按票据方向计算剩余分配额；红票分配冲减以负数记账，不能再次从正票面扣减。
+fn unallocated_amount(kind: InvoiceKind, gross: Amount, allocated: Amount) -> Amount {
+    match kind {
+        InvoiceKind::Blue => gross.checked_sub(allocated),
+        InvoiceKind::Red => gross.checked_add(allocated),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{unallocated_amount, InvoiceKind};
+    use erp_core::money::Amount;
+
+    /// 正票面与负冲减分配必须守恒，完整红冲不得产生两倍未分配额。
+    #[test]
+    fn invoice_remainder_respects_red_allocation_direction() {
+        let gross: Amount = "2576.00".parse().unwrap();
+        let reversed: Amount = "-2576.00".parse().unwrap();
+        assert_eq!(
+            unallocated_amount(InvoiceKind::Red, gross, reversed),
+            "0.00".parse().unwrap()
+        );
+        assert_eq!(
+            unallocated_amount(InvoiceKind::Blue, gross, gross),
+            "0.00".parse().unwrap()
+        );
+        assert_eq!(
+            unallocated_amount(InvoiceKind::Red, gross, "-1000.00".parse().unwrap()),
+            "1576.00".parse().unwrap()
+        );
+        assert_eq!(
+            unallocated_amount(InvoiceKind::Blue, gross, "1000.00".parse().unwrap()),
+            "1576.00".parse().unwrap()
+        );
+    }
 }

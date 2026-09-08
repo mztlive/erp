@@ -15,7 +15,12 @@ import {
     projectReceiptReversal,
     projectReceivable,
 } from "./mappers"
-import { loadReceipts, loadReceivables, loadSalesInvoices } from "./loaders"
+import {
+    loadPendingCardReviewCount,
+    loadReceipts,
+    loadReceivables,
+    loadSalesInvoices,
+} from "./loaders"
 import type {
     BackendCustomerReceipt,
     BackendCustomerRefund,
@@ -83,17 +88,19 @@ export async function fetchCustomerAccountsList(
         page: query.page,
         page_size: query.pageSize,
     }
-    const [recvPage, rcptPage, invPage] = await Promise.all([
-        query.view === "receivable"
-            ? loadReceivables(query)
-            : Promise.resolve(emptyPage as Page<BackendReceivableAccount>),
-        query.view === "receipt" || query.view === "unallocated"
-            ? loadReceipts(query)
-            : Promise.resolve(emptyPage as Page<BackendCustomerReceipt>),
-        query.view === "sales_invoice" || query.view === "unallocated"
-            ? loadSalesInvoices(query)
-            : Promise.resolve(emptyPage as Page<BackendInvoice>),
-    ])
+    const [recvPage, rcptPage, invPage, cardPendingReviewCount] =
+        await Promise.all([
+            query.view === "receivable"
+                ? loadReceivables(query)
+                : Promise.resolve(emptyPage as Page<BackendReceivableAccount>),
+            query.view === "receipt" || query.view === "unallocated"
+                ? loadReceipts(query)
+                : Promise.resolve(emptyPage as Page<BackendCustomerReceipt>),
+            query.view === "sales_invoice" || query.view === "unallocated"
+                ? loadSalesInvoices(query)
+                : Promise.resolve(emptyPage as Page<BackendInvoice>),
+            loadPendingCardReviewCount(query),
+        ])
 
     const receivables = (recvPage.items ?? []).map(projectReceivable)
     const partyDisplay = new Map(
@@ -175,7 +182,7 @@ export async function fetchCustomerAccountsList(
         }
     }
 
-    // metrics：后端无汇总端点 — 缺口登记，返回占位 0（禁止前端求和冒充）
+    // 金额汇总待后端端点；待复核数量使用服务端筛选总数。
     return {
         view: query.view,
         metrics: {
@@ -183,7 +190,7 @@ export async function fetchCustomerAccountsList(
             overdueReceivableTotal: "0.00",
             unallocatedReceiptTotal: "0.00",
             unallocatedInvoiceTotal: "0.00",
-            cardPendingReviewCount: 0,
+            cardPendingReviewCount,
         },
         receivables,
         receipts,

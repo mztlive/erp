@@ -560,7 +560,7 @@ export function projectInvoice(inv: BackendInvoice): PurchaseInvoiceRow {
         }),
         allowedActions:
             status === "POSTED" && inv.invoice_kind === "blue"
-                ? ["VIEW_DETAIL", "CONTINUE_ALLOCATE", "ISSUE_RED"]
+                ? ["VIEW_DETAIL", "CONTINUE_ALLOCATE", "RED_INVOICE"]
                 : ["VIEW_DETAIL"],
         actionBlockers: [],
     }

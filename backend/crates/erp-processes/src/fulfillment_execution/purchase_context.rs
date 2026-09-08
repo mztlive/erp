@@ -243,6 +243,7 @@ mod tests {
         Ok(erp_procurement::entity::facts::PaymentTermFact {
             canonical_code: term.code().to_string(),
             prepay_gate: term.prepay_gate(),
+            prepay_minimum_ratio: term.prepay_minimum_ratio(),
             days_after_delivery: term.days_after_delivery(),
         })
     }

@@ -24,7 +24,7 @@ export function VoucherSalesOrderSubmitConfirmDialog({
             open={open}
             pending={pending}
             snapshot={snapshot}
-            description="提交后进入销售领导 → 运营两级审批；任一层驳回后将从第一节点开始下一轮。"
+            description="提交后按已绑定的审批流程办理；任一层驳回后将从第一节点开始下一轮。"
             onOpenChange={onOpenChange}
             onConfirm={onConfirm}
         />

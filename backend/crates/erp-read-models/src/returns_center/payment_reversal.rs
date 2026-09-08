@@ -68,7 +68,13 @@ impl ReturnsReadService {
             occurred_at: reversal.occurred_at,
             version: reversal.base.version,
             created_at: reversal.base.created_at,
-            approval: payment_reversal_approval_view(binding.as_ref(), None, reversal.status),
+            approval: super::approval::load_runtime(
+                &self.db,
+                erp_workflow::entity::document_registry::DocumentType::PaymentReversal,
+                &id,
+                payment_reversal_approval_view(binding.as_ref(), None, reversal.status),
+            )
+            .await?,
         })
     }
 }

@@ -4,7 +4,7 @@ mod center_facts;
 mod coverage;
 mod coverage_service;
 mod creation_basis;
-mod list_facts;
+pub(super) mod list_facts;
 pub(crate) mod mapping;
 pub mod supplier_names;
 

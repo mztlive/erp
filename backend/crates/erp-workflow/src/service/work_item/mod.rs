@@ -460,6 +460,28 @@ mod tests {
         assert!(authorized_item_fields(item, &access, &w13_facts()).is_none());
     }
 
+    /// 冻结的当前审批人有对象读取权限即可承接节点，陌生人与撤权者仍被拒绝。
+    #[test]
+    fn assigned_approver_requires_object_read_but_not_creator_participation() {
+        let mut item = w13_delta_item();
+        item.work_item_type = WorkItemType::DocumentApproval;
+        item.business_object_type = "purchase_change_order".into();
+        item.business_object_id = "change-1".into();
+        item.owner_role = "purchase_change_order_approver".into();
+        let facts = HashMap::from([(
+            (ObjectKind::PurchaseChangeOrder, "change-1".to_string()),
+            ObjectFact::new("change-1", "采购变更单", "buyer"),
+        )]);
+        let mut access = procurement_access("alice");
+        access.permissions = vec!["purchase_change_order:detail".to_string()];
+        assert!(authorized_item_fields(item.clone(), &access, &facts).is_some());
+        access.actor_id = "stranger".into();
+        assert!(authorized_item_fields(item.clone(), &access, &facts).is_none());
+        access.actor_id = "alice".into();
+        access.permissions.clear();
+        assert!(authorized_item_fields(item, &access, &facts).is_none());
+    }
+
     #[test]
     fn procurement_owner_and_reassign_candidate_use_concrete_permission() {
         let owner_access = procurement_access("buyer-1");

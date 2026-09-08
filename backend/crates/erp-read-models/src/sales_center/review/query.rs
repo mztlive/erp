@@ -6,6 +6,7 @@ use crate::{Error, Result};
 use erp_sales::entity::sales_review::SalesChangeOrder;
 use erp_sales::repository::SalesReviewExt;
 use erp_workflow::service::document_registry::find_approval_binding;
+use erp_workflow::BpmExt;
 use persistence_core::NoTransaction;
 
 impl SalesChangeReadService {
@@ -26,7 +27,32 @@ impl SalesChangeReadService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        Ok(detail_view(change_order, self.load_change_binding(id).await?))
+        let binding = self.load_change_binding(id).await?;
+        // 只读取创建时绑定的定义，不能切换为当前最新发布版本。
+        let graph = match binding.as_ref() {
+            Some(binding) => Some(
+                self.db
+                    .bpm_workflow()
+                    .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
+                    .await?
+                    .ok_or_else(|| Error::ConflictError("销售变更绑定的审批定义不存在".to_string()))?,
+            ),
+            None => None,
+        };
+        let mut view = detail_view(change_order, binding);
+        if let (Some(definition), Some(mut graph)) = (view.approval.definition.as_mut(), graph) {
+            definition.name = graph.definition.name;
+            graph.nodes.sort_by_key(|node| node.display_order);
+            definition.nodes = graph
+                .nodes
+                .into_iter()
+                .map(|node| super::dto::DocumentApprovalNodeView {
+                    key: node.node_key,
+                    name: node.node_name,
+                })
+                .collect();
+        }
+        Ok(view)
     }
     /// 读取变更单创建时冻结的审批绑定。未注册时返回空绑定。
     ///

@@ -4,7 +4,6 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 
-import { assigneeEligibilityLabel } from "../labels"
 import { useEligibleAssigneesQuery } from "../queries"
 import type { DocumentType, EligibleAssignee } from "../types"
 
@@ -43,9 +42,10 @@ export function AssigneeCombobox({
         assignees == null && !disabled,
     )
     const rows = assignees ?? query.data ?? []
+    // 候选人已经过服务端资格过滤，主行只显示人名；资格说明见空状态。
     const options = rows.map((item) => ({
         value: item.user_id,
-        label: assigneeEligibilityLabel(item.name),
+        label: item.name,
         keywords: item.name,
     }))
     if (
@@ -55,7 +55,7 @@ export function AssigneeCombobox({
     ) {
         options.unshift({
             value,
-            label: assigneeEligibilityLabel(selectedName),
+            label: selectedName,
             keywords: selectedName,
         })
     }

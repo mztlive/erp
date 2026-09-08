@@ -23,9 +23,10 @@ pub mod warehouse;
 
 pub use approval_dispatch::ApprovalActionRegistry;
 pub use attachments::{
-    commit_supplier_payment_with_assets, confirm_service_fulfillment_with_assets,
-    product_brand_create_with_assets, product_brand_update_with_assets, product_create_with_assets,
-    product_update_with_assets, supplier_profile_create_with_assets, supplier_profile_update_with_assets,
+    commit_supplier_payment_with_assets, confirm_electronic_delivery_with_assets,
+    confirm_service_fulfillment_with_assets, product_brand_create_with_assets,
+    product_brand_update_with_assets, product_create_with_assets, product_update_with_assets,
+    supplier_profile_create_with_assets, supplier_profile_update_with_assets,
 };
 pub use audit::run_audited;
 pub use catalog::{

@@ -179,7 +179,17 @@ impl PartyService {
     pub async fn party_list(&self, params: &PartyListParams) -> Result<PageView<PartyView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let matching_name_ids = match query.keyword.as_deref() {
+            Some(keyword) => {
+                self.db
+                    .party()
+                    .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
+                    .await?
+            }
+            None => Vec::new(),
+        };
         let filter = PartyFilter {
+            matching_name_ids,
             keyword: query.keyword,
             party_kind: query.party_kind,
             status: query.status,

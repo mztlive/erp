@@ -344,6 +344,8 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
     "warehouse_sku_policy:list",
     "purchase_order:list",
     "purchase_order:detail",
+    "purchase_change_order:list",
+    "purchase_change_order:detail",
     "purchase_receipt:*",
     "delivery:*",
     "stock_balance:list",
@@ -383,6 +385,7 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     // 上下文只读（往来主体搜索：登记回款/销项发票需选择结算主体）
     "party:list",
     "party:detail",
+    "party_revision:list",
     "customer:list",
     "customer:detail",
     "customer_scope:detail",
@@ -396,6 +399,8 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "supplier:detail",
     "sales_order:list",
     "sales_order:detail",
+    "sales_change_order:list",
+    "sales_change_order:detail",
     "purchase_order:list",
     "purchase_order:detail",
     // 采购变更复核：审批区与变更清单需要读取变更单（决定走 approval_instance:decide）
@@ -787,14 +792,33 @@ async fn upgrade_finance_role_party_read_permissions(rbac: &SharedRbacService) -
 }
 
 /// 本轮补齐前财务默认种子缺少的往来主体只读权限。
-const FINANCE_PARTY_READ_GAP_PERMISSIONS: &[&str] = &["party:list", "party:detail"];
+const FINANCE_PARTY_READ_GAP_PERMISSIONS: &[&str] = &["party:list", "party:detail", "party_revision:list"];
 
 /// 构造可安全识别的历史财务默认权限快照。
 fn finance_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
-    Ok(vec![remove_permissions(
-        desired,
-        FINANCE_PARTY_READ_GAP_PERMISSIONS,
-    )])
+    Ok(vec![
+        remove_permissions(desired, &["party_revision:list"]),
+        remove_permissions(desired, &["sales_change_order:list", "sales_change_order:detail"]),
+        remove_permissions(
+            desired,
+            &[
+                "party_revision:list",
+                "sales_change_order:list",
+                "sales_change_order:detail",
+            ],
+        ),
+        remove_permissions(
+            desired,
+            &[
+                "party:list",
+                "party:detail",
+                "party_revision:list",
+                "sales_change_order:list",
+                "sales_change_order:detail",
+            ],
+        ),
+        remove_permissions(desired, FINANCE_PARTY_READ_GAP_PERMISSIONS),
+    ])
 }
 
 /// 仅为仍保持历史默认种子的采购角色补齐当前供应商维护权限。
@@ -1089,6 +1113,34 @@ mod tests {
             .any(|permission| permission.to_string() == "purchase_order:review"));
     }
 
+    /// 财务选择结算主体需要读取名称，历史默认快照升级不包含主体修改权限。
+    #[test]
+    fn finance_party_read_upgrade_covers_previous_defaults() {
+        let desired = parse_permissions(FINANCE_PERMISSIONS).unwrap();
+        assert!(FINANCE_PERMISSIONS.contains(&"party_revision:list"));
+        assert!(FINANCE_PERMISSIONS.contains(&"sales_change_order:detail"));
+        assert!(FINANCE_PERMISSIONS.contains(&"sales_change_order:list"));
+        assert!(!FINANCE_PERMISSIONS.contains(&"sales_change_order:create"));
+        assert!(!FINANCE_PERMISSIONS.contains(&"party_revision:*"));
+        let snapshots = super::finance_legacy_permission_snapshots(&desired).unwrap();
+        assert!(snapshots.contains(&super::remove_permissions(&desired, &["party_revision:list"])));
+        assert!(snapshots.contains(&super::remove_permissions(
+            &desired,
+            &["party:list", "party:detail", "party_revision:list"]
+        )));
+    }
+
+    /// 仓储审批采购变更需要读取对象，但不得获得创建或提交变更的职责。
+    #[test]
+    fn warehouse_can_read_purchase_changes_for_approval() {
+        let permissions = super::WAREHOUSE_PERMISSIONS;
+        assert!(permissions.contains(&"purchase_change_order:list"));
+        assert!(permissions.contains(&"purchase_change_order:detail"));
+        assert!(!permissions.contains(&"purchase_change_order:*"));
+        assert!(!permissions.contains(&"purchase_change_order:create"));
+        assert!(!permissions.contains(&"purchase_change_order:submit"));
+    }
+
     #[test]
     fn all_predefined_permissions_are_parseable() {
         for role in PREDEFINED_ROLES {
@@ -1223,11 +1275,16 @@ mod tests {
 
     #[test]
     fn purchase_change_read_follows_review_responsibility_roles() {
-        // 采购变更由财务复核；管理层可打开任务详情。两者必须能读取变更单，
+        // 采购变更由仓储确认履约影响、财务复核；管理层可打开任务详情。各岗位必须能读取变更单，
         // 决定本身走 approval_instance:decide，无需 approve/reject 资源动作。
         // 采购用通配 `purchase_change_order:*` 覆盖，按解析后的覆盖关系断言。
         let required = ["purchase_change_order:list", "purchase_change_order:detail"];
-        let read_roles = ["role-procurement", "role-finance", "role-management"];
+        let read_roles = [
+            "role-procurement",
+            "role-warehouse",
+            "role-finance",
+            "role-management",
+        ];
         for role in PREDEFINED_ROLES {
             let permissions = parse_permissions(role.permissions).unwrap();
             for permission in required {

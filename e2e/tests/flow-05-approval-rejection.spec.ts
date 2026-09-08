@@ -147,8 +147,8 @@ async function dismissToasts(page: Page): Promise<void> {
   for (let i = 0; i < 5; i += 1) {
     const dismiss = page
       .locator('[data-slot="toast"]')
-      .getByRole('button', { name: 'Dismiss' })
-      .first()
+      .getByRole('button', { name: '关闭提示' })
+      .last()
     if ((await dismiss.count()) === 0) break
     await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
   }

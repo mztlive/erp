@@ -39,6 +39,10 @@ pub struct SupplierPaymentRow {
 /// 供应商付款单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierPaymentFilter {
+    /// 付款单号或供应商名称关键词。
+    pub keyword: Option<String>,
+    /// 查询层按当前名称解析的供应商主键。
+    pub keyword_supplier_ids: Vec<SupplierAccountId>,
     /// 付款单号模糊匹配；`None` 表示不筛选。
     pub payment_no: Option<String>,
     /// 收款供应商；`None` 表示不筛选。
@@ -63,6 +67,20 @@ impl QueryFilter for SupplierPaymentFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "payment_no", self.payment_no.as_deref());
+        if let Some(keyword) = self
+            .keyword
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let mut number_match = Document::new();
+            insert_literal_regex_filter(&mut number_match, "payment_no", Some(keyword));
+            let mut alternatives = vec![number_match];
+            if !self.keyword_supplier_ids.is_empty() {
+                alternatives.push(doc! { "supplier_id": { "$in": self.keyword_supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } });
+            }
+            filter.insert("$or", alternatives);
+        }
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
@@ -192,6 +210,8 @@ mod tests {
     #[test]
     fn payment_filter_escapes_regex_literals() {
         let filter = SupplierPaymentFilter {
+            keyword: Some("狮峰.茶".into()),
+            keyword_supplier_ids: vec![erp_core::ids::SupplierAccountId::new("supplier-1")],
             payment_no: Some("PAY-9.9".to_string()),
             supplier_id: None,
             status: None,
@@ -202,6 +222,30 @@ mod tests {
         };
 
         let document = filter.to_doc();
+        let alternatives = document.get_array("$or").unwrap();
+        assert_eq!(alternatives.len(), 2);
+        assert_eq!(
+            alternatives[0]
+                .as_document()
+                .unwrap()
+                .get_document("payment_no")
+                .unwrap()
+                .get_str("$regex")
+                .unwrap(),
+            r"狮峰\.茶"
+        );
+        assert_eq!(
+            alternatives[1]
+                .as_document()
+                .unwrap()
+                .get_document("supplier_id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap()[0]
+                .as_str(),
+            Some("supplier-1")
+        );
+        assert!(document.contains_key("deleted_at"));
         let regex = document.get_document("payment_no").unwrap();
         assert_eq!(regex.get_str("$regex").unwrap(), r"PAY\-9\.9");
     }

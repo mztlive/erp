@@ -75,7 +75,7 @@ pub fn document_approval_view_with_definition(
 ///
 /// # 返回
 /// 返回定义 id、名称、版本与有序节点。
-fn definition_view_from_binding(
+pub(in crate::purchase_center) fn definition_view_from_binding(
     binding: &ApprovalDefinitionBinding,
     graph: Option<&DefinitionGraph>,
 ) -> DocumentApprovalDefinitionView {

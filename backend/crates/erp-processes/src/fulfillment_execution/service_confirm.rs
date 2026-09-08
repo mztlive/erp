@@ -227,7 +227,7 @@ fn resolve_service_evidence_id(
 ///
 /// # 错误
 /// 凭证不存在、已销毁或元数据不合法时返回错误。
-async fn ensure_service_evidence_asset_in_transaction(
+pub(super) async fn ensure_service_evidence_asset_in_transaction(
     db: &Database,
     asset_id: &FileAssetId,
     pending_assets: &dyn PendingAttachmentBatch,

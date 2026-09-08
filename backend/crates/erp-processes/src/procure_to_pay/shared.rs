@@ -3,7 +3,7 @@ use super::PurchaseOrderProcess;
 use crate::Result;
 use erp_procurement::entity::purchase_order::PaymentTermSnapshot;
 impl PurchaseOrderProcess {
-    /// 解析付款条件并生成门禁快照（金额/比例门槛暂空）。
+    /// 解析付款条件并由供应商受控规则冻结门禁比例。
     pub(super) async fn payment_term_snapshot(&self, payment_term_code: &str) -> Result<PaymentTermSnapshot> {
         let payment_term = super::adapters::payment_term::parse(payment_term_code)?;
         PaymentTermSnapshot::new(

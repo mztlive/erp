@@ -76,7 +76,8 @@ pub async fn sales_order_create(
     Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac());
+    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read());
     let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
     ensure_customer_access(&state, &subject, &user_id, customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
@@ -166,6 +167,7 @@ pub async fn sales_order_submit(
     Json(req): Json<SubmitSalesOrderRequest>,
 ) -> Result<SubmissionView> {
     let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .submit_sales_order(&id, req, &actor)
         .await?;
 
@@ -196,6 +198,7 @@ pub async fn sales_order_cancel_approval(
     Json(req): Json<CancelSalesOrderApprovalRequest>,
 ) -> Result<SalesOrderDetailView> {
     let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read())
         .cancel_approval_submission(&id, req, &actor)
         .await?;
 
@@ -235,6 +238,24 @@ pub async fn sales_order_void(
 
 #[cfg(test)]
 mod tests {
+    /// HTTP 构造审批命令时必须同时接入授权源和对象读取端口，禁止退回未接线默认值。
+    #[test]
+    fn approval_commands_wire_object_read_port() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let constructors: Vec<_> = production
+            .split("SalesOrderCommandProcess::with_rbac(")
+            .skip(1)
+            .collect();
+        assert!(!constructors.is_empty());
+        for constructor in constructors {
+            let statement = constructor.split(';').next().expect("构造语句");
+            assert!(statement.contains(".with_object_read(state.approval_object_read())"));
+        }
+    }
+
     /// HTTP 调用方对卡券销售单只走统一提交/撤回，不得新增专用决定入口。
     #[test]
     fn voucher_sales_order_http_uses_unified_ports() {

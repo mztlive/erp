@@ -7,6 +7,7 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
+import { cn } from "@/lib/utils"
 
 import { orderNodesForSave, seedDraftNodes } from "../draft-nodes"
 import {
@@ -21,6 +22,7 @@ import type {
     ReplaceDefinitionNodesCommand,
 } from "../types"
 import { buildStableReplaceNodesCommand } from "../write-payload"
+import { DefinitionFlowchart } from "./definition-flowchart"
 import { NodeListEditor } from "./node-list-editor"
 
 const INCOMPLETE_DRAFT_MESSAGE =
@@ -50,6 +52,12 @@ export function DefinitionEditor({
         "idle" | "saving" | "saved" | "failed"
     >("idle")
     const [savedAt, setSavedAt] = React.useState<Date | undefined>()
+    const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(
+        null,
+    )
+    const [mobilePane, setMobilePane] = React.useState<"edit" | "preview">(
+        "edit",
+    )
     const readOnly = detail.status !== "DRAFT"
 
     const form = useAppForm({
@@ -117,11 +125,24 @@ export function DefinitionEditor({
         pendingCommandRef.current = null
         form.reset()
         setSubmitError(null)
+        setSelectedNodeId(null)
+        setMobilePane("edit")
         setSaveState("idle")
         setSavedAt(undefined)
         // 仅在切换定义时重置，避免把 form 放进依赖导致循环。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [detail.definition_id])
+
+    const handleFlowSelect = (clientId: string, index: number) => {
+        setSelectedNodeId(clientId)
+        setMobilePane("edit")
+        if (typeof document === "undefined") return
+        globalThis.setTimeout(() => {
+            document
+                .querySelector(`[data-testid="approval-node-${index}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 50)
+    }
 
     return (
         <form
@@ -158,17 +179,72 @@ export function DefinitionEditor({
                         />
                     )}
                 </form.AppField>
+                <div
+                    role="group"
+                    aria-label="编辑与预览切换"
+                    className="flex w-fit rounded-lg border border-border bg-card p-0.5 lg:hidden"
+                >
+                    <Button
+                        id={`${id}-mobile-edit`}
+                        type="button"
+                        size="sm"
+                        variant={mobilePane === "edit" ? "secondary" : "ghost"}
+                        aria-pressed={mobilePane === "edit"}
+                        onClick={() => setMobilePane("edit")}
+                    >
+                        编辑
+                    </Button>
+                    <Button
+                        id={`${id}-mobile-preview`}
+                        type="button"
+                        size="sm"
+                        variant={
+                            mobilePane === "preview" ? "secondary" : "ghost"
+                        }
+                        aria-pressed={mobilePane === "preview"}
+                        onClick={() => setMobilePane("preview")}
+                    >
+                        预览
+                    </Button>
+                </div>
                 <form.Subscribe selector={(state) => state.values.nodes}>
                     {(nodes) => (
-                        <NodeListEditor
-                            id={`${id}-nodes`}
-                            documentType={detail.document_type}
-                            nodes={nodes}
-                            readOnly={readOnly}
-                            onChange={(next) =>
-                                form.setFieldValue("nodes", next)
-                            }
-                        />
+                        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+                            <div
+                                className={cn(
+                                    "min-w-0",
+                                    mobilePane === "edit"
+                                        ? "block"
+                                        : "hidden lg:block",
+                                )}
+                            >
+                                <NodeListEditor
+                                    id={`${id}-nodes`}
+                                    documentType={detail.document_type}
+                                    nodes={nodes}
+                                    readOnly={readOnly}
+                                    selectedClientId={selectedNodeId}
+                                    onChange={(next) =>
+                                        form.setFieldValue("nodes", next)
+                                    }
+                                />
+                            </div>
+                            <div
+                                className={cn(
+                                    "min-w-0 lg:sticky lg:top-4",
+                                    mobilePane === "preview"
+                                        ? "block"
+                                        : "hidden lg:block",
+                                )}
+                            >
+                                <DefinitionFlowchart
+                                    id={`${id}-flow`}
+                                    nodes={nodes}
+                                    selectedClientId={selectedNodeId}
+                                    onSelect={handleFlowSelect}
+                                />
+                            </div>
+                        </div>
                     )}
                 </form.Subscribe>
             </div>

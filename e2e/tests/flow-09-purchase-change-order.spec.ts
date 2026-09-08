@@ -84,7 +84,7 @@ async function openSession(browser: Browser, loginName: LoginName) {
     return { page, context, account }
 }
 
-async function expectToast(page: Page, title: string) {
+async function expectToast(page: Page, title: string | RegExp) {
     await expect(
         page.locator("[data-slot=toast-title]").filter({ hasText: title }),
     ).toBeVisible(VISIBLE)
@@ -92,7 +92,7 @@ async function expectToast(page: Page, title: string) {
     for (let i = 0; i < 5; i += 1) {
         const dismiss = page
             .locator("[data-slot=toast]")
-            .getByRole("button", { name: "Dismiss" })
+            .getByRole("button", { name: "关闭提示", includeHidden: true })
             .first()
         if ((await dismiss.count()) === 0) break
         await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
@@ -166,7 +166,10 @@ async function approveWorkspaceTask(
     await expect(page.getByRole("heading", { name: "确认通过" })).toBeVisible(
         VISIBLE,
     )
+    const decided = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/approval-decisions"), { timeout: 40_000 })
     await page.getByRole("button", { name: "确认通过" }).click()
+    expect((await decided).ok()).toBeTruthy()
+    await expect(page.getByRole("heading", { name: "确认通过" })).toBeHidden(VISIBLE)
     await expect(task).toHaveCount(0, VISIBLE)
 }
 
@@ -182,7 +185,12 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
     {
         const admin = await openSession(browser, "admin")
         try {
+            const rulesLoaded = admin.page.waitForResponse((response) =>
+                response.request().method() === "GET" &&
+                response.url().includes("/admin/procurement-responsibility-rules"),
+            )
             await admin.page.goto("/master-data/procurement-responsibilities")
+            await rulesLoaded
             await expect(
                 admin.page.getByRole("heading", { name: "采购责任规则" }),
             ).toBeVisible(VISIBLE)
@@ -246,14 +254,14 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expect(sales.page.getByRole("heading", { name: "合同" })).toBeVisible(
             VISIBLE,
         )
-        await sales.page.getByRole("button", { name: "上传合同 PDF" }).click()
+        await sales.page.getByLabel("页面操作").getByRole("button", { name: "上传合同 PDF" }).click()
         await expect(
             sales.page.getByRole("heading", { name: "上传合同 PDF" }),
         ).toBeVisible(VISIBLE)
         await sales.page
             .locator("#card-contracts-upload-pdf-input")
             .setInputFiles(SAMPLE_CONTRACT_PDF)
-        await sales.page.getByLabel("合同编号").fill(contractNo)
+        await sales.page.locator("#card-contracts-upload-contract-no").fill(contractNo)
         await chooseComboboxOption(
             sales.page,
             sales.page.locator("#card-contracts-upload-customer"),
@@ -274,7 +282,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             contractNo,
             new RegExp(contractNo),
         )
-        await expect(sales.page.getByText(legalName)).toBeVisible(VISIBLE)
+        await expect(sales.page.getByText(legalName, { exact: true }).first()).toBeVisible(VISIBLE)
         await chooseComboboxOption(
             sales.page,
             sales.page.locator("#sales-orders-create-header-welfare-scene"),
@@ -294,7 +302,8 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expect(skuRow).toBeVisible(VISIBLE)
         await skuRow.getByRole("checkbox").check()
         await skuDialog.getByRole("button", { name: /加入所选/ }).click()
-        await expect(sales.page.getByText(SKU_NAME)).toBeVisible(VISIBLE)
+        await expect(skuDialog).toBeHidden(VISIBLE)
+        await expect(sales.page.getByRole("button", { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible(VISIBLE)
         await sales.page
             .locator('input[id^="sales-orders-create-line-"][id$="-quantity"]')
             .fill("2")
@@ -356,10 +365,11 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             await procurement.page
                 .getByTestId("purchase-create-match-best")
                 .click()
+            await expectToast(procurement.page, /已重新分配供给|没有可匹配的供给方案/)
             await expect(
                 procurement.page.getByText("销售明细与供给方案"),
             ).toBeVisible(VISIBLE)
-            const warehouseInput = procurement.page.getByPlaceholder("选择目标仓")
+            const warehouseInput = procurement.page.getByRole("combobox", { name: "仓库", exact: true })
             if ((await warehouseInput.count()) > 0) {
                 // 仓库下拉按仓库代码精确筛选，填代码后按名称选择选项。
                 await chooseComboboxOption(
@@ -421,7 +431,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expect(
             procurement.page.getByRole("heading", { name: "采购单", exact: true }),
         ).toBeVisible(VISIBLE)
-        const openPo = procurement.page.getByRole("link", {
+        const openPo = procurement.page.getByRole("button", {
             name: /打开采购单/,
         })
         await expect(openPo).toBeVisible(VISIBLE)
@@ -431,8 +441,8 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             VISIBLE,
         )
         purchaseHref = procurement.page.url()
-        await expect(procurement.page.getByText("已生效")).toBeVisible(VISIBLE)
-        await expect(procurement.page.getByText("v1")).toBeVisible(VISIBLE)
+        await expect(procurement.page.locator('[data-slot="document-header"]').getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
+        await expect(procurement.page.locator('[data-slot="document-header"]')).toContainText(/版本\s*v1\b/, VISIBLE)
         await expect(procurement.page.getByText("未付")).toBeVisible(VISIBLE)
         await expect(procurement.page.getByText("未开始")).toBeVisible(VISIBLE)
         await expect(
@@ -459,10 +469,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             }),
         ).toBeVisible(VISIBLE)
         await expect(procurement.page).toHaveURL(/section=changes/, VISIBLE)
-        await expect(procurement.page.getByText("草稿")).toBeVisible(VISIBLE)
-        await expect(
-            procurement.page.getByText("采购变更").or(procurement.page.getByText("基准 v1")),
-        ).toBeVisible(VISIBLE)
+        await expect(procurement.page.getByRole("listitem").filter({ hasText: "采购变更" }).getByText("草稿", { exact: true })).toBeVisible(VISIBLE)
 
         // 进行中改单时不得再开第二张变更单
         await expect(
@@ -484,10 +491,10 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await expect(
             procurement.page.getByRole("heading", { name: "改单已提交审批" }),
         ).toBeVisible(VISIBLE)
-        await expect(procurement.page.getByText("审批中")).toBeVisible(VISIBLE)
+        await expect(procurement.page.getByRole("listitem").filter({ hasText: "采购变更" }).getByText("审批中", { exact: true })).toBeVisible(VISIBLE)
         // 提交后原采购版本仍有效
-        await expect(procurement.page.getByText("已生效")).toBeVisible(VISIBLE)
-        await expect(procurement.page.getByText("v1")).toBeVisible(VISIBLE)
+        await expect(procurement.page.locator('[data-slot="document-header"]').getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
+        await expect(procurement.page.locator('[data-slot="document-header"]')).toContainText(/版本\s*v1\b/, VISIBLE)
     } finally {
         await procurement.context.close()
     }
@@ -538,12 +545,12 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         const procurement = await openSession(browser, "caigou")
         try {
             await procurement.page.goto(purchaseHref)
-            await expect(procurement.page.getByText("已生效")).toBeVisible(VISIBLE)
-            await expect(procurement.page.getByText("v2")).toBeVisible(VISIBLE)
+            await expect(procurement.page.locator('[data-slot="document-header"]').getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
+            await expect(procurement.page.locator('[data-slot="document-header"]')).toContainText(/版本\s*v2\b/, VISIBLE)
             await procurement.page
                 .getByRole("tab", { name: "变更与异常" })
                 .click()
-            await expect(procurement.page.getByText("已生效")).toBeVisible(VISIBLE)
+            await expect(procurement.page.getByRole("listitem").filter({ hasText: "采购变更" }).getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
             await expect(
                 procurement.page.getByRole("button", { name: "提交改单" }),
             ).toHaveCount(0)

@@ -207,6 +207,8 @@ export type FulfillmentDraft =
           type: "ELECTRONIC"
           occurredAt: string
           recipientMasked: string
+          /** 随正式确认一起提交的交付凭证。 */
+          evidenceFile?: File
           result: FulfillmentResultCode
           evidenceNote?: string
           lines: ElectronicDraftLine[]

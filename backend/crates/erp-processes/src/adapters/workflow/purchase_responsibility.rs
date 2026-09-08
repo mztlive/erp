@@ -241,6 +241,7 @@ mod tests {
                 Ok(PaymentTermFact {
                     canonical_code: code.into(),
                     prepay_gate: false,
+                    prepay_minimum_ratio: None,
                     days_after_delivery: Some(30),
                 })
             },

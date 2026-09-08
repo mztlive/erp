@@ -211,6 +211,8 @@ export async function submitPurchaseChange(input: {
             `/admin/purchase-change-orders/${encodeURIComponent(input.purchaseChangeOrderId)}/submit`,
             {
                 expected_lock_version: input.expectedLockVersion,
+                // 空目标行按服务端契约沿用基准版本明细。
+                lines: [],
                 idempotency_key: input.idempotencyKey,
             },
         )

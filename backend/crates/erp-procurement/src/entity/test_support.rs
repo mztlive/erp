@@ -21,6 +21,12 @@ pub(crate) fn payment_term(raw: &str) -> Result<PaymentTermFact> {
     Ok(PaymentTermFact {
         canonical_code: canonical_code.to_string(),
         prepay_gate,
+        prepay_minimum_ratio: match canonical_code {
+            "PREPAY_100" => Some("1.0".parse().unwrap()),
+            "PREPAY_50" => Some("0.5".parse().unwrap()),
+            "PREPAY_30" => Some("0.3".parse().unwrap()),
+            _ => None,
+        },
         days_after_delivery,
     })
 }

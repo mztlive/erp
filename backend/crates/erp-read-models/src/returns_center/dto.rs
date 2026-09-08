@@ -352,6 +352,10 @@ pub struct DocumentApprovalInstanceView {
     pub current_round_no: u32,
     /// 当前节点键。
     pub current_node: Option<String>,
+    /// 当前节点显示名，来自执行快照。
+    pub current_node_name: Option<String>,
+    /// 当前审批人显示名，来自执行快照。
+    pub current_assignee_name: Option<String>,
     /// 当前审批人。
     pub current_assignee: Option<String>,
     /// 最近驳回原因。

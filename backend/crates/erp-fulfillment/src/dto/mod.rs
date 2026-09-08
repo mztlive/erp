@@ -70,7 +70,8 @@ pub use delivery::{
 };
 mod electronic_delivery;
 pub use electronic_delivery::{
-    CreateElectronicDeliveryRequest, ElectronicDeliveryListParams, ElectronicDeliveryView,
+    ConfirmElectronicDeliveryRequest, CreateElectronicDeliveryRequest, ElectronicDeliveryListParams,
+    ElectronicDeliveryView,
 };
 mod service_fulfillment;
 pub use service_fulfillment::{

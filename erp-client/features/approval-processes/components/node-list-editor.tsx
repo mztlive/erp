@@ -28,12 +28,14 @@ export function NodeListEditor({
     nodes,
     readOnly,
     onChange,
+    selectedClientId,
     id = "governance-approval-processes-detail-editor-nodes",
 }: {
     documentType: DocumentType
     nodes: EditorNode[]
     readOnly: boolean
     onChange: (nodes: EditorNode[]) => void
+    selectedClientId?: string | null
     id?: string
 }) {
     const move = (index: number, offset: number) => {
@@ -100,6 +102,9 @@ export function NodeListEditor({
                                     index === nodes.length - 1 &&
                                         readOnly &&
                                         "mb-0",
+                                    selectedClientId != null &&
+                                        node.client_id === selectedClientId &&
+                                        "border-primary/60 ring-2 ring-primary/30",
                                 )}
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">

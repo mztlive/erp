@@ -35,6 +35,7 @@ mod change_start;
 mod create_submit;
 pub(crate) mod creation_basis;
 mod draft_edit;
+mod electronic_drafts;
 mod formalization_posting;
 mod formalization_root;
 mod procurement_task_sync;

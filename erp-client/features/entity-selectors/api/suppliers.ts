@@ -8,6 +8,7 @@ import type { EntitySearch } from "./types"
 type SupplierDto = Readonly<{
     id: string
     supplier_no: string
+    party_id: string
     party_no?: string | null
     legal_name?: string | null
     short_name?: string | null
@@ -55,4 +56,15 @@ export async function fetchSupplierOption(
     } catch {
         return null
     }
+}
+
+/** 发票使用往来单位标识，不能使用供应商账户标识。 */
+export async function fetchSupplierPartyId(
+    supplierId: string,
+): Promise<string> {
+    const supplier = await apiGet<SupplierDto>(
+        `/admin/suppliers/${encodeURIComponent(supplierId)}`,
+    )
+    if (!supplier.party_id) throw new Error("供应商缺少往来单位标识")
+    return supplier.party_id
 }

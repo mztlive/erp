@@ -366,7 +366,7 @@ export function SalesOrderCreateForm({
                 </div>
             </form>
 
-            <div id="sales-orders-create-contract-upload">
+            <div id="sales-orders-create-contract-upload-dialog">
                 <ContractUploadDialog
                     open={uploadOpen}
                     onOpenChange={setUploadOpen}

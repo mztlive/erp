@@ -27,6 +27,8 @@ pub struct PurchaseOrderListItemView {
     pub supplier_name: String,
     /// 采购类型。
     pub purchase_type: PurchaseType,
+    /// 冻结的履约责任。
+    pub fulfillment_responsibility: FulfillmentResponsibility,
     /// 付款条件代码（实体 `payment_term_code`）。
     pub payment_term_code: String,
     /// 当前采购单负责人账号 ID。

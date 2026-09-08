@@ -177,14 +177,6 @@ export const nodePurposeLabel = (
     return "指定用途节点"
 }
 
-/**
- * 返回审批人资格展示。服务端已过滤，页面只说明静态资格结果。
- *
- * @param name 审批人显示名
- */
-export const assigneeEligibilityLabel = (name: string): string =>
-    `${name} · 账号有效，符合定义期资格`
-
 /** 固定驳回语义说明。 */
 export const REJECT_RESTART_COPY =
     "任一层驳回后，将从第一位审批人开始下一轮审批。"

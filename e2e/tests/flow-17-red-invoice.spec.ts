@@ -34,7 +34,7 @@ import {
 import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
-import "../helpers/ui"
+import { expectToast } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
 test.use({ viewport: { width: 1440, height: 960 } })
@@ -179,8 +179,8 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectFulfillmentNotStarted(page)
         await expectNoChangeOrder(page)
         await page.getByRole("tab", { name: /^票款/ }).click()
-        await expect(page.getByText(salesInvoiceNo).first()).toBeVisible({ timeout: LONG })
-        await expect(page.getByText("红票").first()).toBeVisible({ timeout: LONG })
+        // 全额红冲后有效核销归零；原蓝票与红票的保留已在财务台账逐条校验。
+        await expect(page.getByText("还没有核到本单的销项发票。")).toBeVisible({ timeout: LONG })
         await expect(page.locator("#customer-receivables-preview-invoice-red")).toHaveCount(0)
 
         // 可开票余额回退后，W01 开票任务重开；仍不得出现审批任务
@@ -240,7 +240,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         expect(Number(purchaseGross)).toBeGreaterThan(0)
         await assertNoInvoiceApprovalUi(kaipiao.page)
 
-        await kaipiao.page.getByRole("tab", { name: "应付台账" }).click()
+        await kaipiao.page.getByRole("button", { name: /^应付台账(?: \d+)?$/ }).click()
         await expect(kaipiao.page.getByText(/狮峰/).first()).toBeVisible({ timeout: LONG })
         const payableRow = kaipiao.page.getByRole("row").filter({ hasText: /狮峰/ }).first()
         await expect(payableRow).toBeVisible({ timeout: LONG })
@@ -272,10 +272,12 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expect(redRow).toBeVisible({ timeout: LONG })
         await expect(redRow.getByText("已登记")).toBeVisible({ timeout: LONG })
 
-        await kaipiao.page.getByRole("tab", { name: "应付台账" }).click()
+        await kaipiao.page.getByRole("button", { name: /^应付台账(?: \d+)?$/ }).click()
         await expect(kaipiao.page.getByText(/狮峰/).first()).toBeVisible({ timeout: LONG })
-        await expect(kaipiao.page.getByText("收票").first()).toBeVisible({ timeout: TIMEOUT })
-        await expect(kaipiao.page.getByText(/0\.00/).first()).toBeVisible({ timeout: LONG })
+        const restoredPayable = kaipiao.page.getByRole("row").filter({ hasText: /狮峰/ }).first()
+        await expect(restoredPayable.locator('[data-column-id="tracks"]')).toContainText(
+            /收票\s*[¥￥]?\s*0\.00/, { timeout: LONG },
+        )
 
         await kaipiao.page.goto("/workspace")
         await expect(kaipiao.page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
@@ -509,7 +511,7 @@ async function uploadContract(
     await expect(page.getByRole("dialog").getByRole("heading", { name: "上传合同 PDF" })).toBeHidden({
         timeout: LONG,
     })
-    await expect(page.getByText(input.contractNo)).toBeVisible({ timeout: LONG })
+    await expect(page.getByRole("button", { name: `打开合同 ${input.contractNo}`, exact: true })).toBeVisible({ timeout: LONG })
 }
 
 async function createAndSubmitPhysicalSalesOrder(
@@ -554,7 +556,7 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeHidden({
         timeout: TIMEOUT,
     })
-    await expect(page.getByText(SKU_NAME)).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.getByRole("button", { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible({ timeout: TIMEOUT })
     await expect(page.getByTestId(/sales-line-procurement-owner-/)).not.toContainText(
         "暂未确定采购负责人",
         { timeout: LONG },
@@ -562,7 +564,7 @@ async function createAndSubmitPhysicalSalesOrder(
 
     await pickToday(page, "sales-orders-create-batch-due-date")
     await page.locator("#sales-orders-create-batch-due-date-apply").click()
-    await expect(page.getByText("已批量设置交期")).toBeVisible({ timeout: TIMEOUT })
+    await expectToast(page, "已批量设置交期")
 
     await page.locator("#sales-orders-create-submit").click()
     await expect(page.getByRole("dialog").getByRole("heading", { name: "提交销售单" })).toBeVisible({
@@ -694,6 +696,14 @@ async function allocateAndSubmitPurchaseOrder(page: Page, orderNo: string) {
     await task.first().click()
     await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({ timeout: LONG })
     await expect(page.getByText("将创建采购单")).toBeVisible({ timeout: TIMEOUT })
+    const warehouse = page.getByRole("combobox", { name: "仓库", exact: true })
+    if (await warehouse.count()) {
+        await warehouse.click()
+        await warehouse.fill("BJ-TZ-01")
+        const option = page.getByRole("option", { name: /BJ-TZ-01/ })
+        await expect(option).toBeVisible({ timeout: TIMEOUT })
+        await option.click()
+    }
     await page.locator("#procurement-orders-create-preview").click()
     const preview = page.getByRole("dialog", { name: "预览供给分配" })
     await expect(preview).toBeVisible({ timeout: TIMEOUT })
@@ -747,12 +757,13 @@ async function registerSalesInvoiceFromWorkspace(
     })
     const confirm = page.getByRole("alertdialog").filter({ hasText: "确认登记销项发票并分配" })
     await expect(confirm.getByText("提交审批")).toHaveCount(0)
+    const committed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/invoices/commit"), { timeout: LONG })
     await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click()
-    await expect(page.getByRole("heading", { name: "销项发票已登记并分配" })).toBeVisible({
-        timeout: LONG,
-    })
-    const factNo = await factValue(page, "发票号码")
-    return factNo
+    expect((await committed).ok()).toBeTruthy()
+    await expect(confirm).toBeHidden({ timeout: LONG })
+    // 任务完成后处理面板会关闭，以持久化台账验证发票登记结果。
+    await assertSalesInvoiceRow(page, invoiceNo, { kind: "蓝票", status: "已登记" })
+    return invoiceNo
 }
 
 async function searchCustomerInvoices(page: Page, query: string) {
@@ -881,10 +892,11 @@ async function registerPurchaseInvoice(
         timeout: LONG,
     })
     await page.locator("#supplier-payables-allocation-result-close").click()
-    await page.getByRole("tab", { name: "进项发票" }).click()
-    await expect(page.getByText(input.invoiceNo).first()).toBeVisible({ timeout: LONG })
-    await expect(page.getByText("蓝票").first()).toBeVisible({ timeout: TIMEOUT })
-    await expect(page.getByText("已登记").first()).toBeVisible({ timeout: TIMEOUT })
+    await page.getByRole("button", { name: /^进项发票(?: \d+)?$/ }).click()
+    const invoiceRow = page.getByRole("row").filter({ hasText: input.invoiceNo })
+    await expect(invoiceRow).toBeVisible({ timeout: LONG })
+    await expect(invoiceRow.getByText("蓝票", { exact: true })).toBeVisible({ timeout: TIMEOUT })
+    await expect(invoiceRow.getByText("已登记", { exact: true })).toBeVisible({ timeout: TIMEOUT })
     return gross
 }
 
@@ -893,7 +905,7 @@ async function searchSupplierInvoices(page: Page, query: string) {
         `/finance/supplier-accounts?view=purchase_invoice&q=${encodeURIComponent(query)}`,
     )
     await waitHeading(page, "供应商往来")
-    await page.getByRole("tab", { name: "进项发票" }).click()
+    await page.getByRole("button", { name: /^进项发票(?: \d+)?$/ }).click()
     await page.locator("#supplier-payables-toolbar-search").fill(query)
     await page.locator("#supplier-payables-toolbar-search").press("Enter")
 }
