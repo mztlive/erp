@@ -242,7 +242,68 @@ export type DocumentApprovalViewDto = Readonly<{
 }>
 
 /** 实例列表行。 */
+export type ApprovalDocumentSummaryDto = Readonly<{
+    counterparty_label?: string | null
+    impact_summary?: string | null
+    list_summary: string
+    summary_sections: readonly Readonly<{
+        label: string
+        value: string
+        numeric?: boolean
+        object_id?: string | null
+    }>[]
+    brief_lines: readonly Readonly<{
+        title: string
+        quantity?: string | null
+        due_label?: string | null
+    }>[]
+    brief_more_count: number
+}>
+
+export type ApprovalDocumentSummary = Readonly<{
+    counterpartyName?: string
+    impactSummary?: string
+    listSummary: string
+    summarySections: readonly Readonly<{
+        label: string
+        value: string
+        numeric?: boolean
+        objectId?: string
+    }>[]
+    briefLines: readonly Readonly<{
+        title: string
+        quantity?: string
+        dueLabel?: string
+    }>[]
+    briefMoreCount: number
+}>
+
+/** 两种工作台视角共享服务端单据摘要，动作仍由任务授权决定。 */
+function mapApprovalDocumentSummary(
+    dto: ApprovalDocumentSummaryDto,
+): ApprovalDocumentSummary {
+    return {
+        counterpartyName: optionalText(dto.counterparty_label),
+        impactSummary: optionalText(dto.impact_summary),
+        listSummary: dto.list_summary,
+        summarySections: dto.summary_sections.map((section) => ({
+            label: section.label,
+            value: section.value,
+            numeric: section.numeric,
+            objectId: optionalText(section.object_id),
+        })),
+        briefLines: dto.brief_lines.map((line) => ({
+            title: line.title,
+            quantity: optionalText(line.quantity),
+            dueLabel: optionalText(line.due_label),
+        })),
+        briefMoreCount: dto.brief_more_count,
+    }
+}
+
 export type ApprovalInstanceListItemDto = Readonly<{
+    subject_version?: number | null
+    document_summary?: ApprovalDocumentSummaryDto | null
     instance_id: string
     status: string
     current_round_no: number
@@ -360,6 +421,9 @@ export type DocumentApprovalView = Readonly<{
 }>
 
 export type ApprovalInstanceListItem = Readonly<{
+    subjectVersion?: string
+    documentSummary?: ApprovalDocumentSummary
+    documentSummaryResolved?: boolean
     instanceId: string
     status: string
     currentRoundNo: number
@@ -607,6 +671,11 @@ function isCanonicalPositiveU64(value: unknown): value is string {
 export const mapInstanceListItemDto = (
     dto: ApprovalInstanceListItemDto,
 ): ApprovalInstanceListItem => ({
+    documentSummaryResolved: dto.document_summary !== undefined,
+    subjectVersion: optionalVersion(dto.subject_version),
+    documentSummary: dto.document_summary
+        ? mapApprovalDocumentSummary(dto.document_summary)
+        : undefined,
     instanceId: dto.instance_id,
     status: dto.status,
     currentRoundNo: dto.current_round_no,

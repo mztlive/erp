@@ -162,6 +162,26 @@ fn sales_order_fact(
 ) -> WorkbenchObjectFact {
     let mut fact =
         WorkbenchObjectFact::from_authority(super::authority::sales::sales_order_fact(order, submissions));
+    for submission in submissions
+        .iter()
+        .filter(|row| row.sales_order_id.as_ref() == order.base.id)
+    {
+        let lines = lines_by_submission
+            .get(&submission.base.id)
+            .cloned()
+            .unwrap_or_default();
+        let brief = super::WorkbenchSubjectDisplay {
+            counterparty_label: non_empty(&submission.customer_snapshot.customer_name),
+            impact_summary: fact.display.impact_summary.clone(),
+            brief_source: Some(sales_order_brief_source(submission, lines)),
+        };
+        fact.display
+            .subject_briefs
+            .insert(submission.submission_no.to_string(), brief.clone());
+        fact.display
+            .subject_briefs
+            .insert(submission.base.id.clone(), brief);
+    }
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;
     };

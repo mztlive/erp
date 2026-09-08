@@ -1357,6 +1357,50 @@ components:
             - $ref: "#/components/schemas/OpenTaskSummary"
         outcome:
           $ref: "#/components/schemas/CommandOutcome"
+    ApprovalDocumentSummary:
+      type: object
+      nullable: true
+      description: 必须复用工作台待办的单据摘要。已授权实例按冻结提交版本读取；不存在对应摘要时返回空，不得用其他提交替代。此字段不授予操作权限。
+      required: [list_summary, summary_sections, brief_lines, brief_more_count]
+      properties:
+        counterparty_label:
+          type: string
+          nullable: true
+        impact_summary:
+          type: string
+          nullable: true
+        list_summary:
+          type: string
+        summary_sections:
+          type: array
+          items:
+            type: object
+            required: [label, value]
+            properties:
+              label:
+                type: string
+              value:
+                type: string
+              numeric:
+                type: boolean
+              object_id:
+                type: string
+                description: 仅用作关联单据路由身份，不得展示给用户。
+        brief_lines:
+          type: array
+          items:
+            type: object
+            required: [title]
+            properties:
+              title:
+                type: string
+              quantity:
+                type: string
+              due_label:
+                type: string
+        brief_more_count:
+          type: integer
+          minimum: 0
     InstanceListItem:
       type: object
       required: [instance_id, status, current_round_no]
@@ -1391,6 +1435,13 @@ components:
         document_label:
           type: string
           nullable: true
+        subject_version:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: 审批对应的冻结业务版本。
+        document_summary:
+          $ref: "#/components/schemas/ApprovalDocumentSummary"
         total_amount:
           type: string
           nullable: true

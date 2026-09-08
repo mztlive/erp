@@ -197,6 +197,7 @@ export function WorkspaceHomeView({
     const metrics = view.metrics.filter((metric) => metric.visible)
     const items = view.items
     const startedView = urlState.view === "started"
+    const managedView = urlState.view === "managed"
     const startedHasQuery = startedView && Boolean(urlState.query)
     const hasEffectiveFilter =
         startedHasQuery || (!startedView && hasActiveFilter)
@@ -204,16 +205,22 @@ export function WorkspaceHomeView({
         ? "没有匹配的审批"
         : startedView
           ? "还没有我发起的审批"
-          : hasEffectiveFilter
-            ? "当前筛选没有待办"
-            : "当前没有待处理事项"
+          : managedView && !hasEffectiveFilter
+            ? "范围内没有待办"
+            : hasEffectiveFilter
+              ? "当前筛选没有待办"
+              : "当前没有待处理事项"
     const emptyDescription = startedHasQuery
         ? "可清除关键词后查看全部我发起的审批。"
         : startedView
           ? "你发起的审批会在这里持续显示当前节点、审批人和处理状态。"
-          : hasEffectiveFilter
-            ? "可清除筛选后回到待我处理。"
-            : "新任务到达后会出现在这里。"
+          : managedView && !hasEffectiveFilter
+            ? "这里列出你权限范围内尚未完成的任务，不限于派给你本人处理的事项。"
+            : hasEffectiveFilter
+              ? managedView
+                  ? "可清除筛选后回到范围内待办。"
+                  : "可清除筛选后回到待我处理。"
+              : "新任务到达后会出现在这里。"
     const emptyAction = startedHasQuery ? (
         <Button
             id="workspace-home-clear-search"

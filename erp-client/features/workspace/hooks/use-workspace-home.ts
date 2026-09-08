@@ -70,7 +70,6 @@ export function useWorkspaceHome() {
 
     const activeMetric = metricKeyFromUrlState(urlState)
     const hasActiveFilter = Boolean(
-        urlState.view !== "inbox" ||
         urlState.due ||
         urlState.blocked ||
         urlState.family ||

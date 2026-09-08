@@ -116,6 +116,7 @@ export function metricKeyFromUrlState(
     state: Pick<WorkspaceUrlState, "view" | "due" | "blocked">,
 ): WorkspaceMetricKey {
     if (state.view === "started") return "started"
+    if (state.view === "managed") return "managed"
     if (state.blocked) return "blocked"
     if (state.due === "overdue") return "overdue"
     return "inbox"
@@ -149,6 +150,14 @@ export function urlStateFromMetricKey(
             return {
                 ...current,
                 view: "started",
+                due: undefined,
+                blocked: false,
+                currentWorkItemId: undefined,
+            }
+        case "managed":
+            return {
+                ...current,
+                view: "managed",
                 due: undefined,
                 blocked: false,
                 currentWorkItemId: undefined,
@@ -196,6 +205,8 @@ export function filterSummaryFor(key: WorkspaceMetricKey): string {
             return "受阻"
         case "started":
             return "我发起的审批"
+        case "managed":
+            return "范围内待办"
         case "inbox":
         default:
             return "待我处理"

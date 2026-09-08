@@ -30,6 +30,7 @@ use crate::errors::Result;
 /// 采购审核在对象事实中按提交版本保存的展示包。
 #[derive(Debug, Clone)]
 struct PurchaseReviewDisplay {
+    subject_version: Option<u32>,
     purchase_order_id: String,
     counterparty: Option<String>,
     impact: String,
@@ -361,6 +362,11 @@ fn purchase_order_fact(
             fact.display.impact_summary = brief.impact_summary.clone();
             fact.display.brief_source = brief.brief_source.clone();
         }
+        if let Some(version) = display.subject_version {
+            fact.display
+                .subject_briefs
+                .insert(version.to_string(), brief.clone());
+        }
         fact.display.subject_briefs.insert(submission_id.clone(), brief);
     }
     fact
@@ -441,6 +447,7 @@ fn purchase_review_display(
         impact.push_str("；本次为再次提交，必须先核对前后差异");
     }
     PurchaseReviewDisplay {
+        subject_version: submission.formal_sequence(),
         purchase_order_id: submission.purchase_order_id.to_string(),
         counterparty: supplier,
         impact,

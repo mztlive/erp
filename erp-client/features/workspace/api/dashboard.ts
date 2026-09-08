@@ -249,6 +249,8 @@ function buildMetrics(
     stats: WorkItemStats,
     startedCount: number,
     canReadStarted: boolean,
+    managedCount: number,
+    canReadManaged: boolean,
 ): WorkspaceMetric[] {
     return [
         {
@@ -256,6 +258,13 @@ function buildMetrics(
             label: "待我处理",
             count: stats.inbox ?? stats.assigned,
             visible: true,
+            tone: "info",
+        },
+        {
+            key: "managed",
+            label: "范围内待办",
+            count: managedCount,
+            visible: canReadManaged,
             tone: "info",
         },
         {
@@ -274,7 +283,7 @@ function buildMetrics(
         },
         {
             key: "started",
-            label: "我发起的",
+            label: "我发起的审批",
             count: startedCount,
             visible: canReadStarted,
             tone: "info",
@@ -297,6 +306,71 @@ function buildFamilyCounts(
     }
 }
 
+function isForbiddenError(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        "status" in error &&
+        (error as { status?: unknown }).status === 403
+    )
+}
+
+/**
+ * 查询管理范围开放任务。无组织覆盖时服务端 403，按不可用处理，不让整页失败。
+ */
+async function listManagedWorkItems(
+    query: Pick<
+        TodayWorkspaceQuery,
+        | "family"
+        | "workItemType"
+        | "due"
+        | "blocked"
+        | "query"
+        | "sort"
+        | "cursor"
+        | "timezone"
+    >,
+    pageSize: number,
+): Promise<{ items: WorkItemDto[]; total: number; available: boolean }> {
+    try {
+        const page = await listWorkItems({
+            scope: "managed",
+            family: query.family,
+            workItemType: query.workItemType,
+            due: query.due,
+            blocked: query.blocked,
+            query: query.query,
+            sort: query.sort,
+            cursor: query.cursor,
+            timezone: query.timezone,
+            page: 1,
+            pageSize,
+        })
+        return { items: page.items, total: page.total, available: true }
+    } catch (error) {
+        if (isForbiddenError(error)) {
+            return { items: [], total: 0, available: false }
+        }
+        throw error
+    }
+}
+
+function listMineWorkItems(query: TodayWorkspaceQuery) {
+    return listWorkItems({
+        scope: "mine",
+        family: query.family,
+        workItemType: query.workItemType,
+        due: query.due,
+        blocked: query.blocked,
+        query: query.query,
+        sort: query.sort,
+        cursor: query.cursor,
+        timezone: query.timezone,
+        page: 1,
+        pageSize: 50,
+    })
+}
+
 /**
  * 拉取工作台视图：任务列表与指标分别请求，口径一致。
  */
@@ -304,15 +378,12 @@ export async function fetchWorkspaceDashboard(
     query: TodayWorkspaceQuery,
     profile: AccountProfile,
 ): Promise<TodayWorkspaceView> {
-    const canManage = [
-        "approval_instance:resume",
-        "approval_instance:cancel_blocked",
-    ].some((permission) => hasPermission(profile.permissions, permission))
+    const canManage = hasPermission(profile.permissions, "work_item:manage")
     const canReadStarted = hasPermission(
         profile.permissions,
         "approval_instance:read",
     )
-    const view =
+    let view =
         (query.view === "managed" && !canManage) ||
         (query.view === "started" && !canReadStarted)
             ? "inbox"
@@ -339,32 +410,43 @@ export async function fetchWorkspaceDashboard(
               })
             : startedMetricPromise
 
-    const [page, stats, startedPage] = await Promise.all([
+    const [page, stats, startedPage, managedCount] = await Promise.all([
         view === "started"
             ? startedListPromise.then((result) => ({
                   items: [] as WorkItemDto[],
                   startedItems: result.items,
                   total: result.total ?? result.items.length,
                   nextCursor: result.nextCursor,
+                  managedAvailable: false,
               }))
-            : listWorkItems({
-                  scope: view === "managed" ? "managed" : "mine",
-                  family: query.family,
-                  workItemType: query.workItemType,
-                  due: query.due,
-                  blocked: query.blocked,
-                  query: query.query,
-                  sort: query.sort,
-                  cursor: query.cursor,
-                  timezone: query.timezone,
-                  page: 1,
-                  pageSize: 50,
-              }).then((result) => ({
-                  items: result.items,
-                  startedItems: [],
-                  total: result.total,
-                  nextCursor: undefined as string | undefined,
-              })),
+            : view === "managed"
+              ? listManagedWorkItems(query, 50).then(async (managed) => {
+                    if (managed.available) {
+                        return {
+                            items: managed.items,
+                            startedItems: [] as ApprovalInstanceListItem[],
+                            total: managed.total,
+                            nextCursor: undefined as string | undefined,
+                            managedAvailable: true,
+                        }
+                    }
+                    view = "inbox"
+                    const mine = await listMineWorkItems(query)
+                    return {
+                        items: mine.items,
+                        startedItems: [] as ApprovalInstanceListItem[],
+                        total: mine.total,
+                        nextCursor: undefined as string | undefined,
+                        managedAvailable: false,
+                    }
+                })
+              : listMineWorkItems(query).then((result) => ({
+                    items: result.items,
+                    startedItems: [] as ApprovalInstanceListItem[],
+                    total: result.total,
+                    nextCursor: undefined as string | undefined,
+                    managedAvailable: false,
+                })),
         getWorkItemStats({
             scope: "mine",
             family: query.family,
@@ -374,7 +456,26 @@ export async function fetchWorkspaceDashboard(
             timezone: query.timezone,
         }),
         startedMetricPromise,
+        canManage && query.view !== "managed"
+            ? listManagedWorkItems(
+                  { timezone: query.timezone, sort: query.sort },
+                  1,
+              )
+            : Promise.resolve({
+                  items: [] as WorkItemDto[],
+                  total: 0,
+                  available: canManage,
+              }),
     ])
+
+    const canReadManaged =
+        query.view === "managed"
+            ? page.managedAvailable
+            : canManage && managedCount.available
+    const managedMetricCount =
+        query.view === "managed" && page.managedAvailable
+            ? page.total
+            : managedCount.total
 
     const items =
         view === "started"
@@ -388,6 +489,8 @@ export async function fetchWorkspaceDashboard(
         stats,
         startedPage.total ?? startedPage.items.length,
         canReadStarted,
+        managedMetricCount,
+        canReadManaged,
     )
 
     return {
@@ -448,13 +551,14 @@ function startedInstanceToWorkItem(
         .map((part) => part?.trim())
         .filter(Boolean)
         .join(" · ")
+    const summary = item.documentSummary
     const paymentReversal = businessObjectType === "payment_reversal"
     return {
         workItemId: item.instanceId,
         taskVersion: "",
         workItemType: "APPROVAL_INSTANCE",
         amountSummary:
-            item.totalAmount != null
+            !summary && item.totalAmount != null
                 ? {
                       label: "提交金额",
                       value: formatCurrencyFixed(item.totalAmount, {
@@ -468,8 +572,13 @@ function startedInstanceToWorkItem(
         workItemTypeLabel: item.processName ?? typeLabel,
         businessObjectType,
         businessObjectId: item.documentId ?? item.instanceId,
-        subjectVersion: "",
+        subjectVersion: item.subjectVersion ?? "",
         stableNumber: item.documentLabel ?? "单号待补全",
+        documentSummaryResolved: item.documentSummaryResolved,
+        counterpartyName: summary?.counterpartyName,
+        summarySections: summary?.summarySections,
+        briefLines: summary?.briefLines,
+        briefMoreCount: summary?.briefMoreCount,
         objectTitle: item.documentLabel
             ? `${typeLabel} ${item.documentLabel}`
             : typeLabel,
@@ -485,10 +594,12 @@ function startedInstanceToWorkItem(
         ownerOrganizationLabel: "",
         ownerUserLabel: item.currentAssigneeName ?? "处理人待确认",
         reasonLabel: "我发起的审批",
-        listSummary: listSummary || undefined,
-        impactSummary: paymentReversal
-            ? "审批通过前原付款保持不变；通过后系统追加冲正记录并回冲原付款。"
-            : "审批完成前，业务单据保持当前状态。",
+        listSummary: summary?.listSummary || listSummary || undefined,
+        impactSummary:
+            summary?.impactSummary ??
+            (paymentReversal
+                ? "审批通过前原付款保持不变；通过后系统追加冲正记录并回冲原付款。"
+                : "审批完成前，业务单据保持当前状态。"),
         nextActionHint: paymentReversal
             ? "可打开冲正详情查看完整审批进度与原付款。"
             : "打开单据查看完整审批进度。",

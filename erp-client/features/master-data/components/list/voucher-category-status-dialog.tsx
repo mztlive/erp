@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { CirclePauseIcon, CirclePlayIcon, LoaderCircleIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -34,7 +35,9 @@ export function VoucherCategoryStatusButton({
         account.data?.permissions,
         "voucher_category_profile:update",
     )
-    const action = row.lifecycleStatus === "ENABLED" ? "停用" : "启用"
+    const disabling = row.lifecycleStatus === "ENABLED"
+    const action = disabling ? "停用" : "启用"
+    const ActionIcon = disabling ? CirclePauseIcon : CirclePlayIcon
     return (
         <Button
             id={`master-data-voucher-category-${surface}-${toAutomationIdSegment(row.stableId)}-status`}
@@ -48,6 +51,7 @@ export function VoucherCategoryStatusButton({
                 onClick()
             }}
         >
+            <ActionIcon data-icon="inline-start" aria-hidden />
             {action}
         </Button>
     )
@@ -67,6 +71,7 @@ export function VoucherCategoryStatusDialog({
     const [conflict, setConflict] = useState(false)
     const disabling = target?.lifecycleStatus === "ENABLED"
     const action = disabling ? "停用" : "启用"
+    const ActionIcon = disabling ? CirclePauseIcon : CirclePlayIcon
     const prefix = "master-data-voucher-category-status"
     const canUpdate = hasPermission(
         account.data?.permissions,
@@ -168,6 +173,15 @@ export function VoucherCategoryStatusDialog({
                         disabled={!canUpdate || mutation.isPending || conflict}
                         onClick={() => void submit()}
                     >
+                        {mutation.isPending ? (
+                            <LoaderCircleIcon
+                                data-icon="inline-start"
+                                className="animate-spin"
+                                aria-hidden
+                            />
+                        ) : (
+                            <ActionIcon data-icon="inline-start" aria-hidden />
+                        )}
                         {mutation.isPending ? "提交中…" : `确认${action}`}
                     </Button>
                 </DialogFooter>

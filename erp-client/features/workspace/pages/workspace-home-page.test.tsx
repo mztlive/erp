@@ -69,8 +69,15 @@ function emptyAllowedView(
                 tone: "destructive",
             },
             {
+                key: "managed",
+                label: "范围内待办",
+                count: 0,
+                visible: false,
+                tone: "info",
+            },
+            {
                 key: "started",
-                label: "我发起的",
+                label: "我发起的审批",
                 count: 0,
                 visible: true,
                 tone: "neutral",
@@ -139,9 +146,9 @@ test("无待办时显示单一空态，筛选仍在列表上方", () => {
     expect(screen.getByText("当前没有待处理事项")).toBeTruthy()
     expect(document.querySelector('[data-slot="workspace-detail"]')).toBeNull()
     const queue = document.querySelector('[data-slot="workspace-queue"]')
-    expect(
-        queue?.contains(screen.getByRole("group", { name: "任务类型" })),
-    ).toBe(false)
+    const familyNav = screen.queryByRole("group", { name: "任务类型" })
+    expect(familyNav).toBeNull()
+    expect(queue?.contains(familyNav)).toBe(false)
 })
 
 test("筛选无结果时保留条件且可以恢复全部待办", () => {
@@ -152,28 +159,68 @@ test("筛选无结果时保留条件且可以恢复全部待办", () => {
         clearFilters,
     })
     render(<WorkspaceHomePage />)
-    expect(screen.getByRole("button", { name: "任务类型：审批" })).toBeTruthy()
+    expect(screen.getByText("当前筛选没有待办")).toBeTruthy()
     fireEvent.click(document.getElementById("workspace-home-clear-filters")!)
     expect(clearFilters).toHaveBeenCalledTimes(1)
     expect(document.querySelector('[data-slot="workspace-detail"]')).toBeNull()
 })
 
-test("我发起的审批显示搜索且不展示任务类型", () => {
-    const applySearch = vi.fn()
+test("我发起的审批显示空态且不展示任务类型", () => {
     stubHome(emptyAllowedView(), {
         urlState: { view: "started", sort: "priority_due" },
         activeMetric: "started",
-        applySearch,
     })
     render(<WorkspaceHomePage />)
 
-    const search = screen.getByLabelText("搜索我发起的审批")
-    expect(search).toBeTruthy()
     expect(screen.queryByRole("group", { name: "任务类型" })).toBeNull()
     expect(screen.queryByLabelText("排序：超期与优先级")).toBeNull()
     expect(screen.getByText("还没有我发起的审批")).toBeTruthy()
-    fireEvent.submit(search.closest("form") as HTMLFormElement)
-    expect(applySearch).toHaveBeenCalledTimes(1)
+    expect(
+        screen.getByRole("button", { name: "我发起的审批 0 项" }),
+    ).toBeTruthy()
+})
+
+test("范围内待办空态说明不是本人待办", () => {
+    stubHome(
+        emptyAllowedView({
+            metrics: [
+                {
+                    key: "inbox",
+                    label: "待我处理",
+                    count: 0,
+                    visible: true,
+                    tone: "neutral",
+                },
+                {
+                    key: "managed",
+                    label: "范围内待办",
+                    count: 2,
+                    visible: true,
+                    tone: "info",
+                },
+                {
+                    key: "started",
+                    label: "我发起的审批",
+                    count: 0,
+                    visible: true,
+                    tone: "neutral",
+                },
+            ],
+        }),
+        {
+            urlState: { view: "managed", sort: "priority_due" },
+            activeMetric: "managed",
+        },
+    )
+    render(<WorkspaceHomePage />)
+
+    expect(screen.getByRole("button", { name: "范围内待办 2 项" })).toBeTruthy()
+    expect(screen.getByText("范围内没有待办")).toBeTruthy()
+    expect(
+        screen.getByText(
+            "这里列出你权限范围内尚未完成的任务，不限于派给你本人处理的事项。",
+        ),
+    ).toBeTruthy()
 })
 
 test("我发起的审批搜索无结果时可以清除关键词", () => {

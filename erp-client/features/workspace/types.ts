@@ -1,7 +1,8 @@
 /**
  * W01 我的工作台 — 列表 + 详情主从。
  *
- * 只有「待我处理」口径，不存在团队分区。指标数量来自服务端，不得对已加载条目求和。
+ * 队列口径是「待我处理 / 范围内待办 / 我发起的审批」。范围内待办按 DataScope
+ * 列出开放任务，不是团队分区。指标数量来自服务端，不得对已加载条目求和。
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
@@ -18,7 +19,12 @@ export type WorkspaceFamilyFilter =
 export type WorkspaceViewFilter = "inbox" | "started" | "managed"
 export type WorkspaceSort = "priority_due" | "due_asc" | "created_desc"
 
-export type WorkspaceMetricKey = "inbox" | "overdue" | "blocked" | "started"
+export type WorkspaceMetricKey =
+    | "inbox"
+    | "managed"
+    | "overdue"
+    | "blocked"
+    | "started"
 
 export type WorkspaceActionCode =
     | "VIEW"
@@ -90,6 +96,8 @@ export type WorkspaceWorkItem = Readonly<{
         dueLabel?: string
     }>[]
     briefMoreCount?: number
+    /** 服务端已按审批版本解析摘要；空结果不得补拉当前单据替代。 */
+    documentSummaryResolved?: boolean
     approval?: {
         instanceId: string
         currentRoundNo: number

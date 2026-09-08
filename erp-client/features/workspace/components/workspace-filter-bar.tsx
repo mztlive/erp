@@ -93,8 +93,14 @@ export function WorkspaceQueueScopeNav({
     const visibleMetrics = metrics.filter(
         (metric) =>
             metric.visible &&
-            (metric.key === "inbox" || metric.key === "started"),
+            (metric.key === "inbox" ||
+                metric.key === "managed" ||
+                metric.key === "started"),
     )
+    const scopeKey =
+        activeMetric === "started" || activeMetric === "managed"
+            ? activeMetric
+            : "inbox"
 
     return (
         <div
@@ -106,18 +112,11 @@ export function WorkspaceQueueScopeNav({
                 <WorkspaceTextNavButton
                     key={metric.key}
                     id={`workspace-queue-scope-${toAutomationIdSegment(metric.key)}`}
-                    active={
-                        metric.key ===
-                        (activeMetric === "started" ? "started" : "inbox")
-                    }
-                    aria-label={`${metric.key === "started" ? "我发起的审批" : metric.label} ${metric.count} 项`}
+                    active={metric.key === scopeKey}
+                    aria-label={`${metric.label} ${metric.count} 项`}
                     onClick={() => onMetricClick(metric.key)}
                 >
-                    <span>
-                        {metric.key === "started"
-                            ? "我发起的审批"
-                            : metric.label}
-                    </span>
+                    <span>{metric.label}</span>
                     <span className="num ml-1 text-xs text-muted-foreground">
                         {metric.count}
                     </span>

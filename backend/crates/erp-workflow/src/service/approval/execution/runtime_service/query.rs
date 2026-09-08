@@ -421,6 +421,9 @@ pub struct RuntimeInstanceListItem {
     pub document_id: Option<String>,
     /// 被审批单据业务编号。
     pub document_label: Option<String>,
+    /// 审批对应的冻结业务版本，供只读单据摘要选择使用。
+    #[serde(default)]
+    pub subject_version: Option<u32>,
     /// 与实例、对象及提交版本匹配的启动快照金额；未知或非金额审批为 None。
     #[serde(default)]
     pub total_amount: Option<erp_core::money::Amount>,
@@ -1107,6 +1110,7 @@ pub(super) fn item_from_summary(
         document_type: Some(document_type.as_str().to_string()),
         document_id: Some(document_id),
         document_label,
+        subject_version: Some(row.subject_version),
         total_amount,
         process_version: Some(row.definition_version),
         started_at: Some(row.started_at),
@@ -1172,6 +1176,7 @@ fn item_from_instance_id(
         document_type: None,
         document_id: None,
         document_label: None,
+        subject_version: None,
         total_amount: None,
         process_version: None,
         started_at: None,

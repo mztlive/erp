@@ -189,6 +189,7 @@ export function CreateOrderForm() {
 - UI 使用项目内 shadcn / Base UI 组件（`components/ui`）。
 - 数据层（TanStack Query）与展示层解耦：组件只消费 query/mutation hooks 的状态与数据。
 - 表单层（TanStack Form）与展示层解耦：字段通过 `components/form` 绑定 UI，业务页只声明 schema 与 submit。
+- 列表行点开的右侧窄栏预览，视觉与信息架构以公司商品池为准，见第 8 节。
 
 ## 5. 用户可见文案必须过术语表
 
@@ -228,6 +229,9 @@ export function CreateOrderForm() {
 - [ ] 新增枚举是否配了中文映射？内部 ID 是否漏进界面？
 - [ ] 是否为了单个页面改了共享组件的默认文案（应改为加 prop）？
 - [ ] 新增的 URL 查询参数是否有对应的界面控件和清除方式？
+- [ ] 列表行预览是否走第 8 节的轻预览 Sheet（窄栏、浅遮罩、头/分区/脚），而不是半屏 detail 或字段表？
+- [ ] identity / title / description / summary 是否各司其职？正文是否先给决策数字，而不是把列表字段再倒一遍？
+- [ ] 关闭后焦点是否回到原行？主 CTA 是否是「打开对象」，而不是把表单塞进 Sheet？
 
 ## 7. 自动化 DOM id
 
@@ -239,3 +243,103 @@ export function CreateOrderForm() {
 - 修改输入 ID 时必须同步 `htmlFor`、`aria-describedby`、说明和错误节点 ID；未传新 ID 时保留原兼容行为。
 - 纯 UI primitive 已完整透传 `id` 时无需改动；primitive 自行生成额外交互控件时必须提供可派生 ID 的 API。
 - disabled 控件仍需 ID；路由互斥可复用概念，同一文档内同时挂载的列表、表格、对话框、抽屉和重复卡片不可重复。
+
+## 8. 列表轻预览 Sheet（以公司商品池为基准）
+
+列表行点开后的右侧窄栏，用来**对着表格读一张卡片**，不是半屏详情、不是 Dialog、不是对象中心。
+视觉与信息架构以公司商品池为准；新的主数据/目录类点读应对齐它，而不是对齐半屏单据核对。
+
+基准实现：
+
+- 壳：`features/master-data/components/list/sellable-preview-sheet.tsx`
+- 正文：`features/master-data/components/list/master-data-sellable-preview.tsx`
+
+卡券类目预览（`voucher-category-preview-sheet.tsx`）已按同一套 chrome 对齐。抽成
+`QuickPreviewSheet` 具名 chrome 之前，新 sheet **直接复用**商品池的
+`overlayClassName` / `contentClassName`，不要再发明 480 / 500 / 520 或另一档遮罩。
+
+### 何时用、何时不用
+
+| 场景 | 用什么 |
+| --- | --- |
+| 列表里确认「这是谁、现在能不能用、关键数字是多少」，再决定要不要进对象中心 | 本节的轻预览 Sheet |
+| 正式单据纸质核对 | `PaperDocument` 浮层（销售单列表已如此，不要再挂 Sheet） |
+| 对照行项目、双栏或读完整主记录 | `QuickPreviewSheet size="detail"`（768px） |
+| 编辑、校验、提交 | 对象中心或 Dialog + TanStack Form |
+| 破坏性确认 | `FormalActionConfirmDialog` |
+
+轻预览成立的前提：列表行投影已经够回答上面三个问题。不要为了打开 Sheet 再打一枪详情接口，
+除非正文里确有列表没有的块（历史版本等），那时也只把该块做成可失败的局部状态，不要让整栏转圈。
+
+### 壳：让列表仍在视野里
+
+必须使用 `QuickPreviewSheet`，`size="preview"`，从右侧滑出。不要为点读再包一层裸 `Sheet`。
+
+当前 chrome 合同（商品池 / 卡券类目 / 账号权限只读预览共用）：
+
+```tsx
+overlayClassName="bg-black/20 supports-backdrop-filter:backdrop-blur-none"
+contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px] [&_[data-slot=sheet-header]]:gap-3 [&_[data-slot=sheet-header]]:px-7 [&_[data-slot=sheet-header]]:pt-10 [&_[data-slot=sheet-title]]:text-xl [&_[data-slot=sheet-title]]:leading-8 [&_[data-slot=sheet-title]]:font-semibold [&_[data-slot=quick-preview-identity]]:text-xs [&_[data-slot=quick-preview-content]]:px-7 [&_[data-slot=sheet-footer]]:flex-row [&_[data-slot=sheet-footer]]:justify-end [&_[data-slot=sheet-footer]]:px-7 [&_[data-slot=sheet-footer]]:py-4"
+```
+
+原则（改 class 时先改原则，再改数字）：
+
+- **宽 460px**：比默认 preview token（400px）略宽，容得下大数字和右对齐键值；远小于 detail 的 768px。窄栏是设计，不是省空间。
+- **浅遮罩、不模糊**（`bg-black/20` + 关闭 backdrop-blur）：表格还在，用户知道自己从哪一行进来。深遮罩或 blur 会把点读做成挡住整页的模态框。
+- **头 / 正文 / 脚同一条竖边**：`px-7`。头额外 `pt-10`，标题才有呼吸；脚 `py-4` 横排右对齐，不要默认那一列全宽按钮。
+- **标题按对象名排版**：`text-xl leading-8 font-semibold`，不是默认 `SheetTitle` 的 `text-base font-medium`。
+- 关闭按钮（右上角 X）保留；页脚再给一个「关闭」，出口必须一眼能找到。
+
+### 头部分层：四个插槽各司其职
+
+`QuickPreviewSheet` 的渲染顺序是 identity → title → description → summary。商品池把它用成「先编号、后品名」的对象头，不要把四个槽塞成同一段话。
+
+| 插槽 | 放什么 | 不放什么 |
+| --- | --- | --- |
+| `identity` | 稳定编号，带人类可读前缀，用 `.num`。例：`SKU 编号：A-001` | 名称、状态、价格、版本散文 |
+| `title` | 用户认得的对象名（商品名、类目名） | 「商品预览」「详情」这类页面功能名；把名字藏进正文再在标题写「预览」 |
+| `description` | **一条**次身份，例如规格。占位文案（「无规格」）则整个省略 | 多句说明、操作指引、「点击下方按钮…」 |
+| `summary` | **一个**状态 Badge + **一句**弱化限定（商品类型、`v3`、角色数） | Badge 堆、金额、按钮、筛选项 |
+
+状态用 `BusinessStatusBadge context="preview"` 或语义 `Badge`（如 `success` = 当前可售）。限定语用 `text-xs text-muted-foreground`，不要再做成第二个 Badge。
+
+### 正文：叙事分区，不是字段表
+
+轻预览的正文是短文，不是把列表列再排成 `dl`。商品池的顺序是范本：
+
+1. **先回答这张列表存在的那个问题。** 商品池是销售价（含税）：`MoneyValue` 做成约 32px、`font-semibold`、`tracking-tight`。数量、比例走 `QuantityValue` / `RateValue`，不要手写金额格式。没有这种「一个数字」时（如卡券类目），才从资料区起笔，不要为了对称硬造 KPI。
+2. **对照量压在主数字下面**，`text-xs text-muted-foreground`（市场参考价）。不要和主数字并排抢层级。
+3. **分区有呼吸**：容器 `space-y-6 text-sm`；区块之间用 `border-b border-border pb-6`（末区可改 `border-t pt-6`）。不要密排 `Separator` + `grid-cols-[7rem_1fr]` 把身份 / 关键事实 / 可用性一次性倒进去——那是旧的 `MasterDataPreviewPanel`，不是这套。
+4. **主分区标题用正文级** `h3` + `font-medium`（「可供区域」「商品资料」）。只有脚注区才用 `text-xs font-medium text-muted-foreground`（「当前可售期间」）。
+5. **资料行当排版，不当表格**：左 `dt` 为 `text-xs text-muted-foreground`，右 `dd` 为 `text-[13px] text-right break-all` + `.num`，行用 `flex items-baseline justify-between gap-5`。长值加 `title`。
+6. **支撑信息写成一句话**，不要再开一张表。例：图标 14px + 「当前由 **N** 家有效供应商支持供货」，数字用 `<strong className="num text-foreground">`。
+7. **末段交代这是哪一时点的快照**（可售期间、资格核对日），`text-xs leading-5 text-muted-foreground`。不要假装 Sheet 里的数是实时锁。
+8. **只留帮助决策的字段。** 名称已在 title，就不要再做「名称」行。编号可以在资料区再出现一次（方便复制），不要第三遍。内部 ID、阻断原因原文、审计字段不进轻预览。
+9. **空值写出来**：`—`、`未标注区域`、`暂无描述`。禁止留空白格子。
+10. 标签、数字、日期一律走术语表和 `.num`；枚举走中文映射。
+
+反例：为了「信息全」把仓库库存、敏感字段、修订时间线、可用性矩阵全塞进窄栏。那些属于对象中心或 `size="detail"`。
+
+### 页脚：出路，不是工具条
+
+- 次要：`variant="outline"` 的「关闭」。
+- 主要：离开预览、进入对象中心。默认 Button，文案「打开{对象}资料」，尾随 `ArrowUpRightIcon`（`data-icon="inline-end"`）。这是「去正式页」，不是「在这里再看一遍」。
+- 横排、右对齐（chrome 已声明 `flex-row justify-end`）。不要一列全宽、不要把主按钮放进正文。
+- 允许额外动作（改状态、修订）仅当它是当下这一步、且**不会把 Sheet 变成表单**。真正的编辑、上传、多字段提交去对象中心或 Dialog。
+- 主按钮禁用时，用外层提示说清原因（见 `DisabledActionHint`），不要静默 `disabled`。
+
+### 交互
+
+- 用 `DataTable` 的 `onRowPreview` 打开；同时把 `highlightedRowId` 设成当前行，表格要能看出「正在读哪一行」。
+- 打开前记下 `lastFocusedRowId`；`onOpenChange(false)` 或 `onOpenChangeComplete` 后把焦点还回 `[data-row-id="…"]`。查询选择器对业务 ID 做 `CSS.escape`。
+- Sheet 打开时，页面级 `/` 聚焦搜索框必须停（已有列表页都是这个口径）。
+- 只读。不要在轻预览里接 `useAppForm`。
+
+### 不要做
+
+- 用 `size="detail"` 做主数据 / 目录点读。
+- 标题写「预览」「详情」，把对象名埋进正文第一行。
+- 深色遮罩或 blur，把背后的列表藏掉。
+- 在窄栏里塞行项目表、纸质单据、完整时间线或筛选控件。
+- 为单个页面改 `QuickPreviewSheet` 默认 padding / 标题级，却不复用商品池 chrome——结果是同一种点读五种宽。
+- 页脚只放「查看详情」outline、没有主色「打开对象」；或反过来只有打开、没有关闭。

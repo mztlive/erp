@@ -14,6 +14,7 @@ import type { WorkspaceWorkItem } from "@/features/workspace/types"
  */
 export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
     const hasSummary = Boolean(
+        item.documentSummaryResolved ||
         (item.summarySections && item.summarySections.length > 0) ||
         (item.briefLines && item.briefLines.length > 0),
     )
@@ -26,6 +27,7 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
             "workspace-document-facts",
             item.businessObjectType,
             item.businessObjectId,
+            item.subjectVersion,
         ],
         queryFn: () =>
             fetchWorkspaceDocumentFacts({

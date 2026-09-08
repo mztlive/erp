@@ -1,6 +1,8 @@
 //! Workbench read model: authorized work-item list, detail, stats and briefs.
 
 mod access;
+mod approval_list;
+pub use approval_list::{ApprovalDocumentSummary, ApprovalListItem, ApprovalListPage};
 pub mod authority;
 mod brief;
 mod change_order_brief;
