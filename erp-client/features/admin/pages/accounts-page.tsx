@@ -3,12 +3,7 @@
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
-import {
-    MoreHorizontalIcon,
-    PlusIcon,
-    ShieldCheckIcon,
-    Trash2Icon,
-} from "lucide-react"
+import { PlusIcon, ShieldCheckIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -26,12 +21,6 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { AccountPermissionsSheet } from "@/features/admin/components/accounts/account-permissions-sheet"
 import { AccountFormDialog } from "@/features/admin/components/accounts/account-form-dialog"
 import type { AccountDraft } from "@/features/admin/components/accounts/account-form-dialog"
@@ -148,7 +137,8 @@ export function AccountsPage() {
             },
             {
                 id: "actions",
-                size: 100,
+                size: 220,
+                minSize: 220,
                 header: () => <span className="block text-right">操作</span>,
                 cell: ({ row }) => {
                     const account = row.original
@@ -174,50 +164,34 @@ export function AccountsPage() {
                             >
                                 编辑
                             </Button>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    id={`governance-admin-accounts-row-${segment}-more`}
-                                    render={
-                                        <Button
-                                            type="button"
-                                            size="icon-xs"
-                                            variant="ghost"
-                                            aria-label={`${account.account} 更多操作`}
-                                        />
-                                    }
-                                >
-                                    <MoreHorizontalIcon aria-hidden="true" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                    align="end"
-                                    className="min-w-40"
-                                >
-                                    <DropdownMenuItem
-                                        id={`governance-admin-accounts-row-${segment}-permissions`}
-                                        onClick={() => {
-                                            permissionReturnId.current = `governance-admin-accounts-row-${segment}-more`
-                                            setPermissionAccount(account)
-                                            setPermissionsOpen(true)
-                                        }}
-                                    >
-                                        <ShieldCheckIcon aria-hidden="true" />
-                                        查看权限
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        id={`governance-admin-accounts-row-${segment}-delete`}
-                                        variant="destructive"
-                                        onClick={() =>
-                                            setDeletingAccount({
-                                                id: account.id,
-                                                account: account.account,
-                                            })
-                                        }
-                                    >
-                                        <Trash2Icon aria-hidden="true" />
-                                        删除
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            <Button
+                                id={`governance-admin-accounts-row-${segment}-permissions`}
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                onClick={() => {
+                                    permissionReturnId.current = `governance-admin-accounts-row-${segment}-permissions`
+                                    setPermissionAccount(account)
+                                    setPermissionsOpen(true)
+                                }}
+                            >
+                                查看权限
+                            </Button>
+                            <Button
+                                id={`governance-admin-accounts-row-${segment}-delete`}
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() =>
+                                    setDeletingAccount({
+                                        id: account.id,
+                                        account: account.account,
+                                    })
+                                }
+                            >
+                                删除
+                            </Button>
                         </div>
                     )
                 },
