@@ -10,35 +10,10 @@ use erp_core::money::Quantity;
 /// 简报最多展开的销售明细行数。
 pub(crate) const BRIEF_LINE_LIMIT: usize = 3;
 
-/// 对象事实上携带的只读事项内容。
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct ObjectBriefSource {
-    pub customer: Option<String>,
-    pub amount_label: Option<String>,
-    pub lines: Vec<BriefLine>,
-    pub more_count: u32,
-    pub submitter_name: Option<String>,
-    pub list_summary: String,
-    pub extra_sections: Vec<BriefSection>,
-}
-
-/// 简报中的一行销售明细。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BriefLine {
-    pub title: String,
-    pub quantity: Option<String>,
-    pub due_label: Option<String>,
-}
-
-/// 简报键值段。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BriefSection {
-    pub label: String,
-    pub value: String,
-    pub numeric: bool,
-    /// 可跳转关联单据的稳定身份；仅作路由键，不上屏。
-    pub object_id: Option<String>,
-}
+pub(crate) use erp_workflow::entity::approval_integration::display_snapshot::{
+    ApprovalBriefLine as BriefLine, ApprovalBriefSection as BriefSection,
+    ApprovalBriefSource as ObjectBriefSource,
+};
 
 /// 组装后的事项简报。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

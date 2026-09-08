@@ -19,3 +19,5 @@ pub use notification_outbox::{
 pub use subject_snapshot::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload,
 };
+
+pub mod display_snapshot;

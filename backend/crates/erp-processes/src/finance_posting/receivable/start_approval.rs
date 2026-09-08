@@ -494,6 +494,9 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
             "客户回款单审批启动守卫冲突，请刷新后重试".to_string(),
         ));
     }
+    // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
+    let mut receipt = receipt;
+    db.customer_receipts().update(&mut receipt, session).await?;
     persist_runtime_writes(
         db,
         &writes,
@@ -504,8 +507,6 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
         session,
     )
     .await?;
-    let mut receipt = receipt;
-    db.customer_receipts().update(&mut receipt, session).await?;
     db.audit_logs().create(&audit, session).await?;
     Ok(receipt)
 }
@@ -536,7 +537,7 @@ async fn persist_runtime_writes(
             session,
         )
         .await?;
-    let snapshot = ApprovalSubjectSnapshot::new(
+    let mut snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
         DocumentType::CustomerReceipt,
@@ -545,6 +546,15 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+    snapshot.display = Some(
+        erp_read_models::workbench::capture_approval_display(
+            db,
+            snapshot.document_type,
+            &snapshot.business_object_id,
+            session,
+        )
+        .await?,
+    );
     db.approval_subject_snapshots()
         .create_immutable_snapshot(&snapshot, session)
         .await?;

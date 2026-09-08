@@ -377,3 +377,16 @@ for (const [businessObjectType, destinationWorkspaceId, path, section] of [
         }
     })
 }
+
+test("retired master mapping has no registration or navigation", () => {
+    assert.equal("master_mapping_task" in HANDLER_REGISTRY, false)
+    assert.equal(
+        buildHandlerHref({
+            ...REQUIRED_CONTEXT,
+            handlerKey: "master_mapping_task",
+            businessObjectType: "MASTER_MAPPING_TASK",
+            destinationWorkspaceId: "W17",
+        }),
+        null,
+    )
+})

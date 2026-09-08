@@ -96,18 +96,19 @@ pub(super) fn document_summary(
     } else {
         Some(fact.display.subject_briefs.get(&version?.to_string())?)
     };
-    let source = subject
-        .and_then(|value| value.brief_source.as_ref())
-        .or(fact.display.brief_source.as_ref())?;
+    let source = match subject {
+        Some(subject) => subject.brief_source.as_ref(),
+        None => fact.display.brief_source.as_ref(),
+    }?;
     let brief = assemble_brief(source, None);
     Some(ApprovalDocumentSummary {
         root_business_object_id: fact.display.root_document_id.clone(),
         counterparty_label: subject
-            .and_then(|value| value.counterparty_label.clone())
-            .or_else(|| fact.display.counterparty_label.clone()),
+            .map(|value| value.counterparty_label.clone())
+            .unwrap_or_else(|| fact.display.counterparty_label.clone()),
         impact_summary: subject
-            .and_then(|value| value.impact_summary.clone())
-            .or_else(|| fact.display.impact_summary.clone()),
+            .map(|value| value.impact_summary.clone())
+            .unwrap_or_else(|| fact.display.impact_summary.clone()),
         list_summary: brief.list_summary,
         summary_sections: brief
             .sections
@@ -204,7 +205,7 @@ mod tests {
         use erp_workflow::entity::document_registry::DocumentType;
         use erp_workflow::service::approval::policy::{policy_of, ApprovalRequirement};
         let relations = WorkItemType::registered_brief_relations();
-        assert_eq!(relations.len(), 29);
+        assert_eq!(relations.len(), 28);
         assert_eq!(
             relations
                 .iter()

@@ -378,6 +378,34 @@ impl<'a> ApprovalSubjectSnapshotRepository<'a> {
         mongo_ops::insert_one(&self.collection(), snapshot, executor).await
     }
 
+    /// 按已授权对象批量读取提交快照；调用方仍须校验对象类型和审批版本。
+    ///
+    /// # 参数
+    /// * `objects` - 单据类型和业务身份；使用现有类型/对象/版本复合索引
+    /// * `executor` - 调用方事务执行器
+    /// # 返回
+    /// 返回未删除的匹配快照。
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    pub async fn list_by_business_objects(
+        &self,
+        objects: &[(crate::entity::document_registry::DocumentType, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalSubjectSnapshot>> {
+        if objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        let clauses = objects
+            .iter()
+            .map(|(kind, id)| doc! { "document_type": kind.as_str(), "business_object_id": id })
+            .collect::<Vec<_>>();
+        self.find_many(
+            doc! { "$or": clauses, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            executor,
+        )
+        .await
+    }
+
     /// 按审批实例读取唯一快照。
     ///
     /// # 错误

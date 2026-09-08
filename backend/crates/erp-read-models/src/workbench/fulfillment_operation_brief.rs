@@ -49,7 +49,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             apply_source_brief(key.0, &mut fact, &briefs);
             (key, fact)
         }));
-        Ok(())
+        self.load_fulfillment_details(keys, facts, executor).await
     }
 }
 

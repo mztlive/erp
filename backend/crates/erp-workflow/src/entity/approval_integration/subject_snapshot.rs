@@ -75,6 +75,9 @@ pub struct ApprovalSubjectSnapshot {
     pub subject_version: u32,
     /// 有界业务字段。
     pub payload: ApprovalSubjectSnapshotPayload,
+    /// 旧快照没有该字段；缺失时不得从当前草稿补成历史内容。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<super::display_snapshot::ApprovalDisplaySnapshot>,
 }
 
 impl ApprovalSubjectSnapshot {
@@ -113,6 +116,7 @@ impl ApprovalSubjectSnapshot {
             )?,
             subject_version,
             payload,
+            display: None,
         })
     }
 

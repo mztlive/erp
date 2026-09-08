@@ -12,7 +12,6 @@ mod approval;
 mod finance;
 mod fulfillment;
 mod integration_task_binding;
-mod mapping_task;
 mod query;
 
 /// 队列列表的最小任务事实投影。

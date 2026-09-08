@@ -41,3 +41,8 @@ pub use fulfillment_queue::{
 pub use query::WorkbenchReadService;
 
 pub(crate) type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
+
+mod approval_snapshot;
+pub use approval_snapshot::capture_approval_display;
+
+mod fulfillment_details;

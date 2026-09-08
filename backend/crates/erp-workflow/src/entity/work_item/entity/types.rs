@@ -95,8 +95,6 @@ pub enum WorkItemBriefObjectKind {
     IntegrationErrorTask,
     /// 对账差异。
     ReconciliationDifference,
-    /// 主数据映射任务。
-    MasterMappingTask,
     /// 供应商履约订单。
     SupplierFulfillmentOrder,
     /// 供应商供给。
@@ -219,12 +217,6 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         object_kind: WorkItemBriefObjectKind::ReconciliationDifference,
         business_object_type: "reconciliation_difference",
         read_permission: "reconciliation_difference:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::BusinessException,
-        object_kind: WorkItemBriefObjectKind::MasterMappingTask,
-        business_object_type: "MASTER_MAPPING_TASK",
-        read_permission: "master_mapping_task:list",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::IntegrationResultUnknown,

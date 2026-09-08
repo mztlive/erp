@@ -404,6 +404,9 @@ mod tests {
         assert!(WorkItemType::IntegrationResultUnknown.is_w29_closable("integration_error_task", false,));
         assert!(WorkItemType::BusinessException.is_w29_closable("reconciliation_difference", false,));
         assert!(!WorkItemType::BusinessException.is_w29_closable("MASTER_MAPPING_TASK", false));
+        assert!(WorkItemType::BusinessException
+            .brief_relation("MASTER_MAPPING_TASK")
+            .is_none());
         assert!(!WorkItemType::BusinessException.is_w29_closable("SUPPLIER_OFFERING", false));
         assert!(!WorkItemType::BusinessException.is_w29_closable("SUPPLIER_FULFILLMENT_ORDER", false,));
         assert!(!WorkItemType::BusinessException.is_w29_closable("integration_error_task", true,));

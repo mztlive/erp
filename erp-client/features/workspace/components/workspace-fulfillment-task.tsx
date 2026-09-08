@@ -366,3 +366,55 @@ function WorkspaceFulfillmentReassignDialog({
         </Dialog>
     )
 }
+
+/** 工作台公共详情保持一致，执行者通过独立操作入口打开原有履约表单。 */
+export function WorkspaceFulfillmentProcessAction(
+    props: WorkspaceFulfillmentTaskProps,
+) {
+    const [open, setOpen] = React.useState(false)
+    const completedTaskRef = React.useRef<string | null>(null)
+    if (!props.item.allowedActions.includes("PROCESS")) return null
+    return (
+        <>
+            <Button
+                id={`workspace-fulfillment-process-${toAutomationIdSegment(props.item.workItemId)}`}
+                onClick={() => setOpen(true)}
+            >
+                处理履约
+            </Button>
+            <Dialog
+                open={open}
+                onOpenChange={setOpen}
+                onOpenChangeComplete={(isOpen) => {
+                    if (isOpen || !completedTaskRef.current) return
+                    const completedId = completedTaskRef.current
+                    completedTaskRef.current = null
+                    props.onTaskCompleted(completedId)
+                }}
+            >
+                <DialogContent
+                    id={`workspace-fulfillment-process-dialog-${toAutomationIdSegment(props.item.workItemId)}`}
+                    className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl"
+                >
+                    <DialogHeader>
+                        <DialogTitle>处理履约</DialogTitle>
+                        <DialogDescription>
+                            填写本次履约信息并确认提交。
+                        </DialogDescription>
+                    </DialogHeader>
+                    {open ? (
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            <WorkspaceFulfillmentTask
+                                {...props}
+                                onTaskCompleted={(id) => {
+                                    completedTaskRef.current = id
+                                    setOpen(false)
+                                }}
+                            />
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+        </>
+    )
+}

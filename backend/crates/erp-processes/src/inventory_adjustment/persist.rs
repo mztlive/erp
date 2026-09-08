@@ -199,6 +199,18 @@ pub async fn persist_stock_adjustment_start(
                         "库存调整单审批启动守卫冲突，请刷新后重试".to_string(),
                     ));
                 }
+                // 同一事务先写本次提交的数量与状态，随后冻结完整展示。
+                for line in &lines {
+                    if !db
+                        .inventory()
+                        .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), session)
+                        .await?
+                    {
+                        return Err(Error::NotFound("调整明细不存在".to_string()));
+                    }
+                }
+                let mut adjustment = adjustment;
+                db.stock_adjustments().update(&mut adjustment, session).await?;
                 persist_runtime_writes(
                     &db,
                     &writes,
@@ -213,17 +225,6 @@ pub async fn persist_stock_adjustment_start(
                     session,
                 )
                 .await?;
-                for line in &lines {
-                    if !db
-                        .inventory()
-                        .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), session)
-                        .await?
-                    {
-                        return Err(Error::NotFound("调整明细不存在".to_string()));
-                    }
-                }
-                let mut adjustment = adjustment;
-                db.stock_adjustments().update(&mut adjustment, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<StockAdjustment, crate::Error>(adjustment)
             })
@@ -495,7 +496,7 @@ async fn persist_runtime_writes(
             session,
         )
         .await?;
-    let snapshot = ApprovalSubjectSnapshot::new(
+    let mut snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
         DocumentType::StockAdjustment,
@@ -504,6 +505,15 @@ async fn persist_runtime_writes(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+    snapshot.display = Some(
+        erp_read_models::workbench::capture_approval_display(
+            db,
+            snapshot.document_type,
+            &snapshot.business_object_id,
+            session,
+        )
+        .await?,
+    );
     db.approval_subject_snapshots()
         .create_immutable_snapshot(&snapshot, session)
         .await?;

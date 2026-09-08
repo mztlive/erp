@@ -303,6 +303,9 @@ pub async fn persist_receipt_reversal_start(
                         "回款冲正单审批启动守卫冲突，请刷新后重试".to_string(),
                     ));
                 }
+                let mut reversal = reversal;
+                erp_returns::service::ReturnsService::persist_receipt_reversal(&db, &mut reversal, session)
+                    .await?;
                 persist_receipt_reversal_runtime(
                     &db,
                     &writes,
@@ -313,9 +316,6 @@ pub async fn persist_receipt_reversal_start(
                     session,
                 )
                 .await?;
-                let mut reversal = reversal;
-                erp_returns::service::ReturnsService::persist_receipt_reversal(&db, &mut reversal, session)
-                    .await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<ReceiptReversal, crate::Error>(reversal)
             })
@@ -349,7 +349,7 @@ pub async fn persist_receipt_reversal_runtime(
             session,
         )
         .await?;
-    let snapshot = ApprovalSubjectSnapshot::new(
+    let mut snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
         DocumentType::ReceiptReversal,
@@ -358,6 +358,15 @@ pub async fn persist_receipt_reversal_runtime(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+    snapshot.display = Some(
+        erp_read_models::workbench::capture_approval_display(
+            db,
+            snapshot.document_type,
+            &snapshot.business_object_id,
+            session,
+        )
+        .await?,
+    );
     db.approval_subject_snapshots()
         .create_immutable_snapshot(&snapshot, session)
         .await?;

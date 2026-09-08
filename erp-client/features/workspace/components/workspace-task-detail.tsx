@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
+import { useMutation } from "@tanstack/react-query"
+import { downloadFileAsset } from "@/features/file-assets/api"
 import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
@@ -52,13 +54,12 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
 import {
-    WorkspaceFulfillmentTask,
+    WorkspaceFulfillmentProcessAction,
     WorkspaceFulfillmentReassignAction,
 } from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
 import { WorkspaceImportTask } from "./workspace-import-task"
 import { WorkspaceIntegrationTask } from "./workspace-integration-task"
-import { WorkspaceMasterMappingTask } from "./workspace-master-mapping-task"
 import { WorkspacePaymentTask } from "./workspace-payment-task"
 import { WorkspaceProcurementTask } from "./workspace-procurement-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
@@ -169,19 +170,6 @@ function WorkspaceTaskSurface({
         )
     }
 
-    // 主数据映射异常 → WorkspaceMasterMappingTask
-    if (
-        item.workItemType === "BUSINESS_EXCEPTION" &&
-        item.businessObjectType === "MASTER_MAPPING_TASK"
-    ) {
-        return (
-            <WorkspaceMasterMappingTask
-                item={item}
-                onTaskCompleted={onTaskCompleted}
-            />
-        )
-    }
-
     // 集成结果未知或业务异常：接口差错 / 对账差异 → WorkspaceIntegrationTask
     if (
         (item.workItemType === "INTEGRATION_RESULT_UNKNOWN" ||
@@ -220,25 +208,6 @@ function WorkspaceTaskSurface({
             <WorkspaceSupplyExceptionTask
                 item={item}
                 onTaskCompleted={onTaskCompleted}
-            />
-        )
-    }
-
-    // 履约处理：采购收货 / 仓发或代发 / 电子交付 / 服务履约 → WorkspaceFulfillmentTask
-    if (
-        item.workItemType === "FULFILLMENT_OPERATION" &&
-        [
-            "purchase_receipt",
-            "delivery",
-            "electronic_delivery",
-            "service_fulfillment",
-        ].includes(item.businessObjectType)
-    ) {
-        return (
-            <WorkspaceFulfillmentTask
-                item={item}
-                grantedPermissions={grantedPermissions}
-                onTaskCompleted={(workItemId) => onTaskCompleted?.(workItemId)}
             />
         )
     }
@@ -282,6 +251,25 @@ function WorkspaceTaskSurface({
         )
     }
 
+    if (
+        item.workItemType === "FULFILLMENT_OPERATION" &&
+        [
+            "purchase_receipt",
+            "delivery",
+            "electronic_delivery",
+            "service_fulfillment",
+        ].includes(item.businessObjectType)
+    ) {
+        return (
+            <WorkspaceDocumentTaskDetail
+                item={item}
+                canReadSensitive={canReadSensitive}
+                grantedPermissions={grantedPermissions}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
     // 非审批任务且没有登记专用作业面 → 停止处理并提示
     if (
         item.workItemType !== "DOCUMENT_APPROVAL" &&
@@ -307,6 +295,7 @@ function WorkspaceTaskSurface({
         <WorkspaceDocumentTaskDetail
             item={item}
             canReadSensitive={canReadSensitive}
+            grantedPermissions={grantedPermissions}
             onDecisionApplied={onDecisionApplied}
         />
     )
@@ -317,9 +306,11 @@ function WorkspaceDocumentTaskDetail({
     canReadSensitive,
     onDecisionApplied,
     onTaskCompleted,
+    grantedPermissions = [],
 }: {
     item: WorkspaceWorkItem
     canReadSensitive: boolean
+    grantedPermissions?: readonly string[]
     onTaskCompleted?: (workItemId: string) => void
     onDecisionApplied?: (
         view: ApprovalCommandView,
@@ -418,6 +409,12 @@ function WorkspaceDocumentTaskDetail({
                 onDecisionApplied={(view) =>
                     onDecisionApplied?.(view, item.workItemId)
                 }
+            />
+        ) : item.workItemType === "FULFILLMENT_OPERATION" ? (
+            <WorkspaceFulfillmentProcessAction
+                item={item}
+                grantedPermissions={grantedPermissions}
+                onTaskCompleted={(id) => onTaskCompleted?.(id)}
             />
         ) : null
     const canOpenDocument = Boolean(
@@ -833,6 +830,8 @@ function LinkedDocumentValue({
 }) {
     const objectId = section.objectId?.trim()
     if (!objectId) return section.value
+    if (section.label === "履约凭证")
+        return <FulfillmentEvidenceLink assetId={objectId} />
     const href = linkedDocumentHref(section.label, objectId, returnTo)
     const canPreview = Boolean(linkedDocumentPaperKind(section.label))
     if (!href && !canPreview) return section.value
@@ -870,6 +869,31 @@ function LinkedDocumentValue({
                 >
                     <ArrowUpRightIcon aria-hidden="true" />
                 </IconActionButton>
+            ) : null}
+        </span>
+    )
+}
+
+/** 凭证通过现有受控文件接口下载，禁止把内部 ID 或静态未授权地址交给页面。 */
+function FulfillmentEvidenceLink({ assetId }: { assetId: string }) {
+    const download = useMutation({
+        mutationFn: () => downloadFileAsset(assetId, "履约凭证"),
+    })
+    return (
+        <span className="inline-flex flex-col gap-1">
+            <button
+                id={`workspace-fulfillment-evidence-${toAutomationIdSegment(assetId)}`}
+                type="button"
+                className="text-left text-primary underline-offset-2 hover:underline"
+                disabled={download.isPending}
+                onClick={() => download.mutate()}
+            >
+                {download.isPending ? "正在读取…" : "下载凭证"}
+            </button>
+            {download.isError ? (
+                <span role="alert" className="text-xs text-destructive">
+                    凭证读取失败，请重试
+                </span>
             ) : null}
         </span>
     )

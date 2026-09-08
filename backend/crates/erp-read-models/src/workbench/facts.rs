@@ -309,8 +309,9 @@ fn apply_subject_display(
     subject: Option<&WorkbenchSubjectDisplay>,
 ) {
     fields.counterparty_label = subject
-        .and_then(|item| item.counterparty_label.clone())
-        .or_else(|| fact.display.counterparty_label.clone());
+        .filter(|item| item.brief_source.is_some())
+        .map(|item| item.counterparty_label.clone())
+        .unwrap_or_else(|| fact.display.counterparty_label.clone());
     let preserve_task_impact = fields.work_item_type.uses_explicit_owner_authorization()
         && fields
             .impact_summary
@@ -325,8 +326,8 @@ fn apply_subject_display(
         }
     }
     fields.brief_source = subject
-        .and_then(|item| item.brief_source.clone())
-        .or_else(|| fact.display.brief_source.clone());
+        .map(|item| item.brief_source.clone())
+        .unwrap_or_else(|| fact.display.brief_source.clone());
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
@@ -347,6 +348,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
 
     /// 按固定对象注册表分组查询；未注册类型不会进入本映射。
     pub(super) async fn load_object_facts(
+        &self,
+        keys: &HashSet<(ObjectKind, String)>,
+        executor: &mut dyn Executor,
+    ) -> Result<WorkbenchObjectFactMap> {
+        let mut facts = self.load_live_object_facts(keys, executor).await?;
+        self.load_approval_displays(keys, &mut facts, executor).await?;
+        Ok(facts)
+    }
+
+    /// 读取当前业务事实；审批提交捕获与普通展示复用，禁止在此叠加旧快照。
+    pub(super) async fn load_live_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
         executor: &mut dyn Executor,

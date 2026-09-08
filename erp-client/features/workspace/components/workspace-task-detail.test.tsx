@@ -10,7 +10,10 @@ vi.mock("next/navigation", () => ({
 }))
 vi.mock("../hooks/use-workspace-document-facts", () => ({
     useWorkspaceDocumentFacts: (item: WorkspaceWorkItem) => ({
-        facts: { sections: item.summarySections ?? [], lines: [] },
+        facts: {
+            sections: item.summarySections ?? [],
+            lines: item.briefLines ?? [],
+        },
         isPending: false,
         isError: false,
     }),
@@ -38,6 +41,16 @@ vi.mock("./workspace-document-paper-dialog", () => ({
             </div>
         ) : null,
 }))
+
+vi.mock(
+    "@/features/fulfillment-operations/pages/hooks/use-fulfillment-operations-controller",
+    () => ({
+        useFulfillmentOperationsController: () => ({
+            queueQuery: { isPending: true, isError: false },
+            context: undefined,
+        }),
+    }),
+)
 
 afterEach(cleanup)
 
@@ -175,7 +188,6 @@ const registeredTasks = [
     ["BUSINESS_EXCEPTION", "integration_error_task"],
     ["BUSINESS_EXCEPTION", "reconciliation_difference"],
     ["INTEGRATION_RESULT_UNKNOWN", "reconciliation_difference"],
-    ["BUSINESS_EXCEPTION", "MASTER_MAPPING_TASK"],
     ["INTEGRATION_RESULT_UNKNOWN", "SUPPLIER_FULFILLMENT_ORDER"],
     ["BUSINESS_EXCEPTION", "SUPPLIER_FULFILLMENT_ORDER"],
     ["BUSINESS_EXCEPTION", "SUPPLIER_OFFERING"],
@@ -295,5 +307,62 @@ test.each([
         expect(screen.getByText("含税金额")).toBeTruthy()
         expect(screen.queryByText("本单当前没有待处理的履约单据")).toBeNull()
         expect(screen.queryByRole("spinbutton")).toBeNull()
+    },
+)
+
+test.each([
+    "purchase_receipt",
+    "delivery",
+    "electronic_delivery",
+    "service_fulfillment",
+])(
+    "%s 的阅读人与处理人展示同一组履约事实，仅操作入口不同",
+    (businessObjectType) => {
+        const common: WorkspaceWorkItem = {
+            ...item,
+            workItemType: "FULFILLMENT_OPERATION",
+            businessObjectType,
+            handlerKey: "fulfillment_operation",
+            rootBusinessObjectId: "source-1",
+            approval: undefined,
+            approvalProcessInstanceId: undefined,
+            workItemTypeLabel: "履约处理",
+            summarySections: [
+                { label: "履约批次", value: "FUL-001" },
+                { label: "履约状态", value: "待处理" },
+                { label: "物流单号", value: "SF123" },
+                { label: "完成说明", value: "已完成约定服务" },
+            ],
+            briefLines: [{ title: "龙井礼盒", quantity: "1 盒" }],
+            allowedActions: ["VIEW"],
+        }
+        const view = render(<WorkspaceTaskDetail item={common} />)
+        for (const text of [
+            "FUL-001",
+            "SF123",
+            "已完成约定服务",
+            "龙井礼盒",
+            "1 盒",
+        ])
+            expect(screen.getByText(text)).toBeTruthy()
+        expect(screen.queryByRole("button", { name: "处理履约" })).toBeNull()
+        view.rerender(
+            <WorkspaceTaskDetail
+                item={{ ...common, allowedActions: ["VIEW", "PROCESS"] }}
+            />,
+        )
+        for (const text of [
+            "FUL-001",
+            "SF123",
+            "已完成约定服务",
+            "龙井礼盒",
+            "1 盒",
+        ])
+            expect(screen.getByText(text)).toBeTruthy()
+        expect(screen.getByRole("button", { name: "处理履约" })).toBeTruthy()
+        expect(screen.queryByRole("dialog")).toBeNull()
+        expect(screen.queryByText("任务处理器未登记")).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "处理履约" }))
+        expect(screen.getByRole("dialog", { name: "处理履约" })).toBeTruthy()
     },
 )

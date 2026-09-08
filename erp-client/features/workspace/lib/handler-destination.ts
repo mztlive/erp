@@ -94,12 +94,6 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W29",
         baseHref: "/governance/integration-errors",
     },
-    master_mapping_task: {
-        workItemTypeLabel: "主数据映射任务",
-        family: "exception",
-        destinationWorkspaceId: "W17",
-        baseHref: "/governance/integration-errors",
-    },
     business_exception: {
         workItemTypeLabel: "业务异常",
         family: "exception",
@@ -398,10 +392,6 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
                 params,
             )
         case "supplier_supply_exception":
-            return withParams(registration.baseHref, params)
-        case "master_mapping_task":
-            params.set("view", "mapping")
-            params.set("mappingTaskId", businessObjectId)
             return withParams(registration.baseHref, params)
         case "integration_unknown":
         case "business_exception":

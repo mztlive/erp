@@ -320,7 +320,6 @@ pub(super) fn handler_route(
             "SUPPLIER_FULFILLMENT_ORDER",
         ) => ("supplier_fulfillment_investigation", "W26"),
         (WorkItemType::BusinessException, "SUPPLIER_OFFERING") => ("supplier_supply_exception", "W21"),
-        (WorkItemType::BusinessException, "MASTER_MAPPING_TASK") => ("master_mapping_task", "W17"),
         (WorkItemType::IntegrationResultUnknown, "integration_error_task") => ("integration_unknown", "W29"),
         (WorkItemType::BusinessException, "integration_error_task" | "reconciliation_difference") => {
             ("business_exception", "W29")

@@ -301,6 +301,9 @@ pub async fn persist_supplier_refund_start(
                         "供应商退款单审批启动守卫冲突，请刷新后重试".to_string(),
                     ));
                 }
+                let mut refund = refund;
+                erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, session)
+                    .await?;
                 persist_supplier_refund_runtime(
                     &db,
                     &writes,
@@ -311,9 +314,6 @@ pub async fn persist_supplier_refund_start(
                     session,
                 )
                 .await?;
-                let mut refund = refund;
-                erp_returns::service::ReturnsService::persist_supplier_refund(&db, &mut refund, session)
-                    .await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<SupplierRefund, crate::Error>(refund)
             })
@@ -347,7 +347,7 @@ pub async fn persist_supplier_refund_runtime(
             session,
         )
         .await?;
-    let snapshot = ApprovalSubjectSnapshot::new(
+    let mut snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
         DocumentType::SupplierRefund,
@@ -356,6 +356,15 @@ pub async fn persist_supplier_refund_runtime(
         snapshot_payload.clone(),
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
+    snapshot.display = Some(
+        erp_read_models::workbench::capture_approval_display(
+            db,
+            snapshot.document_type,
+            &snapshot.business_object_id,
+            session,
+        )
+        .await?,
+    );
     db.approval_subject_snapshots()
         .create_immutable_snapshot(&snapshot, session)
         .await?;
