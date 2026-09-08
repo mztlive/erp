@@ -109,6 +109,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 more_count,
                 submitter_name: non_empty(&adjustment.prepared_by),
             });
+            fact.display.approval_subject_version =
+                (!adjustment.status.is_editable()).then_some(adjustment.approval_subject_version);
             facts.insert((ObjectKind::StockAdjustment, adjustment.base.id.clone()), fact);
         }
         Ok(())
@@ -188,7 +190,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let external_bill = external_bill_label(&statement);
             push_section(&mut sections, "供应商账单", external_bill.as_deref(), false);
             let source_as_of = format_instant_datetime(statement.source_as_of);
-            push_section(&mut sections, "来源事实水位", Some(&source_as_of), false);
+            push_section(&mut sections, "来源数据截至", Some(&source_as_of), false);
             push_section(
                 &mut sections,
                 "ERP 金额",

@@ -72,6 +72,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             ));
 
             fact.display.brief_source = Some(receipt_brief_source(&receipt, counterparty.as_deref(), lines));
+            fact.display.approval_subject_version = (!receipt.status.as_str().eq_ignore_ascii_case("draft"))
+                .then_some(receipt.approval_subject_version);
             facts.insert((ObjectKind::CustomerReceipt, receipt.base.id.clone()), fact);
         }
         Ok(())
@@ -148,6 +150,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     .or_else(|| origin.and_then(|item| item.counterparty.clone())),
             );
             let mut brief = amount_reason_brief(
+                "退款金额",
                 format_yuan(&refund.amount),
                 vec![
                     ("客户", customer.clone()),
@@ -167,6 +170,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 "通过后追加应收冲减与反向核销，原回款或应收事实保留",
             );
             fact.display.brief_source = Some(brief);
+            fact.display.approval_subject_version = (!refund.status.as_str().eq_ignore_ascii_case("draft"))
+                .then_some(refund.approval_subject_version);
             facts.insert((ObjectKind::CustomerRefund, refund.base.id.clone()), fact);
         }
         Ok(())
@@ -220,6 +225,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 origin.and_then(|item| item.counterparty.clone()),
             );
             let mut brief = amount_reason_brief(
+                "冲正金额",
                 format_yuan(&reversal.amount),
                 vec![
                     ("往来主体", origin.and_then(|item| item.counterparty.clone())),
@@ -239,6 +245,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 "通过后追加反向回款与反向核销，原回款事实保留并标记已冲正",
             );
             fact.display.brief_source = Some(brief);
+            fact.display.approval_subject_version = (!reversal.status.as_str().eq_ignore_ascii_case("draft"))
+                .then_some(reversal.approval_subject_version);
             facts.insert((ObjectKind::ReceiptReversal, reversal.base.id.clone()), fact);
         }
         Ok(())

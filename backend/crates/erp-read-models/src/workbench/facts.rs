@@ -25,6 +25,10 @@ pub(crate) struct WorkbenchSubjectDisplay {
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkbenchObjectDisplay {
+    /// 页面跳转的父单据；不参与任务阅读或执行授权。
+    pub(super) root_document_id: String,
+    /// 无独立提交表的单据只证明当前非草稿审批版本。
+    pub(super) approval_subject_version: Option<u32>,
     pub(super) label: String,
     pub(super) counterparty_label: Option<String>,
     pub(super) impact_summary: Option<String>,
@@ -41,6 +45,8 @@ pub(crate) struct WorkbenchObjectFact {
 impl WorkbenchObjectFact {
     pub(super) fn from_authority(authority: erp_workflow::ports::ObjectFact) -> Self {
         let display = WorkbenchObjectDisplay {
+            root_document_id: authority.root_document_id.clone(),
+            approval_subject_version: None,
             label: authority.label.clone(),
             counterparty_label: authority.counterparty_label.clone(),
             impact_summary: authority.impact_summary.clone(),
@@ -273,9 +279,16 @@ pub(super) fn object_policy(
 /// 无。
 pub(super) fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &WorkbenchObjectFact) {
     fields.business_object_label = fact.display.label.clone();
-    fields.root_business_object_id = fact.authority.root_document_id.clone();
+    fields.root_business_object_id = fact.display.root_document_id.clone();
     let subject = fact.display.subject_briefs.get(&fields.subject_version);
     apply_subject_display(fields, fact, subject);
+    if fields.work_item_type == WorkItemType::DocumentApproval
+        && super::approval_list::document_summary(fact, fields.subject_version.parse().ok()).is_none()
+        && subject.and_then(|value| value.brief_source.as_ref()).is_none()
+    {
+        fields.brief_source = None;
+        fields.counterparty_label = None;
+    }
 }
 
 /// 按任务针对的提交版本覆盖往来方、影响和事项简报。
@@ -395,7 +408,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .await?;
         self.load_supplier_fulfillment_order_facts(keys, facts, executor)
             .await?;
-        self.load_supplier_offering_facts(keys, facts, executor).await
+        self.load_supplier_offering_facts(keys, facts, executor).await?;
+        self.load_operational_briefs(keys, facts, executor).await
     }
 
     async fn load_legacy_import_batch_facts(

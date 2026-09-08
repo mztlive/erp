@@ -55,7 +55,6 @@ export function WorkspaceFulfillmentTask({
     grantedPermissions,
     onTaskCompleted,
 }: WorkspaceFulfillmentTaskProps) {
-    const [reassignOpen, setReassignOpen] = React.useState(false)
     const descriptor = workspaceFulfillmentDescriptor(item)
     const operationType = descriptor?.operationTypes[0]
     const filters = React.useMemo<FulfillmentQueueFilters>(
@@ -96,16 +95,10 @@ export function WorkspaceFulfillmentTask({
                         .filter(Boolean)
                         .join(" · ")}
                 >
-                    {item.allowedActions.includes("REASSIGN") ? (
-                        <Button
-                            id={`workspace-fulfillment-reassign-trigger-${toAutomationIdSegment(item.workItemId)}`}
-                            type="button"
-                            variant="outline"
-                            onClick={() => setReassignOpen(true)}
-                        >
-                            转交责任
-                        </Button>
-                    ) : null}
+                    <WorkspaceFulfillmentReassignAction
+                        item={item}
+                        onReassigned={() => onTaskCompleted(item.workItemId)}
+                    />
                 </WorkspaceTaskIdentityHeader>
             }
             aria-label="当前履约任务"
@@ -143,13 +136,39 @@ export function WorkspaceFulfillmentTask({
                     onBack={() => undefined}
                 />
             )}
-            <WorkspaceFulfillmentReassignDialog
-                open={reassignOpen}
-                onOpenChange={setReassignOpen}
-                item={item}
-                onReassigned={() => onTaskCompleted(item.workItemId)}
-            />
         </WorkspaceTaskPane>
+    )
+}
+
+/** 责任管理独立于履约执行队列，只有 REASSIGN 授权才提供入口。 */
+export function WorkspaceFulfillmentReassignAction({
+    item,
+    onReassigned,
+}: {
+    item: WorkspaceWorkItem
+    onReassigned: () => void
+}) {
+    const [open, setOpen] = React.useState(false)
+    if (!item.allowedActions.includes("REASSIGN")) return null
+    return (
+        <>
+            <Button
+                id={`workspace-fulfillment-reassign-trigger-${toAutomationIdSegment(item.workItemId)}`}
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(true)}
+            >
+                转交责任
+            </Button>
+            {open ? (
+                <WorkspaceFulfillmentReassignDialog
+                    open={open}
+                    onOpenChange={setOpen}
+                    item={item}
+                    onReassigned={onReassigned}
+                />
+            ) : null}
+        </>
     )
 }
 

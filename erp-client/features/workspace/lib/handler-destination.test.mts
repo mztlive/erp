@@ -332,3 +332,48 @@ test("unknown, mismatched, and incomplete handlers fail closed", () => {
         null,
     )
 })
+
+for (const [businessObjectType, destinationWorkspaceId, path, section] of [
+    [
+        "sales_change_order",
+        "W05",
+        "/sales/orders/parent%20%2F%207",
+        "change-review",
+    ],
+    [
+        "purchase_change_order",
+        "W08",
+        "/procurement/orders/parent%20%2F%207",
+        "changes",
+    ],
+]) {
+    test(`${businessObjectType} opens the exact change under its parent for task and initiator`, () => {
+        for (const trackingOnly of [false, true]) {
+            const input = {
+                ...REQUIRED_CONTEXT,
+                businessObjectType,
+                destinationWorkspaceId,
+                handlerKey: "document_approval",
+                rootBusinessObjectId: "parent / 7",
+                trackingOnly,
+                approvalInstanceId: "instance-7",
+            }
+            const url = parsedHref(buildHandlerHref(input))
+            assert.equal(url.pathname, path)
+            assert.equal(url.searchParams.get("changeOrderId"), "object / 42")
+            assert.equal(url.searchParams.get("section"), section)
+            assert.equal(url.searchParams.has("workItemId"), !trackingOnly)
+            assert.equal(
+                buildHandlerHref({ ...input, rootBusinessObjectId: undefined }),
+                null,
+            )
+            assert.equal(
+                buildHandlerHref({
+                    ...input,
+                    rootBusinessObjectId: input.businessObjectId,
+                }),
+                null,
+            )
+        }
+    })
+}

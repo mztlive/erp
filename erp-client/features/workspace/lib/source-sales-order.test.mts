@@ -41,7 +41,11 @@ test("only 来源销售单 uses the sales paper adapter", () => {
         "sales_order",
     )
     assert.equal(linkedDocumentPaperKind("来源采购单"), null)
-    assert.equal(linkedDocumentHref("来源采购单", "po-1"), null)
+    assert.equal(
+        new URL(linkedDocumentHref("来源采购单", "po-1")!, "https://erp.test")
+            .pathname,
+        "/procurement/orders/po-1",
+    )
     assert.ok(linkedDocumentHref(SOURCE_SALES_ORDER_LABEL, "so-1"))
     const paymentHref = linkedDocumentHref(
         ORIGINAL_SUPPLIER_PAYMENT_LABEL,

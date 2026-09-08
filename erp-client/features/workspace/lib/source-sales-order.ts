@@ -68,6 +68,9 @@ export function linkedDocumentHref(
     if (label === SOURCE_SALES_ORDER_LABEL) {
         return sourceSalesOrderHref(objectId, returnTo)
     }
+    if (label === "来源采购单") {
+        return `/procurement/orders/${encodeURIComponent(objectId)}?${new URLSearchParams({ from: "workspace", returnTo })}`
+    }
     if (label === ORIGINAL_SUPPLIER_PAYMENT_LABEL) {
         const params = new URLSearchParams({
             view: "payment",

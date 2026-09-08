@@ -171,12 +171,32 @@ function buildDocumentApprovalHref(
 
     switch (item.destinationWorkspaceId) {
         case "W05":
+            if (item.businessObjectType === "sales_change_order") {
+                const rootId = requiredValue(item.rootBusinessObjectId)
+                if (!rootId || rootId === businessObjectId) return null
+                params.set("section", "change-review")
+                params.set("changeOrderId", businessObjectId)
+                return withParams(
+                    `/sales/orders/${encodeURIComponent(rootId)}`,
+                    params,
+                )
+            }
             params.set("section", "approval")
             return withParams(
                 `/sales/orders/${encodeURIComponent(businessObjectId)}`,
                 params,
             )
         case "W08":
+            if (item.businessObjectType === "purchase_change_order") {
+                const rootId = requiredValue(item.rootBusinessObjectId)
+                if (!rootId || rootId === businessObjectId) return null
+                params.set("section", "changes")
+                params.set("changeOrderId", businessObjectId)
+                return withParams(
+                    `/procurement/orders/${encodeURIComponent(rootId)}`,
+                    params,
+                )
+            }
             params.set("section", "approval")
             return withParams(
                 `/procurement/orders/${encodeURIComponent(businessObjectId)}`,

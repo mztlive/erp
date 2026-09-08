@@ -30,6 +30,7 @@ export function useSalesOrderDetailUrlState({
     const searchParams = useSearchParams()
     const returnTo = searchParams.get("returnTo")
     const fromWorkspace = searchParams.get("from")
+    const focusedChangeOrderId = searchParams.get("changeOrderId")?.trim() ?? ""
     const focusedWorkItemId = searchParams.get("workItemId")?.trim() ?? ""
     const queueContextId = searchParams.get("queueContextId")?.trim() ?? ""
     const workItemReturnTo =
@@ -50,6 +51,9 @@ export function useSalesOrderDetailUrlState({
             if (fromWorkspace) params.set("from", fromWorkspace)
             if (next === "acceptance" && extras?.mode === "register") {
                 params.set("mode", "register")
+            }
+            if (next === "change-review" && focusedChangeOrderId) {
+                params.set("changeOrderId", focusedChangeOrderId)
             }
             const workItemId = searchParams.get("workItemId")
             const retainWorkItem = Boolean(
@@ -74,7 +78,14 @@ export function useSalesOrderDetailUrlState({
                 { scroll: false },
             )
         },
-        [fromWorkspace, returnTo, router, salesOrderId, searchParams],
+        [
+            focusedChangeOrderId,
+            fromWorkspace,
+            returnTo,
+            router,
+            salesOrderId,
+            searchParams,
+        ],
     )
 
     const fromQueue =
@@ -97,6 +108,7 @@ export function useSalesOrderDetailUrlState({
         returnTo,
         fromWorkspace,
         focusedWorkItemId,
+        focusedChangeOrderId,
         queueContextId,
         workItemReturnTo,
         fromQueue,

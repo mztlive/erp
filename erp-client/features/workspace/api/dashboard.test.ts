@@ -97,84 +97,95 @@ describe("fetchWorkspaceDashboard started approvals", () => {
         expect(view.items[0].summarySections).toBeUndefined()
     })
 
-    it.each(["purchase_order", "sales_order", "supplier_payment"])(
-        "%s 的发起人展示完整单据摘要但只允许查看",
-        async (documentType) => {
-            const { mapInstanceListItemDto } =
-                await import("@/features/approval-workflow/types")
-            mocks.listApprovalInstances.mockResolvedValue({
-                items: [
-                    mapInstanceListItemDto({
-                        instance_id: "approval-1",
-                        status: "RUNNING",
-                        current_round_no: 1,
-                        document_type: documentType,
-                        document_id: "doc-1",
-                        subject_version: 1,
-                        document_label: "PO1",
-                        total_amount: "920",
-                        document_summary: {
-                            counterparty_label: "杭州狮峰茶叶有限公司",
-                            impact_summary: "审批后生效",
-                            list_summary: "供应商 · ¥920",
-                            brief_more_count: 0,
-                            summary_sections: [
-                                {
-                                    label: "含税金额",
-                                    value: "¥920",
-                                    numeric: true,
-                                },
-                                {
-                                    label: "不含税金额",
-                                    value: "¥800.4",
-                                    numeric: true,
-                                },
-                                {
-                                    label: "税额",
-                                    value: "¥119.6",
-                                    numeric: true,
-                                },
-                                { label: "付款条件", value: "先款 50%" },
-                            ],
-                            brief_lines: [
-                                {
-                                    title: "狮峰明前龙井礼盒 250g",
-                                    quantity: "1 盒 · ¥920",
-                                    due_label: "9/8 交",
-                                },
-                            ],
-                        },
-                    }),
-                ],
-                total: 1,
-            })
-            const view = await fetchWorkspaceDashboard(
-                { ...baseQuery, view: "started" },
-                profile,
-            )
-            expect(view.items[0]).toMatchObject({
-                counterpartyName: "杭州狮峰茶叶有限公司",
-                subjectVersion: "1",
-                allowedActions: ["VIEW"],
-                summarySections: expect.arrayContaining([
-                    expect.objectContaining({
-                        label: "税额",
-                        value: "¥119.6",
-                        numeric: true,
-                    }),
-                ]),
-                briefLines: [
-                    {
-                        title: "狮峰明前龙井礼盒 250g",
-                        quantity: "1 盒 · ¥920",
-                        dueLabel: "9/8 交",
+    it.each([
+        "sales_order",
+        "voucher_sales_order",
+        "sales_change_order",
+        "purchase_order",
+        "purchase_change_order",
+        "stock_adjustment",
+        "customer_receipt",
+        "customer_refund",
+        "receipt_reversal",
+        "supplier_refund",
+        "payment_reversal",
+    ])("%s 的发起人展示完整单据摘要但只允许查看", async (documentType) => {
+        const { mapInstanceListItemDto } =
+            await import("@/features/approval-workflow/types")
+        mocks.listApprovalInstances.mockResolvedValue({
+            items: [
+                mapInstanceListItemDto({
+                    instance_id: "approval-1",
+                    status: "RUNNING",
+                    current_round_no: 1,
+                    document_type: documentType,
+                    document_id: "doc-1",
+                    subject_version: 1,
+                    document_label: "PO1",
+                    total_amount: "920",
+                    document_summary: {
+                        root_business_object_id: "parent-1",
+                        counterparty_label: "杭州狮峰茶叶有限公司",
+                        impact_summary: "审批后生效",
+                        list_summary: "供应商 · ¥920",
+                        brief_more_count: 0,
+                        summary_sections: [
+                            {
+                                label: "含税金额",
+                                value: "¥920",
+                                numeric: true,
+                            },
+                            {
+                                label: "不含税金额",
+                                value: "¥800.4",
+                                numeric: true,
+                            },
+                            {
+                                label: "税额",
+                                value: "¥119.6",
+                                numeric: true,
+                            },
+                            { label: "付款条件", value: "先款 50%" },
+                        ],
+                        brief_lines: [
+                            {
+                                title: "狮峰明前龙井礼盒 250g",
+                                quantity: "1 盒 · ¥920",
+                                due_label: "9/8 交",
+                            },
+                        ],
                     },
-                ],
-            })
-            expect(view.items[0].amountSummary).toBeUndefined()
-            expect(view.items[0].taskVersion).toBe("")
-        },
-    )
+                }),
+            ],
+            total: 1,
+        })
+        const view = await fetchWorkspaceDashboard(
+            { ...baseQuery, view: "started" },
+            profile,
+        )
+        expect(view.items[0]).toMatchObject({
+            rootBusinessObjectId: "parent-1",
+            counterpartyName: "杭州狮峰茶叶有限公司",
+            subjectVersion: "1",
+            allowedActions: ["VIEW"],
+            summarySections: expect.arrayContaining([
+                expect.objectContaining({
+                    label: "税额",
+                    value: "¥119.6",
+                    numeric: true,
+                }),
+            ]),
+            briefLines: [
+                {
+                    title: "狮峰明前龙井礼盒 250g",
+                    quantity: "1 盒 · ¥920",
+                    dueLabel: "9/8 交",
+                },
+            ],
+        })
+        expect(view.items[0].amountSummary).toBeUndefined()
+        expect(view.items[0].taskVersion).toBe("")
+    })
 
     it("服务端明确缺少提交摘要时不把当前单据当作旧版本事实", async () => {
         const { mapInstanceListItemDto } =

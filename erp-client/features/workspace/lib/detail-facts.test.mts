@@ -37,7 +37,7 @@ test("source sales order stays a key field and keeps its routing id", () => {
     assert.equal(facts.amounts[0]?.label, "含税金额")
 })
 
-test("sales invoice facts promote the pending amount and remove equal duplicates", () => {
+test("sales invoice keeps distinct business amounts even when their values are equal", () => {
     const facts = splitDetailSections([
         { label: "含税金额", value: "¥1,398", numeric: true },
         { label: "开放余额", value: "¥1,398", numeric: true },
@@ -48,14 +48,21 @@ test("sales invoice facts promote the pending amount and remove equal duplicates
 
     assert.deepEqual(facts.amounts, [
         { label: "待开票金额", value: "¥1,398", numeric: true },
+        { label: "含税金额", value: "¥1,398", numeric: true },
+        { label: "含税总额", value: "¥1,398", numeric: true },
     ])
     assert.deepEqual(facts.moreFields, [
+        { label: "开放余额", value: "¥1,398", numeric: true },
         { label: "销售单", value: "XS20260826190103" },
     ])
 })
 
 test("settlement and fulfillment amounts are visible with their original business labels", () => {
     for (const label of [
+        "退款金额",
+        "回款金额",
+        "付款金额",
+        "冲正金额",
         "ERP 金额",
         "供应商金额",
         "来源销售单金额",

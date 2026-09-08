@@ -158,3 +158,142 @@ test.each([
         ).toBe(`${businessObjectType}:so-1`)
     },
 )
+
+const registeredTasks = [
+    ["PROCUREMENT_ORDER_CREATION", "sales_order"],
+    ["FULFILLMENT_OPERATION", "purchase_receipt"],
+    ["FULFILLMENT_OPERATION", "delivery"],
+    ["FULFILLMENT_OPERATION", "electronic_delivery"],
+    ["FULFILLMENT_OPERATION", "service_fulfillment"],
+    ["CUSTOMER_ACCEPTANCE_REGISTRATION", "sales_order"],
+    ["DOCUMENT_APPROVAL", "sales_order"],
+    ["SUPPLIER_PAYMENT_EXECUTION", "payable_account"],
+    ["SALES_INVOICE_EXECUTION", "receivable_account"],
+    ["SUPPLIER_SETTLEMENT_REVIEW", "supplier_settlement_statement"],
+    ["IMPORT_BUSINESS_CONFIRMATION", "LEGACY_IMPORT_BATCH"],
+    ["INTEGRATION_RESULT_UNKNOWN", "integration_error_task"],
+    ["BUSINESS_EXCEPTION", "integration_error_task"],
+    ["BUSINESS_EXCEPTION", "reconciliation_difference"],
+    ["INTEGRATION_RESULT_UNKNOWN", "reconciliation_difference"],
+    ["BUSINESS_EXCEPTION", "MASTER_MAPPING_TASK"],
+    ["INTEGRATION_RESULT_UNKNOWN", "SUPPLIER_FULFILLMENT_ORDER"],
+    ["BUSINESS_EXCEPTION", "SUPPLIER_FULFILLMENT_ORDER"],
+    ["BUSINESS_EXCEPTION", "SUPPLIER_OFFERING"],
+    ["DOCUMENT_APPROVAL", "voucher_sales_order"],
+    ["DOCUMENT_APPROVAL", "sales_change_order"],
+    ["DOCUMENT_APPROVAL", "purchase_order"],
+    ["DOCUMENT_APPROVAL", "purchase_change_order"],
+    ["DOCUMENT_APPROVAL", "stock_adjustment"],
+    ["DOCUMENT_APPROVAL", "customer_receipt"],
+    ["DOCUMENT_APPROVAL", "customer_refund"],
+    ["DOCUMENT_APPROVAL", "receipt_reversal"],
+    ["DOCUMENT_APPROVAL", "supplier_refund"],
+    ["DOCUMENT_APPROVAL", "payment_reversal"],
+] as const
+
+test.each(registeredTasks)(
+    "%s / %s 的只读入口保留公共字段并隐藏执行控件",
+    (workItemType, businessObjectType) => {
+        render(
+            <WorkspaceTaskDetail
+                item={{
+                    ...item,
+                    workItemType,
+                    businessObjectType,
+                    approval: undefined,
+                    approvalProcessInstanceId: undefined,
+                    allowedActions: ["VIEW"],
+                    counterpartyName: "测试往来方",
+                    summarySections: [
+                        ...item.summarySections!,
+                        { label: "业务备注", value: "提交冻结内容" },
+                    ],
+                    documentSummaryResolved: true,
+                }}
+            />,
+        )
+        expect(screen.getByText("测试往来方")).toBeTruthy()
+        expect(screen.getByText("含税金额")).toBeTruthy()
+        expect(screen.getByText("不含税金额")).toBeTruthy()
+        expect(screen.getByText("税额")).toBeTruthy()
+        expect(screen.getByText("提交冻结内容")).toBeTruthy()
+        expect(screen.queryByRole("textbox")).toBeNull()
+        expect(screen.queryByRole("combobox")).toBeNull()
+        expect(screen.queryByRole("spinbutton")).toBeNull()
+        expect(
+            screen.queryByRole("button", {
+                name: /同意审批|预览供给分配|确认付款|确认开票|确认导入|重试|重放/,
+            }),
+        ).toBeNull()
+    },
+)
+
+test("已解析但缺少历史摘要时明确提示，不显示提交金额冒充完整内容", () => {
+    render(
+        <WorkspaceTaskDetail
+            item={{
+                ...item,
+                documentSummaryResolved: true,
+                summarySections: [],
+                briefLines: [],
+            }}
+        />,
+    )
+    expect(screen.getByRole("status").textContent).toContain(
+        "此次提交的单据摘要暂不可用",
+    )
+    expect(screen.queryByText("提交金额")).toBeNull()
+})
+
+test("只读开票任务的文档图标只用于查看，不使用登记动作的文案和 URL", () => {
+    render(
+        <WorkspaceTaskDetail
+            item={{
+                ...item,
+                workItemType: "SALES_INVOICE_EXECUTION",
+                businessObjectType: "receivable_account",
+                businessObjectId: "receivable-1",
+                rootBusinessObjectId: "sales-1",
+                queueContextId: "queue-1",
+                handlerKey: "sales_invoice_execution",
+                destinationWorkspaceId: "W11",
+                approval: undefined,
+                approvalProcessInstanceId: undefined,
+            }}
+        />,
+    )
+    const link = screen.getByRole("link", { name: "查看应收账户" })
+    expect(link.querySelector("svg.lucide-file-text")).toBeTruthy()
+    expect(link.getAttribute("href")).not.toContain("register=")
+    expect(screen.queryByRole("link", { name: "去登记销项发票" })).toBeNull()
+})
+
+test.each([
+    "purchase_receipt",
+    "delivery",
+    "electronic_delivery",
+    "service_fulfillment",
+])(
+    "%s 管理员保留转交与公共字段，不进入执行者的空队列",
+    (businessObjectType) => {
+        render(
+            <WorkspaceTaskDetail
+                item={{
+                    ...item,
+                    workItemType: "FULFILLMENT_OPERATION",
+                    businessObjectType,
+                    handlerKey: "fulfillment_operation",
+                    destinationWorkspaceId: "W01",
+                    rootBusinessObjectId: "parent-1",
+                    allowedActions: ["VIEW", "REASSIGN"],
+                    approval: undefined,
+                    approvalProcessInstanceId: undefined,
+                }}
+            />,
+        )
+        expect(screen.getByRole("button", { name: "转交责任" })).toBeTruthy()
+        expect(screen.getByText("含税金额")).toBeTruthy()
+        expect(screen.queryByText("本单当前没有待处理的履约单据")).toBeNull()
+        expect(screen.queryByRole("spinbutton")).toBeNull()
+    },
+)

@@ -1,7 +1,9 @@
 //! 销售变更与采购变更审批任务的事项简报装载。
 //!
-//! 变更简报以冻结基准版本与当前不可变提交为权威来源，展示表头前后值和行级
+//! 变更简报以冻结基准版本与各次不可变提交为权威来源，展示表头前后值和行级
 //! 数量、金额、单价、交期差异；不得从可变草稿或客户端计算变更事实。
+
+mod subjects;
 
 use std::collections::{HashMap, HashSet};
 
@@ -134,6 +136,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 lines,
                 more_count,
             ));
+            fact.display.root_document_id = change.sales_order_id.to_string();
+            subjects::sales(&mut fact, &change, sales_no.as_deref(), &context);
             facts.insert((ObjectKind::SalesChangeOrder, change.base.id.clone()), fact);
         }
         Ok(())
@@ -209,12 +213,14 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 lines,
                 more_count,
             ));
+            fact.display.root_document_id = change.purchase_order_id.to_string();
+            subjects::purchase(&mut fact, &change, purchase_no.as_deref(), &context);
             facts.insert((ObjectKind::PurchaseChangeOrder, change.base.id.clone()), fact);
         }
         Ok(())
     }
 
-    /// 批量读取销售变更的冻结基准、当前提交与两侧明细。
+    /// 批量读取销售变更的冻结基准、全部提交与两侧明细。
     async fn sales_change_brief_context(
         &self,
         changes: &[SalesChangeOrder],
@@ -228,17 +234,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .facts_reader()
             .read_sales_revisions(&base_ids, executor)
             .await?;
-        let submission_ids = changes
+        let change_ids = changes
             .iter()
-            .filter_map(|change| change.current_submission_id.clone())
+            .map(|change| erp_core::ids::SalesChangeOrderId::new(change.base.id.clone()))
             .collect::<Vec<_>>();
         let submissions = self
-            .facts_reader()
-            .read_sales_change_submissions(
-                &submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                executor,
-            )
+            .db
+            .sales_change_submissions()
+            .list_by_change_orders(&change_ids, executor)
             .await?;
+        let submission_ids = submissions
+            .iter()
+            .map(|row| erp_core::ids::SalesChangeSubmissionId::new(row.base.id.clone()))
+            .collect::<Vec<_>>();
         let revision_ids = base_revisions
             .iter()
             .map(|revision| SalesOrderRevisionId::new(revision.base.id.clone()))
@@ -281,7 +289,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         })
     }
 
-    /// 批量读取采购变更的冻结基准、当前提交与两侧明细。
+    /// 批量读取采购变更的冻结基准、全部提交与两侧明细。
     async fn purchase_change_brief_context(
         &self,
         changes: &[PurchaseChangeOrder],
@@ -295,17 +303,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .facts_reader()
             .read_purchase_revisions(&base_ids, executor)
             .await?;
-        let submission_ids = changes
+        let change_ids = changes
             .iter()
-            .filter_map(|change| change.current_submission_id.clone())
+            .map(|change| erp_core::ids::PurchaseChangeOrderId::new(change.base.id.clone()))
             .collect::<Vec<_>>();
         let submissions = self
-            .facts_reader()
-            .read_purchase_change_submissions(
-                &submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                executor,
-            )
+            .db
+            .purchase_change_submissions()
+            .list_by_change_orders(&change_ids, executor)
             .await?;
+        let submission_ids = submissions
+            .iter()
+            .map(|row| erp_core::ids::PurchaseChangeSubmissionId::new(row.base.id.clone()))
+            .collect::<Vec<_>>();
         let revision_ids = base_revisions
             .iter()
             .map(|revision| PurchaseOrderRevisionId::new(revision.base.id.clone()))

@@ -66,7 +66,7 @@ pub(super) fn payable_brief_source(
     push_section(&mut sections, "计划付款日", due_date.as_deref(), false);
     ObjectBriefSource {
         customer: supplier.clone(),
-        amount_label: Some(format_yuan(&account.open_total)),
+        amount_label: None,
         extra_sections: sections,
         list_summary: join_list_summary([
             supplier,
@@ -104,7 +104,7 @@ pub(super) fn receipt_brief_source(
     push_section(&mut sections, "往来主体", counterparty, false);
     push_section(
         &mut sections,
-        "含税金额",
+        "回款金额",
         Some(format_yuan(&receipt.amount)).as_deref(),
         true,
     );
@@ -131,7 +131,7 @@ pub(super) fn receipt_brief_source(
     let first_line = visible.first().map(|line| line.title.clone());
     ObjectBriefSource {
         customer: None,
-        amount_label: Some(format_yuan(&receipt.amount)),
+        amount_label: None,
         extra_sections: sections,
         list_summary: join_list_summary([
             counterparty.map(str::to_string),
@@ -333,7 +333,8 @@ pub(super) fn append_funds_origin(
 /// 金额加原因类资金单据的共用简报。
 ///
 /// # 参数
-/// * `amount_label` - 含税金额展示
+/// * `amount_title` - 退款或冲正金额名称
+/// * `amount_label` - 金额展示
 /// * `fields` - 额外键值
 /// * `list_summary` - 列表一行摘要
 ///
@@ -343,18 +344,19 @@ pub(super) fn append_funds_origin(
 /// # 错误
 /// 无。
 pub(super) fn amount_reason_brief(
+    amount_title: &str,
     amount_label: String,
     fields: Vec<(&str, Option<String>)>,
     list_summary: String,
 ) -> ObjectBriefSource {
     let mut sections = Vec::new();
-    push_section(&mut sections, "含税金额", Some(amount_label.as_str()), true);
+    push_section(&mut sections, amount_title, Some(amount_label.as_str()), true);
     for (label, value) in fields {
         push_section(&mut sections, label, value.as_deref(), false);
     }
     ObjectBriefSource {
         customer: None,
-        amount_label: Some(amount_label),
+        amount_label: None,
         extra_sections: sections,
         list_summary,
         lines: Vec::new(),
@@ -585,11 +587,18 @@ mod tests {
     #[test]
     fn amount_reason_brief_keeps_amount_and_reason() {
         let brief = amount_reason_brief(
+            "退款金额",
             "¥500".to_string(),
             vec![("原因", Some("重复到账".into()))],
             "¥500 · 重复到账".to_string(),
         );
-        assert_eq!(brief.amount_label.as_deref(), Some("¥500"));
+        assert!(brief.amount_label.is_none());
+        let assembled = crate::workbench::brief::assemble_brief(&brief, None);
+        assert!(assembled
+            .sections
+            .iter()
+            .any(|s| s.label == "退款金额" && s.value == "¥500"));
+        assert!(!assembled.sections.iter().any(|s| s.label == "含税金额"));
         assert!(brief.extra_sections.iter().any(|section| section.label == "原因"));
         assert_eq!(brief.list_summary, "¥500 · 重复到账");
     }
@@ -597,6 +606,7 @@ mod tests {
     #[test]
     fn funds_origin_adds_original_document_allocation_impact_and_evidence() {
         let mut brief = amount_reason_brief(
+            "冲正金额",
             "¥500".to_string(),
             vec![("原因", Some("重复到账".into()))],
             "¥500 · 重复到账".to_string(),

@@ -63,6 +63,37 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         Ok(())
     }
 
+    /// 审批跟踪复用责任队列的提交人姓名解析；无法解析的账号不展示。
+    ///
+    /// # 参数
+    /// `items` 为已完成阅读授权的审批列表。
+    /// # 返回
+    /// 原地将提交人身份替换为姓名。
+    /// # 错误
+    /// 账号批量读取失败时返回仓储错误。
+    pub(super) async fn apply_approval_party_names(
+        &self,
+        items: &mut [super::ApprovalListItem],
+    ) -> Result<()> {
+        let mut ids = items
+            .iter()
+            .filter_map(|item| item.document_summary.as_ref())
+            .filter_map(|summary| submitter_section(&summary.summary_sections))
+            .map(|section| section.value.clone())
+            .filter(|value| is_account_id(value))
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let names = self.load_account_names(&ids, &mut NoTransaction).await?;
+        for summary in items.iter_mut().filter_map(|item| item.document_summary.as_mut()) {
+            apply_submitter_name(&mut summary.summary_sections, &names);
+        }
+        Ok(())
+    }
+
     /// 按账号 ID 批量读取姓名。
     ///
     /// # 参数

@@ -51,7 +51,10 @@ import {
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
-import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
+import {
+    WorkspaceFulfillmentTask,
+    WorkspaceFulfillmentReassignAction,
+} from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
 import { WorkspaceImportTask } from "./workspace-import-task"
 import { WorkspaceIntegrationTask } from "./workspace-integration-task"
@@ -112,6 +115,21 @@ function WorkspaceTaskSurface({
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
+    // 非执行者统一阅读服务端摘要，避免挂载建单、确认或异常处理表单。
+    if (
+        item.workItemType !== "DOCUMENT_APPROVAL" &&
+        item.workItemType !== "APPROVAL_INSTANCE" &&
+        !item.allowedActions.includes("PROCESS")
+    ) {
+        return (
+            <WorkspaceDocumentTaskDetail
+                item={item}
+                canReadSensitive={canReadSensitive}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
     // 待供给分配：销售单生成采购 → WorkspaceProcurementTask
     if (
         item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
@@ -298,9 +316,11 @@ function WorkspaceDocumentTaskDetail({
     item,
     canReadSensitive,
     onDecisionApplied,
+    onTaskCompleted,
 }: {
     item: WorkspaceWorkItem
     canReadSensitive: boolean
+    onTaskCompleted?: (workItemId: string) => void
     onDecisionApplied?: (
         view: ApprovalCommandView,
         completedWorkItemId: string,
@@ -323,7 +343,10 @@ function WorkspaceDocumentTaskDetail({
     const canReadPaper = Boolean(
         currentPaperKind && item.businessObjectId.trim(),
     )
-    const readActionLabel = workspaceReadActionLabel(item.businessObjectType)
+    const readActionLabel =
+        item.workItemType === "FULFILLMENT_OPERATION"
+            ? `查看来源${item.businessObjectType === "delivery" ? "销售" : "采购"}单`
+            : workspaceReadActionLabel(item.businessObjectType)
     const openActionLabel = workspaceOpenActionLabel(
         item.workItemType,
         item.businessObjectType,
@@ -401,7 +424,9 @@ function WorkspaceDocumentTaskDetail({
         documentHref &&
         (approvalTask ||
             trackingTask ||
-            item.allowedActions.includes("PROCESS")),
+            item.allowedActions.includes("PROCESS") ||
+            item.allowedActions.includes("VIEW") ||
+            item.allowedActions.includes("OPEN_DOCUMENT")),
     )
 
     return (
@@ -413,6 +438,14 @@ function WorkspaceDocumentTaskDetail({
                         {item.workItemTypeLabel}
                     </h2>
                     <WorkspaceTaskHeaderActions item={item}>
+                        {item.workItemType === "FULFILLMENT_OPERATION" ? (
+                            <WorkspaceFulfillmentReassignAction
+                                item={item}
+                                onReassigned={() =>
+                                    onTaskCompleted?.(item.workItemId)
+                                }
+                            />
+                        ) : null}
                         {canReadPaper && currentPaperKind ? (
                             <IconActionButton
                                 id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
@@ -432,7 +465,11 @@ function WorkspaceDocumentTaskDetail({
                         {canOpenDocument && documentHref ? (
                             <IconActionButton
                                 id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-                                label={openActionLabel}
+                                label={
+                                    canReadPaper
+                                        ? openActionLabel
+                                        : readActionLabel
+                                }
                                 testId={`work-item-open-document-${item.workItemId}`}
                                 href={documentHref}
                             >
@@ -471,6 +508,17 @@ function WorkspaceDocumentTaskDetail({
                         </p>
                     ) : null}
                 </div>
+
+                {item.documentSummaryResolved &&
+                !item.summarySections?.length &&
+                !item.briefLines?.length ? (
+                    <p
+                        className="px-5 py-4 text-sm text-muted-foreground"
+                        role="status"
+                    >
+                        此次提交的单据摘要暂不可用。
+                    </p>
+                ) : null}
 
                 {documentFacts.isError ? (
                     <div

@@ -67,7 +67,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             push_section(&mut sections, "供应商", supplier.as_deref(), false);
             push_section(
                 &mut sections,
-                "含税金额",
+                "付款金额",
                 Some(format_yuan(&payment.amount)).as_deref(),
                 true,
             );
@@ -90,7 +90,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             let lines = lines.into_iter().take(BRIEF_LINE_LIMIT).collect();
             fact.display.brief_source = Some(ObjectBriefSource {
                 customer: None,
-                amount_label: Some(format_yuan(&payment.amount)),
+                amount_label: None,
                 extra_sections: sections,
                 list_summary: join_list_summary([
                     supplier.clone(),
@@ -170,6 +170,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 supplier.clone(),
             );
             let mut brief = amount_reason_brief(
+                "退款金额",
                 format_yuan(&refund.amount),
                 vec![
                     ("供应商", supplier.clone()),
@@ -189,6 +190,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 "通过后追加应付冲减；已付款部分追加反向付款分配，原付款或应付事实保留",
             );
             fact.display.brief_source = Some(brief);
+            fact.display.approval_subject_version = (!refund.status.as_str().eq_ignore_ascii_case("draft"))
+                .then_some(refund.approval_subject_version);
             facts.insert((ObjectKind::SupplierRefund, refund.base.id.clone()), fact);
         }
         Ok(())
@@ -242,6 +245,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 origin.and_then(|item| item.counterparty.clone()),
             );
             let mut brief = amount_reason_brief(
+                "冲正金额",
                 format_yuan(&reversal.amount),
                 vec![
                     ("供应商", origin.and_then(|item| item.counterparty.clone())),
@@ -261,6 +265,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 "通过后追加反向付款与反向核销，原付款事实保留并标记已冲正",
             );
             fact.display.brief_source = Some(brief);
+            fact.display.approval_subject_version = (!reversal.status.as_str().eq_ignore_ascii_case("draft"))
+                .then_some(reversal.approval_subject_version);
             facts.insert((ObjectKind::PaymentReversal, reversal.base.id.clone()), fact);
         }
         Ok(())

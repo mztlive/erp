@@ -239,6 +239,7 @@ export function mapWorkspaceWorkItem(
               }
             : undefined,
         rootBusinessObjectId: task.rootBusinessObjectId,
+        documentSummaryResolved: task.workItemType === "DOCUMENT_APPROVAL",
         summarySections: task.summarySections,
         briefLines: task.briefLines,
         briefMoreCount: task.briefMoreCount,
@@ -574,6 +575,7 @@ function startedInstanceToWorkItem(
         businessObjectId: item.documentId ?? item.instanceId,
         subjectVersion: item.subjectVersion ?? "",
         stableNumber: item.documentLabel ?? "单号待补全",
+        rootBusinessObjectId: summary?.rootBusinessObjectId,
         documentSummaryResolved: item.documentSummaryResolved,
         counterpartyName: summary?.counterpartyName,
         summarySections: summary?.summarySections,

@@ -170,7 +170,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 .map(|item| format!("卡券 {} 张", item.total_count));
             fact.display.brief_source = Some(ObjectBriefSource {
                 customer: counterparty.clone(),
-                amount_label: Some(format_yuan(&account.open_total)),
+                amount_label: None,
                 extra_sections: sections,
                 list_summary: join_list_summary([
                     counterparty,

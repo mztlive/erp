@@ -243,6 +243,7 @@ export type DocumentApprovalViewDto = Readonly<{
 
 /** 实例列表行。 */
 export type ApprovalDocumentSummaryDto = Readonly<{
+    root_business_object_id?: string | null
     counterparty_label?: string | null
     impact_summary?: string | null
     list_summary: string
@@ -261,6 +262,7 @@ export type ApprovalDocumentSummaryDto = Readonly<{
 }>
 
 export type ApprovalDocumentSummary = Readonly<{
+    rootBusinessObjectId?: string
     counterpartyName?: string
     impactSummary?: string
     listSummary: string
@@ -283,6 +285,7 @@ function mapApprovalDocumentSummary(
     dto: ApprovalDocumentSummaryDto,
 ): ApprovalDocumentSummary {
     return {
+        rootBusinessObjectId: optionalText(dto.root_business_object_id),
         counterpartyName: optionalText(dto.counterparty_label),
         impactSummary: optionalText(dto.impact_summary),
         listSummary: dto.list_summary,

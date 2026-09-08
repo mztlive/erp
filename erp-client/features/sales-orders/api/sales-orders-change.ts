@@ -62,10 +62,17 @@ export async function startSalesChangeOrder(
 export async function fetchSalesChangeOrderDetail(
     id: string,
     nature: SalesOrderNature,
+    expectedSalesOrderId?: string,
 ): Promise<SalesChangeOrderSummary> {
     const detail = await apiGet<BackendSalesChangeOrder>(
         `/admin/sales-change-orders/${encodeURIComponent(id)}`,
     )
+    if (
+        expectedSalesOrderId &&
+        detail.sales_order_id !== expectedSalesOrderId
+    ) {
+        throwValidation("该变更单不属于当前销售单")
+    }
     return mapChangeOrder(detail, nature)
 }
 

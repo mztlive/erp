@@ -11,6 +11,7 @@ import {
     createSalesOrder,
     createSalesOrderExportJob,
     fetchSalesOrderDetail,
+    fetchSalesChangeOrderDetail,
     fetchSalesOrderDraftForResume,
     fetchSalesOrders,
     saveSalesOrderDraft,
@@ -55,6 +56,31 @@ export function useSalesOrderDetailQuery(salesOrderId: string) {
         queryKey: salesOrderKeys.detail(salesOrderId),
         queryFn: () => fetchSalesOrderDetail(salesOrderId),
         enabled: Boolean(salesOrderId),
+    })
+}
+
+/** 按指定变更单读取，历史入口不得回退到当前活动变更单。 */
+export function useSalesChangeOrderDetailQuery(
+    salesOrderId: string,
+    changeOrderId: string,
+    nature: Parameters<typeof fetchSalesChangeOrderDetail>[1] | undefined,
+) {
+    return useQuery({
+        queryKey: [
+            ...salesOrderKeys.detail(salesOrderId),
+            "change",
+            changeOrderId,
+            nature,
+        ],
+        queryFn: () => {
+            if (!nature) throw new Error("销售单业务性质尚未加载")
+            return fetchSalesChangeOrderDetail(
+                changeOrderId,
+                nature,
+                salesOrderId,
+            )
+        },
+        enabled: Boolean(changeOrderId && nature),
     })
 }
 

@@ -1363,6 +1363,10 @@ components:
       description: 必须复用工作台待办的单据摘要。已授权实例按冻结提交版本读取；不存在对应摘要时返回空，不得用其他提交替代。此字段不授予操作权限。
       required: [list_summary, summary_sections, brief_lines, brief_more_count]
       properties:
+        root_business_object_id:
+          type: string
+          description: 所属销售单或采购单的稳定身份，仅用于打开对象中心。
+
         counterparty_label:
           type: string
           nullable: true

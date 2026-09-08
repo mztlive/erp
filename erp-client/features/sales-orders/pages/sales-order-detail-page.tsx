@@ -27,6 +27,7 @@ import {
     salesOrderKeys,
     useSalesOrderAcceptanceEligibilityQuery,
     useSalesOrderDetailQuery,
+    useSalesChangeOrderDetailQuery,
 } from "@/features/sales-orders/hooks/queries"
 import { useSalesOrderDetailStartChange } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
@@ -63,6 +64,7 @@ export function SalesOrderDetailPage({
         returnTo,
         fromWorkspace,
         focusedWorkItemId,
+        focusedChangeOrderId,
         fromQueue,
         backHref,
         backLabel,
@@ -74,6 +76,18 @@ export function SalesOrderDetailPage({
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
         : undefined
+    const changeOrderId =
+        section === "change-review"
+            ? focusedChangeOrderId ||
+              (focusedWorkItem?.businessObjectType === "sales_change_order"
+                  ? focusedWorkItem.businessObjectId
+                  : "")
+            : ""
+    const changeQuery = useSalesChangeOrderDetailQuery(
+        salesOrderId,
+        changeOrderId,
+        query.data?.nature,
+    )
     const selectSection = React.useCallback(
         (
             next: Parameters<typeof selectUrlSection>[0],
@@ -281,11 +295,28 @@ export function SalesOrderDetailPage({
                 />
             ) : null}
 
-            {section === "change-review" ? (
+            {section === "change-review" &&
+            changeOrderId &&
+            changeQuery.isPending ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    正在加载变更单…
+                </p>
+            ) : section === "change-review" &&
+              changeOrderId &&
+              changeQuery.isError ? (
+                <BusinessFailureState
+                    title="变更单读取失败"
+                    description="请重新打开该变更单，当前销售单的其他变更不会替代此次内容。"
+                />
+            ) : section === "change-review" ? (
                 <SalesChangeOrderApprovalSection
                     salesOrderId={order.id}
                     nature={order.nature}
-                    changeOrder={order.activeChangeOrder ?? null}
+                    changeOrder={
+                        changeOrderId
+                            ? (changeQuery.data ?? null)
+                            : (order.activeChangeOrder ?? null)
+                    }
                     workItemId={focusedWorkItem?.workItemId}
                     expectedTaskVersion={focusedWorkItem?.taskVersion}
                     workItemAllowedActions={focusedWorkItem?.allowedActions}

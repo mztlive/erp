@@ -189,6 +189,33 @@ impl<'a> SalesChangeOrderRepository<'a> {
 }
 
 impl<'a> SalesChangeSubmissionRepository<'a> {
+    /// 批量读取指定变更单的全部有效提交，供审批历史摘要使用。
+    ///
+    /// # 参数
+    /// `change_order_ids` 为父变更单身份集合；`executor` 决定事务上下文。
+    /// # 返回
+    /// 返回全部未删除提交；空集合返回空结果，不扫描全表。
+    /// # 错误
+    /// MongoDB 查询失败时返回仓储错误。
+    pub async fn list_by_change_orders(
+        &self,
+        change_order_ids: &[SalesChangeOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmission>> {
+        if change_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = change_order_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        self.find_many(
+            doc! { "sales_change_order_id": { "$in": ids }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            executor,
+        )
+        .await
+    }
+
     /// 列出销售变更单提交历史，新提交在前。
     ///
     /// # 参数

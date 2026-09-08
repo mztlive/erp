@@ -33,8 +33,22 @@ export function resolveWorkspaceHref(
 /**
  * 非审批任务跳转目标工作面的地址。审批决定在本页提交，不跳第二套待办页。
  */
-export function buildDocumentHref(item: WorkspaceWorkItem): string | null {
-    return buildHandlerHref({
+export function buildDocumentHref(
+    item: Pick<
+        WorkspaceWorkItem,
+        | "handlerKey"
+        | "destinationWorkspaceId"
+        | "businessObjectType"
+        | "businessObjectId"
+        | "rootBusinessObjectId"
+        | "workItemId"
+        | "approvalProcessInstanceId"
+        | "workItemType"
+        | "queueContextId"
+        | "routeContext"
+    >,
+): string | null {
+    const href = buildHandlerHref({
         handlerKey: item.handlerKey,
         destinationWorkspaceId: item.destinationWorkspaceId,
         businessObjectType: item.businessObjectType,
@@ -46,6 +60,25 @@ export function buildDocumentHref(item: WorkspaceWorkItem): string | null {
         queueContextId: item.queueContextId,
         routeContext: item.routeContext,
     })
+    if (!href || item.handlerKey === "document_approval") return href
+    if (item.handlerKey === "procurement_order_creation") {
+        return `/sales/orders/${encodeURIComponent(item.businessObjectId)}?from=workspace`
+    }
+    if (item.handlerKey === "fulfillment_operation") {
+        const root = item.rootBusinessObjectId?.trim()
+        if (!root || root === item.businessObjectId) return null
+        const base =
+            item.businessObjectType === "delivery"
+                ? "/sales/orders"
+                : "/procurement/orders"
+        return `${base}/${encodeURIComponent(root)}?from=workspace`
+    }
+    const [path, query] = href.split("?", 2)
+    const params = new URLSearchParams(query)
+    // 查看单据不得自动打开付款、开票或登记表单；处理仍由当前任务的正式按钮发起。
+    for (const key of ["session", "register", "mode", "action"])
+        params.delete(key)
+    return `${path}?${params.toString()}`
 }
 
 export function buildWarningHref(warning: {
