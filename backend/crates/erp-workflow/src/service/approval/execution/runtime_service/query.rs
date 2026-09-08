@@ -421,6 +421,9 @@ pub struct RuntimeInstanceListItem {
     pub document_id: Option<String>,
     /// 被审批单据业务编号。
     pub document_label: Option<String>,
+    /// 与实例、对象及提交版本匹配的启动快照金额；未知或非金额审批为 None。
+    #[serde(default)]
+    pub total_amount: Option<erp_core::money::Amount>,
     /// 审批定义业务版本。
     pub process_version: Option<u32>,
     /// 发起时间。
@@ -1084,14 +1087,15 @@ pub(super) fn item_from_summary(
     if row.process_kind != process_kind_of(document_type) {
         return Err(hidden_not_found());
     }
-    let document_label = snapshot
+    let snapshot = snapshot
         .filter(|snapshot| snapshot.approval_process_instance_id.as_ref() == row.id.as_str())
         .filter(|snapshot| {
             snapshot
                 .ensure_matches_runtime_subject(document_type, &document_id, row.subject_version)
                 .is_ok()
-        })
-        .map(|snapshot| snapshot.payload.document_no.clone());
+        });
+    let document_label = snapshot.map(|snapshot| snapshot.payload.document_no.clone());
+    let total_amount = snapshot.and_then(|snapshot| snapshot.payload.total_amount);
     Ok(RuntimeInstanceListItem {
         instance_id: row.id,
         status: row.status.as_str().to_string(),
@@ -1103,6 +1107,7 @@ pub(super) fn item_from_summary(
         document_type: Some(document_type.as_str().to_string()),
         document_id: Some(document_id),
         document_label,
+        total_amount,
         process_version: Some(row.definition_version),
         started_at: Some(row.started_at),
         latest_rejection_summary: row.latest_rejection_summary,
@@ -1167,6 +1172,7 @@ fn item_from_instance_id(
         document_type: None,
         document_id: None,
         document_label: None,
+        total_amount: None,
         process_version: None,
         started_at: None,
         latest_rejection_summary: None,

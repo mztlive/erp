@@ -42,8 +42,6 @@ test("common inbox badges use distinct colors", () => {
 test("workbench metadata contains only active and projectable work item types", () => {
     assert.deepEqual(Object.keys(TYPE_META).sort(), [
         "BUSINESS_EXCEPTION",
-        "CARD_FUNDS_DELTA_REVIEW",
-        "CARD_FUNDS_REVIEW",
         "CUSTOMER_ACCEPTANCE_REGISTRATION",
         "DOCUMENT_APPROVAL",
         "FULFILLMENT_OPERATION",

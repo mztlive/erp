@@ -66,29 +66,6 @@ fn priority_codes_are_strict_and_ordered() {
 }
 
 #[test]
-fn w13_receivable_review_routes_use_fixed_handlers() {
-    let opening = handler_route(
-        WorkItemType::CardFundsReview,
-        "receivable_account",
-        "role-finance",
-    )
-    .unwrap();
-    let delta = handler_route(
-        WorkItemType::CardFundsDeltaReview,
-        "receivable_account",
-        "role-finance",
-    )
-    .unwrap();
-
-    assert_eq!(opening.handler_key, "card_funds");
-    assert_eq!(opening.destination_workspace_id, "W13");
-    assert_eq!(delta.handler_key, "card_funds_delta");
-    assert_eq!(delta.destination_workspace_id, "W13");
-    assert!(opening.route_context.is_none());
-    assert!(delta.route_context.is_none());
-}
-
-#[test]
 fn sales_invoice_execution_routes_to_w11() {
     let route = handler_route(
         WorkItemType::SalesInvoiceExecution,
@@ -278,4 +255,12 @@ fn document_approval_maps_to_signed_workspace_and_approval_family() {
         WorkItemFamily::Approval
     );
     assert!(WORK_ITEM_TYPES.contains(&WorkItemType::DocumentApproval));
+}
+
+/// 已退役的历史复核任务不得恢复工作面路由。
+#[test]
+fn retired_funds_review_has_no_handler() {
+    for kind in [WorkItemType::CardFundsReview, WorkItemType::CardFundsDeltaReview] {
+        assert!(handler_route(kind, "receivable_account", "role-finance").is_err());
+    }
 }

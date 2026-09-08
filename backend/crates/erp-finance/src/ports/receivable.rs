@@ -1,12 +1,11 @@
 //! Minimal sales snapshot fields combined with finance facts for receivable decisions.
 
 use crate::entity::receivable::{
-    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, ReceivableFundsReview,
-    SalesInvoiceAllocation,
+    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,
 };
 
-/// W13 校验所需的当前应收、票款与复核链事实快照。
-pub struct CardFundsSnapshot {
+/// 当前销售版本与应收票款记录快照。
+pub struct ReceivableSnapshot {
     pub current_sales_order_revision_id: String,
     pub sales_order_no: String,
     pub sales_order_revision_no: u32,
@@ -14,7 +13,6 @@ pub struct CardFundsSnapshot {
     pub customer_name: String,
     pub counterparty_party_name: Option<String>,
     pub entries: Vec<ReceivableEntry>,
-    pub reviews: Vec<ReceivableFundsReview>,
     pub receipt_allocations: Vec<ReceiptAllocation>,
     pub invoice_allocations: Vec<SalesInvoiceAllocation>,
     pub receipts: Vec<CustomerReceipt>,

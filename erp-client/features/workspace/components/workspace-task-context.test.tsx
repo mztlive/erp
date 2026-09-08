@@ -48,7 +48,7 @@ function sampleItem(
     }
 }
 
-test("单据审批、供给分配和票款复核都在标题栏内嵌问号", () => {
+test("单据审批和供给分配保留说明，已退役票款任务不展示处理说明", () => {
     expect(
         workspaceTaskHasInlineContextHelp({
             workItemType: "DOCUMENT_APPROVAL",
@@ -63,7 +63,7 @@ test("单据审批、供给分配和票款复核都在标题栏内嵌问号", ()
         workspaceTaskHasInlineContextHelp({
             workItemType: "CARD_FUNDS_REVIEW",
         }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
         workspaceTaskHasInlineContextHelp({
             workItemType: "UNKNOWN_HANDLER",

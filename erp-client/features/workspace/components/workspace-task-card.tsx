@@ -1,28 +1,57 @@
 "use client"
 
-import { ChevronRightIcon } from "lucide-react"
+import {
+    BadgeCheckIcon,
+    ChevronRightIcon,
+    CircleAlertIcon,
+    FileTextIcon,
+    TruckIcon,
+    WalletIcon,
+} from "lucide-react"
 
 import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 import { splitDetailSections } from "../lib/detail-facts"
 import { findSourceSalesOrder } from "../lib/source-sales-order"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 
-/** 队列只保留长单号的可辨识首尾，完整单号仍在右侧任务详情展示。 */
-function compactDocumentNumber(number: string): string {
-    return number.length > 22
-        ? `${number.slice(0, 10)}…${number.slice(-6)}`
-        : number
+/** 表头和任务行共用列宽；手机将金额与截止时间合并到右列。 */
+export const workspaceTaskColumns =
+    "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 @min-[600px]/workspace-queue:grid-cols-[minmax(0,1fr)_7.5rem_8rem_1rem]"
+
+const FAMILY_APPEARANCE = {
+    approval: {
+        icon: FileTextIcon,
+        className:
+            "bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300",
+    },
+    procurement: {
+        icon: FileTextIcon,
+        className:
+            "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    fulfillment: {
+        icon: TruckIcon,
+        className:
+            "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    finance: {
+        icon: WalletIcon,
+        className:
+            "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    exception: {
+        icon: CircleAlertIcon,
+        className:
+            "bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300",
+    },
 }
 
-/**
- * 工作台队列行。首行单号与金额对齐扫读，次行放类型徽章与往来方。
- */
+/** 同一行对齐业务对象、金额与期限，保留原生按钮的键盘操作和稳定定位。 */
 export function WorkspaceTaskCard({
     item,
     selected,
@@ -34,28 +63,36 @@ export function WorkspaceTaskCard({
 }) {
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
-    const amount = splitDetailSections(
-        item.summarySections,
-        item.counterpartyName,
-    ).amounts[0]
+    const tracking = item.workItemType === "APPROVAL_INSTANCE"
+    const amount =
+        item.amountSummary ??
+        splitDetailSections(item.summarySections, item.counterpartyName)
+            .amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
-    const paymentTask = item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
-    const trackingTask = item.workItemType === "APPROVAL_INSTANCE"
     const sourceSales = findSourceSalesOrder(item.summarySections)
-    const counterpartyLine = [
-        item.counterpartyName,
-        sourceSales ? `来源 ${sourceSales.orderNo}` : undefined,
-    ]
-        .filter(Boolean)
-        .join(" · ")
-    const primaryLabel = paymentTask
-        ? item.counterpartyName || "供应商付款"
-        : number
-    const secondaryLine = trackingTask
-        ? item.listSummary || item.statusLabel
-        : paymentTask
-          ? `采购单 ${compactDocumentNumber(number)}`
-          : item.listSummary || counterpartyLine || item.reasonLabel
+    const appearance = FAMILY_APPEARANCE[item.family]
+    const Icon =
+        item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION"
+            ? BadgeCheckIcon
+            : appearance.icon
+    const title = item.counterpartyName || item.objectTitle
+    const deadline = tracking ? (
+        <StatusBadge label={item.statusLabel} tone={item.statusTone} />
+    ) : (
+        <>
+            <time
+                dateTime={item.dueAt || undefined}
+                className="num text-xs sm:text-sm"
+            >
+                {item.dueAt ? item.dueAtLabel : "未设截止"}
+            </time>
+            {blocked ? (
+                <StatusBadge label="受阻" tone="warning" />
+            ) : overdue ? (
+                <StatusBadge label="已超期" tone="warning" />
+            ) : null}
+        </>
+    )
 
     return (
         <button
@@ -66,72 +103,80 @@ export function WorkspaceTaskCard({
                     ? `work-item-procurement-order-creation-${item.workItemId}`
                     : undefined
             }
-            aria-label={
-                paymentTask || trackingTask
-                    ? `${item.workItemTypeLabel} ${primaryLabel} ${secondaryLine}`
-                    : sourceSales
-                      ? `${item.workItemTypeLabel} ${number} 来源 ${sourceSales.orderNo}`
-                      : `${item.workItemTypeLabel} ${number}`
-            }
+            aria-label={`${item.workItemTypeLabel} ${title} ${number}${sourceSales ? " 来源 " + sourceSales.orderNo : ""}`}
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
-                "relative flex w-full flex-col gap-2 px-4 py-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                workspaceTaskColumns,
+                "relative min-h-22 w-full px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5",
                 selected
-                    ? "bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
-                    : "hover:bg-muted/40",
+                    ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
+                    : "hover:bg-muted/30",
             )}
         >
-            <span className="flex items-baseline justify-between gap-3">
+            <span className="flex min-w-0 items-start gap-3">
                 <span
                     className={cn(
-                        "min-w-0 truncate text-sm font-medium",
-                        !paymentTask && "num",
+                        "mt-1 flex size-9 shrink-0 items-center justify-center rounded-lg",
+                        appearance.className,
                     )}
                 >
-                    {primaryLabel}
+                    <Icon className="size-4" aria-hidden="true" />
                 </span>
-                {amount ? (
-                    <span className="num shrink-0 text-sm">{amount.value}</span>
-                ) : null}
-            </span>
-            <span className="flex min-w-0 items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5">
-                    <WorkspaceDocumentBadge item={item} decorative />
-                    {secondaryLine ? (
-                        <span className="min-w-0 truncate text-xs text-muted-foreground">
-                            {secondaryLine}
+                <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-sm text-muted-foreground">
+                        {item.workItemTypeLabel}
+                    </span>
+                    <span
+                        className="truncate text-base font-medium"
+                        title={title}
+                    >
+                        {title}
+                    </span>
+                    <span
+                        className="num truncate text-xs text-muted-foreground"
+                        title={
+                            sourceSales
+                                ? number + " · 来源 " + sourceSales.orderNo
+                                : number
+                        }
+                    >
+                        {number}
+                    </span>
+                    {item.listSummary ? (
+                        <span className="truncate text-xs text-muted-foreground">
+                            {item.listSummary}
                         </span>
                     ) : null}
                 </span>
-                <span className="flex shrink-0 items-center gap-1">
-                    {trackingTask ? (
-                        <StatusBadge
-                            label={item.statusLabel}
-                            tone={item.statusTone}
-                        />
-                    ) : blocked ? (
-                        <StatusBadge label="受阻" tone="warning" />
-                    ) : overdue ? (
-                        <StatusBadge label="已超期" tone="destructive" />
-                    ) : item.dueAt ? (
-                        <time
-                            dateTime={item.dueAt}
-                            className="shrink-0 text-xs text-muted-foreground"
-                        >
-                            {item.dueAtLabel}
-                        </time>
-                    ) : (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                            未设截止
-                        </span>
-                    )}
-                    <ChevronRightIcon
-                        aria-hidden="true"
-                        className="size-3.5 text-muted-foreground"
-                    />
+            </span>
+            <span className="flex flex-col items-end gap-2 @min-[600px]/workspace-queue:items-start">
+                <span
+                    className="num whitespace-nowrap text-sm font-medium"
+                    aria-label={
+                        amount
+                            ? amount.label + " " + amount.value
+                            : "金额未提供"
+                    }
+                >
+                    {amount?.value ?? "—"}
+                </span>
+                {amount ? (
+                    <span className="text-xs text-muted-foreground">
+                        {amount.label}
+                    </span>
+                ) : null}
+                <span className="flex flex-col items-end gap-1 text-muted-foreground @min-[600px]/workspace-queue:hidden">
+                    {deadline}
                 </span>
             </span>
+            <span className="hidden flex-col items-start gap-1.5 @min-[600px]/workspace-queue:flex">
+                {deadline}
+            </span>
+            <ChevronRightIcon
+                aria-hidden="true"
+                className="hidden size-4 text-muted-foreground @min-[600px]/workspace-queue:block"
+            />
         </button>
     )
 }

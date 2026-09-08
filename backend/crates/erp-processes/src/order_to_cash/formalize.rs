@@ -359,7 +359,7 @@ mod tests {
         assert!(ensure_final_approve_formalize(&order).is_ok());
         assert_eq!(
             AccountReviewStatus::initial_for_sales_business_type(SalesBusinessTypeFact::Voucher),
-            AccountReviewStatus::OpeningPending
+            AccountReviewStatus::NotApplicable
         );
         assert_eq!(
             AccountReviewStatus::initial_for_sales_business_type(SalesBusinessTypeFact::GoodsService),

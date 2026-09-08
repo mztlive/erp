@@ -2627,7 +2627,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     },
     {
         name: "客户往来",
-        description: "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+        description: "应收台账、回款与销项发票管理",
         permissions: [
             {
                 module: "admin",
@@ -2657,36 +2657,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "receivable_account",
                     action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/receivable-funds-reviews",
-                description: "完成卡券票款正式复核",
-                permission: {
-                    resource: "receivable_funds_review",
-                    action: "complete",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/card-funds-review/receipts",
-                description: "原子登记卡券票款历史回款",
-                permission: {
-                    resource: "customer_receipt",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/card-funds-review/invoices",
-                description: "原子登记卡券票款历史发票",
-                permission: {
-                    resource: "invoice",
-                    action: "create",
                 },
             },
             {

@@ -1,7 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Maximize2Icon, Minimize2Icon, RefreshCwIcon } from "lucide-react"
+import {
+    Maximize2Icon,
+    Minimize2Icon,
+    RefreshCwIcon,
+    XIcon,
+} from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -10,11 +15,9 @@ import {
     PageActions,
     PageHeader,
     PageScaffold,
-    WorkspaceTaskPane,
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import {
     Tooltip,
     TooltipContent,
@@ -29,6 +32,7 @@ import {
 import {
     WorkspaceFamilyNav,
     WorkspaceQueueScopeNav,
+    WorkspaceQueueStatusNav,
     WorkspaceQueueToolbar,
 } from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
@@ -39,11 +43,21 @@ import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "@/features/workspace/lib/freshness"
 import { filterSummaryFor } from "@/features/workspace/lib/url-state"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
  * 工作台：页头切换待办口径，队列与作业面左右分栏，审批在右侧连续提交。
  */
 export function WorkspaceHomePage() {
+    return <WorkspaceHomeView home={useWorkspaceHome()} />
+}
+
+/** 工作台视图独立消费页面状态，业务请求与处理命令仍由现有 hooks 管理。 */
+export function WorkspaceHomeView({
+    home,
+}: {
+    home: ReturnType<typeof useWorkspaceHome>
+}) {
     const {
         urlState,
         view,
@@ -68,8 +82,26 @@ export function WorkspaceHomePage() {
         applySearch,
         clearSearch,
         refresh,
-    } = useWorkspaceHome()
+    } = home
     const [detailFullscreen, setDetailFullscreen] = React.useState(false)
+    const [detailHidden, setDetailHidden] = React.useState(false)
+    const detailItem = detailHidden ? undefined : selected
+    const selectTask = (item: NonNullable<typeof selected>) => {
+        setDetailHidden(false)
+        onSelectTask(item)
+    }
+    const closeDetail = () => {
+        setDetailHidden(true)
+        setDetailFullscreen(false)
+        setNarrowDetailOpen(false)
+        if (selected)
+            document
+                .getElementById(
+                    "workspace-task-" +
+                        toAutomationIdSegment(selected.workItemId),
+                )
+                ?.focus()
+    }
 
     React.useEffect(() => {
         if (!selected) setDetailFullscreen(false)
@@ -198,61 +230,62 @@ export function WorkspaceHomePage() {
             variant="secondary"
             onClick={clearFilters}
         >
-            回到待我处理
+            清除筛选
         </Button>
     ) : undefined
 
-    const queueToolbar = startedView ? (
-        <div className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between gap-3 py-1">
-                <h2 className="text-sm font-medium">我发起的审批</h2>
-                <span className="text-xs text-muted-foreground">
-                    {view.total.toLocaleString("zh-CN")} 条
-                </span>
-            </div>
-            <WorkspaceQueueToolbar
-                urlState={urlState}
-                searchDraft={searchDraft}
-                onSearchDraftChange={setSearchDraft}
-                onSortChange={onSortChange}
-                onSearch={applySearch}
-                showSort={false}
-                searchAriaLabel="搜索我发起的审批"
-                resultCount={view.total}
-                loading={refreshing}
-                resultNoun="条审批"
-            />
-        </div>
-    ) : (
-        <>
-            <WorkspaceFamilyNav
-                urlState={urlState}
-                counts={view.familyCounts}
-                onFamilyChange={onFamilyChange}
-            />
-            <WorkspaceQueueToolbar
-                urlState={urlState}
-                searchDraft={searchDraft}
-                onSearchDraftChange={setSearchDraft}
-                onSortChange={onSortChange}
-                onSearch={applySearch}
-                resultCount={view.total}
-                loading={refreshing}
-            />
-        </>
+    const queueToolbar = (
+        <WorkspaceQueueToolbar
+            urlState={urlState}
+            searchDraft={searchDraft}
+            onSearchDraftChange={setSearchDraft}
+            onSortChange={onSortChange}
+            onSearch={applySearch}
+            onClearSearch={clearSearch}
+            showSort={!startedView}
+            searchAriaLabel={startedView ? "搜索我发起的审批" : "搜索待办"}
+            filters={
+                !startedView ? (
+                    <>
+                        <WorkspaceFamilyNav
+                            urlState={urlState}
+                            counts={view.familyCounts}
+                            onFamilyChange={onFamilyChange}
+                        />
+                        <WorkspaceQueueStatusNav
+                            metrics={metrics}
+                            activeMetric={activeMetric}
+                            onMetricClick={onMetricClick}
+                        />
+                    </>
+                ) : undefined
+            }
+        />
     )
 
-    const paneActions = selected ? (
-        <WorkspaceDetailFullscreenButton
-            expanded={detailFullscreen}
-            onToggle={() => setDetailFullscreen((current) => !current)}
-        />
+    const paneActions = detailItem ? (
+        <>
+            <WorkspaceDetailFullscreenButton
+                expanded={detailFullscreen}
+                onToggle={() => setDetailFullscreen((current) => !current)}
+            />
+            <Button
+                id="workspace-detail-close"
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="关闭详情"
+                onClick={closeDetail}
+            >
+                <XIcon aria-hidden="true" />
+            </Button>
+        </>
     ) : null
 
-    const detail = selected ? (
+    const detail = detailItem ? (
         <WorkspacePaneActionsProvider actions={paneActions}>
             <WorkspaceTaskDetail
-                item={selected}
+                item={detailItem}
                 grantedPermissions={accountProfileQuery.data?.permissions ?? []}
                 onDecisionApplied={(commandView, workItemId) => {
                     applyDecisionAfter(
@@ -263,36 +296,17 @@ export function WorkspaceHomePage() {
                 onTaskCompleted={applyDecisionAfter}
             />
         </WorkspacePaneActionsProvider>
-    ) : (
-        <WorkspaceTaskPane
-            header={
-                <div className="flex min-w-0 flex-col gap-2">
-                    <h2 className="text-xl font-semibold tracking-tight">
-                        任务处理
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        选中左侧待办后，可在此核对并提交决定。
-                    </p>
-                </div>
-            }
-            aria-label="任务处理"
-        >
-            <div className="flex min-h-full items-center justify-center p-8">
-                <BusinessEmptyState
-                    kind="no-tasks"
-                    title="在此处理任务"
-                    description="选中左侧待办后，可在此核对并提交决定。"
-                    className="bg-transparent ring-0"
-                />
-            </div>
-        </WorkspaceTaskPane>
-    )
+    ) : null
 
     return (
         <PageScaffold className="min-h-0" density="compact">
             <p
                 key={completionAnnouncement.sequence}
-                className="sr-only"
+                className={
+                    completionAnnouncement.text
+                        ? "rounded-lg bg-muted/40 px-3 py-2 text-sm"
+                        : "sr-only"
+                }
                 role="status"
                 aria-live="polite"
                 aria-atomic="true"
@@ -301,16 +315,14 @@ export function WorkspaceHomePage() {
             </p>
             <PageHeader
                 title="我的工作台"
-                metadata={
-                    <DataFreshness
-                        updatedAt={workItemsFreshness.updatedAtLabel}
-                        dateTime={workItemsFreshness.dateTime}
-                        state={workItemsFreshness.state}
-                        statusLabel={workItemsFreshness.statusLabel}
-                    />
-                }
                 actions={
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <DataFreshness
+                            updatedAt={workItemsFreshness.updatedAtLabel}
+                            dateTime={workItemsFreshness.dateTime}
+                            state={workItemsFreshness.state}
+                            statusLabel={workItemsFreshness.statusLabel}
+                        />
                         <PageActions
                             actions={[
                                 {
@@ -330,35 +342,64 @@ export function WorkspaceHomePage() {
                 }
             />
 
-            <div className="border-b border-border pb-3">
+            <div className="border-b border-border pb-2">
                 <WorkspaceQueueScopeNav
                     metrics={metrics}
                     activeMetric={activeMetric}
                     onMetricClick={onMetricClick}
                 />
             </div>
+            <section aria-label="任务筛选" className="space-y-2">
+                {queueToolbar}
+                {hasEffectiveFilter ? (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>
+                            {[
+                                urlState.query
+                                    ? "关键词：" + urlState.query
+                                    : undefined,
+                                !startedView && urlState.due === "today"
+                                    ? "今日截止"
+                                    : undefined,
+                                !startedView && urlState.workItemType
+                                    ? "已限定任务类型"
+                                    : undefined,
+                            ]
+                                .filter(Boolean)
+                                .join(" · ") || "筛选已生效"}
+                        </span>
+                        <Button
+                            id="workspace-queue-reset-filters"
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={startedView ? clearSearch : clearFilters}
+                        >
+                            清除筛选
+                        </Button>
+                    </div>
+                ) : null}
+            </section>
             <div
                 className={cn(
                     surfacePanelClassName,
-                    "flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row",
+                    "flex min-h-0 flex-1 overflow-hidden border border-border/70",
                 )}
             >
                 <section
                     data-slot="workspace-queue"
                     className={cn(
-                        "flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0 xl:w-96",
-                        detailFullscreen && "hidden",
+                        "flex min-h-0 min-w-0 flex-1 flex-col",
+                        detailFullscreen && "xl:hidden",
+                        detailItem &&
+                            !narrowDetailOpen &&
+                            !detailFullscreen &&
+                            "xl:w-[420px] xl:flex-none 2xl:w-[450px]",
                     )}
                     aria-label={filterLabel}
                 >
-                    <header className="flex flex-col gap-3 border-b border-grid px-3 pt-1 pb-4">
-                        <p className="sr-only" aria-live="polite">
-                            {filterLabel} {view.total} 项
-                        </p>
-                        {queueToolbar}
-                    </header>
                     {items.length === 0 ? (
-                        <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
+                        <div className="flex min-h-72 flex-1 items-center justify-center px-6 py-12">
                             <BusinessEmptyState
                                 kind={
                                     hasEffectiveFilter ? "filter" : "no-tasks"
@@ -366,35 +407,46 @@ export function WorkspaceHomePage() {
                                 title={emptyTitle}
                                 description={emptyDescription}
                                 action={emptyAction}
-                                className="bg-transparent p-0 ring-0"
+                                className="max-w-sm bg-transparent p-0 ring-0"
                             />
                         </div>
                     ) : (
                         <WorkspaceTaskList
                             items={items}
-                            selectedWorkItemId={selected?.workItemId}
-                            onSelect={onSelectTask}
+                            selectedWorkItemId={detailItem?.workItemId}
+                            onSelect={selectTask}
+                            tracking={startedView}
                         />
                     )}
+                    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-grid px-5 py-3 text-xs text-muted-foreground">
+                        <span role="status">
+                            {refreshing
+                                ? "正在更新…"
+                                : "共 " +
+                                  view.total.toLocaleString("zh-CN") +
+                                  (startedView ? " 条审批" : " 条待办")}
+                        </span>
+                        {view.total > items.length ? (
+                            <span>已显示 {items.length} 条</span>
+                        ) : null}
+                    </footer>
                 </section>
-                <Separator
-                    orientation="vertical"
-                    className={cn(
-                        "hidden lg:block",
-                        detailFullscreen && "lg:hidden",
-                    )}
-                />
-                <section
-                    data-slot="workspace-detail"
-                    aria-label="任务处理"
-                    className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col"
-                >
-                    {detail}
-                </section>
+                {detailItem && !narrowDetailOpen ? (
+                    <section
+                        data-slot="workspace-detail"
+                        aria-label={startedView ? "审批详情" : "任务详情"}
+                        className={cn(
+                            "hidden min-h-0 min-w-0 flex-col border-l border-grid bg-card xl:flex",
+                            detailFullscreen ? "flex-1 border-l-0" : "flex-1",
+                        )}
+                    >
+                        {detail}
+                    </section>
+                ) : null}
             </div>
 
             <Sheet
-                open={narrowDetailOpen && Boolean(selected)}
+                open={narrowDetailOpen && Boolean(detailItem)}
                 onOpenChange={setNarrowDetailOpen}
                 onOpenChangeComplete={setNarrowDetailSettledOpen}
             >
@@ -402,18 +454,20 @@ export function WorkspaceHomePage() {
                     side="right"
                     size="detail"
                     closeButtonId="workspace-detail-sheet-close"
-                    className="w-full p-0 sm:max-w-lg"
+                    className="w-full p-0 sm:max-w-lg [&_[data-slot=workspace-task-header]]:pr-14"
                 >
                     <SheetTitle className="sr-only">
                         {selected?.objectTitle ?? "任务详情"}
                     </SheetTitle>
                     <SheetDescription className="sr-only">
-                        当前待办的摘要与处理动作
+                        {startedView
+                            ? "当前审批的进度与处理记录"
+                            : "当前待办的摘要与处理动作"}
                     </SheetDescription>
-                    {selected ? (
-                        <WorkspacePaneActionsProvider actions={paneActions}>
+                    {detailItem ? (
+                        <WorkspacePaneActionsProvider actions={null}>
                             <WorkspaceTaskDetail
-                                item={selected}
+                                item={detailItem}
                                 grantedPermissions={
                                     accountProfileQuery.data?.permissions ?? []
                                 }

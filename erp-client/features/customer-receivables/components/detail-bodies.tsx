@@ -57,7 +57,6 @@ export function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
                     }
                 />
                 <Fact label="到期日" value={row.dueDate} mono />
-                <Fact label="复核" value={row.reviewStatusLabel} />
             </div>
             <p className="text-xs text-muted-foreground">
                 回款进度与开票进度独立；不可用开票状态推断结清。

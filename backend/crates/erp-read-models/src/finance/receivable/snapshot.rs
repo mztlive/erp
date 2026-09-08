@@ -8,19 +8,15 @@ use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
-pub use erp_finance::ports::receivable::CardFundsSnapshot;
-pub use erp_finance::service::receivable::mapping::{
-    card_funds_review_chain, card_funds_snapshot_of, ensure_expected_version, invoice_fact_views,
-    map_chain_error, map_ledger_error, parse_task_version, pending_review_status, receipt_fact_views,
-    zero_amount,
-};
+pub use erp_finance::ports::receivable::ReceivableSnapshot;
+pub use erp_finance::service::receivable::mapping::{invoice_fact_views, receipt_fact_views, zero_amount};
 
-/// 读取 W13 当前销售版本、账户分录、票款分配和复核链。
-pub async fn load_card_funds_snapshot(
+/// 读取 当前销售版本、账户分录与票款分配。
+pub async fn load_receivable_snapshot(
     db: &Database,
     account: &ReceivableAccount,
     executor: &mut dyn Executor,
-) -> Result<CardFundsSnapshot> {
+) -> Result<ReceivableSnapshot> {
     let sales_order_id = account.sales_order_id.to_string();
     let sales_order = db
         .sales_orders()
@@ -39,7 +35,7 @@ pub async fn load_card_funds_snapshot(
     let account_id = ReceivableAccountId::new(account.base.id.clone());
     let facts = db
         .receivable()
-        .card_funds_snapshot_facts(&account_id, executor)
+        .receivable_snapshot_facts(&account_id, executor)
         .await?;
     if facts.receipts.len() != facts.expected_receipt_count {
         return Err(Error::NotFound("应收账户引用的回款单不存在".to_string()));
@@ -52,8 +48,7 @@ pub async fn load_card_funds_snapshot(
     let invoice_allocations = facts.invoice_allocations;
     let receipts = facts.receipts;
     let invoices = facts.invoices;
-    let reviews = facts.reviews;
-    Ok(CardFundsSnapshot {
+    Ok(ReceivableSnapshot {
         current_sales_order_revision_id,
         sales_order_no: sales_order.order_no,
         sales_order_revision_no: current_revision.revision.revision_no,
@@ -63,7 +58,6 @@ pub async fn load_card_funds_snapshot(
             .settlement_party_snapshot
             .map(|snapshot| snapshot.settlement_party_name),
         entries,
-        reviews,
         receipt_allocations,
         invoice_allocations,
         receipts,

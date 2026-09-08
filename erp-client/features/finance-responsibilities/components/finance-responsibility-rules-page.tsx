@@ -57,11 +57,7 @@ import {
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 
-const OPERATION_VALUES = [
-    "SUPPLIER_PAYMENT",
-    "SALES_INVOICE",
-    "CARD_FUNDS_REVIEW",
-] as const
+const OPERATION_VALUES = ["SUPPLIER_PAYMENT", "SALES_INVOICE"] as const
 const SCOPE_VALUES = ["COUNTERPARTY", "DEFAULT"] as const
 
 const ruleFormSchema = z
@@ -109,7 +105,7 @@ function eligibleOwners(
             if (operation === "SALES_INVOICE") {
                 return owner.salesInvoiceEligible
             }
-            return owner.cardFundsReviewEligible
+            return owner.salesInvoiceEligible
         })
         .map((owner) => ({
             value: owner.userId,
@@ -149,7 +145,7 @@ function RuleDialog({
                 toast.add({
                     title: target ? "财务责任规则已更新" : "财务责任规则已新增",
                     description:
-                        "新形成的付款、开票或票款复核任务使用最新规则；已有任务负责人保持不变。",
+                        "新形成的付款或开票任务使用最新规则；已有任务负责人保持不变。",
                     type: "success",
                     timeout: 4500,
                 })
@@ -441,7 +437,7 @@ export function FinanceResponsibilityRulesPage() {
             <ListWorkspaceHeader
                 eyebrow="财务"
                 title="财务责任配置"
-                description="为供应商付款、客户销项开票和卡券票款复核指定具体负责人；指定往来方优先，默认规则兜底。"
+                description="为供应商付款和客户销项开票指定具体负责人；指定往来方优先，默认规则兜底。"
             >
                 {canManage ? (
                     <Button

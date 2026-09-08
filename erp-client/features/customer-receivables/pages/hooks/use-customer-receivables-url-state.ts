@@ -10,7 +10,6 @@ import type {
     CustomerAccountsView,
     CustomerReceivablesFilterKey,
     DueFilter,
-    ReceivableReviewStatusFilter,
     ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
 import { parseDue, parseView } from "../lib/url-params"
@@ -27,7 +26,6 @@ export interface CustomerReceivablesUrlState {
     customerId: string | undefined
     due: DueFilter | undefined
     status: Exclude<ReceivableStatusFilter, "all"> | undefined
-    reviewStatus: Exclude<ReceivableReviewStatusFilter, "all"> | undefined
     focusId: string | undefined
     salesOrderId: string | undefined
     registerMode: "receipt" | "invoice" | undefined
@@ -58,10 +56,6 @@ export interface CustomerReceivablesUrlState {
     setDueDraft: React.Dispatch<React.SetStateAction<DueFilter>>
     statusDraft: ReceivableStatusFilter
     setStatusDraft: React.Dispatch<React.SetStateAction<ReceivableStatusFilter>>
-    reviewStatusDraft: ReceivableReviewStatusFilter
-    setReviewStatusDraft: React.Dispatch<
-        React.SetStateAction<ReceivableReviewStatusFilter>
-    >
     panelOpen: boolean
     setPanelOpen: React.Dispatch<React.SetStateAction<boolean>>
     hasActiveFilters: boolean
@@ -77,17 +71,6 @@ export interface CustomerReceivablesUrlState {
 
 function parseReceivableStatus(raw: string | null): ReceivableStatusFilter {
     if (raw === "open" || raw === "partial" || raw === "settled") return raw
-    return "all"
-}
-
-function parseReviewStatus(raw: string | null): ReceivableReviewStatusFilter {
-    if (
-        raw === "pending_opening" ||
-        raw === "reviewed" ||
-        raw === "pending_sync_diff"
-    ) {
-        return raw
-    }
     return "all"
 }
 
@@ -113,13 +96,6 @@ export function useCustomerReceivablesUrlState(
     const due = parseDue(searchParams.get("due"))
     const statusDraftFromUrl = parseReceivableStatus(searchParams.get("status"))
     const status = statusDraftFromUrl === "all" ? undefined : statusDraftFromUrl
-    const reviewStatusDraftFromUrl = parseReviewStatus(
-        searchParams.get("reviewStatus"),
-    )
-    const reviewStatus =
-        reviewStatusDraftFromUrl === "all"
-            ? undefined
-            : reviewStatusDraftFromUrl
     const focusId = searchParams.get("focusId") ?? undefined
     const salesOrderId =
         options.fixedSalesOrderId ??
@@ -158,12 +134,8 @@ export function useCustomerReceivablesUrlState(
     const [dueDraft, setDueDraft] = React.useState<DueFilter>(due ?? "all")
     const [statusDraft, setStatusDraft] =
         React.useState<ReceivableStatusFilter>(statusDraftFromUrl)
-    const [reviewStatusDraft, setReviewStatusDraft] =
-        React.useState<ReceivableReviewStatusFilter>(reviewStatusDraftFromUrl)
 
-    const hasStructuredFilters = Boolean(
-        counterpartyPartyId || status || reviewStatus,
-    )
+    const hasStructuredFilters = Boolean(counterpartyPartyId || status)
     // 有结构化条件的初始深链展开面板；后续 URL 回填不得抢夺展开态。
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
 
@@ -188,7 +160,6 @@ export function useCustomerReceivablesUrlState(
             customerId,
             due,
             status,
-            reviewStatus,
             salesOrderId,
             receivableAccountId,
             returnTo,
@@ -202,7 +173,6 @@ export function useCustomerReceivablesUrlState(
             customerId,
             due,
             status,
-            reviewStatus,
             salesOrderId,
             receivableAccountId,
             returnTo,
@@ -246,7 +216,6 @@ export function useCustomerReceivablesUrlState(
         customerId ||
         (due && due !== "all") ||
         status ||
-        reviewStatus ||
         salesOrderId ||
         receivableAccountId,
     )
@@ -259,8 +228,6 @@ export function useCustomerReceivablesUrlState(
                 counterpartyId: counterpartyPartyIdDraft || null,
                 due: dueDraft === "all" ? null : dueDraft,
                 status: statusDraft === "all" ? null : statusDraft,
-                reviewStatus:
-                    reviewStatusDraft === "all" ? null : reviewStatusDraft,
                 page: null,
             },
             { replace: true },
@@ -271,7 +238,6 @@ export function useCustomerReceivablesUrlState(
         dueDraft,
         // eslint-disable-next-line react-hooks/exhaustive-deps
         patchUrl,
-        reviewStatusDraft,
         searchDraft,
         statusDraft,
     ])
@@ -283,7 +249,6 @@ export function useCustomerReceivablesUrlState(
             if (key === "counterpartyId") setCounterpartyPartyIdDraft(null)
             if (key === "due") setDueDraft("all")
             if (key === "status") setStatusDraft("all")
-            if (key === "reviewStatus") setReviewStatusDraft("all")
             patchUrl({ [key]: null, page: null }, { replace: true })
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,15 +259,13 @@ export function useCustomerReceivablesUrlState(
     const resetMoreFilters = React.useCallback(() => {
         setCounterpartyPartyIdDraft(null)
         setStatusDraft("all")
-        setReviewStatusDraft("all")
     }, [])
 
     const hasPendingChanges =
         searchDraft.trim() !== qParam.trim() ||
         counterpartyPartyIdDraft !== (counterpartyPartyId ?? null) ||
         dueDraft !== (due ?? "all") ||
-        statusDraft !== statusDraftFromUrl ||
-        reviewStatusDraft !== reviewStatusDraftFromUrl
+        statusDraft !== statusDraftFromUrl
 
     /** 清全部筛选参数 + 分页回 1；保留 view 与导航上下文。 */
     const clearFilters = React.useCallback(() => {
@@ -310,7 +273,6 @@ export function useCustomerReceivablesUrlState(
         setCounterpartyPartyIdDraft(null)
         setDueDraft("all")
         setStatusDraft("all")
-        setReviewStatusDraft("all")
         setPanelOpen(false)
         patchUrl(
             {
@@ -319,7 +281,6 @@ export function useCustomerReceivablesUrlState(
                 customerId: null,
                 due: null,
                 status: null,
-                reviewStatus: null,
                 salesOrderId: null,
                 receivableAccountId: null,
                 focusId: null,
@@ -356,14 +317,7 @@ export function useCustomerReceivablesUrlState(
         setCounterpartyPartyIdDraft(counterpartyPartyId ?? null)
         setDueDraft(due ?? "all")
         setStatusDraft(statusDraftFromUrl)
-        setReviewStatusDraft(reviewStatusDraftFromUrl)
-    }, [
-        counterpartyPartyId,
-        due,
-        qParam,
-        reviewStatusDraftFromUrl,
-        statusDraftFromUrl,
-    ])
+    }, [counterpartyPartyId, due, qParam, statusDraftFromUrl])
 
     // `/` 聚焦搜索；Dialog / Sheet 打开时不得聚焦背景搜索框（§3.2、§14.4）。
     React.useEffect(() => {
@@ -404,7 +358,6 @@ export function useCustomerReceivablesUrlState(
         customerId,
         due,
         status,
-        reviewStatus,
         focusId,
         salesOrderId,
         registerMode,
@@ -427,8 +380,6 @@ export function useCustomerReceivablesUrlState(
         setDueDraft,
         statusDraft,
         setStatusDraft,
-        reviewStatusDraft,
-        setReviewStatusDraft,
         panelOpen,
         setPanelOpen,
         hasActiveFilters,

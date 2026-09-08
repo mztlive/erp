@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use super::funds_snapshot::{checked_add_amount, checked_sub_amount, net_receipt_allocated, zero_amount};
+use super::allocation_amount::{checked_add_amount, checked_sub_amount, net_receipt_allocated, zero_amount};
 use super::{
     AllocationAction, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData, ReceivableEntry,
 };
@@ -144,7 +144,7 @@ impl ReceivableFundsLedger {
     /// # 参数
     /// * `receipt_id` - 新建历史回款
     /// * `receipt_amount` - 登记含税金额
-    /// * `plan` - [`super::ReceivableFundsSnapshot::plan_historical_receipt_allocations`] 产出
+    /// * `plan` - 调用方提供的核销分配计划
     ///
     /// # 返回
     /// 返回待逐行 apply 的账本。

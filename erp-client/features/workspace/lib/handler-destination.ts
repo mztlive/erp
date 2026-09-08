@@ -13,7 +13,6 @@ type HandlerWorkspaceId =
     | "W10"
     | "W11"
     | "W12"
-    | "W13"
     | "W17"
     | "W18"
     | "W21"
@@ -64,18 +63,6 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         family: "finance",
         destinationWorkspaceId: "W11",
         baseHref: "/finance/customer-accounts",
-    },
-    card_funds: {
-        workItemTypeLabel: "卡券票款复核",
-        family: "finance",
-        destinationWorkspaceId: "W13",
-        baseHref: "/finance/card-funds-review",
-    },
-    card_funds_delta: {
-        workItemTypeLabel: "卡券票款差异复核",
-        family: "finance",
-        destinationWorkspaceId: "W13",
-        baseHref: "/finance/card-funds-review",
     },
     supplier_settlement: {
         workItemTypeLabel: "供应商结算复核",

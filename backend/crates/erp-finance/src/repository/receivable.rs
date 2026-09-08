@@ -1,5 +1,4 @@
 //! 域 D18 `receivable` 仓储：receivable_account、receivable_entry、
-//! receivable_funds_review、receivable_entry_offset、customer_receipt、
 //! receipt_allocation、invoice、sales_invoice_allocation。
 //!
 //! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类；本模块只补充域特有查询、
@@ -25,7 +24,7 @@ mod receipt;
 
 pub mod customer_center;
 
-mod card_funds;
+mod snapshot;
 
 mod sales_order_summary;
 
@@ -36,8 +35,6 @@ pub use receipt::CustomerReceiptFilter;
 
 /// `receivable_entry` 集合名（单一来源：`ReceivableExt` 关联常量）。
 const RECEIVABLE_ENTRIES: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES;
-/// `receivable_funds_review` 集合名（单一来源：`ReceivableExt` 关联常量）。
-const RECEIVABLE_FUNDS_REVIEWS: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_FUNDS_REVIEWS;
 
 /// D18 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///

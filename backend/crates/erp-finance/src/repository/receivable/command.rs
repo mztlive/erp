@@ -1,6 +1,6 @@
 use crate::entity::receivable::{
     CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceiptAllocation,
-    ReceivableAccount, ReceivableEntry, ReceivableFundsReview, SalesInvoiceAllocation,
+    ReceivableAccount, ReceivableEntry, SalesInvoiceAllocation,
 };
 use crate::repository::owned::{
     CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
@@ -8,12 +8,11 @@ use crate::repository::owned::{
 };
 use erp_core::ids::{PartyId, ReceivableAccountId};
 use mongodb::bson::doc;
-use mongodb::options::FindOptions;
 
 use super::super::extensions::ReceivableExt;
 use super::invoice::{InvoiceFilter, InvoiceRow};
 use super::receipt::{CustomerReceiptFilter, CustomerReceiptRow};
-use super::{ReceivableRepository, RECEIVABLE_ENTRIES, RECEIVABLE_FUNDS_REVIEWS};
+use super::{ReceivableRepository, RECEIVABLE_ENTRIES};
 use persistence_core::Executor;
 use persistence_core::PageResult;
 use persistence_core::{mongo_ops, Result};
@@ -125,59 +124,6 @@ impl<'a> ReceivableRepository<'a> {
         )
         .await?;
         Ok(())
-    }
-
-    /// 追加卡券票款正式复核（复核链尾锁定，跨集合读后写）。
-    ///
-    /// 复核链按数据模型 §6.8 逐号递增：`review_no = 1` 必须是链头（此前无任何
-    /// 复核），`review_no > 1` 必须引用当前链尾且复核号连续。方法先读当前链尾
-    /// （同子账最大 `review_no`）再插入新记录；链尾已被其他并发复核占用时
-    /// 返回 [`persistence_core::Error::OptimisticLockingError`]（链尾锁定失败），
-    /// 并发写同号复核由 `uk_receivable_funds_reviews_account_no` 唯一索引兜底。
-    /// **必须收到事务执行器**：读后写构成两步骤，传入 `NoTransaction` 时
-    /// 链尾判定与插入各自自动提交，并发场景下可能读出旧链尾后插入失败留下
-    /// 半个复核；Service 必须传入事务会话。
-    ///
-    /// # 参数
-    /// * `review` - 待写入的复核记录（含链尾引用）
-    /// * `executor` - 数据访问执行器，必须位于事务中
-    ///
-    /// # 错误
-    /// 链尾不匹配时返回 [`persistence_core::Error::OptimisticLockingError`]；
-    /// 复核号重复时返回 [`persistence_core::Error::DuplicateKey`]。
-    pub async fn append_funds_review(
-        &self,
-        review: &ReceivableFundsReview,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let collection = self
-            .db
-            .collection::<ReceivableFundsReview>(RECEIVABLE_FUNDS_REVIEWS);
-        let options = FindOptions::builder()
-            .sort(doc! { "review_no": -1 })
-            .limit(1)
-            .build();
-        let mut tail = mongo_ops::find_many(
-            &collection,
-            doc! { "receivable_account_id": review.receivable_account_id.to_string() },
-            options,
-            executor,
-        )
-        .await?;
-        let tail = tail.pop();
-
-        let chain_locked = match (&tail, review.review_no) {
-            (None, 1) => true,
-            (Some(tail), no) if no > 1 => {
-                review.supersedes_review_id.as_ref().map(ToString::to_string) == Some(tail.base.id.clone())
-                    && tail.review_no + 1 == no
-            }
-            _ => false,
-        };
-        if !chain_locked {
-            return Err(persistence_core::Error::OptimisticLockingError);
-        }
-        mongo_ops::insert_one(&collection, review, executor).await
     }
 
     /// 批量创建销项发票分配（`insert_many`，调用方事务内原子写入，FIN-R10）。

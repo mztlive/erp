@@ -40,7 +40,6 @@ export function useCustomerQualityQuery(query: CustomerQualityQuery | null) {
                 periodBasis: "EXPLICIT",
                 periodSelectionSource: "EXPLICIT",
                 scopeId: "",
-                fundsReview: "all",
                 sort: "salesGrossAmount:desc",
                 page: 1,
                 pageSize: 20,

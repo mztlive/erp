@@ -171,9 +171,6 @@ export function CustomerQualityMainView({
                                 isVoucherOnly={isVoucherOnly}
                                 periodFrom={data.period.from}
                                 periodTo={data.period.to}
-                                onShowReviewedOnly={() =>
-                                    patchUrl({ fundsReview: "reviewed_only" })
-                                }
                             />
 
                             <CustomerQualityMetricStrip

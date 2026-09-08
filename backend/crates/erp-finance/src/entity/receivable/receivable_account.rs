@@ -58,9 +58,9 @@ impl ReceivableAccountStatus {
     }
 }
 
-/// 卡券票款复核状态（数据模型 §6.8：不适用、卡券期初待复核、已复核、同步差额待复核）。
+/// 历史票款复核状态，仅保留存量应收文档的反序列化兼容。
 ///
-/// 仅为事务内同步的查询缓存，权威记录是 `receivable_funds_review` 复核链。
+/// 复核功能已退役；新建与变更应收统一使用 `NotApplicable`，不生成复核任务。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountReviewStatus {
@@ -81,34 +81,31 @@ impl AccountReviewStatus {
     /// * `business_type` - 来源销售单创建后不可变的业务性质
     ///
     /// # 返回
-    /// 卡券销售返回期初待复核，实物及服务销售返回不适用。
+    /// 所有销售单新建应收均返回不适用；历史状态仅用于存量数据解码。
     pub fn initial_for_sales_business_type(business_type: BusinessType) -> Self {
         match business_type {
-            BusinessType::Voucher => Self::OpeningPending,
+            BusinessType::Voucher => Self::NotApplicable,
             BusinessType::GoodsService => Self::NotApplicable,
         }
     }
 
     /// 派生并校验新建应收账户的唯一合法票款复核初始状态。
     ///
-    /// 同步差额待复核只能由既有期初复核链上的销售变更形成；新建入口未指定
-    /// 状态时直接派生，显式指定时必须与来源销售单业务性质一致。
+    /// 新建入口不接受历史待复核或已复核状态，所有销售性质均不适用复核。
     ///
     /// # 参数
     /// * `requested` - 新建请求可选携带的复核状态
     /// * `business_type` - 来源销售单创建后不可变的业务性质
     ///
     /// # 返回
-    /// 返回卡券销售的期初待复核，或实物及服务销售的不适用状态。
+    /// 返回不适用，拒绝从新建入口恢复已退役的复核状态。
     ///
     /// # 错误
     /// 显式请求状态与业务性质派生状态不一致时返回错误。
     pub fn resolve_initial(requested: Option<Self>, business_type: BusinessType) -> Result<Self> {
         let expected = Self::initial_for_sales_business_type(business_type);
         if requested.is_some_and(|status| status != expected) {
-            return Err(Error::from(
-                "新建应收账户的票款复核状态必须由来源销售单业务性质决定",
-            ));
+            return Err(Error::from("新建应收账户不再支持票款复核状态"));
         }
         Ok(expected)
     }
@@ -153,7 +150,7 @@ pub struct ReceivableAccountData {
     pub counterparty_party_id: PartyId,
     /// 本子账开始适用的销售版本。
     pub source_sales_order_revision_id: SalesOrderRevisionId,
-    /// 卡券票款复核状态缓存。
+    /// 旧数据兼容字段，不参与当前销售或资金处理。
     pub review_status: AccountReviewStatus,
     /// 最近一次正式复核人。
     pub reviewed_by: Option<String>,
@@ -210,7 +207,7 @@ pub struct ReceivableAccount {
     pub counterparty_party_id: PartyId,
     /// 本子账开始适用的销售版本。
     pub source_sales_order_revision_id: SalesOrderRevisionId,
-    /// 卡券票款复核状态缓存。
+    /// 旧数据兼容字段，不参与当前销售或资金处理。
     pub review_status: AccountReviewStatus,
     /// 最近一次正式复核人。
     pub reviewed_by: Option<String>,
@@ -705,7 +702,7 @@ mod tests {
     fn initial_review_status_is_derived_from_sales_business_type() {
         assert_eq!(
             AccountReviewStatus::initial_for_sales_business_type(BusinessType::Voucher),
-            AccountReviewStatus::OpeningPending
+            AccountReviewStatus::NotApplicable
         );
         assert_eq!(
             AccountReviewStatus::initial_for_sales_business_type(BusinessType::GoodsService),
@@ -717,7 +714,7 @@ mod tests {
     fn initial_review_status_accepts_derived_or_matching_request() {
         assert_eq!(
             AccountReviewStatus::resolve_initial(None, BusinessType::Voucher).unwrap(),
-            AccountReviewStatus::OpeningPending
+            AccountReviewStatus::NotApplicable
         );
         assert_eq!(
             AccountReviewStatus::resolve_initial(
@@ -737,10 +734,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(
-            error.to_string(),
-            "新建应收账户的票款复核状态必须由来源销售单业务性质决定"
-        );
+        assert_eq!(error.to_string(), "新建应收账户不再支持票款复核状态");
     }
 
     #[test]

@@ -355,8 +355,6 @@ pub(super) fn handler_route(
                 "销项开票执行任务业务对象未注册".to_string(),
             ));
         }
-        (WorkItemType::CardFundsReview, "receivable_account") => ("card_funds", "W13"),
-        (WorkItemType::CardFundsDeltaReview, "receivable_account") => ("card_funds_delta", "W13"),
         (WorkItemType::SupplierSettlementReview, "supplier_settlement_statement") => {
             ("supplier_settlement", "W27")
         }

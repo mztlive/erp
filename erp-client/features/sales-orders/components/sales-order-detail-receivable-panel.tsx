@@ -270,11 +270,7 @@ export function ReceivablePanel({
                         description={
                             accounts.length === 0
                                 ? "销售单生效后才会形成应收子账。"
-                                : accounts.length === 1
-                                  ? uniqueAccountReview(
-                                        accounts[0]?.reviewStatusLabel,
-                                    )
-                                  : undefined
+                                : undefined
                         }
                     >
                         <RelatedDocumentList
@@ -394,13 +390,6 @@ export function ReceivablePanel({
             />
         </div>
     )
-}
-
-function uniqueAccountReview(reviewStatusLabel?: string) {
-    if (!reviewStatusLabel || reviewStatusLabel === "不适用") {
-        return undefined
-    }
-    return `票款复核：${reviewStatusLabel}`
 }
 
 function toRelatedDocument(document: OrderReceivableDocument) {

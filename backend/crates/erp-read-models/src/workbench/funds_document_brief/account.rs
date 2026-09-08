@@ -13,7 +13,7 @@ use crate::errors::Result;
 use crate::workbench::authority::funds::mapping as authority_mapping;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
-    /// 应收子账票款复核与销项开票任务共用的对象事实。
+    /// 应收子账销项开票任务的对象事实。
     ///
     /// # 参数
     /// * `keys` - 本批任务引用的对象键
@@ -144,18 +144,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                     "已开票",
                     Some(format_yuan(&account.invoiced_total)).as_deref(),
                     true,
-                );
-                push_section(
-                    &mut sections,
-                    "复核状态",
-                    Some(account.review_status.label()),
-                    false,
-                );
-                push_section(
-                    &mut sections,
-                    "复核证据",
-                    account.review_evidence_reference.as_deref(),
-                    false,
                 );
             } else {
                 push_section(

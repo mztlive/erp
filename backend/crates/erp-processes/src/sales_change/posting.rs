@@ -91,14 +91,6 @@ async fn write_receivable_delta(
 ) -> Result<()> {
     delta.persist(db, session).await?;
     let account = delta.account();
-    let subject_version = delta.subject_version();
-    crate::finance_posting::receivable::card_funds_task::ensure_card_funds_review_task(
-        db,
-        account,
-        subject_version,
-        session,
-    )
-    .await?;
     let account_id = ReceivableAccountId::new(account.base.id.clone());
     crate::finance_posting::receivable::invoice_task::sync_sales_invoice_task(
         db,

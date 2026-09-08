@@ -23,11 +23,7 @@ import { useCustomerQualityFilters } from "../hooks/use-customer-quality-filters
 import { useCustomerQualityNavigationState } from "../hooks/use-customer-quality-navigation-state"
 import { useCustomerQualityPeriodState } from "../hooks/use-customer-quality-period-state"
 import { useCustomerQualityRowFocus } from "../hooks/use-customer-quality-row-focus"
-import {
-    parseBusinessType,
-    parseFundsReview,
-    parseScenario,
-} from "../lib/url-state"
+import { parseBusinessType, parseScenario } from "../lib/url-state"
 import { CustomerQualityFilterCard } from "../components/customer-quality-filter-card"
 import { CustomerQualityMainView } from "../components/customer-quality-main-view"
 import { CustomerQualityPageSkeleton } from "../components/customer-quality-page-skeleton"
@@ -39,7 +35,6 @@ export function CustomerQualityPage() {
     const scenario = parseScenario(searchParams.get("scenario"))
     const fromParam = searchParams.get("from")
     const toParam = searchParams.get("to")
-    const fundsReview = parseFundsReview(searchParams.get("fundsReview"))
     const businessType = parseBusinessType(searchParams.get("businessType"))
     const scaleTag = searchParams.get("scaleTag") ?? undefined
     const profitTag = searchParams.get("profitTag") ?? undefined
@@ -60,7 +55,6 @@ export function CustomerQualityPage() {
         fromParam,
         toParam,
         periodPreset,
-        fundsReview,
         businessType,
         scaleTag,
         profitTag,
@@ -105,7 +99,6 @@ export function CustomerQualityPage() {
     // 明细筛选三层状态：Applied 在 URL、Draft 本地、UI 本地；统一提交与清除
     const filters = useCustomerQualityFilters({
         qParam,
-        fundsReview,
         businessType,
         customerId,
         customerName: chipCustomerName,
@@ -171,15 +164,10 @@ export function CustomerQualityPage() {
             searchDraft={filters.searchDraft}
             onSearchDraftChange={filters.setSearchDraft}
             searchInputRef={filters.searchInputRef}
-            panelOpen={filters.panelOpen}
-            setPanelOpen={filters.setPanelOpen}
             appliedChips={appliedChips}
             onRemoveFilter={filters.removeFilter}
             onApplyFilters={filters.applyFilters}
             onClearAllFilters={filters.clearAllFilters}
-            onResetMoreFilters={filters.resetMoreFilters}
-            fundsReviewDraft={filters.fundsReviewDraft}
-            setFundsReviewDraft={filters.setFundsReviewDraft}
             businessTypeDraft={filters.businessTypeDraft}
             setBusinessTypeDraft={filters.setBusinessTypeDraft}
             hasPendingChanges={filters.hasPendingChanges}

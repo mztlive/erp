@@ -243,29 +243,6 @@ impl WorkItemType {
         ])
     }
 
-    /// 返回 W13 卡券票款复核所需的完整权限集合。
-    ///
-    /// # 参数
-    /// * `business_object_type` - 票款任务固定对象类型
-    ///
-    /// # 返回
-    /// 两类卡券票款任务绑定应收子账时返回读取与正式复核权限；其它组合返回 `None`。
-    pub fn card_funds_review_permissions(
-        self,
-        business_object_type: &str,
-    ) -> Option<&'static [&'static str]> {
-        if !matches!(self, Self::CardFundsReview | Self::CardFundsDeltaReview)
-            || business_object_type != "receivable_account"
-        {
-            return None;
-        }
-        Some(&[
-            "receivable_account:list",
-            "receivable_account:detail",
-            "receivable_funds_review:complete",
-        ])
-    }
-
     /// 返回任务类型与业务对象组合所需的完整执行权限集合。
     ///
     /// # 返回
@@ -285,7 +262,7 @@ impl WorkItemType {
         } else if self.is_sales_invoice_execution() {
             self.sales_invoice_execution_permissions(business_object_type)
         } else if matches!(self, Self::CardFundsReview | Self::CardFundsDeltaReview) {
-            self.card_funds_review_permissions(business_object_type)
+            None
         } else {
             Some(&[])
         }

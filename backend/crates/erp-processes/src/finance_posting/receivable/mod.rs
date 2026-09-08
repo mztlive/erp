@@ -1,9 +1,8 @@
-//! 域 D18 `receivable` 服务编排（页面：W11 客户往来、W13 卡券票款复核）。
+//! 域 D18 `receivable` 服务编排（页面：W11 客户往来）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 发票创建必须在同一事务注册 `BusinessDocument` 并调用统一绑定端口；
 //!   `NO_APPROVAL` 返回空绑定，不查询发布定义、不启动实例、不建任务；
-//! - 单集合草稿写入（复核缓存更新）→ `&mut NoTransaction`；
 //! - 客户回款创建必须在同一事务注册 `BusinessDocument` 并绑定发布定义；
 //! - 跨集合资金/票款过账（§8.3 不变量）→
 //!   `persistence_core::Transactional::with_transaction`，闭包内按稳定顺序锁定两侧，
@@ -23,12 +22,6 @@ use erp_identity::SharedRbacService;
 mod account;
 mod adapter;
 mod cancel_approval;
-pub(crate) mod card_funds_decision;
-pub(crate) mod card_funds_identity;
-pub(crate) mod card_funds_receipt;
-mod card_funds_register;
-mod card_funds_review;
-pub(crate) mod card_funds_task;
 mod customer_receipt;
 
 mod dto;
@@ -45,7 +38,7 @@ pub use self::customer_receipt::{
 };
 /// 客户往来服务。
 ///
-/// 提供应收台账、回款、销项发票与卡券票款复核的查询与过账编排。
+/// 提供应收台账、回款与销项发票的查询与过账编排。
 pub struct ReceivableProcess {
     db: Database,
     read: erp_read_models::finance::receivable::ReceivableReadService,

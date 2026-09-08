@@ -191,16 +191,16 @@ test("supplier settlement review opens the exact W27 statement", () => {
 })
 
 test("existing queue handlers keep their registered focus parameters", () => {
-    const cardFunds = parsedHref(
-        buildHandlerHref({
-            ...REQUIRED_CONTEXT,
-            handlerKey: "card_funds",
-            destinationWorkspaceId: "W13",
-        }),
-    )
-    assert.equal(cardFunds.pathname, "/finance/card-funds-review")
-    assert.equal(cardFunds.searchParams.get("currentWorkItemId"), "wi-42")
-    assertStableContext(cardFunds)
+    for (const handlerKey of ["card_funds", "card_funds_delta"]) {
+        assert.equal(
+            buildHandlerHref({
+                ...REQUIRED_CONTEXT,
+                handlerKey,
+                destinationWorkspaceId: "W13",
+            }),
+            null,
+        )
+    }
 
     const supplierOrder = parsedHref(
         buildHandlerHref({

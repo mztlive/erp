@@ -1,6 +1,6 @@
 //! 财务执行任务的具体负责人规则。
 //!
-//! 付款按供应商，销项开票与卡券票款复核按客户匹配；精确往来方优先于同业务的默认规则。
+//! 付款按供应商，销项开票按客户匹配；精确往来方优先于同业务的默认规则。
 //! 规则只决定新任务的初始负责人，已经形成的工作项责任事实不随规则更新漂移。
 
 use entity_core::BaseModel;
@@ -71,7 +71,7 @@ pub enum FinanceResponsibilityOperation {
     SupplierPayment,
     /// 客户销项开票执行。
     SalesInvoice,
-    /// 客户卡券票款复核。
+    /// 已退役操作，仅用于存量责任规则解码；不得创建或执行。
     CardFundsReview,
 }
 
@@ -112,7 +112,7 @@ impl FinanceResponsibilityOperation {
     /// 无。
     ///
     /// # 业务约束
-    /// 权限合同必须与付款、销项开票和卡券票款复核工作项保持同一规则源。
+    /// 权限合同必须与付款和销项开票工作项保持同一规则源。
     pub fn required_permission_codes(self) -> Option<&'static [&'static str]> {
         match self {
             Self::SupplierPayment => WorkItemType::SupplierPaymentExecution
@@ -120,9 +120,7 @@ impl FinanceResponsibilityOperation {
             Self::SalesInvoice => {
                 WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
             }
-            Self::CardFundsReview => {
-                WorkItemType::CardFundsReview.card_funds_review_permissions("receivable_account")
-            }
+            Self::CardFundsReview => None,
         }
     }
 }
@@ -469,14 +467,7 @@ mod tests {
         );
         assert_eq!(
             FinanceResponsibilityOperation::CardFundsReview.required_permission_codes(),
-            Some(
-                [
-                    "receivable_account:list",
-                    "receivable_account:detail",
-                    "receivable_funds_review:complete",
-                ]
-                .as_slice()
-            )
+            None
         );
     }
 

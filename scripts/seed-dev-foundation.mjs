@@ -5,7 +5,7 @@
  * 先按 §11 创建全部岗位账号，再写仓库、财务责任、客户与合同。
  * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
  * 仓库在主数据重置后由本脚本重建。
- * 付款、销项开票与卡券票款复核任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
+ * 付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
  * 财务三人分责：caiwu 为财务总监，只审批采购单、资金单和库存调整，不得提交回款、退款或冲正；
  * fukuan 为出纳，执行付款任务并提交客户回款/退款/冲正；kaipiao 为默认开票负责人。
  * 供应商付款不得发布或启动独立审批。
@@ -31,7 +31,6 @@ import {
 const DEFAULT_FINANCE_RULES = [
   { operation: "SUPPLIER_PAYMENT", label: "默认付款负责人", accountKey: "payment" },
   { operation: "SALES_INVOICE", label: "默认开票负责人", accountKey: "invoice" },
-  { operation: "CARD_FUNDS_REVIEW", label: "默认票款复核负责人", accountKey: "finance" },
 ];
 const WAREHOUSES = [
   {
@@ -271,7 +270,7 @@ async function verifyWarehouseEligibility(adminToken, warehouseAccount) {
 }
 
 /**
- * 校验财务三人分别具备付款、开票与卡券票款复核执行权限。
+ * 校验财务账号具备付款与开票执行权限。
  */
 async function verifyFinanceEligibility(adminToken, people) {
   const options = await call("GET", "/admin/finance-responsibility-owner-options", {
@@ -287,9 +286,6 @@ async function verifyFinanceEligibility(adminToken, people) {
     throw new Error("kaipiao 不具备销项开票完整执行权限，无法配置默认开票负责人");
   }
   const financeOption = rows.find((row) => row.user_id === people.finance.id);
-  if (!financeOption?.card_funds_review_eligible) {
-    throw new Error("caiwu 不具备卡券票款复核完整执行权限，无法配置默认复核负责人");
-  }
 }
 
 function findDefaultFinanceRule(rows, operation) {

@@ -5,7 +5,6 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
@@ -275,9 +274,6 @@ export function useCustomerQualityColumns({
                                             : undefined
                                     }
                                 />
-                                {r.cardFundsReviewInsufficient ? (
-                                    <Badge variant="warning">票款未复核</Badge>
-                                ) : null}
                             </div>
                             {canW11 && data && r.overdueGross != null ? (
                                 <Button

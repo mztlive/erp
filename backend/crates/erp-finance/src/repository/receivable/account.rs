@@ -1,4 +1,4 @@
-use crate::entity::receivable::{AccountReviewStatus, ReceivableAccount, ReceivableAccountStatus};
+use crate::entity::receivable::{ReceivableAccount, ReceivableAccountStatus};
 use crate::repository::owned::ReceivableAccountRepository;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::stable::StableBase;
@@ -30,8 +30,6 @@ pub struct ReceivableAccountRow {
     pub customer_id: String,
     /// 收款和开票往来主体。
     pub counterparty_party_id: String,
-    /// 卡券票款复核状态缓存。
-    pub review_status: AccountReviewStatus,
     /// 含税应收总额。
     pub gross_total: Amount,
     /// 已核销含税总额。
@@ -617,7 +615,7 @@ impl<'a> ReceivableAccountRepository<'a> {
         .await
     }
 
-    /// 按稳定 ID 读取票款复核任务使用的应收子账。
+    /// 按稳定 ID 读取销项开票任务使用的应收子账。
     ///
     /// 工作项入口的历史名称；纯主键读取，直接委托基类单条查询。
     ///
@@ -788,7 +786,6 @@ fn receivable_account_projection() -> Document {
         "account_seq": 1,
         "customer_id": 1,
         "counterparty_party_id": 1,
-        "review_status": 1,
         "gross_total": 1,
         "settled_total": 1,
         "open_total": 1,

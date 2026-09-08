@@ -85,20 +85,6 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "violet",
         openActionLabel: "去登记销项发票",
     },
-    CARD_FUNDS_REVIEW: {
-        label: "卡券票款复核",
-        family: "finance",
-        badgeLabel: "卡券票款",
-        badgeVariant: "orange",
-        openActionLabel: "去复核卡券票款",
-    },
-    CARD_FUNDS_DELTA_REVIEW: {
-        label: "卡券票款差异复核",
-        family: "finance",
-        badgeLabel: "卡券差异",
-        badgeVariant: "lime",
-        openActionLabel: "去复核票款差额",
-    },
     SUPPLIER_SETTLEMENT_REVIEW: {
         label: "供应商结算复核",
         family: "finance",

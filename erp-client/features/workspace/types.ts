@@ -76,6 +76,8 @@ export type WorkspaceWorkItem = Readonly<{
     approvalProcessInstanceId?: string
     approvalNodeExecutionId?: string
     rootBusinessObjectId?: string
+    /** 发起审批时冻结的提交金额；独立于当前单据详情，避免阻断详情补拉。 */
+    amountSummary?: Readonly<{ label: string; value: string; numeric: true }>
     summarySections?: readonly Readonly<{
         label: string
         value: string

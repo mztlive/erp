@@ -1,8 +1,4 @@
-import type {
-    BusinessTypeFilter,
-    CustomerQualityScenario,
-    FundsReviewFilter,
-} from "../types"
+import type { BusinessTypeFilter, CustomerQualityScenario } from "../types"
 
 const SCENARIOS = new Set<CustomerQualityScenario>([
     "default",
@@ -24,10 +20,6 @@ export function parseScenario(
         return raw as CustomerQualityScenario
     }
     return undefined
-}
-
-export function parseFundsReview(raw: string | null): FundsReviewFilter {
-    return raw === "reviewed_only" ? "reviewed_only" : "all"
 }
 
 export function parseBusinessType(

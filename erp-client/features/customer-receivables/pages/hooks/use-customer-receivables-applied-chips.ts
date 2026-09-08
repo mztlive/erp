@@ -11,7 +11,6 @@ import type { CustomerAccountsListView } from "@/features/customer-receivables/t
 import {
     DUE_LABEL,
     RECEIVABLE_STATUS_LABEL,
-    REVIEW_STATUS_LABEL,
 } from "@/features/customer-receivables/types"
 import type { ReceivableAppliedChip } from "../components/customer-receivables-toolbar"
 import type { useCustomerReceivablesUrlState } from "./use-customer-receivables-url-state"
@@ -89,12 +88,6 @@ export function useCustomerReceivablesAppliedChips({
                 label: `状态：${RECEIVABLE_STATUS_LABEL[urlState.status]}`,
             })
         }
-        if (urlState.reviewStatus) {
-            chips.push({
-                key: "reviewStatus",
-                label: `复核状态：${REVIEW_STATUS_LABEL[urlState.reviewStatus]}`,
-            })
-        }
         if (urlState.salesOrderId && !embedded) {
             const receivable = data?.receivables.find(
                 (candidate) => candidate.salesOrderId === urlState.salesOrderId,
@@ -132,7 +125,6 @@ export function useCustomerReceivablesAppliedChips({
         urlState.due,
         urlState.qParam,
         urlState.receivableAccountId,
-        urlState.reviewStatus,
         urlState.salesOrderId,
         urlState.status,
     ])

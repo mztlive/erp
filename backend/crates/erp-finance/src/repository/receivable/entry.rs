@@ -1,7 +1,5 @@
-use crate::entity::receivable::{ReceivableEntry, ReceivableEntryOffset, ReceivableFundsReview};
-use crate::repository::owned::{
-    ReceivableEntryOffsetRepository, ReceivableEntryRepository, ReceivableFundsReviewRepository,
-};
+use crate::entity::receivable::{ReceivableEntry, ReceivableEntryOffset};
+use crate::repository::owned::{ReceivableEntryOffsetRepository, ReceivableEntryRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
@@ -215,56 +213,6 @@ impl<'a> ReceivableEntryOffsetRepository<'a> {
     ) -> Result<Vec<ReceivableEntryOffset>> {
         self.find_many(
             doc! { "increase_entry_id": increase_entry_id.to_string() },
-            executor,
-        )
-        .await
-    }
-}
-
-impl<'a> ReceivableFundsReviewRepository<'a> {
-    /// 按应收子账集合批量取回复核记录。
-    ///
-    /// # 参数
-    /// * `account_ids` - 应收子账 ID 集合；空集合直接返回空结果
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回全部匹配复核记录；调用方按子账分组后按复核号排序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_reviews_by_accounts(
-        &self,
-        account_ids: &[ReceivableAccountId],
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableFundsReview>> {
-        if account_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
-        self.find_many(doc! { "receivable_account_id": { "$in": ids } }, executor)
-            .await
-    }
-
-    /// 按子账取回复核链全部记录（按复核号升序）。
-    ///
-    /// # 参数
-    /// * `account_id` - 应收往来子账 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按 `review_no` 升序的复核记录；空链返回空集合。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_reviews_by_account(
-        &self,
-        account_id: &ReceivableAccountId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<ReceivableFundsReview>> {
-        self.find_many_sorted(
-            doc! { "receivable_account_id": account_id.to_string() },
-            doc! { "review_no": 1 },
             executor,
         )
         .await

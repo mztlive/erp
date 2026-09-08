@@ -8,7 +8,6 @@ import type {
     BusinessTypeFilter,
     CustomerQualityQuery,
     CustomerQualityScenario,
-    FundsReviewFilter,
     PeriodSelectionSource,
 } from "../types"
 import { useCustomerQualityPeriodPolicyQuery } from "./queries"
@@ -19,7 +18,6 @@ export function useCustomerQualityPeriodState({
     fromParam,
     toParam,
     periodPreset,
-    fundsReview,
     businessType,
     scaleTag,
     profitTag,
@@ -37,7 +35,6 @@ export function useCustomerQualityPeriodState({
     fromParam: string | null
     toParam: string | null
     periodPreset?: string
-    fundsReview: FundsReviewFilter
     businessType?: BusinessTypeFilter
     scaleTag?: string
     profitTag?: string
@@ -148,7 +145,6 @@ export function useCustomerQualityPeriodState({
                   )
                 : undefined,
             scopeId,
-            fundsReview,
             businessType,
             scaleTag,
             profitTag,
@@ -169,7 +165,6 @@ export function useCustomerQualityPeriodState({
         periodPolicy,
         searchParams,
         scopeId,
-        fundsReview,
         businessType,
         scaleTag,
         profitTag,

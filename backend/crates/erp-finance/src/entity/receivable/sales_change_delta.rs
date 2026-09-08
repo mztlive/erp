@@ -79,78 +79,7 @@ impl ReceivableDelta {
     }
 }
 
-impl AccountReviewStatus {
-    /// 销售变更差额允许的复核状态迁移。
-    ///
-    /// # 参数
-    /// * `self` - 当前复核状态（账户现有状态）
-    /// * `business_type` - 销售单业务性质
-    ///
-    /// # 返回
-    /// 下一复核状态：卡券已复核 -> 同步差额待复核；实物服务不适用 -> 仍为不适用。
-    ///
-    /// # 错误
-    /// 卡券上一轮票款复核尚未完成，或非卡券账户复核状态非法时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 该方法仅判定状态机是否允许形成差额，不读取仓储或判断账户存在性；
-    /// `OpeningPending` / `SyncDeltaPending` 的卡券账户不得再次形成差额，
-    /// 实物服务账户只有 `NotApplicable` 允许。
-    pub fn transition_for_sales_change_delta(&self, business_type: BusinessType) -> Result<Self> {
-        match (business_type, *self) {
-            (BusinessType::Voucher, AccountReviewStatus::Reviewed) => {
-                Ok(AccountReviewStatus::SyncDeltaPending)
-            }
-            (BusinessType::Voucher, _) => Err(Error::from(
-                "卡券上一轮票款复核尚未通过，不能生效新的销售变更差额",
-            )),
-            (BusinessType::GoodsService, AccountReviewStatus::NotApplicable) => {
-                Ok(AccountReviewStatus::NotApplicable)
-            }
-            (BusinessType::GoodsService, _) => Err(Error::from(
-                "非卡券应收账户的票款复核状态不合法，不能生效销售变更",
-            )),
-        }
-    }
-}
-
 impl ReceivableAccount {
-    /// 销售变更差额对应的复核缓存更新（不含总额）。
-    ///
-    /// # 参数
-    /// * `business_type` - 销售单业务性质
-    ///
-    /// # 返回
-    /// 仅含复核字段的 `ReceivableAccountUpdate`：卡券返回待复核迁移并清除上一轮
-    /// 缓存（`reviewed_by=""` / `review_evidence_reference=""`），实物服务返回空更新。
-    ///
-    /// # 错误
-    /// 状态不允许形成差额时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 不修改含税总额；调用方需另行注入 `gross_total` / `invoiceable_total`。
-    pub fn sales_change_delta_review_update(
-        &self,
-        business_type: BusinessType,
-    ) -> Result<ReceivableAccountUpdate> {
-        let next = self
-            .review_status
-            .transition_for_sales_change_delta(business_type)?;
-        match (business_type, next) {
-            (BusinessType::Voucher, AccountReviewStatus::SyncDeltaPending) => Ok(ReceivableAccountUpdate {
-                review_status: Some(AccountReviewStatus::SyncDeltaPending),
-                reviewed_by: Some(String::new()),
-                reviewed_at: None,
-                review_evidence_reference: Some(String::new()),
-                ..Default::default()
-            }),
-            (BusinessType::GoodsService, AccountReviewStatus::NotApplicable) => {
-                Ok(ReceivableAccountUpdate::default())
-            }
-            _ => Err(Error::from("复核状态迁移结果与业务性质不一致")),
-        }
-    }
-
     /// 销售变更差额对应的完整账户更新（含新总额）。
     ///
     /// # 参数
@@ -158,19 +87,22 @@ impl ReceivableAccount {
     /// * `new_gross` - 新版本含税总额（将同时写入 `gross_total` 与 `invoiceable_total`）
     ///
     /// # 返回
-    /// 含复核迁移与新总额的 `ReceivableAccountUpdate`，可直接用于 `ReceivableAccount::update`。
+    /// 含新总额的 `ReceivableAccountUpdate`，可直接用于 `ReceivableAccount::update`。
     ///
     /// # 错误
-    /// 复核状态不允许或新总额校验失败（由 `update` 完成）时返回错误。
+    /// 新总额校验失败（由 `update` 完成）时返回错误。
     ///
     /// # 关键业务约束
     /// 该方法不判断账户存在性；仅对已加载账户计算确定性更新。
     pub fn sales_change_delta_update(
         &self,
-        business_type: BusinessType,
+        _business_type: BusinessType,
         new_gross: Amount,
     ) -> Result<ReceivableAccountUpdate> {
-        let mut update = self.sales_change_delta_review_update(business_type)?;
+        let mut update = ReceivableAccountUpdate {
+            review_status: Some(AccountReviewStatus::NotApplicable),
+            ..Default::default()
+        };
         update.gross_total = Some(new_gross);
         update.invoiceable_total = Some(new_gross);
         Ok(update)
@@ -235,69 +167,6 @@ mod tests {
     }
 
     #[test]
-    fn review_transition_voucher_reviewed_allows_sync_delta() {
-        let next = AccountReviewStatus::Reviewed
-            .transition_for_sales_change_delta(BusinessType::Voucher)
-            .unwrap();
-        assert_eq!(next, AccountReviewStatus::SyncDeltaPending);
-    }
-
-    #[test]
-    fn review_transition_voucher_unreviewed_rejects() {
-        assert!(AccountReviewStatus::OpeningPending
-            .transition_for_sales_change_delta(BusinessType::Voucher)
-            .is_err());
-        assert!(AccountReviewStatus::SyncDeltaPending
-            .transition_for_sales_change_delta(BusinessType::Voucher)
-            .is_err());
-        assert!(AccountReviewStatus::NotApplicable
-            .transition_for_sales_change_delta(BusinessType::Voucher)
-            .is_err());
-    }
-
-    #[test]
-    fn review_transition_goods_service_not_applicable_keeps() {
-        let next = AccountReviewStatus::NotApplicable
-            .transition_for_sales_change_delta(BusinessType::GoodsService)
-            .unwrap();
-        assert_eq!(next, AccountReviewStatus::NotApplicable);
-    }
-
-    #[test]
-    fn review_transition_goods_service_illegal_rejects() {
-        assert!(AccountReviewStatus::Reviewed
-            .transition_for_sales_change_delta(BusinessType::GoodsService)
-            .is_err());
-        assert!(AccountReviewStatus::OpeningPending
-            .transition_for_sales_change_delta(BusinessType::GoodsService)
-            .is_err());
-        assert!(AccountReviewStatus::SyncDeltaPending
-            .transition_for_sales_change_delta(BusinessType::GoodsService)
-            .is_err());
-    }
-
-    #[test]
-    fn account_delta_review_update_voucher_clears_cache() {
-        let account = make_account(AccountReviewStatus::Reviewed);
-        let update = account
-            .sales_change_delta_review_update(BusinessType::Voucher)
-            .unwrap();
-        assert_eq!(update.review_status, Some(AccountReviewStatus::SyncDeltaPending));
-        assert_eq!(update.reviewed_by.as_deref(), Some(""));
-        assert!(update.reviewed_at.is_none());
-        assert_eq!(update.review_evidence_reference.as_deref(), Some(""));
-    }
-
-    #[test]
-    fn account_delta_review_update_goods_service_is_empty() {
-        let account = make_account(AccountReviewStatus::NotApplicable);
-        let update = account
-            .sales_change_delta_review_update(BusinessType::GoodsService)
-            .unwrap();
-        assert_eq!(update, ReceivableAccountUpdate::default());
-    }
-
-    #[test]
     fn account_delta_update_sets_new_gross() {
         let account = make_account(AccountReviewStatus::Reviewed);
         let update = account
@@ -305,7 +174,7 @@ mod tests {
             .unwrap();
         assert_eq!(update.gross_total, Some(amt("120.00")));
         assert_eq!(update.invoiceable_total, Some(amt("120.00")));
-        assert_eq!(update.review_status, Some(AccountReviewStatus::SyncDeltaPending));
+        assert_eq!(update.review_status, Some(AccountReviewStatus::NotApplicable));
     }
 
     #[test]
@@ -316,7 +185,7 @@ mod tests {
             .unwrap();
         assert_eq!(update.gross_total, Some(amt("200.00")));
         assert_eq!(update.invoiceable_total, Some(amt("200.00")));
-        assert_eq!(update.review_status, None);
+        assert_eq!(update.review_status, Some(AccountReviewStatus::NotApplicable));
     }
 
     fn make_account(status: AccountReviewStatus) -> ReceivableAccount {

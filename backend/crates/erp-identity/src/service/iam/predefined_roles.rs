@@ -413,7 +413,6 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "contract:detail",
     // 客户往来
     "receivable_account:*",
-    "receivable_funds_review:*",
     "customer_receipt:*",
     "invoice:*",
     // 供应商往来

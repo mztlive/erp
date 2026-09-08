@@ -14,16 +14,6 @@ export type BackendReceivableEntry = {
     offset_total: string
 }
 
-export type BackendFundsReview = {
-    id: string
-    review_no: number
-    review_type: string
-    review_result: string
-    reviewed_by: string
-    reviewed_at: number
-    evidence_reference?: string | null
-}
-
 export type BackendReceivableAccount = {
     id: string
     sales_order_id: string
@@ -36,7 +26,6 @@ export type BackendReceivableAccount = {
     customer_name: string
     counterparty_party_id: string
     counterparty_party_name?: string | null
-    review_status: string
     gross_total: string
     settled_total: string
     open_total: string
@@ -47,7 +36,6 @@ export type BackendReceivableAccount = {
     version: number
     created_at: number
     entries: BackendReceivableEntry[]
-    reviews: BackendFundsReview[]
 }
 
 export type BackendReceiptAllocation = {

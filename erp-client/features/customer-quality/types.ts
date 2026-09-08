@@ -3,7 +3,6 @@
  * 前端仅格式化展示；金额/标签/覆盖率一律服务端投影字段。
  */
 
-export type FundsReviewFilter = "all" | "reviewed_only"
 export type BusinessTypeFilter = "VOUCHER" | "GOODS_SERVICE"
 export type PeriodSelectionSource =
     | "SERVER_DEFAULT"
@@ -54,7 +53,6 @@ export type CustomerQualityQuery = Readonly<{
     customerQualityPeriodPolicyId?: string
     customerQualityPeriodPolicyVersion?: number
     scopeId: string
-    fundsReview: FundsReviewFilter
     businessType?: BusinessTypeFilter
     benefitScenario?: string
     scaleTag?: string
@@ -133,7 +131,6 @@ export type CustomerQualityRow = Readonly<{
     scaleTierCode: string
     profitTierCode: string
     riskTierCode: string
-    cardFundsReviewInsufficient: boolean
     allowedDrilldowns: readonly ("W03" | "W11" | "W16" | "W05")[]
 }>
 
@@ -159,11 +156,6 @@ export type CustomerQualityView = Readonly<{
         refreshFailed?: boolean
     }
     coverage: {
-        cardFundsReviewRate: string
-        cardFundsReviewPercent: number
-        reviewedVoucherOrderCount: number
-        requiredVoucherOrderCount: number
-        cardFundsState: "complete" | "partial" | "none"
         costCoveredNetRevenue: string
         costUncoveredNetRevenue: string
         costCoverageRate: string

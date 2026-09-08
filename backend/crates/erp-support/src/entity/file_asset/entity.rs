@@ -417,27 +417,6 @@ impl FileAsset {
             && self.destroyed_at.is_none()
             && self.expires_at.is_none_or(|expires_at| expires_at > now)
     }
-
-    /// 校验文件资产在指定时点可用作 W13 受控证据。
-    ///
-    /// 与 [`Self::is_usable_at`] 使用同一规则；不可用时以既有业务错误文案失败关闭，
-    /// 供 `CardFundsReviewEvidence::validate_assets` 按首错顺序复用。
-    ///
-    /// # 参数
-    /// * `now` - 校验的统一时点
-    ///
-    /// # 返回
-    /// 可用时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 扫描未通过、已销毁或已过期时返回 `LogicError("复核证据文件未通过安全检查、已销毁或已过期")`。
-    pub fn validate_usable_at(&self, now: Instant) -> Result<()> {
-        if self.is_usable_at(now) {
-            Ok(())
-        } else {
-            Err(Error::from("复核证据文件未通过安全检查、已销毁或已过期"))
-        }
-    }
 }
 
 #[cfg(test)]

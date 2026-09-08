@@ -3,12 +3,10 @@
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::{
-    CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction, CardFundsReviewType, FundsReviewView,
     ReceiptAllocationView, ReceivableEntryView, ReceivableInvoiceFactView, ReceivableReceiptFactView,
 };
-use erp_finance::entity::receivable::{AccountReviewStatus, CustomerReceiptStatus, ReceivableAccountStatus};
+use erp_finance::entity::receivable::{CustomerReceiptStatus, ReceivableAccountStatus};
 use serde::Serialize;
-use serde_json::Value as WorkItemView;
 
 /// 应收往来子账响应视图（W11 应收台账行 + 详情）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -27,7 +25,7 @@ pub struct ReceivableAccountView {
     pub account_seq: u32,
     /// 本子账开始适用的销售版本。
     pub source_sales_order_revision_id: String,
-    /// 当前销售版本（W13 正式动作的领域版本锁）。
+    /// 当前销售版本。
     pub current_sales_order_revision_id: String,
     /// 企业客户经营归属。
     pub customer_id: String,
@@ -37,8 +35,6 @@ pub struct ReceivableAccountView {
     pub counterparty_party_id: String,
     /// 当前销售版本冻结的收款/开票往来主体名称；缺失时为空并阻断登记动作。
     pub counterparty_party_name: Option<String>,
-    /// 卡券票款复核状态缓存。
-    pub review_status: AccountReviewStatus,
     /// 含税应收总额。
     pub gross_total: Amount,
     /// 已核销含税总额。
@@ -55,16 +51,8 @@ pub struct ReceivableAccountView {
     pub status: ReceivableAccountStatus,
     /// 乐观锁版本。
     pub version: u64,
-    /// W13 不透明账户领域版本；客户端不得自行递增或与其它版本互换。
+    /// 账户领域版本；客户端不得自行递增或与其它版本互换。
     pub account_domain_version: String,
-    /// 当前复核链尾；空链为 `None`。
-    pub review_chain_tail_id: Option<String>,
-    /// W13 不透明复核链版本。
-    pub review_chain_version: String,
-    /// 服务端计算的下一复核号。
-    pub next_review_no: u32,
-    /// W13 不透明票款事实版本。
-    pub funds_fact_version: String,
     /// 当前账户关联的正式回款事实。
     pub receipt_facts: Vec<ReceivableReceiptFactView>,
     /// 当前账户关联的正式销项发票事实。
@@ -73,20 +61,6 @@ pub struct ReceivableAccountView {
     pub created_at: u64,
     /// 应收分录（含抵销合计）。
     pub entries: Vec<ReceivableEntryView>,
-    /// 卡券票款复核链。
-    pub reviews: Vec<FundsReviewView>,
-    /// 当前操作人可见的 W13 正式任务。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub work_item: Option<WorkItemView>,
-    /// 由正式任务类型确定的 W13 复核类型。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_review_type: Option<CardFundsReviewType>,
-    /// W13 领域动作，不得从通用任务动作推导。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub allowed_actions: Vec<CardFundsReviewAllowedAction>,
-    /// W13 领域动作阻断事实。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub action_blockers: Vec<CardFundsReviewActionBlockerView>,
 }
 
 /// 客户回款单响应视图。

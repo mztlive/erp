@@ -133,37 +133,29 @@ function stubHome(
     }
 }
 
-test("队列为空时仍渲染左右分栏，空态落在队列列", () => {
+test("无待办时显示单一空态，筛选仍在列表上方", () => {
     stubHome(emptyAllowedView())
     render(<WorkspaceHomePage />)
-
+    expect(screen.getByText("当前没有待处理事项")).toBeTruthy()
+    expect(document.querySelector('[data-slot="workspace-detail"]')).toBeNull()
     const queue = document.querySelector('[data-slot="workspace-queue"]')
-    const detail = document.querySelector('[data-slot="workspace-detail"]')
-    expect(queue).toBeTruthy()
-    expect(detail).toBeTruthy()
-    expect(queue?.className).toContain("lg:w-80")
-    expect(detail?.className).toContain("flex-1")
-
-    expect(screen.getByRole("group", { name: "任务类型" })).toBeTruthy()
-    expect(queue?.contains(screen.getByText("当前没有待处理事项"))).toBe(true)
-    expect(detail?.contains(screen.getByText("在此处理任务"))).toBe(true)
+    expect(
+        queue?.contains(screen.getByRole("group", { name: "任务类型" })),
+    ).toBe(false)
 })
 
-test("筛选无结果时清空动作留在左列，右列作业面仍在", () => {
+test("筛选无结果时保留条件且可以恢复全部待办", () => {
+    const clearFilters = vi.fn()
     stubHome(emptyAllowedView(), {
         urlState: { view: "inbox", sort: "priority_due", family: "approval" },
         hasActiveFilter: true,
+        clearFilters,
     })
     render(<WorkspaceHomePage />)
-
-    expect(screen.getByRole("button", { name: "回到待我处理" })).toBeTruthy()
-    const queue = document.querySelector('[data-slot="workspace-queue"]')
-    const detail = document.querySelector('[data-slot="workspace-detail"]')
-    expect(
-        queue?.contains(screen.getByRole("button", { name: "回到待我处理" })),
-    ).toBe(true)
-    expect(detail).toBeTruthy()
-    expect(screen.getByText("在此处理任务")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "任务类型：审批" })).toBeTruthy()
+    fireEvent.click(document.getElementById("workspace-home-clear-filters")!)
+    expect(clearFilters).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[data-slot="workspace-detail"]')).toBeNull()
 })
 
 test("我发起的审批显示搜索且不展示任务类型", () => {
@@ -219,4 +211,35 @@ test("右侧全屏会收起左列队列，再次点击恢复", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "退出全屏" }))
     expect(queue?.className.includes("hidden")).toBe(false)
+})
+
+test("关闭详情后列表恢复全宽，同一任务可以再次打开", () => {
+    const item = {
+        workItemId: "wi-1",
+        objectTitle: "采购单",
+        stableNumber: "PO-1",
+        workItemTypeLabel: "采购审批",
+        workItemType: "DOCUMENT_APPROVAL",
+        family: "approval",
+        counterpartyName: "测试供应商",
+        dueAtLabel: "今天",
+        dueBucket: "today",
+        processingState: "READY",
+    } as TodayWorkspaceView["items"][number]
+    const onSelectTask = vi.fn()
+    stubHome(emptyAllowedView({ items: [item], total: 1 }), {
+        selected: item,
+        onSelectTask,
+    })
+    render(<WorkspaceHomePage />)
+    fireEvent.click(screen.getByRole("button", { name: "关闭详情" }))
+    expect(document.querySelector('[data-slot="workspace-detail"]')).toBeNull()
+    const row = screen.getByRole("button", { name: "采购审批 测试供应商 PO-1" })
+    expect(row.getAttribute("aria-current")).toBeNull()
+    fireEvent.click(row)
+    expect(onSelectTask).toHaveBeenCalledWith(item)
+    expect(
+        document.querySelector('[data-slot="workspace-detail"]'),
+    ).toBeTruthy()
+    expect(row.getAttribute("aria-current")).toBe("true")
 })

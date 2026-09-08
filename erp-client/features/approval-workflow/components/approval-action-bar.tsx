@@ -47,6 +47,7 @@ export function ApprovalActionBar({
     hiddenActions = [],
     decisionContext,
     onDecisionApplied,
+    presentation = "default",
     id = "governance-approval-action-bar",
 }: {
     allowedActions: readonly string[]
@@ -71,6 +72,8 @@ export function ApprovalActionBar({
         impactSummary?: string
     }>
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    /** 工作台侧栏使用紧凑动作顺序；其它页面保留原样。 */
+    presentation?: "default" | "workspace"
     id?: string
 }) {
     const [dialog, setDialog] = React.useState<DialogKind>(null)
@@ -99,16 +102,21 @@ export function ApprovalActionBar({
                 <Button
                     id={`${id}-approve`}
                     type="button"
+                    className={
+                        presentation === "workspace" ? "order-last" : undefined
+                    }
                     onClick={() => setDialog("approve")}
                 >
-                    通过
+                    {presentation === "workspace" ? "同意审批" : "通过"}
                 </Button>
             ) : null}
             {showReject && workItemId && expectedTaskVersion ? (
                 <Button
                     id={`${id}-reject`}
                     type="button"
-                    variant="destructive"
+                    variant={
+                        presentation === "workspace" ? "outline" : "destructive"
+                    }
                     onClick={() => setDialog("reject")}
                 >
                     驳回

@@ -24,9 +24,10 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-test("通过动作先打开确认弹窗且不会直接提交", () => {
+test("工作台同意审批先打开确认弹窗且不会直接提交", () => {
     render(
         <ApprovalActionBar
+            presentation="workspace"
             allowedActions={["APPROVE", "REJECT"]}
             workItemId="work-item-1"
             expectedTaskVersion="3"
@@ -39,7 +40,7 @@ test("通过动作先打开确认弹窗且不会直接提交", () => {
         />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "通过" }))
+    fireEvent.click(screen.getByRole("button", { name: "同意审批" }))
 
     expect(screen.getByRole("dialog")).toBeTruthy()
     expect(screen.getByRole("button", { name: "确认通过" })).toBeTruthy()

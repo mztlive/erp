@@ -5,36 +5,28 @@
 //! 金额一律十进制字符串（`erp_core::money::Amount`）；业务日期为 `YYYY-MM-DD`。
 //!
 //! 契约来源：`erp-client/features/customer-receivables/types.ts`（W11）、
-//! `features/card-funds-review`（W13）；与前端 mock 的 camelCase/ISO 形态差异
+//! 客户往来页面；与客户端 camelCase/ISO 形态差异
 //! 见 P3 PR「契约变更」一节（后端统一 snake_case + 秒级时间戳）。
 
-mod card_funds;
 mod command;
+mod facts;
 mod invoice;
 mod query;
 
-pub use self::card_funds::{
-    CardFundsRegistrationAllocation, CardFundsRegistrationResult, CardFundsReviewActionBlockerView,
-    CardFundsReviewAllowedAction, CardFundsReviewBusinessResult, CardFundsReviewConclusion,
-    CardFundsReviewDecision, CardFundsReviewDetailParams, CardFundsReviewFollowUpWorkItem,
-    CardFundsReviewResult, CardFundsReviewType, CompleteCardFundsReviewCommand,
-    CompleteCardFundsReviewResult, CompletedWorkItemStatus, ReceivableInvoiceFactView,
-    ReceivableReceiptFactView, RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest,
-};
 pub use self::command::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CreateCustomerReceiptRequest,
     CreateReceivableAccountRequest, PostCustomerReceiptRequest, ReceiptAllocationLineRequest,
     SubmitCustomerReceiptRequest,
 };
+pub use self::facts::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 pub use self::invoice::{
     CommitInvoiceRequest, CommitRedInvoiceRequest, CreateInvoiceRequest, PostInvoiceRequest,
     SalesInvoiceAllocationLineRequest,
 };
 pub use self::query::{
-    CustomerReceiptListParams, CustomerReceiptListQuery, FundsReviewView, InvoiceListParams,
-    InvoiceListQuery, InvoiceView, PageParams, ReceiptAllocationView, ReceivableAccountListParams,
-    ReceivableAccountListQuery, ReceivableAccountSummaryView, ReceivableEntryView,
-    SalesInvoiceAllocationView,
+    CustomerReceiptListParams, CustomerReceiptListQuery, InvoiceListParams, InvoiceListQuery, InvoiceView,
+    PageParams, ReceiptAllocationView, ReceivableAccountListParams, ReceivableAccountListQuery,
+    ReceivableAccountSummaryView, ReceivableEntryView, SalesInvoiceAllocationView,
 };
 
 /// 排序方向。
@@ -60,9 +52,8 @@ pub(crate) use application_core::normalize_sort;
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_sort, CardFundsReviewConclusion, CardFundsReviewResult, CardFundsReviewType,
-        CompleteCardFundsReviewCommand, CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams,
-        InvoiceView, ReceivableAccountListParams, SortDir,
+        normalize_sort, CreateInvoiceRequest, CustomerReceiptListParams, InvoiceListParams, InvoiceView,
+        ReceivableAccountListParams, SortDir,
     };
     use crate::entity::receivable::{
         CustomerReceiptStatus, InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus,
@@ -96,7 +87,6 @@ mod tests {
             counterparty_party_id: None,
             status: Some(ReceivableAccountStatus::Open),
             sales_order_id: Some(" SO-1 ".to_string()),
-            review_status: None,
             page: Some(2),
             page_size: Some(50),
             sort_by: Some("open_total".to_string()),
@@ -121,7 +111,6 @@ mod tests {
             counterparty_party_id: None,
             status: None,
             sales_order_id: None,
-            review_status: None,
             page: Some(0),
             page_size: Some(u32::MAX),
             sort_by: None,
@@ -219,76 +208,6 @@ mod tests {
         assert!(!object.contains_key("approval"));
         assert!(!object.contains_key("definition_id"));
         assert!(!object.contains_key("assignee"));
-    }
-
-    #[test]
-    fn complete_card_funds_review_command_accepts_documented_shape() {
-        let command: CompleteCardFundsReviewCommand = serde_json::from_value(serde_json::json!({
-            "work_item_id": "wi-1",
-            "expected_task_version": "7",
-            "expected_subject_version": "sor-9",
-            "decision": {
-                "receivable_account_id": "ra-1",
-                "expected_account_seq": 1,
-                "expected_account_domain_version": "4",
-                "expected_review_chain_tail_id": "review-2",
-                "expected_review_chain_version": "rcv:abc",
-                "expected_next_review_no": 3,
-                "expected_sales_order_revision_id": "sor-9",
-                "expected_funds_fact_version": "ffv:def",
-                "review_type": "SYNC_DELTA",
-                "review_result": "REJECTED",
-                "conclusion": "REJECTED",
-                "evidence_document_ids": ["file-1"],
-                "evidence_references": ["BANK-REF-1"],
-                "comment": "金额不一致",
-                "reason_code": "FACTS_MISMATCH"
-            },
-            "idempotency_key": "card-review-1"
-        }))
-        .unwrap();
-
-        assert_eq!(command.expected_task_version, "7");
-        assert_eq!(command.decision.review_type, CardFundsReviewType::SyncDelta);
-        assert_eq!(command.decision.review_result, CardFundsReviewResult::Rejected);
-        assert_eq!(command.decision.conclusion, CardFundsReviewConclusion::Rejected);
-        assert!(command.validate().is_ok());
-    }
-
-    #[test]
-    fn complete_card_funds_review_command_rejects_legacy_or_invented_fields() {
-        let legacy = serde_json::json!({
-            "receivable_account_id": "ra-1",
-            "review_type": "opening",
-            "review_result": "passed",
-            "reviewed_by": "client-spoofed-user",
-            "reviewed_at": 1_700_000_000,
-            "evidence_reference": "legacy"
-        });
-        assert!(serde_json::from_value::<CompleteCardFundsReviewCommand>(legacy).is_err());
-
-        let invented_subject_hash = serde_json::json!({
-            "work_item_id": "wi-1",
-            "expected_task_version": "1",
-            "expected_subject_version": "sor-1",
-            "decision": {
-                "receivable_account_id": "ra-1",
-                "expected_account_seq": 1,
-                "expected_account_domain_version": "1",
-                "expected_review_chain_version": "rcv:empty",
-                "expected_next_review_no": 1,
-                "expected_sales_order_revision_id": "sor-1",
-                "expected_funds_fact_version": "ffv:empty",
-                "expected_subject_hash": "client-invented",
-                "review_type": "OPENING",
-                "review_result": "APPROVED",
-                "conclusion": "NO_HISTORY_FROM_ZERO",
-                "evidence_document_ids": [],
-                "evidence_references": ["核对记录"]
-            },
-            "idempotency_key": "card-review-2"
-        });
-        assert!(serde_json::from_value::<CompleteCardFundsReviewCommand>(invented_subject_hash).is_err());
     }
 
     #[test]

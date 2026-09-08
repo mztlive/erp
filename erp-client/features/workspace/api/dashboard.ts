@@ -15,6 +15,7 @@ import {
     type WorkItemStats,
 } from "@/features/work-items/api"
 import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
+import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
@@ -452,6 +453,18 @@ function startedInstanceToWorkItem(
         workItemId: item.instanceId,
         taskVersion: "",
         workItemType: "APPROVAL_INSTANCE",
+        amountSummary:
+            item.totalAmount != null
+                ? {
+                      label: "提交金额",
+                      value: formatCurrencyFixed(item.totalAmount, {
+                          maxScale: 4,
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                      }),
+                      numeric: true,
+                  }
+                : undefined,
         workItemTypeLabel: item.processName ?? typeLabel,
         businessObjectType,
         businessObjectId: item.documentId ?? item.instanceId,

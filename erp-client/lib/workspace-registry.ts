@@ -59,7 +59,6 @@ export type WorkspaceId =
     | "W10"
     | "W11"
     | "W12"
-    | "W13"
     | "W14"
     | "W15"
     | "W16"
@@ -167,8 +166,6 @@ function defaultNavPermissionsFor(
             return ["receivable_account:list"]
         case "W12":
             return ["payable_account:list"]
-        case "W13":
-            return ["receivable_funds_review:create", "receivable_account:list"]
         case "W14":
             return masterDataPermissionsForHref(href)
         case "W15":
@@ -355,13 +352,6 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
         navHref: "/finance/supplier-accounts",
     },
     {
-        id: "W13",
-        name: "卡券票款复核",
-        mode: "M3",
-        mainRoute: "/finance/card-funds-review",
-        navHref: "/finance/card-funds-review",
-    },
-    {
         id: "W14",
         name: "公司商品池、商品、类目、供应商与仓库",
         mode: "M2+M4",
@@ -506,10 +496,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W12",
                     icon: WalletCardsIcon,
-                },
-                {
-                    routeId: "W13",
-                    icon: ScaleIcon,
                 },
                 {
                     routeId: "W12",

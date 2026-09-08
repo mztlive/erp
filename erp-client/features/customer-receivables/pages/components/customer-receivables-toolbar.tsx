@@ -15,7 +15,6 @@ import {
     type CustomerAccountsView,
     type CustomerReceivablesFilterKey,
     type DueFilter,
-    type ReceivableReviewStatusFilter,
     type ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
 
@@ -49,18 +48,6 @@ const STATUS_RADIO_OPTIONS: ReadonlyArray<{
     ] as const
 ).map((option) => ({ ...option }))
 
-const REVIEW_STATUS_RADIO_OPTIONS: ReadonlyArray<{
-    value: ReceivableReviewStatusFilter
-    label: string
-}> = (
-    [
-        { value: "all", label: "全部复核状态" },
-        { value: "pending_opening", label: "期初待复核" },
-        { value: "reviewed", label: "已复核" },
-        { value: "pending_sync_diff", label: "同步差额待复核" },
-    ] as const
-).map((option) => ({ ...option }))
-
 type CustomerReceivablesToolbarProps = {
     view: CustomerAccountsView
     searchDraft: string
@@ -72,8 +59,6 @@ type CustomerReceivablesToolbarProps = {
     setDueDraft: SetState<DueFilter>
     statusDraft: ReceivableStatusFilter
     setStatusDraft: SetState<ReceivableStatusFilter>
-    reviewStatusDraft: ReceivableReviewStatusFilter
-    setReviewStatusDraft: SetState<ReceivableReviewStatusFilter>
     panelOpen: boolean
     setPanelOpen: SetState<boolean>
     appliedChips: readonly ReceivableAppliedChip[]
@@ -98,8 +83,6 @@ export function CustomerReceivablesToolbar({
     setDueDraft,
     statusDraft,
     setStatusDraft,
-    reviewStatusDraft,
-    setReviewStatusDraft,
     panelOpen,
     setPanelOpen,
     appliedChips,
@@ -114,7 +97,7 @@ export function CustomerReceivablesToolbar({
 }: CustomerReceivablesToolbarProps) {
     const receivableView = view === "receivable"
     const moreCount = appliedChips.filter(({ key }) =>
-        ["counterpartyId", "status", "reviewStatus"].includes(key),
+        ["counterpartyId", "status"].includes(key),
     ).length
 
     return (
@@ -181,15 +164,6 @@ export function CustomerReceivablesToolbar({
                                 onValueChange={setStatusDraft}
                                 options={STATUS_RADIO_OPTIONS}
                             />
-                            <div id={`${prefix}-review-status-filter`}>
-                                <FixedOptionRadioFilter
-                                    idPrefix={`${prefix}-review-status-filter`}
-                                    label="复核状态"
-                                    value={reviewStatusDraft}
-                                    onValueChange={setReviewStatusDraft}
-                                    options={REVIEW_STATUS_RADIO_OPTIONS}
-                                />
-                            </div>
                         </>
                     ) : null}
                 </div>

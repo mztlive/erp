@@ -120,11 +120,6 @@ export function createReceivableColumns({
                         label={row.original.statusLabel}
                         tone={row.original.statusTone}
                     />
-                    {row.original.reviewStatus !== "na" ? (
-                        <span className="text-xs text-muted-foreground">
-                            {row.original.reviewStatusLabel}
-                        </span>
-                    ) : null}
                 </div>
             ),
         },

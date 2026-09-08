@@ -1,5 +1,5 @@
 //! 域 D18 `receivable` 的索引声明：receivable_account、receivable_entry、
-//! receivable_funds_review、receivable_entry_offset、customer_receipt、
+//! receivable_entry_offset、customer_receipt、
 //! receipt_allocation、invoice、sales_invoice_allocation。
 //!
 //! 集合名常量取 `ReceivableExt` 关联常量（唯一权威来源，conventions §4.3）：
@@ -19,9 +19,6 @@ use persistence_core::Result;
 pub(crate) const RECEIVABLE_ACCOUNTS: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ACCOUNTS;
 /// `receivable_entry` 集合名。
 pub(crate) const RECEIVABLE_ENTRIES: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES;
-/// `receivable_funds_review` 集合名。
-pub(crate) const RECEIVABLE_FUNDS_REVIEWS: &str =
-    <mongodb::Database as ReceivableExt>::RECEIVABLE_FUNDS_REVIEWS;
 /// `receivable_entry_offset` 集合名。
 pub(crate) const RECEIVABLE_ENTRY_OFFSETS: &str =
     <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRY_OFFSETS;
@@ -51,7 +48,6 @@ pub(crate) const SALES_INVOICE_ALLOCATIONS: &str =
 pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, RECEIVABLE_ACCOUNTS, receivable_account_indexes()).await?;
     create_indexes(db, RECEIVABLE_ENTRIES, receivable_entry_indexes()).await?;
-    create_indexes(db, RECEIVABLE_FUNDS_REVIEWS, receivable_funds_review_indexes()).await?;
     create_indexes(db, RECEIVABLE_ENTRY_OFFSETS, receivable_entry_offset_indexes()).await?;
     create_indexes(db, CUSTOMER_RECEIPTS, customer_receipt_indexes()).await?;
     create_indexes(db, RECEIPT_ALLOCATIONS, receipt_allocation_indexes()).await?;
@@ -107,27 +103,6 @@ fn receivable_entry_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_receivable_entries_source",
             doc! { "source_fact_type": 1, "source_document_id": 1 },
-        ),
-    ]
-}
-
-/// 返回 `receivable_funds_review` 的复核链约束索引。
-fn receivable_funds_review_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index(
-            "uk_receivable_funds_reviews_account_no",
-            doc! { "receivable_account_id": 1, "review_no": 1 },
-        ),
-        unique_index(
-            "uk_receivable_funds_reviews_work_item",
-            doc! { "work_item_id": 1 },
-        ),
-        // §6.8：非空 supersedes_review_id 唯一且必须属于同一子账。MongoDB 唯一
-        // 索引对缺失/null 值不去重，等价于「非空值唯一」的部分唯一语义，无需
-        // partialFilterExpression；回滚：改为应用层校验后删除此索引。
-        unique_index(
-            "uk_receivable_funds_reviews_supersedes",
-            doc! { "supersedes_review_id": 1 },
         ),
     ]
 }
@@ -247,8 +222,8 @@ mod tests {
 
     use super::{
         customer_receipt_indexes, invoice_indexes, receipt_allocation_indexes, receivable_account_indexes,
-        receivable_entry_indexes, receivable_entry_offset_indexes, receivable_funds_review_indexes,
-        sales_invoice_allocation_indexes, uncoded_index_options,
+        receivable_entry_indexes, receivable_entry_offset_indexes, sales_invoice_allocation_indexes,
+        uncoded_index_options,
     };
 
     fn name(index: &IndexModel) -> Option<&str> {
@@ -294,24 +269,6 @@ mod tests {
             }
         );
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
-    }
-
-    #[test]
-    fn funds_review_constraints_are_unique() {
-        let indexes = receivable_funds_review_indexes();
-
-        assert!(indexes.iter().any(|index| {
-            name(index) == Some("uk_receivable_funds_reviews_account_no")
-                && index.options.as_ref().and_then(|o| o.unique) == Some(true)
-        }));
-        assert!(indexes.iter().any(|index| {
-            name(index) == Some("uk_receivable_funds_reviews_work_item")
-                && index.options.as_ref().and_then(|o| o.unique) == Some(true)
-        }));
-        assert!(indexes.iter().any(|index| {
-            name(index) == Some("uk_receivable_funds_reviews_supersedes")
-                && index.keys == doc! { "supersedes_review_id": 1 }
-        }));
     }
 
     #[test]

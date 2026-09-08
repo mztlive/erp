@@ -15,12 +15,7 @@ import {
     projectReceiptReversal,
     projectReceivable,
 } from "./mappers"
-import {
-    loadPendingCardReviewCount,
-    loadReceipts,
-    loadReceivables,
-    loadSalesInvoices,
-} from "./loaders"
+import { loadReceipts, loadReceivables, loadSalesInvoices } from "./loaders"
 import type {
     BackendCustomerReceipt,
     BackendCustomerRefund,
@@ -43,7 +38,6 @@ function emptyView(
             overdueReceivableTotal: "0.00",
             unallocatedReceiptTotal: "0.00",
             unallocatedInvoiceTotal: "0.00",
-            cardPendingReviewCount: 0,
         },
         receivables: [],
         receipts: [],
@@ -88,19 +82,17 @@ export async function fetchCustomerAccountsList(
         page: query.page,
         page_size: query.pageSize,
     }
-    const [recvPage, rcptPage, invPage, cardPendingReviewCount] =
-        await Promise.all([
-            query.view === "receivable"
-                ? loadReceivables(query)
-                : Promise.resolve(emptyPage as Page<BackendReceivableAccount>),
-            query.view === "receipt" || query.view === "unallocated"
-                ? loadReceipts(query)
-                : Promise.resolve(emptyPage as Page<BackendCustomerReceipt>),
-            query.view === "sales_invoice" || query.view === "unallocated"
-                ? loadSalesInvoices(query)
-                : Promise.resolve(emptyPage as Page<BackendInvoice>),
-            loadPendingCardReviewCount(query),
-        ])
+    const [recvPage, rcptPage, invPage] = await Promise.all([
+        query.view === "receivable"
+            ? loadReceivables(query)
+            : Promise.resolve(emptyPage as Page<BackendReceivableAccount>),
+        query.view === "receipt" || query.view === "unallocated"
+            ? loadReceipts(query)
+            : Promise.resolve(emptyPage as Page<BackendCustomerReceipt>),
+        query.view === "sales_invoice" || query.view === "unallocated"
+            ? loadSalesInvoices(query)
+            : Promise.resolve(emptyPage as Page<BackendInvoice>),
+    ])
 
     const receivables = (recvPage.items ?? []).map(projectReceivable)
     const partyDisplay = new Map(
@@ -158,7 +150,6 @@ export async function fetchCustomerAccountsList(
         query.customerId ||
         query.due ||
         query.status ||
-        query.reviewStatus ||
         query.salesOrderId,
     )
 
@@ -190,7 +181,6 @@ export async function fetchCustomerAccountsList(
             overdueReceivableTotal: "0.00",
             unallocatedReceiptTotal: "0.00",
             unallocatedInvoiceTotal: "0.00",
-            cardPendingReviewCount,
         },
         receivables,
         receipts,

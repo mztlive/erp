@@ -50,10 +50,6 @@ export function CustomerReceivablesMetrics({
             id: "unallocated-invoice",
             label: "待分配销项发票",
             value: metrics.unallocatedInvoiceTotal,
-            detail:
-                metrics.cardPendingReviewCount > 0
-                    ? `卡券待复核 ${metrics.cardPendingReviewCount}`
-                    : undefined,
         },
     ]
 

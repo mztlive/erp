@@ -1,8 +1,8 @@
 //! 应收查询参数、列表/详情视图与分页归一化。
 
 use crate::entity::receivable::{
-    AccountReviewStatus, AllocationAction, CustomerReceiptStatus, EntryDirection, FundsReviewType,
-    InvoiceDirection, InvoiceKind, InvoiceStatus, ReceivableAccountStatus, ReceivableEntryType, ReviewResult,
+    AllocationAction, CustomerReceiptStatus, EntryDirection, InvoiceDirection, InvoiceKind, InvoiceStatus,
+    ReceivableAccountStatus, ReceivableEntryType,
 };
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, PartyId, ReceivableAccountId};
@@ -90,8 +90,6 @@ pub struct ReceivableAccountSummaryView {
     pub counterparty_party_id: String,
     /// 当前销售版本冻结的往来主体名称。
     pub counterparty_party_name: Option<String>,
-    /// 卡券票款复核状态缓存。
-    pub review_status: AccountReviewStatus,
     /// 含税应收总额。
     pub gross_total: Amount,
     /// 已核销含税总额。
@@ -114,25 +112,6 @@ pub struct ReceivableAccountSummaryView {
     pub entries: Vec<ReceivableEntryView>,
 }
 
-/// 卡券票款复核记录视图。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct FundsReviewView {
-    /// 实体主键。
-    pub id: String,
-    /// 子账内递增复核号。
-    pub review_no: u32,
-    /// 复核类型。
-    pub review_type: FundsReviewType,
-    /// 复核结果。
-    pub review_result: ReviewResult,
-    /// 财务复核人。
-    pub reviewed_by: String,
-    /// 复核时间（秒级时间戳）。
-    pub reviewed_at: Instant,
-    /// 复核证据引用。
-    pub evidence_reference: Option<String>,
-}
-
 /// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReceivableAccountListParams {
@@ -148,8 +127,6 @@ pub struct ReceivableAccountListParams {
     pub status: Option<ReceivableAccountStatus>,
     /// 来源销售单筛选。
     pub sales_order_id: Option<String>,
-    /// 卡券票款复核状态筛选。
-    pub review_status: Option<AccountReviewStatus>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -177,8 +154,6 @@ pub struct ReceivableAccountListQuery {
     pub status: Option<ReceivableAccountStatus>,
     /// 来源销售单筛选。
     pub sales_order_id: Option<String>,
-    /// 卡券票款复核状态筛选。
-    pub review_status: Option<AccountReviewStatus>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -203,7 +178,6 @@ impl ReceivableAccountListParams {
             counterparty_party_id: self.counterparty_party_id.clone(),
             status: self.status,
             sales_order_id: normalized_text(self.sales_order_id.as_deref()),
-            review_status: self.review_status,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),

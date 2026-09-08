@@ -10,8 +10,7 @@
 
 use crate::repository::owned::{
     CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
-    ReceivableEntryOffsetRepository, ReceivableEntryRepository, ReceivableFundsReviewRepository,
-    SalesInvoiceAllocationRepository,
+    ReceivableEntryOffsetRepository, ReceivableEntryRepository, SalesInvoiceAllocationRepository,
 };
 use mongodb::Database;
 
@@ -25,8 +24,6 @@ pub trait ReceivableExt {
     const RECEIVABLE_ACCOUNTS: &'static str = "receivable_accounts";
     /// `receivable_entry` 集合名。
     const RECEIVABLE_ENTRIES: &'static str = "receivable_entries";
-    /// `receivable_funds_review` 集合名。
-    const RECEIVABLE_FUNDS_REVIEWS: &'static str = "receivable_funds_reviews";
     /// `receivable_entry_offset` 集合名。
     const RECEIVABLE_ENTRY_OFFSETS: &'static str = "receivable_entry_offsets";
     /// `customer_receipt` 集合名。
@@ -58,12 +55,6 @@ pub trait ReceivableExt {
     /// # 返回
     /// 返回 `ReceivableEntryRepository<'_>`。
     fn receivable_entries(&self) -> ReceivableEntryRepository<'_>;
-
-    /// 获取 `receivable_funds_review` 集合的 Repository。
-    ///
-    /// # 返回
-    /// 返回 `ReceivableFundsReviewRepository<'_>`。
-    fn receivable_funds_reviews(&self) -> ReceivableFundsReviewRepository<'_>;
 
     /// 获取 `receivable_entry_offset` 集合的 Repository。
     ///
@@ -113,10 +104,6 @@ impl ReceivableExt for Database {
 
     fn receivable_entries(&self) -> ReceivableEntryRepository<'_> {
         ReceivableEntryRepository::new(self, Self::RECEIVABLE_ENTRIES)
-    }
-
-    fn receivable_funds_reviews(&self) -> ReceivableFundsReviewRepository<'_> {
-        ReceivableFundsReviewRepository::new(self, Self::RECEIVABLE_FUNDS_REVIEWS)
     }
 
     fn receivable_entry_offsets(&self) -> ReceivableEntryOffsetRepository<'_> {

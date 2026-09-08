@@ -60,7 +60,6 @@ function queryToParams(query: CustomerQualityQuery): Record<string, unknown> {
         customer_quality_period_policy_version:
             query.customerQualityPeriodPolicyVersion,
         scope_id: query.scopeId,
-        funds_review: query.fundsReview,
         business_type: query.businessType,
         benefit_scenario: query.benefitScenario,
         scale_tag: query.scaleTag,
@@ -146,7 +145,6 @@ export async function startCustomerQualityExport(input: {
         to: input.query.to,
         period_basis: input.query.periodBasis,
         scope_id: input.query.scopeId,
-        funds_review: input.query.fundsReview,
         business_type: input.query.businessType,
         filter_summary: input.filterSummary,
         projection_watermark: input.projectionWatermark,

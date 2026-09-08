@@ -33,8 +33,8 @@ use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
 #[cfg(test)]
 use access::{
     allowed_actions, authorized_fields, authorized_item_fields, detail_scope,
-    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_access_shapes, object_policy,
-    ActorAccess, ViewAccess,
+    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_policy, ActorAccess,
+    ViewAccess,
 };
 #[cfg(test)]
 use query_support::{
@@ -98,7 +98,7 @@ mod tests {
         allowed_actions, approval_assignment_separated, audited_fact_operator_actors, authorized_fields,
         authorized_item_fields, business_day_bounds_at, counts_as_processable_stat, detail_scope,
         ensure_generic_work_item_mutation, expected_task_version, family_counts_for_types,
-        has_assignment_candidate_access, non_empty_assignment_actors, object_access_shapes, object_policy,
+        has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
         purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions, ActorAccess,
         AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, ObjectFact, ObjectFactMap,
         ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
@@ -415,31 +415,6 @@ mod tests {
 
         assert_eq!(policy.object_kind, ObjectKind::IntegrationErrorTask);
         assert_eq!(policy.read_permission, "integration_error_task:detail");
-    }
-
-    #[test]
-    fn w13_delta_policy_authorizes_list_and_stats_projection() {
-        let access = w13_access();
-        let facts = w13_facts();
-        let policy = object_policy(WorkItemType::CardFundsDeltaReview, "receivable_account").unwrap();
-
-        assert_eq!(policy.object_kind, ObjectKind::ReceivableAccount);
-        assert_eq!(policy.read_permission, "receivable_account:detail");
-        assert!(object_access_shapes(&access).contains(&(
-            WorkItemType::CardFundsDeltaReview,
-            "receivable_account".to_string(),
-        )));
-        let fields = authorized_fields(vec![w13_delta_row()], &access, &facts);
-        assert_eq!(fields.len(), 1);
-        assert_eq!(fields[0].business_object_label, "应收子账 2");
-    }
-
-    #[test]
-    fn w13_delta_policy_authorizes_detail_projection() {
-        let fields = authorized_item_fields(w13_delta_item(), &w13_access(), &w13_facts()).unwrap();
-
-        assert_eq!(fields.work_item_type, WorkItemType::CardFundsDeltaReview);
-        assert_eq!(fields.business_object_label, "应收子账 2");
     }
 
     #[test]
@@ -907,6 +882,7 @@ mod tests {
         let first_candidate_batch = (0..AUTHORIZED_SCAN_BATCH_SIZE.get())
             .map(|index| {
                 let mut row = w13_delta_row();
+                row.work_item_type = WorkItemType::SalesInvoiceExecution;
                 row.id = format!("denied-{index}");
                 row.business_object_id = format!("missing-{index}");
                 row
@@ -915,6 +891,7 @@ mod tests {
         let later_candidate_batch = (0..3)
             .map(|index| {
                 let mut row = w13_delta_row();
+                row.work_item_type = WorkItemType::SalesInvoiceExecution;
                 row.id = format!("allowed-{index}");
                 row
             })
@@ -1156,5 +1133,19 @@ mod tests {
             ),
             Err(Error::Forbidden(_))
         ));
+    }
+}
+
+#[cfg(test)]
+mod retired_review_tests {
+    use super::*;
+    use crate::entity::work_item::WorkItemType;
+
+    /// 旧任务可解码，但不得通过通用工作台获得业务对象参与权。
+    #[test]
+    fn retired_review_has_no_object_policy() {
+        for kind in [WorkItemType::CardFundsReview, WorkItemType::CardFundsDeltaReview] {
+            assert!(object_policy(kind, "receivable_account").is_none());
+        }
     }
 }

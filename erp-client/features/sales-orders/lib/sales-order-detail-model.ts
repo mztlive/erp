@@ -63,7 +63,7 @@ const REVIEW_CODES = new Set([
 ])
 
 const FROM_FULFILLMENT = new Set(["W01", "W07", "W08", "W09"])
-const FROM_RECEIVABLE = new Set(["W11", "W13"])
+const FROM_RECEIVABLE = new Set(["W11"])
 
 const LIFECYCLE_ORDER: LifecycleStepId[] = [
     "submit",

@@ -1,7 +1,7 @@
 //! 域 D18 `receivable` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/receivable-accounts`、
-//! `/admin/customer-receipts`、`/admin/invoices`、`/admin/receivable-funds-reviews`；
+//! `/admin/customer-receipts`、`/admin/invoices`；
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 
@@ -47,30 +47,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(receivable::receivable_account_detail),
                 rbac,
                 receivable::receivable_account_detail_permission_key(),
-            ),
-        )
-        .route(
-            "/receivable-funds-reviews",
-            with_permission(
-                post(receivable::receivable_funds_review_complete),
-                rbac,
-                receivable::receivable_funds_review_complete_permission_key(),
-            ),
-        )
-        .route(
-            "/card-funds-review/receipts",
-            with_permission(
-                post(receivable::card_funds_receipt_register),
-                rbac,
-                receivable::card_funds_receipt_register_permission_key(),
-            ),
-        )
-        .route(
-            "/card-funds-review/invoices",
-            with_permission(
-                post(receivable::card_funds_invoice_register),
-                rbac,
-                receivable::card_funds_invoice_register_permission_key(),
             ),
         )
         .route(
@@ -193,5 +169,28 @@ mod tests {
         assert!(production.contains("customer_receipt_submit"));
         assert!(production.contains("customer_receipt_cancel_approval"));
         assert!(!production.contains("PENDING_REVIEW"));
+    }
+}
+
+#[cfg(test)]
+mod retired_review_routes_tests {
+    /// 复核接口撤销后，正常回款、发票及应收接口必须继续保留。
+    #[test]
+    fn funds_review_routes_are_removed_and_finance_routes_remain() {
+        let source = include_str!("receivable.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        assert!(!source.contains("/receivable-funds-reviews"));
+        assert!(!source.contains("/card-funds-review/"));
+        for path in [
+            "/receivable-accounts",
+            "/customer-receipts/commit",
+            "/customer-receipts/{id}/submit",
+            "/invoices/commit",
+            "/invoices/{id}/red-issue",
+        ] {
+            assert!(source.contains(path));
+        }
     }
 }

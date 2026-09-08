@@ -101,7 +101,6 @@ export function CustomerReceivablesTable({
         if (nextView !== "receivable") {
             patch.due = null
             patch.status = null
-            patch.reviewStatus = null
         }
         patchUrl(patch, { replace: true })
     }

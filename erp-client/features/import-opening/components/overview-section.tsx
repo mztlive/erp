@@ -104,18 +104,6 @@ export function OverviewSection({
                             </p>
                         </div>
                     ))}
-                    {batch.sourceObjectSet.includes("CARD_OPENING_AR") ||
-                    batch.sourceObjectSet.includes("CARD_SALES_ORDER") ? (
-                        <Button
-                            id="operations-import-batch-detail-overview-card-funds-review"
-                            size="sm"
-                            variant="outline"
-                            render={<Link href="/finance/card-funds-review" />}
-                        >
-                            前往卡券票款复核
-                            <ExternalLinkIcon className="size-4" />
-                        </Button>
-                    ) : null}
                     {batch.sourceObjectSet.includes("OPENING_STOCK") ? (
                         <Button
                             id="operations-import-batch-detail-overview-inventory-link"

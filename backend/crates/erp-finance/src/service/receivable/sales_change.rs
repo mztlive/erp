@@ -20,7 +20,7 @@ pub struct SalesChangeReceivableInput {
     pub sales_order_id: SalesOrderId,
     /// 新正式版本标识。
     pub revision_id: SalesOrderRevisionId,
-    /// 财务所需的业务分类，决定票款复核迁移。
+    /// 财务所需的业务分类，保留销售业务归属。
     pub business_type: SalesBusinessTypeFact,
     /// 当前生效版本含税金额，作为差额基准。
     pub current_gross: Amount,
@@ -39,12 +39,12 @@ pub struct SalesChangeReceivableWrite {
     entry: ReceivableEntry,
 }
 impl SalesChangeReceivableWrite {
-    /// 写入后的财务子账，供组合层继续处理复核与开票任务。
+    /// 写入后的财务子账，供组合层继续处理开票任务。
     pub fn account(&self) -> &ReceivableAccount {
         &self.account
     }
 
-    /// 本次差额的正式版本号，作为原资金复核任务主体版本。
+    /// 本次差额的正式版本号，用于追溯本次金额调整。
     pub fn subject_version(&self) -> &str {
         &self.entry.source_revision_id
     }
@@ -62,14 +62,14 @@ impl SalesChangeReceivableWrite {
     }
 }
 
-/// 读取既有主应收子账，再计算差额及复核迁移，不启动事务。
+/// 读取既有主应收子账，再计算差额，不启动事务。
 ///
 /// 子账必须先读取，即使新旧金额相等也保留原读取时点。零差额不产生分录；
 /// 非零差额而子账缺失表示正式事实链损坏，必须拒绝，不能补造兼容账户。
 /// 调用方显式提供原 NoTransaction 或已有 Executor，不暗中改变隔离边界。
 ///
 /// # 错误
-/// 保留原缺子账 BusinessLogicError、复核迁移与金额 Logic 及仓储错误。
+/// 保留原缺子账 BusinessLogicError、金额 Logic 及仓储错误。
 pub async fn prepare_sales_change_receivable(
     db: &Database,
     input: SalesChangeReceivableInput,
@@ -89,7 +89,7 @@ pub async fn prepare_sales_change_receivable(
 
 /// 构建应收差额分录（§8.1.3：新版本金额减当前版本金额，零差额不写）。
 ///
-/// 差额方向、绝对金额与复核迁移由 `ReceivableDelta` / `ReceivableAccount` 决定。
+/// 差额方向、绝对金额与账户金额更新由 `ReceivableDelta` / `ReceivableAccount` 决定。
 /// 先完成账户校验和更新，再分配分录 ID、读取到期业务日，保持原失败顺序。
 fn build_sales_change_receivable(
     input: SalesChangeReceivableInput,
@@ -241,35 +241,37 @@ mod tests {
         assert_eq!(date_reads.get(), 0);
     }
 
+    /// 卡券金额变更不受历史复核状态阻挡，且保留应收、开票金额约束。
     #[test]
-    fn voucher_review_chain_and_invoiced_amount_constraints_remain_enforced() {
-        let write = build(
-            input(SalesBusinessTypeFact::Voucher, "120.00"),
-            Some(account(AccountReviewStatus::Reviewed, "0.00")),
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(write.account.review_status, AccountReviewStatus::SyncDeltaPending);
-        assert!(write.account.reviewed_by.is_none());
-        assert!(write.account.review_evidence_reference.is_none());
+    fn voucher_changes_ignore_retired_review_status_and_keep_money_guards() {
         for status in [
+            AccountReviewStatus::NotApplicable,
             AccountReviewStatus::OpeningPending,
+            AccountReviewStatus::Reviewed,
             AccountReviewStatus::SyncDeltaPending,
         ] {
-            let error = build(
-                input(SalesBusinessTypeFact::Voucher, "120.00"),
-                Some(account(status, "0.00")),
+            for (gross, direction) in [
+                ("120.00", EntryDirection::Increase),
+                ("80.00", EntryDirection::Decrease),
+            ] {
+                let write = build(
+                    input(SalesBusinessTypeFact::Voucher, gross),
+                    Some(account(status, "50.00")),
+                )
+                .unwrap()
+                .unwrap();
+                assert_eq!(write.account.review_status, AccountReviewStatus::NotApplicable);
+                assert_eq!(write.account.gross_total, amount(gross));
+                assert_eq!(write.account.invoiceable_total, amount(gross));
+                assert_eq!(write.account.invoiced_total, amount("50.00"));
+                assert_eq!(write.entry.direction, direction);
+                assert_eq!(write.entry.amount, amount("20.00"));
+            }
+            assert!(build(
+                input(SalesBusinessTypeFact::Voucher, "49.99"),
+                Some(account(status, "50.00"))
             )
-            .unwrap_err();
-            assert!(
-                matches!(error, Error::Logic(ref source) if source.to_string() == "卡券上一轮票款复核尚未通过，不能生效新的销售变更差额")
-            );
+            .is_err());
         }
-        let error = build(
-            input(SalesBusinessTypeFact::GoodsService, "49.99"),
-            Some(account(AccountReviewStatus::NotApplicable, "50.00")),
-        )
-        .unwrap_err();
-        assert!(matches!(error, Error::Logic(_)));
     }
 }

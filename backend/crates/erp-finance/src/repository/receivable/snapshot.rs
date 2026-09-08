@@ -1,20 +1,17 @@
 //! 应收票款仓储数据面（FIN-R09 / FIN-R12）。
 //!
-//! 提供有界 `CardFundsSnapshotFacts` 读取、按 exact review ID／`supersedes`
-//! 精确定位，以及回款核销的批量条件进度更新与 `insert_many`。所有方法接收
+//! 提供有界 `ReceivableSnapshotFacts` 读取，以及回款核销的批量条件进度
+//! 更新与 `insert_many`。所有方法接收
 //! 调用方 `&mut dyn Executor`，不开启事务，不返回 services DTO。
 
-use crate::repository::owned::{
-    ReceivableAccountRepository, ReceivableEntryRepository, ReceivableFundsReviewRepository,
-};
+use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
 use std::collections::HashSet;
 
 use crate::entity::receivable::{
-    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, ReceivableFundsReview,
-    SalesInvoiceAllocation,
+    CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId};
+use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
 use erp_core::money::Amount;
 use mongodb::bson::{doc, Bson, Document};
 
@@ -24,16 +21,14 @@ use crate::repository::extensions::ReceivableExt;
 use persistence_core::Executor;
 use persistence_core::{mongo_ops, Result};
 
-/// W13 票款快照的有界持久化事实（FIN-R12）。
+/// 应收票款快照的有界持久化事实（FIN-R12）。
 ///
-/// 固定次数读取：分录、回款分配、发票分配、回款、发票、复核链。
+/// 固定次数读取：分录、回款分配、发票分配、回款、发票。
 /// 缺失回款／发票由 Service 按 `expected_*_count` 解释首错；本类型不裁决业务。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CardFundsSnapshotFacts {
+pub struct ReceivableSnapshotFacts {
     /// 账户分录（按 `source_sequence` 升序）。
     pub entries: Vec<ReceivableEntry>,
-    /// 账户复核链（按 `review_no` 升序）。
-    pub reviews: Vec<ReceivableFundsReview>,
     /// 分录关联的回款核销分配。
     pub receipt_allocations: Vec<ReceiptAllocation>,
     /// 账户关联的销项发票分配。
@@ -49,29 +44,29 @@ pub struct CardFundsSnapshotFacts {
 }
 
 impl<'a> ReceivableRepository<'a> {
-    /// 一次装载 W13 账户范围内的有界票款事实。
+    /// 一次装载应收账户范围内的有界票款事实。
     ///
     /// 读取次数与分录／分配行数无关：分录按账户一次、分配按 ID 集合各一次、
-    /// 回款／发票按去重 ID `$in` 各一次、复核链按账户一次。长复核链不做二次扫描。
+    /// 回款／发票按去重 ID `$in` 各一次。
     ///
     /// # 参数
     /// * `account_id` - 应收往来子账
     /// * `executor` - 调用方执行器，必须复用以保持同一事务快照
     ///
     /// # 返回
-    /// 返回 [`CardFundsSnapshotFacts`]；关联单据缺失时仍返回已读到的子集，
+    /// 返回 [`ReceivableSnapshotFacts`]；关联单据缺失时仍返回已读到的子集，
     /// 由 Service 按回款优先于发票的首错顺序解释。
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
     ///
     /// # 约束
-    /// 不装载销售单（跨聚合），不计算 version／conclusion，不开事务。
-    pub async fn card_funds_snapshot_facts(
+    /// 不装载销售单（跨聚合），不裁决业务，不开事务。
+    pub async fn receivable_snapshot_facts(
         &self,
         account_id: &ReceivableAccountId,
         executor: &mut dyn Executor,
-    ) -> Result<CardFundsSnapshotFacts> {
+    ) -> Result<ReceivableSnapshotFacts> {
         let entries = self
             .db
             .receivable_entries()
@@ -113,14 +108,8 @@ impl<'a> ReceivableRepository<'a> {
             .invoices()
             .find_invoices_by_ids(&invoice_ids, executor)
             .await?;
-        let reviews = self
-            .db
-            .receivable_funds_reviews()
-            .find_reviews_by_account(account_id, executor)
-            .await?;
-        Ok(CardFundsSnapshotFacts {
+        Ok(ReceivableSnapshotFacts {
             entries,
-            reviews,
             receipt_allocations,
             invoice_allocations,
             receipts,
@@ -231,33 +220,6 @@ impl<'a> ReceivableEntryRepository<'a> {
     }
 }
 
-impl<'a> ReceivableFundsReviewRepository<'a> {
-    /// 按 `supersedes_review_id` 精确读取后继复核（FIN-R12）。
-    ///
-    /// 使用 `uk_receivable_funds_reviews_supersedes` 唯一索引，长链不做全量扫描。
-    ///
-    /// # 参数
-    /// * `supersedes_review_id` - 被替代的复核主键
-    /// * `executor` - 调用方执行器，须与其它读取共用事务快照
-    ///
-    /// # 返回
-    /// 存在后继时返回该记录，否则 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    ///
-    /// # 约束
-    /// 不解释后继任务身份；domain 连续性由 Entity／VO 负责。
-    pub async fn find_review_by_supersedes(
-        &self,
-        supersedes_review_id: &ReceivableFundsReviewId,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<ReceivableFundsReview>> {
-        self.find_one_by_field("supersedes_review_id", supersedes_review_id.as_ref(), executor)
-            .await
-    }
-}
-
 /// 构造条件核销的写前置条件（不超额核销）。
 ///
 /// # 参数
@@ -311,7 +273,7 @@ fn unique_ids(ids: impl IntoIterator<Item = String>) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{settlement_guard, unique_ids, CardFundsSnapshotFacts};
+    use super::{settlement_guard, unique_ids, ReceivableSnapshotFacts};
     use crate::entity::receivable::{ReceivableAccount, ReceivableEntry};
     use crate::repository::extensions::ReceivableExt;
     use crate::repository::owned::{ReceivableAccountRepository, ReceivableEntryRepository};
@@ -347,7 +309,7 @@ mod tests {
 
     #[test]
     fn find_entries_by_ids_uniques_before_query() {
-        let source = include_str!("card_funds.rs");
+        let source = include_str!("snapshot.rs");
         assert!(source.contains("pub async fn find_entries_by_ids"));
         assert!(source.contains("unique_ids(entry_ids.iter().map(ToString::to_string))"));
     }
@@ -455,9 +417,8 @@ mod tests {
 
     #[tokio::test]
     async fn snapshot_facts_type_is_storage_agnostic() {
-        let facts = CardFundsSnapshotFacts {
+        let facts = ReceivableSnapshotFacts {
             entries: Vec::new(),
-            reviews: Vec::new(),
             receipt_allocations: Vec::new(),
             invoice_allocations: Vec::new(),
             receipts: Vec::new(),
@@ -588,77 +549,6 @@ mod tests {
         });
     }
 
-    /// exact supersedes 定位后继，长链不做全量扫描语义（唯一索引精确查询）。
-    #[tokio::test]
-    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
-    async fn find_review_by_supersedes_returns_exact_successor() {
-        use crate::entity::receivable::{
-            FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
-        };
-        use crate::repository::test_fixture::{require_mongo, TestDb};
-        use erp_core::common::time::Instant;
-        use erp_core::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
-
-        require_mongo!(async {
-            let fixture = TestDb::new("recv_review_supersedes")
-                .await
-                .expect("测试数据库创建失败");
-            crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
-            let reviews = fixture.db().receivable_funds_reviews();
-            let first = ReceivableFundsReview::new(
-                ReceivableFundsReviewId::new("r-1"),
-                ReceivableFundsReviewData {
-                    receivable_account_id: ReceivableAccountId::new("ra-1"),
-                    review_no: 1,
-                    review_type: FundsReviewType::Opening,
-                    work_item_id: WorkItemId::new("wi-1"),
-                    evidence_document_id: Some(FileAssetId::new("file-1")),
-                    evidence_reference: Some("BANK".to_string()),
-                    review_result: ReviewResult::Rejected,
-                    reviewed_by: "alice".to_string(),
-                    reviewed_at: Instant::from_unix_secs(1_700_000_000),
-                    supersedes_review_id: None,
-                },
-            )
-            .unwrap();
-            let second = ReceivableFundsReview::new(
-                ReceivableFundsReviewId::new("r-2"),
-                ReceivableFundsReviewData {
-                    receivable_account_id: ReceivableAccountId::new("ra-1"),
-                    review_no: 2,
-                    review_type: FundsReviewType::Opening,
-                    work_item_id: WorkItemId::new("wi-2"),
-                    evidence_document_id: Some(FileAssetId::new("file-2")),
-                    evidence_reference: Some("BANK".to_string()),
-                    review_result: ReviewResult::Passed,
-                    reviewed_by: "bob".to_string(),
-                    reviewed_at: Instant::from_unix_secs(1_700_000_100),
-                    supersedes_review_id: Some(ReceivableFundsReviewId::new("r-1")),
-                },
-            )
-            .unwrap();
-            reviews
-                .create(&first, &mut NoTransaction)
-                .await
-                .expect("写入失败");
-            reviews
-                .create(&second, &mut NoTransaction)
-                .await
-                .expect("写入失败");
-            let successor = reviews
-                .find_review_by_supersedes(&ReceivableFundsReviewId::new("r-1"), &mut NoTransaction)
-                .await
-                .expect("查询失败")
-                .expect("必须命中后继");
-            assert_eq!(successor.base.id, "r-2");
-            assert!(reviews
-                .find_review_by_supersedes(&ReceivableFundsReviewId::new("r-2"), &mut NoTransaction)
-                .await
-                .expect("查询失败")
-                .is_none());
-        });
-    }
-
     /// 快照有界读取：缺失回款 count 先于缺失发票 count，供 Service 保持首错顺序。
     #[tokio::test]
     #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
@@ -747,7 +637,7 @@ mod tests {
 
             let facts = db
                 .receivable()
-                .card_funds_snapshot_facts(&ReceivableAccountId::new("ra-1"), &mut NoTransaction)
+                .receivable_snapshot_facts(&ReceivableAccountId::new("ra-1"), &mut NoTransaction)
                 .await
                 .expect("快照读取失败");
             assert_eq!(facts.expected_receipt_count, 1);
@@ -823,219 +713,12 @@ mod tests {
                 .expect("回款分配写入失败");
             let facts = db
                 .receivable()
-                .card_funds_snapshot_facts(&ReceivableAccountId::new("ra-1"), &mut NoTransaction)
+                .receivable_snapshot_facts(&ReceivableAccountId::new("ra-1"), &mut NoTransaction)
                 .await
                 .expect("快照读取失败");
             assert_eq!(facts.expected_receipt_count, 1);
             assert!(facts.receipts.is_empty());
             assert_eq!(facts.expected_invoice_count, 0);
-        });
-    }
-
-    #[tokio::test]
-    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
-    async fn find_review_by_id_and_supersedes_miss() {
-        use crate::repository::test_fixture::{require_mongo, TestDb};
-        use erp_core::ids::ReceivableFundsReviewId;
-
-        require_mongo!(async {
-            let fixture = TestDb::new("recv_review_miss").await.expect("测试数据库创建失败");
-            crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
-            let reviews = fixture.db().receivable_funds_reviews();
-            assert!(reviews
-                .find_by_id("missing-review", &mut NoTransaction)
-                .await
-                .expect("精确读取失败")
-                .is_none());
-            assert!(reviews
-                .find_review_by_supersedes(&ReceivableFundsReviewId::new("missing-tail"), &mut NoTransaction)
-                .await
-                .expect("后继读取失败")
-                .is_none());
-        });
-    }
-
-    #[tokio::test]
-    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
-    async fn long_chain_supersedes_lookup_uses_unique_index() {
-        use crate::entity::receivable::{
-            FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
-        };
-        use crate::repository::test_fixture::{require_mongo, TestDb};
-        use erp_core::common::time::Instant;
-        use erp_core::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
-        use mongodb::bson::doc;
-
-        require_mongo!(async {
-            let fixture = TestDb::new("recv_review_explain")
-                .await
-                .expect("测试数据库创建失败");
-            crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
-            let reviews = fixture.db().receivable_funds_reviews();
-            let mut predecessor: Option<String> = None;
-            for no in 1..=12_u32 {
-                let id = format!("r-{no}");
-                let review = ReceivableFundsReview::new(
-                    ReceivableFundsReviewId::new(&id),
-                    ReceivableFundsReviewData {
-                        receivable_account_id: ReceivableAccountId::new("ra-1"),
-                        review_no: no,
-                        review_type: if no == 1 {
-                            FundsReviewType::Opening
-                        } else {
-                            FundsReviewType::SyncDelta
-                        },
-                        work_item_id: WorkItemId::new(format!("wi-{no}")),
-                        evidence_document_id: Some(FileAssetId::new("file-1")),
-                        evidence_reference: Some("BANK".to_string()),
-                        review_result: ReviewResult::Passed,
-                        reviewed_by: "alice".to_string(),
-                        reviewed_at: Instant::from_unix_secs(1_700_000_000 + i64::from(no)),
-                        supersedes_review_id: predecessor.as_deref().map(ReceivableFundsReviewId::new),
-                    },
-                )
-                .unwrap();
-                reviews
-                    .create(&review, &mut NoTransaction)
-                    .await
-                    .expect("复核写入失败");
-                predecessor = Some(id);
-            }
-            let successor = reviews
-                .find_review_by_supersedes(&ReceivableFundsReviewId::new("r-6"), &mut NoTransaction)
-                .await
-                .expect("后继读取失败")
-                .expect("必须命中 r-7");
-            assert_eq!(successor.base.id, "r-7");
-
-            let explain = fixture
-                .db()
-                .run_command(doc! {
-                    "explain": {
-                        "find": <mongodb::Database as ReceivableExt>::RECEIVABLE_FUNDS_REVIEWS,
-                        "filter": {
-                            "supersedes_review_id": "r-6",
-                            "deleted_at": 0_i64,
-                        },
-                        "limit": 1_i64,
-                    },
-                    "verbosity": "executionStats",
-                })
-                .await
-                .expect("explain 失败");
-            let rendered = format!("{explain:?}");
-            assert!(
-                rendered.contains("IXSCAN"),
-                "长链 supersedes 查询必须 IXSCAN：{rendered}"
-            );
-            assert!(
-                !rendered.contains("COLLSCAN"),
-                "长链 supersedes 查询不得 COLLSCAN：{rendered}"
-            );
-            assert!(
-                rendered.contains("uk_receivable_funds_reviews_supersedes"),
-                "必须命中 uk_receivable_funds_reviews_supersedes：{rendered}"
-            );
-        });
-    }
-
-    #[tokio::test]
-    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
-    async fn snapshot_facts_same_session_ignores_concurrent_review_insert() {
-        use crate::entity::receivable::{
-            FundsReviewType, ReceivableFundsReview, ReceivableFundsReviewData, ReviewResult,
-        };
-        use crate::repository::test_fixture::{require_mongo, TestDb};
-        use erp_core::common::time::Instant;
-        use erp_core::ids::{FileAssetId, ReceivableFundsReviewId, WorkItemId};
-        use persistence_core::Transactional;
-
-        require_mongo!(async {
-            let fixture = TestDb::new("recv_snapshot_isolation")
-                .await
-                .expect("测试数据库创建失败");
-            crate::indexes::ensure(fixture.db()).await.expect("索引创建失败");
-            let db = fixture.db();
-            db.receivable_accounts()
-                .create(&test_account("ra-1", "100.00", "0.00"), &mut NoTransaction)
-                .await
-                .expect("子账写入失败");
-            let first = ReceivableFundsReview::new(
-                ReceivableFundsReviewId::new("r-1"),
-                ReceivableFundsReviewData {
-                    receivable_account_id: ReceivableAccountId::new("ra-1"),
-                    review_no: 1,
-                    review_type: FundsReviewType::Opening,
-                    work_item_id: WorkItemId::new("wi-1"),
-                    evidence_document_id: Some(FileAssetId::new("file-1")),
-                    evidence_reference: Some("BANK".to_string()),
-                    review_result: ReviewResult::Passed,
-                    reviewed_by: "alice".to_string(),
-                    reviewed_at: Instant::from_unix_secs(1_700_000_000),
-                    supersedes_review_id: None,
-                },
-            )
-            .unwrap();
-            db.receivable_funds_reviews()
-                .create(&first, &mut NoTransaction)
-                .await
-                .expect("复核写入失败");
-
-            let db_tx = db.clone();
-            let db_insert = db.clone();
-            let (gate_tx, gate_rx) = tokio::sync::oneshot::channel::<()>();
-            let insert_task = tokio::spawn(async move {
-                gate_rx.await.expect("门控关闭");
-                let extra = ReceivableFundsReview::new(
-                    ReceivableFundsReviewId::new("r-2"),
-                    ReceivableFundsReviewData {
-                        receivable_account_id: ReceivableAccountId::new("ra-1"),
-                        review_no: 2,
-                        review_type: FundsReviewType::SyncDelta,
-                        work_item_id: WorkItemId::new("wi-2"),
-                        evidence_document_id: Some(FileAssetId::new("file-2")),
-                        evidence_reference: Some("BANK".to_string()),
-                        review_result: ReviewResult::Passed,
-                        reviewed_by: "bob".to_string(),
-                        reviewed_at: Instant::from_unix_secs(1_700_000_100),
-                        supersedes_review_id: Some(ReceivableFundsReviewId::new("r-1")),
-                    },
-                )
-                .unwrap();
-                db_insert
-                    .receivable_funds_reviews()
-                    .create(&extra, &mut NoTransaction)
-                    .await
-                    .expect("并发复核写入失败");
-            });
-
-            let counts = fixture
-                .client()
-                .with_transaction(move |session| {
-                    let db_tx = db_tx.clone();
-                    Box::pin(async move {
-                        let before = db_tx
-                            .receivable()
-                            .card_funds_snapshot_facts(&ReceivableAccountId::new("ra-1"), session)
-                            .await?;
-                        let _ = gate_tx.send(());
-                        insert_task.await.expect("并发任务失败");
-                        let after = db_tx
-                            .receivable()
-                            .card_funds_snapshot_facts(&ReceivableAccountId::new("ra-1"), session)
-                            .await?;
-                        Ok::<_, persistence_core::Error>((before.reviews.len(), after.reviews.len()))
-                    })
-                })
-                .await
-                .expect("事务快照读取失败");
-            assert_eq!(counts, (1, 1), "同一事务快照不得混入并发新增复核");
-            let outside = db
-                .receivable()
-                .card_funds_snapshot_facts(&ReceivableAccountId::new("ra-1"), &mut NoTransaction)
-                .await
-                .expect("事务外读取失败");
-            assert_eq!(outside.reviews.len(), 2);
         });
     }
 

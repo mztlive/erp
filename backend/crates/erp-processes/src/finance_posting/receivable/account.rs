@@ -1,6 +1,6 @@
 //! Receivable account creation coordinating finance, workflow tasks and audit.
 
-use super::{card_funds_task, invoice_task, ReceivableProcess};
+use super::{invoice_task, ReceivableProcess};
 use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -60,15 +60,14 @@ impl ReceivableProcess {
             sales_business_type_fact(sales_order.business_type),
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
-        if review_status == AccountReviewStatus::OpeningPending
+        if sales_order.business_type == erp_sales::entity::sales_order::BusinessType::Voucher
             && sales_order.stable.current_revision_id.as_deref()
                 != Some(req.source_sales_order_revision_id.as_str())
         {
             return Err(Error::ConflictError(
-                "卡券票款复核必须绑定来源销售单的当前正式版本".to_string(),
+                "卡券应收必须绑定来源销售单的当前正式版本".to_string(),
             ));
         }
-
         let account_id = ReceivableAccountId::new(next_id());
         let entry_id = ReceivableEntryId::new(next_id());
         let posted_at = Instant::now();
@@ -122,7 +121,6 @@ impl ReceivableProcess {
                     db.receivable()
                         .create_receivable_with_entry(&account, &entry, session)
                         .await?;
-                    card_funds_task::ensure_initial_card_funds_review_task(&db, &account, session).await?;
                     invoice_task::ensure_sales_invoice_task(&db, &account, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::Error>(())

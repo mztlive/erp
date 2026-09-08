@@ -94,8 +94,6 @@ export function CustomerReceivablesListPane({
                         setDueDraft={urlState.setDueDraft}
                         statusDraft={urlState.statusDraft}
                         setStatusDraft={urlState.setStatusDraft}
-                        reviewStatusDraft={urlState.reviewStatusDraft}
-                        setReviewStatusDraft={urlState.setReviewStatusDraft}
                         panelOpen={urlState.panelOpen}
                         setPanelOpen={urlState.setPanelOpen}
                         appliedChips={appliedChips}

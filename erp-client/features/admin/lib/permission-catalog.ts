@@ -193,7 +193,6 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
     customer_scope: "客户范围",
     customer_sensitive: "客户敏感信息",
     supplier_sensitive: "供应商敏感信息",
-    receivable_funds_review: "回款复核",
     supplier_refund_fact: "供应商退款记录",
     integration_task: "集成任务",
     cost_entry: "成本记录",

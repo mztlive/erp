@@ -20,7 +20,7 @@ use persistence_core::Executor;
 /// 首次应收形成所需的冻结事实；不得携带销售聚合或审批、工作项对象。
 #[derive(Debug, Clone)]
 pub struct InitialReceivableInput {
-    /// 销售业务分类，仅用于确定初始票款复核状态。
+    /// 销售业务分类，用于标识应收来源业务。
     pub business_type: SalesBusinessTypeFact,
     /// 来源销售单稳定标识。
     pub sales_order_id: SalesOrderId,
@@ -137,10 +137,7 @@ mod tests {
                 SalesBusinessTypeFact::GoodsService,
                 AccountReviewStatus::NotApplicable,
             ),
-            (
-                SalesBusinessTypeFact::Voucher,
-                AccountReviewStatus::OpeningPending,
-            ),
+            (SalesBusinessTypeFact::Voucher, AccountReviewStatus::NotApplicable),
         ] {
             let input = input(business_type, "123.45");
             let posted_at = input.posted_at;

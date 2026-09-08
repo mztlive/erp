@@ -9,13 +9,9 @@ use axum::{
     Extension, Json,
 };
 use erp_finance::dto::receivable::CancelCustomerReceiptApprovalRequest;
-use erp_finance::dto::receivable::CardFundsRegistrationResult;
-use erp_finance::dto::receivable::CardFundsReviewDetailParams;
 use erp_finance::dto::receivable::CommitCustomerReceiptRequest;
 use erp_finance::dto::receivable::CommitInvoiceRequest;
 use erp_finance::dto::receivable::CommitRedInvoiceRequest;
-use erp_finance::dto::receivable::CompleteCardFundsReviewCommand;
-use erp_finance::dto::receivable::CompleteCardFundsReviewResult;
 use erp_finance::dto::receivable::CreateCustomerReceiptRequest;
 use erp_finance::dto::receivable::CreateInvoiceRequest;
 use erp_finance::dto::receivable::CreateReceivableAccountRequest;
@@ -27,8 +23,6 @@ use erp_finance::dto::receivable::PostCustomerReceiptRequest;
 use erp_finance::dto::receivable::PostInvoiceRequest;
 use erp_finance::dto::receivable::ReceivableAccountListParams;
 use erp_finance::dto::receivable::ReceivableAccountSummaryView;
-use erp_finance::dto::receivable::RegisterCardFundsInvoiceRequest;
-use erp_finance::dto::receivable::RegisterCardFundsReceiptRequest;
 use erp_finance::dto::receivable::SubmitCustomerReceiptRequest;
 use erp_finance::service::receivable::ReceivableService;
 use erp_processes::finance_posting::receivable::ReceivableProcess;
@@ -43,7 +37,7 @@ use crate::{
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "查询应收往来子账列表",
     resource = "receivable_account",
     action = "list"
@@ -69,7 +63,7 @@ pub async fn receivable_account_list(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "查询应收往来子账详情",
     resource = "receivable_account",
     action = "detail"
@@ -80,24 +74,15 @@ pub async fn receivable_account_list(
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的当前操作人
 /// * `id` - 应收往来子账 ID
-/// * `params` - W13 正式任务入口参数
 ///
 /// # 返回
 /// 返回完整台账视图。
 pub async fn receivable_account_detail(
     State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Query(params): Query<CardFundsReviewDetailParams>,
 ) -> Result<ReceivableAccountView> {
     let view = ReceivableReadService::new(state.db())
-        .receivable_account_detail_with_actions(
-            &id,
-            &params,
-            &actor,
-            state.rbac(),
-            &state.work_item_authorization(),
-        )
+        .receivable_account_detail(&id)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -105,7 +90,7 @@ pub async fn receivable_account_detail(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "建立应收往来子账",
     resource = "receivable_account",
     action = "create"
@@ -134,76 +119,7 @@ pub async fn receivable_account_create(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
-    desc = "完成卡券票款正式复核",
-    resource = "receivable_funds_review",
-    action = "complete"
-)]
-/// 以 W13 强类型命令完成卡券票款正式复核。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `command` - 含任务/对象/账户/链/票款事实版本的完整决定
-///
-/// # 返回
-/// 返回可严格重放的正式结果。
-pub async fn receivable_funds_review_complete(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(command): Json<CompleteCardFundsReviewCommand>,
-) -> Result<CompleteCardFundsReviewResult> {
-    let result = ReceivableProcess::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .complete_card_funds_review(command, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
-    desc = "原子登记卡券票款历史回款",
-    resource = "customer_receipt",
-    action = "create"
-)]
-/// 在当前 W13 正式任务内一次登记历史回款、核销分配与进度。
-pub async fn card_funds_receipt_register(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(req): Json<RegisterCardFundsReceiptRequest>,
-) -> Result<CardFundsRegistrationResult> {
-    let result = ReceivableProcess::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .register_card_funds_receipt(req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
-    desc = "原子登记卡券票款历史发票",
-    resource = "invoice",
-    action = "create"
-)]
-/// 在当前 W13 正式任务内一次登记历史销项发票、分配与进度。
-pub async fn card_funds_invoice_register(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(req): Json<RegisterCardFundsInvoiceRequest>,
-) -> Result<CardFundsRegistrationResult> {
-    let result = ReceivableProcess::new(state.db())
-        .with_object_read(state.approval_object_read())
-        .register_card_funds_invoice(req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "查询客户回款单列表",
     resource = "customer_receipt",
     action = "list"
@@ -229,7 +145,7 @@ pub async fn customer_receipt_list(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "查询客户回款单详情",
     resource = "customer_receipt",
     action = "detail"
@@ -255,7 +171,7 @@ pub async fn customer_receipt_detail(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "登记客户回款草稿",
     resource = "customer_receipt",
     action = "create"
@@ -284,7 +200,7 @@ pub async fn customer_receipt_create(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "原子创建或提交客户回款审批",
     resource = "customer_receipt",
     action = "submit"
@@ -313,7 +229,7 @@ pub async fn customer_receipt_commit(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "提交客户回款审批",
     resource = "customer_receipt",
     action = "submit"
@@ -344,7 +260,7 @@ pub async fn customer_receipt_submit(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "撤回客户回款审批",
     resource = "customer_receipt",
     action = "cancel_approval"
@@ -375,7 +291,7 @@ pub async fn customer_receipt_cancel_approval(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "客户回款过账并核销",
     resource = "customer_receipt",
     action = "post"
@@ -404,7 +320,7 @@ pub async fn customer_receipt_post(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "查询发票列表",
     resource = "invoice",
     action = "list"
@@ -428,7 +344,7 @@ pub async fn invoice_list(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "查询发票详情",
     resource = "invoice",
     action = "detail"
@@ -449,7 +365,7 @@ pub async fn invoice_detail(State(state): State<AppState>, Path(id): Path<String
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "登记发票草稿",
     resource = "invoice",
     action = "create"
@@ -478,7 +394,7 @@ pub async fn invoice_create(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "原子登记销项发票并分配",
     resource = "invoice",
     action = "post"
@@ -507,7 +423,7 @@ pub async fn invoice_commit(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "发票登记过账并分配",
     resource = "invoice",
     action = "post"
@@ -538,7 +454,7 @@ pub async fn invoice_post(
 
 #[permission_macros::permission(
     group = "客户往来",
-    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    group_desc = "应收台账、回款与销项发票管理",
     desc = "开具红票并红冲",
     resource = "invoice",
     action = "reverse"

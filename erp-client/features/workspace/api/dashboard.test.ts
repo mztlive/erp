@@ -68,6 +68,35 @@ describe("fetchWorkspaceDashboard started approvals", () => {
         })
     })
 
+    it("shows frozen submission amounts including zero without replacing document detail facts", async () => {
+        const { mapInstanceListItemDto } =
+            await import("@/features/approval-workflow/types")
+        mocks.listApprovalInstances.mockResolvedValue({
+            items: ["12800.50", "0", null].map((amount, i) =>
+                mapInstanceListItemDto({
+                    instance_id: `instance-${i}`,
+                    status: "RUNNING",
+                    current_round_no: 1,
+                    document_type: "purchase_order",
+                    document_id: `po-${i}`,
+                    total_amount: amount,
+                }),
+            ),
+            total: 3,
+        })
+        const view = await fetchWorkspaceDashboard(
+            { ...baseQuery, view: "started" },
+            profile,
+        )
+        expect(view.items.map((item) => item.amountSummary?.value)).toEqual([
+            "¥12,800.50",
+            "¥0.00",
+            undefined,
+        ])
+        expect(view.items[0].amountSummary?.label).toBe("提交金额")
+        expect(view.items[0].summarySections).toBeUndefined()
+    })
+
     it("shows the initiator metric without approval administration permissions", async () => {
         const dashboard = await fetchWorkspaceDashboard(baseQuery, profile)
         const started = dashboard.metrics.find(

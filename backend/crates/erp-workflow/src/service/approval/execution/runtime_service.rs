@@ -466,6 +466,41 @@ mod tests {
     }
 
     #[test]
+    fn started_amount_uses_matching_snapshot_and_preserves_zero() {
+        for raw in ["12800.50", "0"] {
+            let mut frozen = snapshot();
+            frozen.payload.total_amount = Some(raw.parse().unwrap());
+            let item = item_from_summary(summary(), Some(&frozen)).unwrap();
+            assert_eq!(item.total_amount, frozen.payload.total_amount);
+            assert!(serde_json::to_value(&item).unwrap()["total_amount"].is_string());
+            frozen.subject_version += 1;
+            assert_eq!(
+                item_from_summary(summary(), Some(&frozen)).unwrap().total_amount,
+                None
+            );
+            frozen.subject_version -= 1;
+            frozen.approval_process_instance_id = ApprovalProcessInstanceId::new("other-instance");
+            assert_eq!(
+                item_from_summary(summary(), Some(&frozen)).unwrap().total_amount,
+                None
+            );
+            frozen.approval_process_instance_id = ApprovalProcessInstanceId::new("inst-1");
+            frozen.business_object_id = "other-object".into();
+            assert_eq!(
+                item_from_summary(summary(), Some(&frozen)).unwrap().total_amount,
+                None
+            );
+        }
+        assert_eq!(item_from_summary(summary(), None).unwrap().total_amount, None);
+        assert_eq!(
+            item_from_summary(summary(), Some(&snapshot()))
+                .unwrap()
+                .total_amount,
+            None
+        );
+    }
+
+    #[test]
     fn started_cursor_uses_started_time_and_stable_instance_id() {
         let cursor = cursor_from_summary(ApprovalInstanceListView::Started, &summary());
         assert_eq!(cursor.sort_time, 10);

@@ -85,8 +85,8 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         }
         WorkItemType::SalesChangeImpactReview => "进入销售单后，核对本次变更对履约的影响并提交结论。",
         WorkItemType::SalesChangeFinanceReview => "进入销售单后，核对本次变更对金额的影响并提交结论。",
-        WorkItemType::CardFundsReview => "进入票款复核页后，核对准期初回款与开票事实。",
-        WorkItemType::CardFundsDeltaReview => "进入票款复核页后，核对差额并提交复核结论。",
+        WorkItemType::CardFundsReview => "该历史复核功能已停用。",
+        WorkItemType::CardFundsDeltaReview => "该历史复核功能已停用。",
         WorkItemType::OwnershipMigrationSalesConfirmation => "进入客户页后，确认本次归属迁移。",
         WorkItemType::OwnershipMigrationFinanceConfirmation => "进入对应页面后，确认归属迁移的财务影响。",
         WorkItemType::InventoryAdjustmentReview => "进入库存页后，核对本次调整并提交复核结论。",
@@ -168,8 +168,6 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "procurement_rejection_low_margin_requested" => "采购驳回后，需要上级确认是否按原条件承接",
         "change_impact_dispatched" => "销售变更已提交，需要核对履约影响",
         "change_finance_dispatched" => "销售变更已提交，需要核对财务影响",
-        "card_funds_delta_review" => "票款出现差额，需要财务复核",
-        "card_funds_opening_review" => "卡券销售已生效，需要核对准期初回款与开票",
         "supplier_settlement_review_dispatched" => "供应商结算单待复核",
         "import_trial_confirmation" => "导入试算已完成，需要业务确认范围",
         "supplier_stopped" => "供应已停止，商城在售发布已暂停",
@@ -221,9 +219,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",
-        WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => {
-            "不复核则票款与开票事实不能确认"
-        }
+        WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview => "该历史复核功能已停用",
         WorkItemType::DocumentApproval => "不审批则单据不能生效",
         WorkItemType::OwnershipMigrationSalesConfirmation
         | WorkItemType::OwnershipMigrationFinanceConfirmation => "不确认则客户归属不能完成迁移",
@@ -357,7 +353,7 @@ mod tests {
         );
         assert_eq!(
             usable_impact_summary(Some("请打开业务对象核对影响。"), WorkItemType::CardFundsReview),
-            "不复核则票款与开票事实不能确认"
+            "该历史复核功能已停用"
         );
         assert_eq!(
             usable_impact_summary(Some("同步差额待复核"), WorkItemType::CardFundsDeltaReview),

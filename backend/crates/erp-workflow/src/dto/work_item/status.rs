@@ -1,15 +1,13 @@
 use crate::entity::work_item::WorkItemType;
 use serde::{Deserialize, Serialize};
 
-pub const WORK_ITEM_TYPES: [WorkItemType; 12] = [
+pub const WORK_ITEM_TYPES: [WorkItemType; 10] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::FulfillmentOperation,
     WorkItemType::CustomerAcceptanceRegistration,
     WorkItemType::SupplierPaymentExecution,
     WorkItemType::SalesInvoiceExecution,
-    WorkItemType::CardFundsReview,
-    WorkItemType::CardFundsDeltaReview,
     WorkItemType::SupplierSettlementReview,
     WorkItemType::ImportBusinessConfirmation,
     WorkItemType::IntegrationResultUnknown,

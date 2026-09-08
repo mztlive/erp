@@ -1,17 +1,14 @@
 //! Finance fact projections and stable money, version, and ledger error contracts.
 
 use crate::dto::receivable::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
-use crate::entity::receivable::{
-    AllocationAction, CustomerReceiptStatus, InvoiceKind, InvoiceStatus, ReceivableFundsReview,
-    ReceivableFundsReviewChain, ReceivableFundsSnapshot,
-};
-use crate::ports::receivable::CardFundsSnapshot;
+use crate::entity::receivable::{AllocationAction, CustomerReceiptStatus, InvoiceKind, InvoiceStatus};
+use crate::ports::receivable::ReceivableSnapshot;
 use crate::{Error, Result};
 use erp_core::money::Amount;
 use std::str::FromStr;
 
 /// 装配当前账户关联的正式回款事实投影。
-pub fn receipt_fact_views(snapshot: &CardFundsSnapshot) -> Vec<ReceivableReceiptFactView> {
+pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceiptFactView> {
     let mut receipts = snapshot.receipts.iter().collect::<Vec<_>>();
     receipts.sort_by(|left, right| {
         left.received_at
@@ -45,7 +42,7 @@ pub fn receipt_fact_views(snapshot: &CardFundsSnapshot) -> Vec<ReceivableReceipt
 }
 
 /// 装配当前账户关联的正式销项发票事实投影。
-pub fn invoice_fact_views(snapshot: &CardFundsSnapshot) -> Vec<ReceivableInvoiceFactView> {
+pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoiceFactView> {
     let mut invoices = snapshot.invoices.iter().collect::<Vec<_>>();
     invoices.sort_by(|left, right| {
         left.invoice_date
@@ -98,64 +95,6 @@ pub fn parse_task_version(value: &str) -> Result<u64> {
     Ok(parsed)
 }
 
-/// 从已装载复核事实构造领域复核链。
-///
-/// # 参数
-/// * `reviews` - 快照内复核事实
-///
-/// # 返回
-/// 返回已验证连续性的链。
-///
-/// # 错误
-/// 连续性损坏或溢出映射为 Internal，文案与原 helper 一致。
-///
-/// # 约束
-/// 不扫描全链寻找后继；exact 定位在仓储层。
-pub fn card_funds_review_chain(reviews: &[ReceivableFundsReview]) -> Result<ReceivableFundsReviewChain> {
-    ReceivableFundsReviewChain::from_reviews(reviews).map_err(map_chain_error)
-}
-
-/// 从服务快照构造领域票款事实快照。
-///
-/// # 参数
-/// * `snapshot` - 已装载的 W13 快照
-///
-/// # 返回
-/// 返回无重复主键的领域快照。
-///
-/// # 错误
-/// 重复主键映射为 Internal。
-///
-/// # 约束
-/// 不读取数据库。
-pub fn card_funds_snapshot_of(snapshot: &CardFundsSnapshot) -> Result<ReceivableFundsSnapshot> {
-    ReceivableFundsSnapshot::from_facts(
-        snapshot.entries.clone(),
-        snapshot.receipt_allocations.clone(),
-        snapshot.invoice_allocations.clone(),
-        snapshot.receipts.clone(),
-        snapshot.invoices.clone(),
-    )
-    .map_err(|error| Error::Internal(error.to_string()))
-}
-
-/// 将复核链领域错误映射为 Internal。
-///
-/// # 参数
-/// * `error` - 领域错误
-///
-/// # 返回
-/// 返回 Internal，文案保持 `应收复核链连续性损坏` / `应收复核号已达到上限`。
-///
-/// # 错误
-/// 本函数即错误转换。
-///
-/// # 约束
-/// 不改写文案。
-pub fn map_chain_error(error: erp_core::Error) -> Error {
-    Error::Internal(error.to_string())
-}
-
 /// 将回款账本错误映射为既有业务错误。
 ///
 /// # 参数
@@ -192,18 +131,4 @@ pub fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
     Err(Error::ConflictError(
         "数据已被其他请求修改，请刷新后重试".to_string(),
     ))
-}
-
-/// 返回复核类型对应的待复核账户缓存状态。
-pub fn pending_review_status(
-    review_type: crate::dto::receivable::CardFundsReviewType,
-) -> crate::entity::receivable::AccountReviewStatus {
-    match review_type {
-        crate::dto::receivable::CardFundsReviewType::Opening => {
-            crate::entity::receivable::AccountReviewStatus::OpeningPending
-        }
-        crate::dto::receivable::CardFundsReviewType::SyncDelta => {
-            crate::entity::receivable::AccountReviewStatus::SyncDeltaPending
-        }
-    }
 }

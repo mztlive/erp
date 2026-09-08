@@ -114,7 +114,7 @@ export function useWorkspaceHome() {
             setNarrowDetailOpen(
                 typeof window !== "undefined" &&
                     typeof window.matchMedia === "function" &&
-                    window.matchMedia("(max-width: 1023.98px)").matches,
+                    window.matchMedia("(max-width: 1279.98px)").matches,
             )
         },
         [replaceUrl, urlState],

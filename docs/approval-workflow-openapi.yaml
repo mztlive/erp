@@ -1391,6 +1391,10 @@ components:
         document_label:
           type: string
           nullable: true
+        total_amount:
+          type: string
+          nullable: true
+          description: 与当前实例、对象及提交版本匹配的启动快照金额，十进制定点字符串；未知或非金额审批为空。
         process_version:
           type: integer
           minimum: 1

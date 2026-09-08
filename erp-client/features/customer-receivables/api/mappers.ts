@@ -67,34 +67,6 @@ function mapReceivableStatus(s: string): ReceivableAccountRow["status"] {
     return "open"
 }
 
-function mapReviewStatus(s: string): ReceivableAccountRow["reviewStatus"] {
-    switch (s) {
-        case "opening_pending":
-        case "pending_opening":
-            return "pending_opening"
-        case "reviewed":
-            return "reviewed"
-        case "sync_delta_pending":
-        case "pending_sync_diff":
-            return "pending_sync_diff"
-        default:
-            return "na"
-    }
-}
-
-function reviewLabel(s: ReceivableAccountRow["reviewStatus"]): string {
-    switch (s) {
-        case "pending_opening":
-            return "期初待复核"
-        case "reviewed":
-            return "已复核"
-        case "pending_sync_diff":
-            return "同步差额待复核"
-        default:
-            return "不适用"
-    }
-}
-
 function statusMeta(status: ReceivableAccountRow["status"]): {
     statusLabel: string
     statusTone: ReceivableAccountRow["statusTone"]
@@ -188,7 +160,6 @@ export function projectReceivable(
     a: BackendReceivableAccount,
 ): ReceivableAccountRow {
     const status = mapReceivableStatus(a.status)
-    const reviewStatus = mapReviewStatus(a.review_status)
     const meta = statusMeta(status)
     const allowed: AllowedAction[] = [
         "VIEW_DETAIL",
@@ -229,8 +200,6 @@ export function projectReceivable(
         dueStateLabel: "未到期",
         status,
         ...meta,
-        reviewStatus,
-        reviewStatusLabel: reviewLabel(reviewStatus),
         baselineVersion: a.version,
         entries: (a.entries ?? []).map(projectEntry),
         allowedActions: allowed,

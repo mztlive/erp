@@ -120,12 +120,7 @@ impl QueryFilter for WorkItemFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_enum_filter(&mut filter, "status", &self.statuses, WorkItemStatus::as_str);
-        insert_enum_filter(
-            &mut filter,
-            "work_item_type",
-            &self.work_item_types,
-            WorkItemType::as_str,
-        );
+        insert_active_type_filter(&mut filter, &self.work_item_types);
         insert_enum_filter(
             &mut filter,
             "priority",
@@ -164,6 +159,37 @@ impl Pagination for WorkItemFilter {
     /// 返回 `(page, page_size)`。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
+    }
+}
+
+/// 过滤已退役的历史任务类型；显式仅选旧类型时返回空集，禁止扩大查询范围。
+///
+/// # 参数
+/// * `filter` - 工作项查询文档
+/// * `types` - 请求的类型；空集合表示全部当前任务
+///
+/// # 返回
+/// 原地写入类型约束，不访问存储。
+fn insert_active_type_filter(filter: &mut Document, types: &[WorkItemType]) {
+    let active_types = types
+        .iter()
+        .copied()
+        .filter(|kind| {
+            !matches!(
+                kind,
+                WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
+            )
+        })
+        .collect::<Vec<_>>();
+    if types.is_empty() {
+        filter.insert(
+            "work_item_type",
+            doc! { "$nin": ["CARD_FUNDS_REVIEW", "CARD_FUNDS_DELTA_REVIEW"] },
+        );
+    } else if active_types.is_empty() {
+        filter.insert("work_item_type", doc! { "$in": Vec::<String>::new() });
+    } else {
+        insert_enum_filter(filter, "work_item_type", &active_types, WorkItemType::as_str);
     }
 }
 
@@ -403,6 +429,46 @@ mod tests {
                 "work_item_type": "PURCHASE_ORDER_REVIEW",
                 "business_object_type": "purchase_order",
             }] })
+        );
+    }
+}
+
+#[cfg(test)]
+mod retired_review_tests {
+    use super::*;
+
+    /// 默认队列和显式类型筛选均不得重新暴露已退役任务。
+    #[test]
+    fn retired_review_types_are_excluded_from_queues() {
+        let default = WorkItemFilter::default().to_doc();
+        assert_eq!(
+            default
+                .get_document("work_item_type")
+                .unwrap()
+                .get_array("$nin")
+                .unwrap()
+                .len(),
+            2
+        );
+        let retired = WorkItemFilter {
+            work_item_types: vec![WorkItemType::CardFundsReview],
+            ..Default::default()
+        }
+        .to_doc();
+        assert!(retired
+            .get_document("work_item_type")
+            .unwrap()
+            .get_array("$in")
+            .unwrap()
+            .is_empty());
+        let mixed = WorkItemFilter {
+            work_item_types: vec![WorkItemType::CardFundsReview, WorkItemType::SalesInvoiceExecution],
+            ..Default::default()
+        }
+        .to_doc();
+        assert_eq!(
+            mixed.get_str("work_item_type").unwrap(),
+            "SALES_INVOICE_EXECUTION"
         );
     }
 }

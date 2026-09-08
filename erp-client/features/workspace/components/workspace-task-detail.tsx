@@ -2,14 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
-import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
+import { ArrowUpRightIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
-    surfaceInsetClassName,
     taxAmountToneClass,
     WorkspaceTaskPane,
     workspaceTaskSurfaceClassName,
@@ -30,6 +29,9 @@ import {
 } from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
+import { stripDocumentNumberPrefix } from "../lib/stable-number"
 
 import {
     workspaceOpenActionLabel,
@@ -49,7 +51,6 @@ import {
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
-import { WorkspaceCardFundsTask } from "./workspace-card-funds-task"
 import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
 import { WorkspaceImportTask } from "./workspace-import-task"
@@ -144,20 +145,6 @@ function WorkspaceTaskSurface({
     ) {
         return (
             <WorkspaceImportTask
-                item={item}
-                onTaskCompleted={onTaskCompleted}
-            />
-        )
-    }
-
-    // 卡券票款复核 / 卡券票款差异复核 → WorkspaceCardFundsTask
-    if (
-        (item.workItemType === "CARD_FUNDS_REVIEW" ||
-            item.workItemType === "CARD_FUNDS_DELTA_REVIEW") &&
-        item.businessObjectType === "receivable_account"
-    ) {
-        return (
-            <WorkspaceCardFundsTask
                 item={item}
                 onTaskCompleted={onTaskCompleted}
             />
@@ -365,17 +352,17 @@ function WorkspaceDocumentTaskDetail({
             ? facts.impact
             : item.impactSummary
     const detailFacts = splitDetailSections(summarySections, counterpartyName)
-    const [primaryAmount, ...otherAmounts] = detailFacts.amounts
-    const documentFields = [...detailFacts.keyFields, ...detailFacts.moreFields]
-    const lineCount = (briefLines?.length ?? 0) + (briefMoreCount ?? 0)
-    const subtitle = [
-        counterpartyName,
-        sourceSales.source ? `来源 ${sourceSales.source.orderNo}` : undefined,
-        detailFacts.submitter ? `${detailFacts.submitter} 提交` : undefined,
-        item.enteredAtLabel,
+    const [primaryAmount, ...otherAmounts] = item.amountSummary
+        ? [item.amountSummary]
+        : detailFacts.amounts
+    const documentFields = [
+        ...(detailFacts.submitter
+            ? [{ label: "申请人", value: detailFacts.submitter }]
+            : []),
+        ...detailFacts.keyFields,
+        ...detailFacts.moreFields,
     ]
-        .filter(Boolean)
-        .join(" · ")
+    const lineCount = (briefLines?.length ?? 0) + (briefMoreCount ?? 0)
     const instance = item.approval
         ? {
               id: item.approval.instanceId,
@@ -391,6 +378,7 @@ function WorkspaceDocumentTaskDetail({
         : undefined
     const actions = approvalTask ? (
         <ApprovalActionBar
+            presentation="workspace"
             id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
             allowedActions={item.allowedActions}
             recoveryOptions={recoveryQuery.data?.actions ?? []}
@@ -427,68 +415,89 @@ function WorkspaceDocumentTaskDetail({
         </Button>
     ) : null
 
-    const paneFooter =
-        actions || item.nextActionHint ? (
-            <div
-                className={cn(
-                    "flex w-full min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4",
-                    actions ? "sm:justify-between" : "sm:justify-end",
+    const paneFooter = (
+        <div className="flex w-full min-w-0 flex-col gap-3">
+            {item.nextActionHint ? (
+                <p className="text-xs text-muted-foreground">
+                    {item.nextActionHint}
+                </p>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                {canReadPaper && currentPaperKind ? (
+                    <Button
+                        id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-testid={`work-item-read-document-${item.workItemId}`}
+                        onClick={() =>
+                            setPaper({
+                                kind: currentPaperKind,
+                                objectId: item.businessObjectId,
+                                title: item.stableNumber,
+                            })
+                        }
+                    >
+                        {readActionLabel}
+                    </Button>
+                ) : (
+                    <span />
                 )}
-            >
-                {item.nextActionHint ? (
-                    <p className="order-1 max-w-sm text-left text-xs text-muted-foreground sm:order-2 sm:text-right">
-                        {item.nextActionHint}
-                    </p>
-                ) : null}
                 {actions ? (
-                    <div className="order-2 shrink-0 sm:order-1">{actions}</div>
+                    <div className="ml-auto min-w-0">{actions}</div>
                 ) : null}
             </div>
-        ) : undefined
+        </div>
+    )
 
     return (
         <WorkspaceTaskPane
+            className="@container/document [&>[data-slot=workspace-task-header]]:border-b-0 [&>[data-slot=workspace-task-header]]:pb-2"
             header={
-                <WorkspaceTaskIdentityHeader
-                    item={item}
-                    subtitle={
-                        canReadSensitive
-                            ? subtitle
-                            : "当前账号无权查看部分业务字段"
-                    }
-                >
-                    {canReadPaper && currentPaperKind ? (
-                        <IconActionButton
-                            id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
-                            label={readActionLabel}
-                            testId={`work-item-read-document-${item.workItemId}`}
-                            onClick={() =>
-                                setPaper({
-                                    kind: currentPaperKind,
-                                    objectId: item.businessObjectId,
-                                    title: item.stableNumber,
-                                })
-                            }
-                        >
-                            <FileTextIcon aria-hidden="true" />
-                        </IconActionButton>
-                    ) : null}
-                    {approvalTask && documentHref ? (
-                        <IconActionButton
-                            id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-                            label={openActionLabel}
-                            testId={`work-item-open-document-${item.workItemId}`}
-                            href={documentHref}
-                        >
-                            <ArrowUpRightIcon aria-hidden="true" />
-                        </IconActionButton>
-                    ) : null}
-                </WorkspaceTaskIdentityHeader>
+                <>
+                    <h2 className="min-w-0 text-xl font-semibold tracking-tight">
+                        {item.workItemTypeLabel}
+                    </h2>
+                    <WorkspaceTaskHeaderActions item={item}>
+                        {approvalTask && documentHref ? (
+                            <IconActionButton
+                                id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
+                                label={openActionLabel}
+                                testId={`work-item-open-document-${item.workItemId}`}
+                                href={documentHref}
+                            >
+                                <ArrowUpRightIcon aria-hidden="true" />
+                            </IconActionButton>
+                        ) : null}
+                    </WorkspaceTaskHeaderActions>
+                </>
             }
             footer={paneFooter}
             aria-label="当前任务"
         >
             <div className="flex w-full flex-col">
+                <div className="flex flex-col gap-2 px-5 pt-2 pb-1">
+                    <div className="flex items-start justify-between gap-3">
+                        <h3 className="min-w-0 break-words text-lg font-semibold">
+                            {canReadSensitive
+                                ? counterpartyName || item.objectTitle
+                                : "业务详情"}
+                        </h3>
+                        <StatusBadge
+                            label={item.statusLabel}
+                            tone={item.statusTone}
+                        />
+                    </div>
+                    <p className="num break-all text-sm text-muted-foreground">
+                        {stripDocumentNumberPrefix(item.stableNumber)}
+                    </p>
+                    {!canReadSensitive ? (
+                        <p className="text-xs text-muted-foreground">
+                            当前账号无权查看部分业务字段
+                        </p>
+                    ) : null}
+                </div>
+
                 {documentFacts.isError ? (
                     <div
                         className={cn(workspaceTaskSurfacePadClassName, "mt-4")}
@@ -516,10 +525,9 @@ function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {primaryAmount ? (
-                    <DetailBlock title="金额">
+                    <DetailBlock>
                         <div
                             className={cn(
-                                surfaceInsetClassName,
                                 "flex flex-wrap items-end gap-x-8 gap-y-2 px-4 py-4",
                             )}
                         >
@@ -527,7 +535,7 @@ function WorkspaceDocumentTaskDetail({
                                 <span
                                     className={cn(
                                         "num text-3xl font-semibold tracking-tight",
-                                        taxAmountToneClass(primaryAmount.label),
+                                        "text-foreground",
                                     )}
                                 >
                                     {primaryAmount.value}
@@ -569,7 +577,7 @@ function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {documentFields.length > 0 ? (
-                    <DetailBlock title="单据信息">
+                    <DetailBlock>
                         <FieldGrid
                             sections={documentFields}
                             returnTo={returnTo}
@@ -637,15 +645,16 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {approvalTask ? (
-                    instance ? (
-                        <DetailBlock title="审批">
-                            <RuntimeSummary instance={instance} compact />
-                        </DetailBlock>
-                    ) : null
-                ) : item.impactSummary && primaryAmount ? (
+                {impactSummary && primaryAmount ? (
                     <DetailBlock title="说明">
-                        <p className="text-sm">{item.impactSummary}</p>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            {impactSummary}
+                        </p>
+                    </DetailBlock>
+                ) : null}
+                {approvalTask && instance ? (
+                    <DetailBlock title="审批">
+                        <RuntimeSummary instance={instance} compact />
                     </DetailBlock>
                 ) : null}
             </div>
@@ -717,7 +726,7 @@ function DetailBlock({
     description,
     children,
 }: {
-    title: string
+    title?: string
     description?: string
     children: ReactNode
 }) {
@@ -725,17 +734,19 @@ function DetailBlock({
         <section
             className={cn(
                 workspaceTaskSurfacePadClassName,
-                "flex flex-col gap-3 border-b border-grid py-5 last:border-b-0",
+                "flex flex-col gap-3 border-b border-grid py-4 last:border-b-0",
             )}
         >
-            <header className="flex items-baseline gap-2">
-                <h3 className="text-sm font-medium">{title}</h3>
-                {description ? (
-                    <p className="text-xs text-muted-foreground">
-                        {description}
-                    </p>
-                ) : null}
-            </header>
+            {title ? (
+                <header className="flex items-baseline gap-2">
+                    <h3 className="text-sm font-medium">{title}</h3>
+                    {description ? (
+                        <p className="text-xs text-muted-foreground">
+                            {description}
+                        </p>
+                    ) : null}
+                </header>
+            ) : null}
             {children}
         </section>
     )
@@ -754,10 +765,21 @@ function FieldGrid({
     className?: string
 }) {
     return (
-        <DescriptionList columns="two" className={className}>
+        <DescriptionList
+            columns="one"
+            className={cn(
+                "gap-y-2 @min-[640px]/document:grid-cols-2",
+                className,
+            )}
+        >
             {sections.map((section) => (
-                <DescriptionItem key={section.label}>
-                    <DescriptionTerm>{section.label}</DescriptionTerm>
+                <DescriptionItem
+                    key={section.label}
+                    className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-3 space-y-0"
+                >
+                    <DescriptionTerm className="font-normal">
+                        {section.label}
+                    </DescriptionTerm>
                     <DescriptionDetails
                         className={cn(section.numeric && "num")}
                         title={section.value}

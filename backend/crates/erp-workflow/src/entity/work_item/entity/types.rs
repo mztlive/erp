@@ -24,9 +24,9 @@ pub enum WorkItemType {
     SalesChangeImpactReview,
     /// 销售变更财务影响复核。
     SalesChangeFinanceReview,
-    /// 卡券票款复核。
+    /// 已退役的历史票款复核类型，仅用于解码存量任务。
     CardFundsReview,
-    /// 卡券票款差异复核。
+    /// 已退役的历史差额复核类型，仅用于解码存量任务。
     CardFundsDeltaReview,
     /// 归属迁移销售确认。
     OwnershipMigrationSalesConfirmation,
@@ -171,18 +171,6 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
         read_permission: "sales_order:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::CardFundsReview,
-        object_kind: WorkItemBriefObjectKind::ReceivableAccount,
-        business_object_type: "receivable_account",
-        read_permission: "receivable_account:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::CardFundsDeltaReview,
-        object_kind: WorkItemBriefObjectKind::ReceivableAccount,
-        business_object_type: "receivable_account",
-        read_permission: "receivable_account:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierPaymentExecution,

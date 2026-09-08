@@ -23,8 +23,8 @@ use erp_audit::CommandReceiptServiceExt as _;
 use erp_finance::service::receivable::invoice_commit::{
     convert_post_allocations, ensure_sales_invoice, PreparedInvoiceCommit,
 };
+use erp_finance::service::receivable::mapping::{ensure_expected_version, zero_amount};
 use erp_identity::SharedRbacService;
-use erp_read_models::finance::receivable::snapshot::{ensure_expected_version, zero_amount};
 use erp_workflow::service::approval::binding::{
     binding_decision, BindPublishedDefinitionCommand, BindingDecision,
 };

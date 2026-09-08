@@ -43,7 +43,6 @@ async function loadCustomerQualitySummary(customerId: string) {
         customerQualityPeriodPolicyVersion:
             policy.customerQualityPeriodPolicyVersion,
         scopeId: `customer:${customerId}`,
-        fundsReview: "all",
         sort: "salesGrossAmount:desc",
         page: 1,
         pageSize: 1,

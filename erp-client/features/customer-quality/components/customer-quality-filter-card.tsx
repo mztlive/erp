@@ -8,21 +8,13 @@ import {
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
-import type { BusinessTypeFilter, FundsReviewFilter } from "../types"
+import type { BusinessTypeFilter } from "../types"
 import type {
     CustomerQualityAppliedChip,
     CustomerQualityFilterKey,
 } from "../hooks/use-customer-quality-filters"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
-
-const FUNDS_REVIEW_OPTIONS: ReadonlyArray<{
-    value: FundsReviewFilter
-    label: string
-}> = [
-    { value: "all", label: "全部授权记录" },
-    { value: "reviewed_only", label: "仅已复核卡券票款" },
-]
 
 const BUSINESS_TYPE_OPTIONS: ReadonlyArray<{
     value: BusinessTypeFilter | "all"
@@ -37,15 +29,10 @@ export type CustomerQualityFilterCardProps = {
     searchDraft: string
     onSearchDraftChange: (value: string) => void
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    panelOpen: boolean
-    setPanelOpen: SetState<boolean>
     appliedChips: readonly CustomerQualityAppliedChip[]
     onRemoveFilter: (key: CustomerQualityFilterKey) => void
     onApplyFilters: () => void
     onClearAllFilters: () => void
-    onResetMoreFilters: () => void
-    fundsReviewDraft: FundsReviewFilter
-    setFundsReviewDraft: SetState<FundsReviewFilter>
     businessTypeDraft: BusinessTypeFilter | "all"
     setBusinessTypeDraft: SetState<BusinessTypeFilter | "all">
     hasPendingChanges: boolean
@@ -62,15 +49,10 @@ export function CustomerQualityFilterCard({
     searchDraft,
     onSearchDraftChange,
     searchInputRef,
-    panelOpen,
-    setPanelOpen,
     appliedChips,
     onRemoveFilter,
     onApplyFilters,
     onClearAllFilters,
-    onResetMoreFilters,
-    fundsReviewDraft,
-    setFundsReviewDraft,
     businessTypeDraft,
     setBusinessTypeDraft,
     hasPendingChanges,
@@ -78,10 +60,6 @@ export function CustomerQualityFilterCard({
     loading,
     failed,
 }: CustomerQualityFilterCardProps) {
-    const moreCount = appliedChips.filter(
-        (chip) => chip.key === "fundsReview",
-    ).length
-
     return (
         <ListWorkspaceFilterBar
             idPrefix="customers-quality"
@@ -97,15 +75,7 @@ export function CustomerQualityFilterCard({
                     aria-label="搜索客户"
                 />
             }
-            moreCount={moreCount}
-            moreOpen={panelOpen}
-            onToggleMore={() => setPanelOpen((open) => !open)}
-            morePanelId="customers-quality-more-panel"
-            morePanelAriaLabel="客户经营质量更多筛选条件"
-            moreButtonId="customers-quality-more-filters-trigger"
-            resetMoreButtonId="customers-quality-reset-more"
             clearButtonId="customers-quality-clear-all"
-            onResetMore={onResetMoreFilters}
             commonFilters={
                 <FixedOptionRadioFilter
                     id="customers-quality-business-type"
@@ -114,15 +84,6 @@ export function CustomerQualityFilterCard({
                     value={businessTypeDraft}
                     onValueChange={setBusinessTypeDraft}
                     options={BUSINESS_TYPE_OPTIONS}
-                />
-            }
-            morePanel={
-                <FixedOptionRadioFilter
-                    id="customers-quality-funds-review"
-                    label="票款口径"
-                    value={fundsReviewDraft}
-                    onValueChange={setFundsReviewDraft}
-                    options={FUNDS_REVIEW_OPTIONS}
                 />
             }
             resultStatus={listWorkspaceFilterStatusText({

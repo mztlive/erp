@@ -3,7 +3,6 @@
 mod account;
 pub mod approval_view;
 mod customer_receipt;
-pub mod separation;
 pub mod snapshot;
 
 /// Read-only receivable projections spanning finance, sales and workflow facts.

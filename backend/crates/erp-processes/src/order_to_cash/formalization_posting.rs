@@ -20,7 +20,6 @@ enum PostingStep {
     SynchronizeProcurement,
     SalesSubmission,
     Receivable,
-    FundsReviewTask,
     InvoiceTask,
     Audit,
 }
@@ -42,7 +41,6 @@ async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> 
         SynchronizeProcurement,
         SalesSubmission,
         Receivable,
-        FundsReviewTask,
         InvoiceTask,
         Audit,
     ] {
@@ -146,16 +144,6 @@ impl PostingSteps for MongoPosting<'_> {
                     .await?,
                 );
             }
-            FundsReviewTask => {
-                let account = self
-                    .account
-                    .as_ref()
-                    .ok_or_else(|| Error::Internal("首次应收步骤缺少已创建子账".into()))?;
-                crate::finance_posting::receivable::card_funds_task::ensure_initial_card_funds_review_task(
-                    &write.db, account, executor,
-                )
-                .await?;
-            }
             InvoiceTask => {
                 let account = self
                     .account
@@ -240,7 +228,6 @@ mod tests {
             SynchronizeProcurement,
             SalesSubmission,
             Receivable,
-            FundsReviewTask,
             InvoiceTask,
             Audit,
         ]

@@ -253,6 +253,7 @@ export type ApprovalInstanceListItemDto = Readonly<{
     document_type?: string | null
     document_id?: string | null
     document_label?: string | null
+    total_amount?: string | null
     process_name?: string | null
     process_version?: string | number | null
     blocker_code?: string | null
@@ -369,6 +370,7 @@ export type ApprovalInstanceListItem = Readonly<{
     documentType?: string
     documentId?: string
     documentLabel?: string
+    totalAmount?: string
     processName?: string
     processVersion?: string
     blockerCode?: string
@@ -560,12 +562,12 @@ export const mapCommandViewDto = (
     nextOpenTask:
         dto.next_open_task &&
         isCanonicalPositiveU64(dto.next_open_task.task_version)
-        ? {
-              workItemId: dto.next_open_task.work_item_id,
-              taskVersion: dto.next_open_task.task_version,
-              ownerUserId: dto.next_open_task.owner_user_id,
-          }
-        : undefined,
+            ? {
+                  workItemId: dto.next_open_task.work_item_id,
+                  taskVersion: dto.next_open_task.task_version,
+                  ownerUserId: dto.next_open_task.owner_user_id,
+              }
+            : undefined,
     outcome: dto.outcome,
 })
 
@@ -581,11 +583,9 @@ export const mapUpgradeBindingResultViewDto = (
     newBinding: {
         approvalProcessDefinitionId:
             dto.new_binding.approval_process_definition_id,
-        approvalDefinitionVersion:
-            dto.new_binding.approval_definition_version,
+        approvalDefinitionVersion: dto.new_binding.approval_definition_version,
         approvalBindingVersion: dto.new_binding.approval_binding_version,
-        approvalDefinitionBoundAt:
-            dto.new_binding.approval_definition_bound_at,
+        approvalDefinitionBoundAt: dto.new_binding.approval_definition_bound_at,
     },
     actionId: dto.action_id,
     outcome: dto.outcome,
@@ -617,6 +617,7 @@ export const mapInstanceListItemDto = (
     documentType: optionalText(dto.document_type),
     documentId: optionalText(dto.document_id),
     documentLabel: optionalText(dto.document_label),
+    totalAmount: optionalText(dto.total_amount),
     processName: optionalText(dto.process_name),
     processVersion: optionalVersion(dto.process_version),
     blockerCode: optionalText(dto.blocker_code),

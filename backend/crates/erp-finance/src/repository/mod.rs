@@ -13,7 +13,6 @@ pub use owned::{
     PayableAccountRepository, PayableEntryOffsetRepository, PayableEntryRepository,
     PaymentAllocationRepository, PurchaseInvoiceAllocationRepository, ReceiptAllocationRepository,
     ReceivableAccountRepository, ReceivableEntryOffsetRepository, ReceivableEntryRepository,
-    ReceivableFundsReviewRepository, SalesInvoiceAllocationRepository, SupplierPaymentRepository,
 };
 pub use payable::{
     PayableAccountFilter, PayableRepository, PurchaseInvoiceAllocationFilter, SupplierPaymentFilter,

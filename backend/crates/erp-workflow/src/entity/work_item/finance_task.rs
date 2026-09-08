@@ -1,6 +1,6 @@
 //! Finance WorkItem 的类型化 factory、identity 与 lifecycle contract（FIN-E06）。
 //!
-//! 应收（W11 销项开票执行、W13 卡券票款复核）与应付（W12 供应商付款执行）共用
+//! 应收（W11 销项开票执行）与应付（W12 供应商付款执行）共用
 //! 同一 contract，禁止两套规则。Service 只解析责任人/组织、调用 factory 并持久化，
 //! 不得继续拼接关键身份字段（object/type/role/reason/key/summary/due）。
 //!
@@ -46,25 +46,6 @@ impl SalesInvoiceTaskReason {
     }
 }
 
-/// 卡券票款复核任务种类。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CardFundsTaskKind {
-    /// 首笔票款复核。
-    Opening,
-    /// 差额票款复核。
-    Delta,
-}
-
-impl CardFundsTaskKind {
-    /// 返回任务类型与稳定原因代码。
-    pub fn spec(self) -> (WorkItemType, &'static str) {
-        match self {
-            Self::Opening => (WorkItemType::CardFundsReview, "CARD_FUNDS_OPENING_REVIEW"),
-            Self::Delta => (WorkItemType::CardFundsDeltaReview, "CARD_FUNDS_DELTA_REVIEW"),
-        }
-    }
-}
-
 /// 供应商付款任务产生原因（W12，应付域复用同一 contract）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupplierPaymentTaskReason {
@@ -81,34 +62,6 @@ impl SupplierPaymentTaskReason {
             Self::Initial => "PAYABLE_PAYMENT_REQUIRED",
             Self::ReopenedByReversal => "PAYABLE_REOPENED_BY_REVERSAL",
         }
-    }
-}
-
-/// Receivable card-funds review status snapshot. Wire matches finance `AccountReviewStatus`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CardFundsReviewStatusFact {
-    /// Not applicable.
-    NotApplicable,
-    /// Opening review pending.
-    OpeningPending,
-    /// Reviewed.
-    Reviewed,
-    /// Sync-delta review pending.
-    SyncDeltaPending,
-}
-
-/// 由账户复核状态解析票款任务种类（原 `review_task_spec` 唯一规则源）。
-///
-/// # 参数
-/// * `status` - 应收子账票款复核状态缓存
-///
-/// # 返回
-/// 待复核状态返回任务类型与原因；无需复核时返回 `None`，调用方不得建任务。
-pub fn card_funds_task_kind(status: CardFundsReviewStatusFact) -> Option<(WorkItemType, &'static str)> {
-    match status {
-        CardFundsReviewStatusFact::OpeningPending => Some(CardFundsTaskKind::Opening.spec()),
-        CardFundsReviewStatusFact::SyncDeltaPending => Some(CardFundsTaskKind::Delta.spec()),
-        CardFundsReviewStatusFact::NotApplicable | CardFundsReviewStatusFact::Reviewed => None,
     }
 }
 
@@ -145,26 +98,6 @@ pub struct SalesInvoiceTaskSpec {
     pub reason: SalesInvoiceTaskReason,
     /// 剩余可开票含税额度（冻结为影响摘要）。
     pub open_invoiceable_total: Amount,
-}
-
-/// 卡券票款复核任务创建规格（Service 已解析责任人/组织后传入）。
-pub struct CardFundsTaskSpec {
-    /// 应收子账主键。
-    pub account_id: String,
-    /// 待复核销售版本。
-    pub subject_version: String,
-    /// 责任组织（往来主体）。
-    pub owner_organization_id: String,
-    /// 当前个人责任人。
-    pub owner_user_id: String,
-    /// 复核种类。
-    pub kind: CardFundsTaskKind,
-    /// 含税应收总额。
-    pub gross_total: Amount,
-    /// 已核销含税总额。
-    pub settled_total: Amount,
-    /// 净已开含税总额。
-    pub invoiced_total: Amount,
 }
 
 /// 供应商付款任务创建规格（Service 已解析责任人/组织后传入，应付域复用）。
@@ -217,51 +150,6 @@ pub fn new_sales_invoice_task(
             due_at: None,
             reason_code: Some(spec.reason.as_str().to_string()),
             impact_summary: Some(sales_invoice_impact_summary(spec.open_invoiceable_total)),
-        },
-        responsibility_key,
-    )
-}
-
-/// 创建卡券票款复核任务（W13 factory）。
-///
-/// # 参数
-/// * `id` - 任务主键（Service 注入）
-/// * `spec` - 已解析的任务规格
-/// * `responsibility_key` - 服务端财务责任键（参与开放唯一性）
-///
-/// # 返回
-/// 返回已冻结身份的开放任务。
-///
-/// # 错误
-/// 责任键为空或字段超长时返回错误。
-pub fn new_card_funds_task(
-    id: WorkItemId,
-    spec: CardFundsTaskSpec,
-    responsibility_key: String,
-) -> Result<WorkItem> {
-    let (work_item_type, reason_code) = spec.kind.spec();
-    let priority = match spec.kind {
-        CardFundsTaskKind::Opening | CardFundsTaskKind::Delta => WorkItemPriority::High,
-    };
-    WorkItem::new_with_responsibility_key(
-        id,
-        WorkItemData {
-            work_item_type,
-            business_object_type: RECEIVABLE_OBJECT_TYPE.to_string(),
-            business_object_id: spec.account_id,
-            subject_version: spec.subject_version,
-            owner_role: FINANCE_OWNER_ROLE.to_string(),
-            owner_organization_id: spec.owner_organization_id,
-            owner_user_id: spec.owner_user_id,
-            assignment_source: AssignmentSource::SystemRule,
-            priority,
-            due_at: None,
-            reason_code: Some(reason_code.to_string()),
-            impact_summary: Some(card_funds_impact_summary(
-                spec.gross_total,
-                spec.settled_total,
-                spec.invoiced_total,
-            )),
         },
         responsibility_key,
     )
@@ -333,26 +221,6 @@ pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool
         )
 }
 
-/// 校验任务与指定应收子账的票款复核身份（W13 identity）。
-///
-/// # 参数
-/// * `task` - 待校验任务
-/// * `account_id` - 应收子账主键
-///
-/// # 返回
-/// 身份一致返回 `true`，任一维度不符返回 `false`。
-pub fn matches_card_funds_identity(task: &WorkItem, account_id: &str) -> bool {
-    matches!(
-        task.work_item_type,
-        WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
-    ) && task.business_object_type == RECEIVABLE_OBJECT_TYPE
-        && task.business_object_id == account_id
-        && task.owner_role == FINANCE_OWNER_ROLE
-        && task
-            .responsibility_key()
-            .is_some_and(|key| key.starts_with("finance:CARD_FUNDS_REVIEW:"))
-}
-
 /// 校验采购应付与原始分录属于同一正式事实（原 Service ensure_purchase_payable 唯一规则源）。
 ///
 /// 覆盖来源类型、子账与分录归属、增加方向、来源单据一致与未结清；
@@ -397,15 +265,6 @@ pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> b
 /// 返回随可开票额度变化的开票影响摘要（稳定编码，同一金额同一文本）。
 pub fn sales_invoice_impact_summary(open_invoiceable_total: Amount) -> String {
     format!("待开票金额 ¥{open_invoiceable_total}，请登记销项发票并完成分配")
-}
-
-/// 返回票款复核影响摘要（稳定编码，同一三元组同一文本）。
-pub fn card_funds_impact_summary(
-    gross_total: Amount,
-    settled_total: Amount,
-    invoiced_total: Amount,
-) -> String {
-    format!("应收 ¥{gross_total}，已到账 ¥{settled_total}，已开票 ¥{invoiced_total}；请核对票款正式事实")
 }
 
 /// 返回随开放余额变化的付款影响摘要（稳定编码，应付域复用）。
@@ -562,41 +421,6 @@ mod tests {
             .unwrap();
             assert!(matches_sales_invoice_identity(&task, "ra-1"));
         }
-    }
-
-    /// 票款任务种类映射：仅待复核状态建任务，稳定 key/summary。
-    #[test]
-    fn card_funds_kind_mapping_and_factory() {
-        assert_eq!(
-            card_funds_task_kind(CardFundsReviewStatusFact::OpeningPending),
-            Some((WorkItemType::CardFundsReview, "CARD_FUNDS_OPENING_REVIEW"))
-        );
-        assert_eq!(
-            card_funds_task_kind(CardFundsReviewStatusFact::SyncDeltaPending),
-            Some((WorkItemType::CardFundsDeltaReview, "CARD_FUNDS_DELTA_REVIEW"))
-        );
-        assert!(card_funds_task_kind(CardFundsReviewStatusFact::NotApplicable).is_none());
-        assert!(card_funds_task_kind(CardFundsReviewStatusFact::Reviewed).is_none());
-
-        let task = new_card_funds_task(
-            WorkItemId::new("wi-1"),
-            CardFundsTaskSpec {
-                account_id: "ra-1".to_string(),
-                subject_version: "3".to_string(),
-                owner_organization_id: "party-1".to_string(),
-                owner_user_id: "user-1".to_string(),
-                kind: CardFundsTaskKind::Opening,
-                gross_total: amount("1000.00"),
-                settled_total: amount("400.00"),
-                invoiced_total: amount("100.00"),
-            },
-            "finance:CARD_FUNDS_REVIEW:cust-1".to_string(),
-        )
-        .unwrap();
-        assert!(matches_card_funds_identity(&task, "ra-1"));
-        assert!(!matches_card_funds_identity(&task, "ra-9"));
-        assert_eq!(task.priority, WorkItemPriority::High);
-        assert!(task.impact_summary.as_deref().unwrap().contains("1000"));
     }
 
     /// 付款 factory 冻结时限与摘要；错误组合不匹配。

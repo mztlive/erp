@@ -29,7 +29,7 @@ const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 #[derive(Debug, Clone, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreateFinanceResponsibilityRuleRequest {
-    /// 供应商付款、销项开票或卡券票款复核。
+    /// 供应商付款或销项开票；旧复核操作值仅用于历史数据解码。
     pub operation: FinanceResponsibilityOperation,
     /// 精确往来方或默认规则。
     pub scope: FinanceResponsibilityScope,
@@ -62,7 +62,7 @@ pub struct UpdateFinanceResponsibilityRuleRequest {
     /// 期望乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于0"))]
     pub version: u64,
-    /// 供应商付款、销项开票或卡券票款复核。
+    /// 供应商付款或销项开票；旧复核操作值仅用于历史数据解码。
     pub operation: FinanceResponsibilityOperation,
     /// 精确往来方或默认规则。
     pub scope: FinanceResponsibilityScope,
@@ -96,7 +96,7 @@ impl UpdateFinanceResponsibilityRuleRequest {
 pub struct FinanceResponsibilityRuleView {
     /// 规则主键。
     pub id: String,
-    /// 供应商付款、销项开票或卡券票款复核。
+    /// 供应商付款或销项开票；旧复核操作值仅用于历史数据解码。
     pub operation: FinanceResponsibilityOperation,
     /// 精确往来方或默认规则。
     pub scope: FinanceResponsibilityScope,
@@ -149,8 +149,6 @@ pub struct FinanceResponsibilityOwnerOptionView {
     pub supplier_payment_eligible: bool,
     /// 是否具备销项开票完整执行权限。
     pub sales_invoice_eligible: bool,
-    /// 是否具备卡券票款复核完整执行权限。
-    pub card_funds_review_eligible: bool,
 }
 
 /// 任务生产时冻结的财务责任解析结果。
@@ -174,6 +172,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .finance_responsibility_rules()
             .list_finance_responsibility_rules(&mut NoTransaction)
             .await?;
+        let rules = rules
+            .into_iter()
+            .filter(|rule| rule.operation != FinanceResponsibilityOperation::CardFundsReview)
+            .collect();
         self.finance_responsibility_views(rules).await
     }
 
@@ -336,7 +338,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
         let payment = required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)?;
         let invoice = required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)?;
-        let card_funds = required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview)?;
         let accounts = self
             .auth
             .list_accounts_by_kind(AccountKind::Admin, &mut NoTransaction)
@@ -359,8 +360,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             };
             let supplier_payment_eligible = covers(&payment);
             let sales_invoice_eligible = covers(&invoice);
-            let card_funds_review_eligible = covers(&card_funds);
-            if !supplier_payment_eligible && !sales_invoice_eligible && !card_funds_review_eligible {
+            if !supplier_payment_eligible && !sales_invoice_eligible {
                 continue;
             }
             options.push(FinanceResponsibilityOwnerOptionView {
@@ -369,7 +369,6 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                 account: account.login_account,
                 supplier_payment_eligible,
                 sales_invoice_eligible,
-                card_funds_review_eligible,
             });
         }
         options.sort_by(|left, right| {
@@ -616,11 +615,6 @@ mod tests {
                 .iter()
                 .any(|code| crate::ports::permission_covers(code, "invoice:post"))
         );
-        assert!(
-            required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview)
-                .unwrap()
-                .iter()
-                .any(|code| crate::ports::permission_covers(code, "receivable_funds_review:complete"))
-        );
+        assert!(required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview).is_err());
     }
 }
