@@ -6,6 +6,11 @@ import {
     divideFixed,
     multiplyFixed,
 } from "@/lib/fixed-decimal"
+import type {
+    OfferingStatus,
+    ReviseSupplierOfferingInput,
+    SupplierOfferingView,
+} from "@/features/supplier-offerings/types"
 
 function compareSafely(
     left: string,
@@ -89,6 +94,10 @@ export const availabilitySchema = z.object({
     changeReason: z.string().trim().min(1, "请填写变更原因"),
 })
 
+export const statusRevisionSchema = z.object({
+    changeReason: z.string().trim().min(1, "请填写变更原因"),
+})
+
 export function idempotencyKey(prefix: string): string {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -121,3 +130,58 @@ export function percentageFromRate(value?: string | null): string {
 
 export const errorMessage = (error: unknown, fallback: string): string =>
     getErrorMessage(error, fallback)
+
+function optionalAmount(value?: string | null): string | null {
+    const trimmed = value?.trim()
+    return trimmed ? trimmed : null
+}
+
+/**
+ * 把列表上的当前条款原样带进修订命令。
+ * 关系状态变更也必须追加新版本，不得只改状态字段。
+ */
+export function buildStatusRevisionInput(
+    offering: SupplierOfferingView,
+    status: OfferingStatus,
+    changeReason: string,
+    key: string,
+): ReviseSupplierOfferingInput | null {
+    const expectedRevisionNo = offering.current_revision_no
+    const dropship = offering.dropship_supply_price_gross?.trim()
+    const bulk = offering.bulk_supply_price_gross?.trim()
+    const tax = offering.input_tax_rate?.trim()
+    const moq = offering.bulk_minimum_order_quantity?.trim()
+    const validFrom = offering.valid_from?.trim()
+    if (
+        expectedRevisionNo == null ||
+        expectedRevisionNo < 1 ||
+        !dropship ||
+        !bulk ||
+        !tax ||
+        !moq ||
+        offering.supply_region.length === 0 ||
+        !validFrom
+    ) {
+        return null
+    }
+    return {
+        offeringId: offering.id,
+        expected_revision_no: expectedRevisionNo,
+        terms: {
+            dropship_supply_price_gross: dropship,
+            bulk_supply_price_gross: bulk,
+            input_tax_rate: tax,
+            bulk_minimum_order_quantity: moq,
+            supply_region: offering.supply_region,
+            product_capabilities: offering.product_capabilities,
+            valid_from: validFrom,
+            valid_to: optionalAmount(offering.valid_to),
+            dropship_express: optionalAmount(offering.dropship_express),
+            freight_amount: optionalAmount(offering.freight_amount),
+            service_fee_amount: optionalAmount(offering.service_fee_amount),
+        },
+        status,
+        change_reason: changeReason.trim(),
+        idempotency_key: key,
+    }
+}

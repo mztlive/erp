@@ -12,14 +12,19 @@ export function CustomerReceivablesMetrics({
 }: CustomerReceivablesMetricsProps) {
     if (!metrics) {
         return (
-            <div className="mb-6 grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+            <MetricStrip
+                columns={4}
+                className="mb-4"
+                aria-label="统计加载中"
+                aria-busy="true"
+            >
                 {Array.from({ length: 4 }).map((_, i) => (
                     <div
                         key={i}
-                        className="h-16 animate-pulse rounded-lg bg-muted"
+                        className="h-12 animate-pulse rounded-md bg-muted"
                     />
                 ))}
-            </div>
+            </MetricStrip>
         )
     }
 
@@ -53,7 +58,7 @@ export function CustomerReceivablesMetrics({
     ]
 
     return (
-        <MetricStrip columns={4} aria-label="客户往来指标" className="mb-6">
+        <MetricStrip columns={4} aria-label="客户往来指标" className="mb-4">
             {items.map((item) => (
                 <MetricItem
                     key={item.id}

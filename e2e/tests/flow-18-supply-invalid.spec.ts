@@ -510,7 +510,8 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(offeringRow.getByText("可供").first()).toBeVisible()
         const quantityBefore = (await offeringRow.locator("td").filter({ hasText: /数量/ }).innerText()).match(/数量\s*([\d.]+)/)?.[1]
         expect(quantityBefore).toBeTruthy()
-        await offeringRow.getByRole("button", { name: "更新可供" }).click()
+        await offeringRow.getByRole("button", { name: /操作/ }).click()
+        await page.getByRole("menuitem", { name: "更新可供" }).click()
         const availabilityDialog = page.getByRole("dialog", { name: "更新当前可供情况" })
         await expect(availabilityDialog).toBeVisible({ timeout: UI_TIMEOUT })
         await chooseOption(
@@ -690,7 +691,8 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
                 await page.goto(`/procurement/supplier-offerings?q=${encodeURIComponent(SUPPLIER_SKU_CODE)}`)
                 const row = page.getByRole("row").filter({ hasText: SKU_NAME })
                 await expect(row).toBeVisible({ timeout: UI_TIMEOUT })
-                await row.getByRole("button", { name: "更新可供" }).click()
+                await row.getByRole("button", { name: /操作/ }).click()
+                await page.getByRole("menuitem", { name: "更新可供" }).click()
                 const dialog = page.getByRole("dialog", { name: "更新当前可供情况" })
                 await chooseOption(page, dialog.locator("#supplier-offerings-dialog-availability-status"), "可供")
                 await dialog.locator("#supplier-offerings-dialog-availability-reason").fill("E2E flow-18 清理：恢复测试前可供状态")

@@ -229,7 +229,7 @@ export function ApprovalProcessesPage() {
                 description="按固定单据类型维护审批节点与审批人。"
             />
 
-            <MetricStrip className="mb-6" columns={4}>
+            <MetricStrip className="mb-4" columns={4}>
                 <MetricItem
                     label="必须审批"
                     value={required.length}

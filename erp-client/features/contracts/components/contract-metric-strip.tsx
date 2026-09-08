@@ -15,30 +15,35 @@ export function ContractMetricStrip({
                 label="全部合同"
                 value={metrics.all}
                 detail="当前业务范围"
+                detailMode="tooltip"
             />
             <MetricItem
                 id="card-contracts-list-metric-effective"
                 label="有效"
                 value={metrics.effective}
                 detail="可关联建单"
+                detailMode="tooltip"
             />
             <MetricItem
                 id="card-contracts-list-metric-expiring-30d"
                 label="30 天内到期"
                 value={metrics.expiring_30d}
                 detail="将到期提醒"
+                detailMode="tooltip"
             />
             <MetricItem
                 id="card-contracts-list-metric-expired"
                 label="已到期"
                 value={metrics.expired}
                 detail="历史可追溯"
+                detailMode="tooltip"
             />
             <MetricItem
                 id="card-contracts-list-metric-terminated"
                 label="已终止"
                 value={metrics.terminated}
                 detail="不再履行"
+                detailMode="tooltip"
             />
         </MetricStrip>
     )

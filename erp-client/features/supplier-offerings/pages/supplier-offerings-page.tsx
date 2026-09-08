@@ -14,6 +14,7 @@ import {
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { ChangeOfferingStatusDialog } from "@/features/supplier-offerings/components/dialogs/change-offering-status-dialog"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/components/dialogs/register-supply-for-sku-dialog"
 import { ReviseOfferingDialog } from "@/features/supplier-offerings/components/dialogs/revise-offering-dialog"
 import { UpdateAvailabilityDialog } from "@/features/supplier-offerings/components/dialogs/update-availability-dialog"
@@ -29,6 +30,7 @@ import {
     useSupplierOfferingsQuery,
     useSupplierSupplyExceptionWorkItemQuery,
 } from "@/features/supplier-offerings/hooks/queries"
+import type { OfferingStatusIntent } from "@/features/supplier-offerings/lib/offering-status"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 
 const PAGE_SIZE = 50
@@ -41,6 +43,10 @@ export const SupplierOfferingsPage = () => {
         React.useState<SupplierOfferingView | null>(null)
     const [availabilityOffering, setAvailabilityOffering] =
         React.useState<SupplierOfferingView | null>(null)
+    const [statusChange, setStatusChange] = React.useState<{
+        offering: SupplierOfferingView
+        intent: OfferingStatusIntent
+    } | null>(null)
     const query = useSupplierOfferingsQuery({
         q: state.urlState.q,
         skuId: state.urlState.skuId,
@@ -254,6 +260,9 @@ export const SupplierOfferingsPage = () => {
                                         setAvailabilityOffering
                                     }
                                     onReviseOffering={setReviseOffering}
+                                    onChangeStatus={(offering, intent) =>
+                                        setStatusChange({ offering, intent })
+                                    }
                                 />
                             </div>
                             <div className="shrink-0 border-t border-border py-3">
@@ -309,6 +318,16 @@ export const SupplierOfferingsPage = () => {
                     offering={availabilityOffering}
                     onOpenChange={(open) => {
                         if (!open) setAvailabilityOffering(null)
+                    }}
+                />
+            ) : null}
+            {!state.taskMode && statusChange ? (
+                <ChangeOfferingStatusDialog
+                    key={`${statusChange.offering.id}-${statusChange.intent.actionId}`}
+                    offering={statusChange.offering}
+                    intent={statusChange.intent}
+                    onOpenChange={(open) => {
+                        if (!open) setStatusChange(null)
                     }}
                 />
             ) : null}

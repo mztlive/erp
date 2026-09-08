@@ -2,7 +2,11 @@
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { BusinessFailureState, PageScaffold } from "@/components/business"
+import {
+    BusinessFailureState,
+    MetricStrip,
+    PageScaffold,
+} from "@/components/business"
 import {
     ListWorkspaceHeader,
     listWorkspaceStyles as styles,
@@ -112,11 +116,15 @@ export function ActualProfitLossPage() {
                     {page.viewQuery.isPending && !page.data ? (
                         <>
                             <Skeleton className="h-20 w-full" />
-                            <div className="grid gap-4 xl:grid-cols-5">
+                            <MetricStrip
+                                columns={5}
+                                aria-label="经营指标加载中"
+                                aria-busy="true"
+                            >
                                 {Array.from({ length: 5 }).map((_, i) => (
-                                    <Skeleton key={i} className="h-24 w-full" />
+                                    <Skeleton key={i} className="h-12 w-full" />
                                 ))}
-                            </div>
+                            </MetricStrip>
                             <Skeleton className="h-64 w-full" />
                         </>
                     ) : null}

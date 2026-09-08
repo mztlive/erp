@@ -8,7 +8,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
     return (
-        <MetricStrip columns={3} aria-label="关联业务统计">
+        <MetricStrip variant="plain" columns={3} aria-label="关联业务统计">
             {[
                 {
                     label: "活跃供给",

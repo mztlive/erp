@@ -41,7 +41,11 @@ export function OverviewSection({
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-4">
-                    <MetricStrip columns={4} aria-label="试算指标">
+                    <MetricStrip
+                        variant="plain"
+                        columns={4}
+                        aria-label="试算指标"
+                    >
                         <MetricItem
                             label="总行数"
                             value={batch.metrics.total}

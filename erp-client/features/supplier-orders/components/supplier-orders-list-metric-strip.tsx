@@ -10,7 +10,7 @@ export function SupplierOrdersListMetricStrip({
     metrics: SupplierOrderMetric[]
 }) {
     return (
-        <MetricStrip className="mb-6" columns={5}>
+        <MetricStrip className="mb-4" columns={5}>
             {metrics.map((m) => (
                 <MetricItem
                     key={m.key}

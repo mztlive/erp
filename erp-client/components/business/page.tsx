@@ -227,11 +227,14 @@ const metricColumnClasses: Record<MetricStripColumns, string> = {
 export type MetricStripProps = Omit<React.ComponentProps<"div">, "title"> & {
     columns?: MetricStripColumns
     density?: MetricDensity
+    /** 顶部统计默认采用浅底摘要；嵌入明细分区时可使用 plain。 */
+    variant?: "summary" | "plain"
 }
 
 function MetricStrip({
     columns = 4,
     density = "default",
+    variant = "summary",
     className,
     ...props
 }: MetricStripProps) {
@@ -239,9 +242,14 @@ function MetricStrip({
         <div
             data-slot="metric-strip"
             data-density={density}
+            data-variant={variant}
             className={cn(
                 "grid gap-x-6 gap-y-4",
                 metricColumnClasses[columns],
+                variant === "summary" && [
+                    "gap-x-4 gap-y-4 rounded-xl bg-muted/35 px-4 py-3 lg:gap-x-6",
+                    columns === 1 ? "grid-cols-1" : "grid-cols-2",
+                ],
                 className,
             )}
             {...props}

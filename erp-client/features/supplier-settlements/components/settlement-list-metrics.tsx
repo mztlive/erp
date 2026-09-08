@@ -14,7 +14,7 @@ export function SettlementMetricsStrip({
     confirmedAmount: string
 }) {
     return (
-        <MetricStrip className="mb-6" columns={4} aria-label="结算指标">
+        <MetricStrip className="mb-4" columns={4} aria-label="结算指标">
             <MetricItem
                 id="supplier-settlements-metrics-pending"
                 label="待处理"

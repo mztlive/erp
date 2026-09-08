@@ -2,15 +2,11 @@
 
 import * as React from "react"
 
-import {
-    FixedOptionRadioFilter,
-    MultiOptionCombobox,
-} from "@/components/business"
+import { OptionCombobox, MultiOptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
@@ -28,7 +24,7 @@ import type {
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
-const AVAILABILITY_RADIO_OPTIONS: ReadonlyArray<{
+const AVAILABILITY_OPTIONS: ReadonlyArray<{
     value: InventoryAvailability
     label: string
 }> = (["all", "positive", "zero", "reserved"] as const).map((value) => ({
@@ -38,6 +34,7 @@ const AVAILABILITY_RADIO_OPTIONS: ReadonlyArray<{
 
 interface LedgerToolbarProps {
     view: InventoryView
+    actions?: React.ReactNode
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -69,11 +66,12 @@ interface LedgerToolbarProps {
 }
 
 /**
- * 库存台账筛选条：余额视图常用可用状态，其余视图常用仓库；
- * 更多筛选放仓库 / 流水类型 / 发生日期。
+ * 库存台账主行提供仓库与库存条件，查询后统一生效；
+ * 流水视图的更多筛选提供流水类型与发生日期。
  */
 export function LedgerToolbar({
     view,
+    actions,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -103,25 +101,18 @@ export function LedgerToolbar({
 }: LedgerToolbarProps) {
     const dateErrorId = "inventory-ledger-occurred-error"
     const showAvailabilityCommon = view === "balance"
-    const showWarehouseCommon = view !== "balance"
-    const showWarehouseMore = view === "balance"
     const showMovementMore = view === "movement"
-    const showMore = showWarehouseMore || showMovementMore
-    const moreCount = appliedChips.filter(({ key }) => {
-        if (key === "warehouseId") return showWarehouseMore
-        if (key === "movementType" || key === "occurredRange")
-            return showMovementMore
-        return (
-            key === "skuId" ||
-            key === "salesOrderLineId" ||
-            key === "adjustmentId"
-        )
-    }).length
+    const showMore = showMovementMore
+    const moreCount = appliedChips.filter(
+        ({ key }) =>
+            showMovementMore &&
+            (key === "movementType" || key === "occurredRange"),
+    ).length
 
     const warehouseFilter = (
         <WarehouseSearchCombobox
             id="inventory-ledger-warehouse-filter"
-            className="w-full sm:w-60"
+            className="w-full sm:w-44"
             value={warehouseIdDraft ?? undefined}
             onValueChange={(id) => setWarehouseIdDraft(id ?? null)}
             purpose="filter"
@@ -133,6 +124,7 @@ export function LedgerToolbar({
     return (
         <ListWorkspaceFilterBar
             density="compact"
+            className="[&_[data-slot=list-toolbar-search]]:lg:w-72 [&_[data-slot=list-toolbar-primary]>div>[data-slot=separator]]:hidden"
             idPrefix="inventory-ledger-filter"
             formAriaLabel="库存台账查询"
             onSubmit={applyFilters}
@@ -142,7 +134,7 @@ export function LedgerToolbar({
                     searchInputRef={searchInputRef}
                     value={searchDraft}
                     onChange={setSearchDraft}
-                    placeholder="SKU 编码、名称、规格、仓库"
+                    placeholder="SKU 编码、名称、规格"
                     aria-label="搜索库存"
                 />
             }
@@ -157,39 +149,39 @@ export function LedgerToolbar({
             morePanelAriaLabel="库存台账更多筛选条件"
             onResetMore={showMore ? resetMoreFilters : undefined}
             resetMoreButtonId="inventory-ledger-reset-more"
-            commonFilters={
+            actions={actions}
+            primaryFilters={
                 <>
+                    {warehouseFilter}
                     {showAvailabilityCommon ? (
-                        <FixedOptionRadioFilter
+                        <OptionCombobox
                             id="inventory-ledger-availability-filter"
-                            label="可用状态"
-                            variant="quiet"
+                            className="w-full sm:w-44"
+                            aria-label="库存条件"
                             value={availabilityDraft}
-                            onValueChange={setAvailabilityDraft}
-                            options={AVAILABILITY_RADIO_OPTIONS}
+                            onValueChange={(value) =>
+                                setAvailabilityDraft(
+                                    AVAILABILITY_OPTIONS.find(
+                                        (option) => option.value === value,
+                                    )?.value ?? "all",
+                                )
+                            }
+                            options={AVAILABILITY_OPTIONS.map((option) => ({
+                                ...option,
+                                label:
+                                    option.value === "all"
+                                        ? "库存筛选"
+                                        : option.label,
+                            }))}
+                            allowClear={false}
+                            placeholder="库存筛选"
                         />
-                    ) : null}
-                    {showWarehouseCommon ? (
-                        <ListWorkspaceInlineFilter
-                            htmlFor="inventory-ledger-warehouse-filter"
-                            label="仓库"
-                        >
-                            {warehouseFilter}
-                        </ListWorkspaceInlineFilter>
                     ) : null}
                 </>
             }
             morePanel={
                 showMore ? (
                     <div className="grid min-w-0 gap-5">
-                        {showWarehouseMore ? (
-                            <ListWorkspaceFilterField
-                                htmlFor="inventory-ledger-warehouse-filter"
-                                label="仓库"
-                            >
-                                {warehouseFilter}
-                            </ListWorkspaceFilterField>
-                        ) : null}
                         {showMovementMore ? (
                             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                                 <ListWorkspaceFilterField

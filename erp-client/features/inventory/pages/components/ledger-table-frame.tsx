@@ -9,10 +9,7 @@ import {
     BusinessFailureState,
     OptionCombobox,
 } from "@/components/business"
-import {
-    ListWorkSurface,
-    listWorkspaceEmptyStateClassName,
-} from "@/components/business/list-workspace"
+import { ListWorkSurface } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import {
     defaultSortValue,
@@ -92,6 +89,9 @@ export function LedgerTableFrame({
         return data?.adjustments ?? []
     })()
 
+    const isInitialEmpty =
+        !isError && data?.emptyReason === "NO_DATA" && !hasActiveFilters
+
     return (
         <ListWorkSurface
             toolbarClassName="pt-3 pb-2"
@@ -104,32 +104,42 @@ export function LedgerTableFrame({
                 />
             }
             toolbar={
-                <div className="flex min-w-0 items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                        <LedgerToolbar
-                            view={view}
-                            hasActiveFilters={hasActiveFilters}
-                            appliedChips={appliedChips}
-                            searchInputRef={searchInputRef}
-                            resultCount={data?.total}
-                            loading={loading}
-                            failed={isError}
-                            {...filters}
-                        />
-                    </div>
-                    <OptionCombobox
-                        id="inventory-ledger-sort"
-                        className="w-40 shrink-0"
-                        value={sortValue}
-                        onValueChange={(value) =>
-                            onSortChange(value ?? defaultSortValue(view))
-                        }
-                        options={sortOptions(view)}
-                        allowClear={false}
-                        aria-label="排序方式"
-                        placeholder="排序"
-                    />
-                </div>
+                <LedgerToolbar
+                    view={view}
+                    hasActiveFilters={hasActiveFilters}
+                    appliedChips={appliedChips}
+                    searchInputRef={searchInputRef}
+                    resultCount={data?.total}
+                    loading={loading}
+                    failed={isError}
+                    {...filters}
+                    actions={
+                        isInitialEmpty ? undefined : (
+                            <div className="flex items-center gap-2">
+                                <label
+                                    htmlFor="inventory-ledger-sort"
+                                    className="shrink-0 text-sm text-muted-foreground"
+                                >
+                                    排序
+                                </label>
+                                <OptionCombobox
+                                    id="inventory-ledger-sort"
+                                    className="w-40"
+                                    value={sortValue}
+                                    onValueChange={(value) =>
+                                        onSortChange(
+                                            value ?? defaultSortValue(view),
+                                        )
+                                    }
+                                    options={sortOptions(view)}
+                                    allowClear={false}
+                                    aria-label="排序方式"
+                                    placeholder="排序"
+                                />
+                            </div>
+                        )
+                    }
+                />
             }
             table={
                 isError ? (
@@ -223,8 +233,8 @@ function LedgerTableEmptyContent({
         return (
             <BusinessEmptyState
                 kind="filter"
-                className={listWorkspaceEmptyStateClassName}
-                title="当前筛选无结果"
+                className="flex-none justify-start rounded-none border-0 bg-transparent px-4 py-12 shadow-none ring-0 md:py-16"
+                title="没有符合条件的库存"
                 description={`没有符合「${filterSummary}」的记录。可清除筛选或切换视图。`}
                 action={
                     <Button
@@ -245,9 +255,16 @@ function LedgerTableEmptyContent({
     return (
         <BusinessEmptyState
             kind="no-data"
-            className={listWorkspaceEmptyStateClassName}
-            title="当前仓库尚无 ERP 自有库存记录"
-            description="期初库存需在「导入与期初」完成导入后才会形成流水；商城旧库存不会自动显示在此。"
+            className="flex-none justify-start rounded-none border-0 bg-transparent px-4 py-12 shadow-none ring-0 md:py-16"
+            title="尚未建立库存台账"
+            description={
+                <>
+                    完成期初库存导入后，即可查看库存余额和流水。
+                    <span className="mt-2 block text-xs">
+                        商城旧库存不会自动显示在此。
+                    </span>
+                </>
+            }
             action={
                 <Button
                     id="inventory-ledger-empty-go-imports"
@@ -257,7 +274,7 @@ function LedgerTableEmptyContent({
                     className="rounded-lg shadow-none"
                     render={<Link href="/governance/imports" />}
                 >
-                    前往导入与期初
+                    导入期初库存
                 </Button>
             }
         />

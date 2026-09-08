@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { PageScaffold, surfaceInsetClassName } from "@/components/business"
+import { PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { InventoryBalancePreview } from "@/features/inventory/components/inventory-balance-preview"
@@ -273,7 +273,7 @@ export function InventoryLedgerPage() {
         if (view === "balance" && availability !== "all") {
             chips.push({
                 key: "availability",
-                label: `可用状态：${AVAILABILITY_LABEL[availability]}`,
+                label: `库存条件：${AVAILABILITY_LABEL[availability]}`,
             })
         }
         if (view === "movement" && movementType.length > 0) {
@@ -354,6 +354,8 @@ export function InventoryLedgerPage() {
             <LedgerHeader
                 isPhoneNarrow={isPhoneNarrow}
                 queriedAt={data?.queriedAt ?? ""}
+                excludedKindsNote={data?.excludedKindsNote}
+                openingStockNote={data?.openingStockNote}
                 canExport={data?.canExport ?? false}
                 total={data?.total ?? 0}
                 isExporting={isExporting}
@@ -388,22 +390,6 @@ export function InventoryLedgerPage() {
                         {adjustment.actionError}
                     </AlertDescription>
                 </Alert>
-            ) : null}
-
-            {data ? (
-                <details
-                    className={`${surfaceInsetClassName} px-3 py-2.5 text-sm`}
-                >
-                    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
-                        自有实物库存边界说明
-                    </summary>
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {data.excludedKindsNote}
-                        <span className="mt-1 block">
-                            {data.openingStockNote}
-                        </span>
-                    </p>
-                </details>
             ) : null}
 
             {data ? <LedgerMetricStrip metrics={data.metrics} /> : null}

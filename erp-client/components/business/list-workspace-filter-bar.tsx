@@ -108,6 +108,7 @@ export function ListWorkspaceFilterBar({
     morePanel,
     morePanelAriaLabel = "更多筛选条件",
     commonFilters,
+    primaryFilters,
     resultStatus,
     chips = [],
     onClearChip,
@@ -137,6 +138,8 @@ export function ListWorkspaceFilterBar({
     morePanel?: React.ReactNode
     morePanelAriaLabel?: string
     commonFilters?: React.ReactNode
+    /** 常用条件置于搜索之后、查询按钮之前；不影响默认的次行布局。 */
+    primaryFilters?: React.ReactNode
     resultStatus: React.ReactNode
     chips?: readonly ListWorkspaceFilterChip[]
     onClearChip?: (key: string) => void
@@ -175,6 +178,7 @@ export function ListWorkspaceFilterBar({
                 search={search}
                 filters={
                     <>
+                        {primaryFilters}
                         <Button
                             id={queryButtonId ?? `${idPrefix}-query`}
                             type="submit"

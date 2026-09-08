@@ -95,7 +95,7 @@ export type CompleteSupplierSupplyExceptionTaskResult = Readonly<{
     message: string
 }>
 
-type SupplierOfferingTermsInput = Readonly<{
+export type SupplierOfferingTermsInput = Readonly<{
     dropship_supply_price_gross: string
     bulk_supply_price_gross: string
     input_tax_rate: string

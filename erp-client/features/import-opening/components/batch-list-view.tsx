@@ -102,7 +102,7 @@ export function BatchListView({
                 }
             />
 
-            <MetricStrip className="mb-6" columns={4} aria-label="导入批次指标">
+            <MetricStrip className="mb-4" columns={4} aria-label="导入批次指标">
                 <MetricItem
                     label="待校验"
                     value={data?.metrics.pendingValidate ?? "—"}

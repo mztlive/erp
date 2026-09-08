@@ -1,7 +1,5 @@
 "use client"
 
-import { FilePenLineIcon, PackageCheckIcon } from "lucide-react"
-
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,11 +11,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { SupplierOfferingRowActions } from "@/features/supplier-offerings/components/supplier-offering-row-actions"
+import type { OfferingStatusIntent } from "@/features/supplier-offerings/lib/offering-status"
 import {
     money,
     statusVariant,
 } from "@/features/supplier-offerings/lib/presentation"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 import {
     AVAILABILITY_STATUS_LABELS,
@@ -38,6 +37,10 @@ export type SupplierOfferingsTableProps = {
     onCreateOffering: () => void
     onUpdateAvailability: (offering: SupplierOfferingView) => void
     onReviseOffering: (offering: SupplierOfferingView) => void
+    onChangeStatus: (
+        offering: SupplierOfferingView,
+        intent: OfferingStatusIntent,
+    ) => void
 }
 
 /** 供给列表的加载失败、空态与数据表格三态展示。 */
@@ -54,6 +57,7 @@ export function SupplierOfferingsTable({
     onCreateOffering,
     onUpdateAvailability,
     onReviseOffering,
+    onChangeStatus,
 }: SupplierOfferingsTableProps) {
     if (isError) {
         return (
@@ -157,12 +161,18 @@ export function SupplierOfferingsTable({
                         </TableCell>
                         <TableCell>
                             <div className="text-sm">
-                                <span className="text-xs text-muted-foreground mr-1.5">代发</span>
-                                <span className="tabular-nums font-semibold text-foreground">{money(item.dropship_supply_price_gross)}</span>
+                                <span className="text-xs text-muted-foreground mr-1.5">
+                                    代发
+                                </span>
+                                <span className="tabular-nums font-semibold text-foreground">
+                                    {money(item.dropship_supply_price_gross)}
+                                </span>
                             </div>
                             <div className="mt-0.5 text-xs text-muted-foreground">
                                 <span className="mr-1.5">集采</span>
-                                <span className="tabular-nums font-medium text-foreground/80">{money(item.bulk_supply_price_gross)}</span>
+                                <span className="tabular-nums font-medium text-foreground/80">
+                                    {money(item.bulk_supply_price_gross)}
+                                </span>
                             </div>
                         </TableCell>
                         <TableCell>
@@ -209,40 +219,12 @@ export function SupplierOfferingsTable({
                                     </span>
                                 )
                             ) : (
-                                <div className="flex items-center gap-1.5">
-                                    <Button
-                                        id={`supplier-offerings-table-row-${toAutomationIdSegment(item.id)}-update-availability`}
-                                        type="button"
-                                        size="xs"
-                                        variant="outline"
-                                        className="h-7 px-2.5 text-xs font-normal border-border/80 hover:bg-muted hover:text-foreground shadow-2xs"
-                                        onClick={() =>
-                                            onUpdateAvailability(item)
-                                        }
-                                    >
-                                        <PackageCheckIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                            className="size-3.5"
-                                        />
-                                        更新可供
-                                    </Button>
-                                    <Button
-                                        id={`supplier-offerings-table-row-${toAutomationIdSegment(item.id)}-revise`}
-                                        type="button"
-                                        size="xs"
-                                        variant="ghost"
-                                        className="h-7 px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted"
-                                        onClick={() => onReviseOffering(item)}
-                                    >
-                                        <FilePenLineIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                            className="size-3.5"
-                                        />
-                                        修订条款
-                                    </Button>
-                                </div>
+                                <SupplierOfferingRowActions
+                                    offering={item}
+                                    onUpdateAvailability={onUpdateAvailability}
+                                    onReviseOffering={onReviseOffering}
+                                    onChangeStatus={onChangeStatus}
+                                />
                             )}
                         </TableCell>
                     </TableRow>

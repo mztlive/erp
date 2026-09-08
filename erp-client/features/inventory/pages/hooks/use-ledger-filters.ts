@@ -81,9 +81,8 @@ export function useLedgerFilters({
         (view === "movement" && Boolean(occurredFrom || occurredTo)),
     )
     const hasMoreFilters = Boolean(
-        (view === "balance" && warehouseId) ||
-        (view === "movement" &&
-            (movementType.length > 0 || Boolean(occurredFrom || occurredTo))),
+        view === "movement" &&
+        (movementType.length > 0 || Boolean(occurredFrom || occurredTo)),
     )
     // 有更多条件的初始深链展开面板；URL 回填不得再次强制展开
     const [panelOpen, setPanelOpen] = React.useState(hasMoreFilters)
@@ -154,7 +153,6 @@ export function useLedgerFilters({
 
     /** 只清除「更多筛选」草稿；保留关键词、常用条件与已生效结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        if (view === "balance") setWarehouseIdDraft(null)
         if (view === "movement") {
             setMovementTypeDraft([])
             setOccurredFromDraft("")
