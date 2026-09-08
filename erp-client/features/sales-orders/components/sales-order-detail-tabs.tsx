@@ -104,27 +104,32 @@ export function SalesOrderDetailTabs({
             }}
             items={items}
             listLabel="销售单分区"
+            listClassName="border-border/70"
         >
-            <ObjectSectionTabsPanel value="overview">
-                <OverviewPanel order={order} />
-                {order.nature === "physical_service" ? (
-                    <section
-                        className="rounded-lg border border-grid px-3"
-                        aria-labelledby="sales-order-procurement-heading"
-                    >
-                        <h2
-                            id="sales-order-procurement-heading"
-                            className="border-b border-grid py-2 text-sm font-medium"
-                        >
-                            采购进度
-                        </h2>
-                        <RelatedLanes
-                            order={order}
-                            selfReturn={selfReturn}
-                            lanes={["purchase"]}
-                        />
-                    </section>
-                ) : null}
+            <ObjectSectionTabsPanel value="overview" className="py-5">
+                <OverviewPanel
+                    order={order}
+                    related={
+                        order.nature === "physical_service" ? (
+                            <section
+                                className="rounded-lg border border-border/70 px-4 py-3 md:px-5"
+                                aria-labelledby="sales-order-procurement-heading"
+                            >
+                                <h2
+                                    id="sales-order-procurement-heading"
+                                    className="mb-1 text-lg font-semibold"
+                                >
+                                    采购进度
+                                </h2>
+                                <RelatedLanes
+                                    order={order}
+                                    selfReturn={selfReturn}
+                                    lanes={["purchase"]}
+                                />
+                            </section>
+                        ) : undefined
+                    }
+                />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="approval">

@@ -25,11 +25,11 @@ function OverviewField({
     numeric?: boolean
 }) {
     return (
-        <div className="min-w-0">
-            <dt className="text-xs text-muted-foreground">{label}</dt>
+        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3">
+            <dt className="text-sm text-muted-foreground">{label}</dt>
             <dd
                 className={cn(
-                    "mt-1.5 break-words text-sm leading-6",
+                    "break-words text-sm leading-6",
                     numeric && "num",
                 )}
             >
@@ -42,15 +42,15 @@ function OverviewField({
 export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
     return (
-        <div className="overflow-hidden border-y border-border">
+        <div className="overflow-hidden rounded-lg border-b border-border">
             <Table
                 data-density="compact"
-                className={isCard ? "min-w-[62rem]" : "min-w-[54rem]"}
+                className={isCard ? "min-w-[54rem]" : "min-w-[40rem]"}
             >
                 <TableHeader>
                     <TableRow>
                         <TableHead>项目</TableHead>
-                        <TableHead>数量 / 单位</TableHead>
+                        <TableHead data-align="end">数量 / 单位</TableHead>
                         <TableHead data-align="end">含税单价</TableHead>
                         {isCard ? (
                             <>
@@ -67,7 +67,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                 <TableBody>
                     {order.lineItems.map((line) => (
                         <TableRow key={line.id}>
-                            <TableCell className="whitespace-normal">
+                            <TableCell className="min-w-44 whitespace-normal py-4">
                                 <div>{line.name}</div>
                                 {line.sku ? (
                                     <div className="num text-xs text-muted-foreground">
@@ -117,90 +117,118 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     )
 }
 
-export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
+/** 概览按明细、采购进度、交易约定排序，责任与票款摘要由侧栏承载。 */
+export function OverviewPanel({
+    order,
+    related,
+}: {
+    order: SalesOrderDetailView
+    related?: React.ReactNode
+}) {
     const isCard = order.nature === "card_voucher"
-
     return (
-        <div className="space-y-6">
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-4">
-                <OverviewField
-                    label="关联合同"
-                    value={order.contractRevisionLabel || "—"}
-                />
-                <OverviewField
-                    label="结算主体"
-                    value={order.settlementEntity || "—"}
-                />
-                <OverviewField
-                    label="福利场景"
-                    value={welfareScenarioLabel(order.welfareScene) || "—"}
-                />
-                <OverviewField
-                    label="付款条件"
-                    value={paymentTermLabel(order.paymentTerms) || "—"}
-                />
-                {isCard ? (
-                    <>
-                        <OverviewField
-                            label="履约期限（到期交付）"
-                            value={order.fulfillmentDeadline || "—"}
-                            numeric
-                        />
+        <div className="space-y-5">
+            <section
+                aria-labelledby="sales-order-lines-heading"
+                className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5"
+            >
+                <div className="mb-4 flex items-baseline justify-between gap-2">
+                    <h2
+                        id="sales-order-lines-heading"
+                        className="text-lg font-semibold"
+                    >
+                        {isCard ? "卡券明细" : "销售明细"}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                        共 {order.lineItems.length} 行
+                    </p>
+                </div>
+                <LineItemsTable order={order} />
+                <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
+                    <span className="text-muted-foreground">合计（含税）</span>
+                    <MoneyValue
+                        value={order.amountGross}
+                        className="text-xl font-semibold"
+                    />
+                </div>
+            </section>
+            {related}
+            <section
+                aria-labelledby="sales-order-transaction-heading"
+                className="rounded-lg border border-border/70 p-4 md:p-5"
+            >
+                <h2
+                    id="sales-order-transaction-heading"
+                    className="mb-5 text-lg font-semibold"
+                >
+                    交易约定
+                </h2>
+                <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
+                    <OverviewField
+                        label="关联合同"
+                        value={order.contractRevisionLabel || "—"}
+                    />
+                    <OverviewField
+                        label="结算主体"
+                        value={order.settlementEntity || "—"}
+                    />
+                    <OverviewField
+                        label="福利场景"
+                        value={welfareScenarioLabel(order.welfareScene) || "—"}
+                    />
+                    <OverviewField
+                        label="付款条件"
+                        value={paymentTermLabel(order.paymentTerms) || "—"}
+                    />
+                    <OverviewField
+                        label="税率"
+                        value={
+                            order.taxRatePercent
+                                ? `${order.taxRatePercent}%`
+                                : "—"
+                        }
+                        numeric
+                    />
+                    <OverviewField
+                        label="客户联系人"
+                        value={order.customerContact ?? "—"}
+                    />
+                    <OverviewField
+                        label={
+                            isCard ? "履约期限（到期交付）" : "客户承诺期限摘要"
+                        }
+                        value={order.fulfillmentDeadline || "—"}
+                        numeric
+                    />
+                    <OverviewField
+                        label="当前销售版本"
+                        value={
+                            order.currentRevisionNo == null
+                                ? "尚未生效"
+                                : `v${order.currentRevisionNo}`
+                        }
+                    />
+                    {isCard ? (
                         <OverviewField
                             label="应收到期日"
                             value={order.receivableDueDate || "—"}
                             numeric
                         />
-                    </>
-                ) : (
-                    <OverviewField
-                        label="客户承诺期限摘要"
-                        value={order.fulfillmentDeadline || "—"}
-                        numeric
-                    />
-                )}
-                <OverviewField
-                    label="税率"
-                    value={
-                        order.taxRatePercent ? `${order.taxRatePercent}%` : "—"
-                    }
-                    numeric
-                />
-                <OverviewField
-                    label="客户联系人"
-                    value={order.customerContact ?? "—"}
-                />
-                <OverviewField
-                    label="当前销售版本"
-                    value={
-                        order.currentRevisionNo == null
-                            ? "尚未生效"
-                            : `v${order.currentRevisionNo}`
-                    }
-                    numeric
-                />
-            </dl>
-
-            <dl>
-                <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">内部说明</dt>
-                    <dd className="mt-0.5 whitespace-pre-wrap break-words text-sm">
-                        {order.remark?.trim() || "—"}
-                    </dd>
-                </div>
-            </dl>
-
-            <div>
-                <div className="mb-2 flex items-baseline justify-between gap-2">
-                    <h2 className="text-base font-semibold">
-                        {isCard ? "卡券明细" : "销售明细"}
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        {order.lineItems.length} 行
-                    </p>
-                </div>
-                <LineItemsTable order={order} />
-            </div>
+                    ) : null}
+                    {order.remark?.trim() ? (
+                        <div className="2xl:col-span-2">
+                            <OverviewField
+                                label="内部说明"
+                                value={
+                                    <span className="whitespace-pre-wrap">
+                                        {order.remark.trim()}
+                                    </span>
+                                }
+                            />
+                        </div>
+                    ) : null}
+                </dl>
+            </section>
         </div>
     )
 }

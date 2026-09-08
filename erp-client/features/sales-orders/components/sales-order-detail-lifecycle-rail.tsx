@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, CircleDashedIcon } from "lucide-react"
+import { CheckCircle2Icon, CircleIcon, CircleDotIcon } from "lucide-react"
 
 import {
     Tooltip,
@@ -34,24 +34,21 @@ export function LifecycleRail({ order }: { order: SalesOrderDetailView }) {
 
     return (
         <TooltipProvider>
-            <ol
-                className="flex w-full items-center"
-                aria-label="销售单生命周期"
-            >
+            <ol className="space-y-0" aria-label="销售单生命周期">
                 {rail.steps.map((step, index) => (
                     <li
                         key={step.id}
-                        className={cn(
-                            "flex min-w-0 items-center",
-                            index < rail.steps.length - 1 && "flex-1",
-                        )}
+                        aria-current={
+                            step.state === "current" ? "step" : undefined
+                        }
+                        className="relative min-w-0 pb-5 last:pb-0"
                     >
                         <RailNode step={step} />
                         {index < rail.steps.length - 1 ? (
                             <span
                                 aria-hidden="true"
                                 className={cn(
-                                    "mx-1 h-px min-w-4 flex-1",
+                                    "absolute left-[9px] top-6 bottom-1 w-px",
                                     step.state === "done"
                                         ? "bg-success/50"
                                         : "bg-border",
@@ -69,23 +66,25 @@ function RailNode({ step }: { step: LifecycleStep }) {
     const node = (
         <span
             className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs",
-                step.state === "current" &&
-                    "bg-accent font-medium text-foreground ring-1 ring-primary/15",
+                "inline-flex items-center gap-3 text-sm leading-6",
+                step.state === "current" && "font-semibold text-foreground",
                 step.state === "done" && "text-muted-foreground",
-                step.state === "todo" && "text-muted-foreground/70",
+                step.state === "todo" && "text-muted-foreground",
             )}
         >
             {step.state === "done" ? (
-                <CheckIcon className="size-3 text-success" aria-hidden="true" />
+                <CheckCircle2Icon
+                    className="size-5 shrink-0 fill-success text-background"
+                    aria-hidden="true"
+                />
+            ) : step.state === "current" ? (
+                <CircleDotIcon
+                    className="size-5 shrink-0 rounded-full text-warning ring-4 ring-warning/15"
+                    aria-hidden="true"
+                />
             ) : (
-                <CircleDashedIcon
-                    className={cn(
-                        "size-3",
-                        step.state === "current"
-                            ? "text-primary"
-                            : "text-muted-foreground/60",
-                    )}
+                <CircleIcon
+                    className="size-5 shrink-0 text-muted-foreground/50"
                     aria-hidden="true"
                 />
             )}
@@ -103,6 +102,9 @@ function RailNode({ step }: { step: LifecycleStep }) {
                         id={`sales-orders-detail-lifecycle-rail-step-${toAutomationIdSegment(step.id)}`}
                         type="button"
                         aria-label={step.label}
+                        aria-current={
+                            step.state === "current" ? "step" : undefined
+                        }
                         className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                 }
