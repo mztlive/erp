@@ -7,3 +7,5 @@ pub mod owned;
 pub use contract::{ContractDomainRepository, ContractFilter, ContractRow};
 pub use extensions::ContractExt;
 pub use owned::{ContractRepository, ContractRevisionRepository};
+
+pub mod list_search;

@@ -252,7 +252,7 @@ impl<'a> ContractRevisionRepository<'a> {
 /// 合同归档是「插入不可变版本 + 切换当前版本指针」的两步写入；单一集合 CRUD
 /// 使用 [`Repository`] 基类。本类型由 `ContractExt::contract()` 访问。
 pub struct ContractDomainRepository<'a> {
-    db: &'a Database,
+    pub(super) db: &'a Database,
 }
 
 impl<'a> ContractDomainRepository<'a> {

@@ -32,6 +32,18 @@ pub struct SkuRevisionFact {
 /// Port inventory uses to read SKU identity without depending on `erp-catalog`.
 #[async_trait]
 pub trait CatalogFactsPort: Send + Sync {
+    /// 解析 SKU 编码、当前名称或规格的字面量匹配；无命中返回空集合。
+    ///
+    /// # 错误
+    /// 商品查询失败或适配器未接线。
+    async fn matching_sku_ids(
+        &self,
+        _q: &str,
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<erp_core::ids::SkuId>> {
+        Err(Error::Internal("商品搜索端口未接线".to_string()))
+    }
+
     /// Return SKU facts keyed by id.
     ///
     /// # Parameters

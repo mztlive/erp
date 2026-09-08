@@ -45,6 +45,8 @@ pub struct StockMovementRow {
 /// 库存流水列表筛选条件（正式事实，恒为未删除）。
 #[derive(Debug, Clone)]
 pub struct StockMovementFilter {
+    /// Service 解析的搜索条件；只允许服务端构造。
+    pub search: super::InventorySearch,
     /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
@@ -99,6 +101,7 @@ impl QueryFilter for StockMovementFilter {
         if !range.is_empty() {
             filter.insert("occurred_at", range);
         }
+        self.search.apply(&mut filter);
         filter
     }
 }
@@ -286,6 +289,7 @@ mod tests {
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockMovementFilter {
         StockMovementFilter {
+            search: Default::default(),
             warehouse_ids,
             sku_id: None,
             movement_type: None,
@@ -302,6 +306,7 @@ mod tests {
     #[test]
     fn movement_filter_applies_dimensions_type_range_and_deleted_filter() {
         let filter = StockMovementFilter {
+            search: Default::default(),
             warehouse_ids: Some(vec![WarehouseId::new("wh-1")]),
             sku_id: Some(SkuId::new("sku-1")),
             movement_type: Some(MovementType::PurchaseReceiptIn),

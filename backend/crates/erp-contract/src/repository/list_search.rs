@@ -1,0 +1,366 @@
+//! 合同列表先关联当前修订再筛选、排序、计数，禁止分页后匹配。
+
+use super::{
+    contract::{ContractDomainRepository, ContractFilter, ContractRow},
+    ContractExt,
+};
+use crate::dto::contract::{ContractFilterOption, ContractMetric, ContractMetrics};
+use erp_core::common::time::BusinessDate;
+use mongodb::bson::{doc, Document};
+use persistence_core::{insert_literal_regex_filter, Executor, Pagination, QueryFilter, Result};
+use serde::Deserialize;
+use std::collections::BTreeSet;
+
+/// 可见合同引用的客户搜索事实，外域数据由端口提供。
+pub struct ContractCustomer {
+    /// 当前负责人 ID；未分配时为空。
+    pub owner_id: Option<String>,
+    pub id: String,
+    pub number: String,
+    pub owner: String,
+}
+/// 列表新增筛选，精确字段与关键词按交集执行。
+pub struct ContractSearch {
+    pub q: Option<String>,
+    pub metric: Option<ContractMetric>,
+    pub settlement_party_id: Option<String>,
+    pub owner: Option<String>,
+    pub customers: Vec<ContractCustomer>,
+}
+
+impl ContractSearch {
+    /// 返回全可见合同范围的负责人候选值，不随页码或关键词变化。
+    pub fn owner_options(&self) -> Vec<ContractFilterOption> {
+        self.customers
+            .iter()
+            .map(|c| c.owner.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|label| ContractFilterOption {
+                value: label.clone(),
+                label,
+            })
+            .collect()
+    }
+
+    /// 字面量关键词 OR 匹配多个业务字段，结构化条件继续收窄范围。
+    fn filter(&self) -> Document {
+        let mut filter = Document::new();
+        if let Some(id) = &self.settlement_party_id {
+            filter.insert("settlement_party_id", id);
+        }
+        if let Some(owner) = &self.owner {
+            filter.insert("search_owner", owner);
+        }
+        apply_metric(&mut filter, self.metric);
+        if let Some(q) = &self.q {
+            let mut clauses = [
+                "contract_no",
+                "search_customer",
+                "search_settlement",
+                "search_owner",
+            ]
+            .into_iter()
+            .map(|field| {
+                let mut clause = Document::new();
+                insert_literal_regex_filter(&mut clause, field, Some(q));
+                clause
+            })
+            .collect::<Vec<_>>();
+            let needle = q.to_lowercase();
+            let ids = self
+                .customers
+                .iter()
+                .filter(|c| c.number.to_lowercase().contains(&needle))
+                .map(|c| c.id.clone())
+                .collect::<Vec<_>>();
+            clauses.push(doc! { "customer_id": { "$in": ids } });
+            filter.insert("$or", clauses);
+        }
+        filter
+    }
+
+    /// MongoDB 排序与关键词使用相同当前负责人显示值。
+    fn owner_expression(&self) -> Document {
+        let branches = self.customers.iter().map(|c| doc! { "case": { "$eq": ["$customer_id", { "$literal": &c.id }] }, "then": { "$literal": &c.owner } }).collect::<Vec<_>>();
+        if branches.is_empty() {
+            return doc! { "$literal": "—" };
+        }
+        doc! { "$switch": { "branches": branches, "default": "—" } }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContractCount {
+    pub total: i64,
+}
+/// 单个聚合同时返回结果页、筛选总数、范围指标与结算主体候选项。
+#[derive(Debug, Deserialize, Default)]
+pub struct ContractSearchResult {
+    pub items: Vec<ContractRow>,
+    pub totals: Vec<ContractCount>,
+    pub metrics: Vec<ContractMetrics>,
+    pub settlement_options: Vec<ContractFilterOption>,
+}
+impl ContractSearchResult {
+    /// 空命中聚合计数视为零。
+    pub fn total(&self) -> i64 {
+        self.totals.first().map(|c| c.total).unwrap_or(0)
+    }
+}
+
+impl ContractDomainRepository<'_> {
+    /// 只读取可见合同引用的去重客户 ID，用于批量解析当前负责人。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败。
+    pub async fn list_customer_ids(
+        &self,
+        filter: &ContractFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let collection = self
+            .db
+            .collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+        let mut query = collection.distinct("customer_id", filter.to_doc());
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect())
+    }
+
+    /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
+    ///
+    /// # 错误
+    /// MongoDB 聚合或反序列化失败。
+    pub async fn search_list(
+        &self,
+        filter: &ContractFilter,
+        search: &ContractSearch,
+        executor: &mut dyn Executor,
+    ) -> Result<ContractSearchResult> {
+        let collection = self
+            .db
+            .collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+        let pipeline = list_pipeline(filter, search, BusinessDate::today());
+        if let Some(session) = executor.session() {
+            let mut cursor = collection
+                .aggregate(pipeline)
+                .with_type::<ContractSearchResult>()
+                .session(&mut *session)
+                .await?;
+            if cursor.advance(session).await? {
+                return Ok(cursor.deserialize_current()?);
+            }
+            return Ok(ContractSearchResult::default());
+        }
+        let mut cursor = collection
+            .aggregate(pipeline)
+            .with_type::<ContractSearchResult>()
+            .await?;
+        if cursor.advance().await? {
+            return Ok(cursor.deserialize_current()?);
+        }
+        Ok(ContractSearchResult::default())
+    }
+}
+
+/// 查询流水线：范围 → 当前修订 → 统一派生字段 → 分面分页与统计。
+fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: BusinessDate) -> Vec<Document> {
+    vec![
+        doc! { "$match": filter.to_doc() },
+        doc! { "$lookup": { "from": <mongodb::Database as ContractExt>::CONTRACT_REVISIONS, "localField": "current_revision_id", "foreignField": "id", "as": "current" } },
+        doc! { "$set": { "current": { "$arrayElemAt": ["$current", 0] } } },
+        doc! { "$set": display_fields(search, today) },
+        doc! { "$facet": {
+            "items": [doc! { "$match": search.filter() }, doc! { "$sort": list_sort(filter) }, doc! { "$skip": filter.skip() as i64 }, doc! { "$limit": filter.limit() }],
+            "totals": [doc! { "$match": search.filter() }, doc! { "$count": "total" }],
+            "metrics": [doc! { "$group": metric_group() }],
+            "settlement_options": [doc! { "$sort": { "id": 1 } }, doc! { "$group": { "_id": "$settlement_party_id", "label": { "$first": "$search_settlement" } } }, doc! { "$project": { "_id": 0, "value": "$_id", "label": 1 } }, doc! { "$sort": { "label": 1, "value": 1 } }]
+        } },
+    ]
+}
+
+/// 到期口径为业务自然日当天至第 30 天（两端包含）。
+fn display_fields(search: &ContractSearch, today: BusinessDate) -> Document {
+    let mut end = today.as_naive_date();
+    for _ in 0..30 {
+        end = end.succ_opt().unwrap_or(end);
+    }
+    doc! {
+        "search_customer": { "$ifNull": ["$current.customer_snapshot.customer_name", "$customer_id"] },
+        "search_settlement": { "$ifNull": ["$current.settlement_party_snapshot.settlement_party_name", "$settlement_party_id"] },
+        "search_owner": search.owner_expression(),
+        "search_valid_to": { "$ifNull": ["$current.valid_to", "9999-12-31"] },
+        "search_expiring": { "$and": [ { "$eq": ["$status", "EFFECTIVE"] }, { "$gte": ["$current.valid_to", today.to_string()] }, { "$lte": ["$current.valid_to", end.to_string()] } ] }
+    }
+}
+
+/// 后端排序白名单，全部追加唯一 ID；默认到期优先与页面一致。
+fn list_sort(filter: &ContractFilter) -> Document {
+    let direction = if filter.sort_ascending { 1 } else { -1 };
+    let field = match filter.sort_by.as_deref() {
+        Some("contract_no") => "contract_no",
+        Some("customer") => "search_customer",
+        Some("settlement") => "search_settlement",
+        Some("validity") => "search_valid_to",
+        Some("revision") => "current.revision_no",
+        Some("owner") => "search_owner",
+        Some("expiry_priority") => return doc! { "search_expiring": -1, "search_valid_to": 1, "id": 1 },
+        Some("sales") => "id",
+        _ => "created_at",
+    };
+    let mut sort = Document::new();
+    sort.insert(field, direction);
+    sort.insert("id", direction);
+    sort
+}
+
+/// 状态过滤与指标使用同一持久化字段。
+fn apply_metric(filter: &mut Document, metric: Option<ContractMetric>) {
+    match metric {
+        Some(ContractMetric::Effective) => {
+            filter.insert("status", "EFFECTIVE");
+        }
+        Some(ContractMetric::Expired) => {
+            filter.insert("status", "EXPIRED");
+        }
+        Some(ContractMetric::Terminated) => {
+            filter.insert("status", "TERMINATED");
+        }
+        Some(ContractMetric::Expiring30d) => {
+            filter.insert("search_expiring", true);
+        }
+        _ => {}
+    }
+}
+
+/// 范围统计不受关键词或快捷状态筛选影响。
+fn metric_group() -> Document {
+    doc! { "_id": null, "all": { "$sum": 1 },
+        "effective": { "$sum": { "$cond": [{ "$eq": ["$status", "EFFECTIVE"] }, 1, 0] } },
+        "expired": { "$sum": { "$cond": [{ "$eq": ["$status", "EXPIRED"] }, 1, 0] } },
+        "terminated": { "$sum": { "$cond": [{ "$eq": ["$status", "TERMINATED"] }, 1, 0] } },
+        "expiring_30d": { "$sum": { "$cond": ["$search_expiring", 1, 0] } }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 所有搜索分支仍位于权限范围之后，结果页与 total 使用同一条件。
+    #[test]
+    fn search_precedes_pagination_and_preserves_empty_scope() {
+        let filter = ContractFilter {
+            contract_no: None,
+            customer_id: None,
+            customer_ids: Some(vec![]),
+            status: None,
+            page: 3,
+            page_size: 20,
+            sort_by: Some("expiry_priority".into()),
+            sort_ascending: false,
+        };
+        let search = ContractSearch {
+            q: Some("客户.[x]".into()),
+            metric: Some(ContractMetric::Expiring30d),
+            settlement_party_id: Some("party-1".into()),
+            owner: None,
+            customers: vec![],
+        };
+        let pipeline = list_pipeline(&filter, &search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
+        assert_eq!(
+            pipeline[0]
+                .get_document("$match")
+                .unwrap()
+                .get_document("customer_id")
+                .unwrap(),
+            &doc! { "$in": [] }
+        );
+        let facets = pipeline.last().unwrap().get_document("$facet").unwrap();
+        let items = facets.get_array("items").unwrap();
+        let totals = facets.get_array("totals").unwrap();
+        assert_eq!(items[0], totals[0]);
+        assert_eq!(items[2].as_document().unwrap(), &doc! { "$skip": 40_i64 });
+        let matching = items[0].as_document().unwrap().get_document("$match").unwrap();
+        assert_eq!(matching.get_str("settlement_party_id").unwrap(), "party-1");
+        assert!(matching.get_bool("search_expiring").unwrap());
+        let first = matching.get_array("$or").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .get_document("contract_no")
+            .unwrap();
+        assert_eq!(first.get_str("$regex").unwrap(), r"客户\.\[x\]");
+        assert_eq!(first.get_str("$options").unwrap(), "i");
+    }
+
+    /// 候选项来自完整范围，重复负责人合并，编号命中不会扩大客户范围。
+    #[test]
+    fn foreign_search_and_owner_options_are_not_page_derived() {
+        let search = ContractSearch {
+            q: Some("c-101".into()),
+            metric: None,
+            settlement_party_id: None,
+            owner: Some("张三".into()),
+            customers: vec![
+                ContractCustomer {
+                    owner_id: None,
+                    id: "customer-101".into(),
+                    number: "C-101".into(),
+                    owner: "张三".into(),
+                },
+                ContractCustomer {
+                    owner_id: None,
+                    id: "customer-102".into(),
+                    number: "C-102".into(),
+                    owner: "张三".into(),
+                },
+            ],
+        };
+        assert_eq!(search.owner_options().len(), 1);
+        assert_eq!(
+            search
+                .filter()
+                .get_array("$or")
+                .unwrap()
+                .last()
+                .unwrap()
+                .as_document()
+                .unwrap(),
+            &doc! { "customer_id": { "$in": ["customer-101"] } }
+        );
+        assert_eq!(search.filter().get_str("search_owner").unwrap(), "张三");
+    }
+
+    /// 到期边界使用业务日并保留空页计数。
+    #[test]
+    fn expiry_uses_inclusive_business_dates_and_empty_page_count() {
+        let search = ContractSearch {
+            q: None,
+            metric: None,
+            settlement_party_id: None,
+            owner: None,
+            customers: vec![],
+        };
+        let fields = display_fields(&search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
+        let expression = fields
+            .get_document("search_expiring")
+            .unwrap()
+            .get_array("$and")
+            .unwrap();
+        assert_eq!(
+            expression[1].as_document().unwrap(),
+            &doc! { "$gte": ["$current.valid_to", "2026-09-08"] }
+        );
+        assert_eq!(
+            expression[2].as_document().unwrap(),
+            &doc! { "$lte": ["$current.valid_to", "2026-10-08"] }
+        );
+        assert_eq!(ContractSearchResult::default().total(), 0);
+    }
+}

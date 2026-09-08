@@ -9,8 +9,8 @@ use axum::{
     Extension, Json,
 };
 use erp_contract::{
-    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractView,
-    CreateContractRequest, PageView, TerminateContractRequest, UploadContractRequest, UploadContractView,
+    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView, ContractView,
+    CreateContractRequest, TerminateContractRequest, UploadContractRequest, UploadContractView,
 };
 use erp_support::{RetentionClass, SensitivityClass};
 
@@ -44,7 +44,7 @@ pub async fn contract_list(
     State(state): State<AppState>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(params): Query<ContractListParams>,
-) -> Result<PageView<ContractView>> {
+) -> Result<ContractListView> {
     let page = state.contract_service().contract_list(&params, &user_id).await?;
 
     Ok(ApiResponse::ok_with_data(page))

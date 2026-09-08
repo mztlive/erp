@@ -46,18 +46,5 @@ export function matchesQuery(
     if (q.errorClass && item.classification.errorClass !== q.errorClass) {
         return false
     }
-    if (q.q) {
-        const needle = q.q.toLowerCase()
-        const hay = [
-            item.identity.number,
-            item.identity.id,
-            item.businessObject.title,
-            item.businessObject.objectId,
-            item.classification.label,
-        ]
-            .join(" ")
-            .toLowerCase()
-        if (!hay.includes(needle)) return false
-    }
     return true
 }

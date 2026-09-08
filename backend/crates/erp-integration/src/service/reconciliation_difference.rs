@@ -19,6 +19,7 @@ impl IntegrationOpsService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = DifferenceFilter {
+            q: query.q,
             business_object_type: query.business_object_type,
             business_object_id: query.business_object_id,
             difference_type: query.difference_type,

@@ -6,8 +6,8 @@ pub mod owned;
 
 pub use extensions::InventoryExt;
 pub use inventory::{
-    InventoryRepository, StockAdjustmentFilter, StockAdjustmentRow, StockBalanceFilter, StockBalanceRow,
-    StockMovementFilter, StockMovementRow, StockReservationFilter, StockReservationRow,
+    InventoryRepository, InventorySearch, StockAdjustmentFilter, StockAdjustmentRow, StockBalanceFilter,
+    StockBalanceRow, StockMovementFilter, StockMovementRow, StockReservationFilter, StockReservationRow,
 };
 pub use owned::{
     StockAdjustmentLineRepository, StockAdjustmentRepository, StockBalanceRepository,

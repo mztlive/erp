@@ -181,6 +181,8 @@ pub struct IntegrationErrorTaskRow {
 /// 集成错误任务列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct IntegrationErrorTaskFilter {
+    /// 字面量关键词；分页和计数共同使用。
+    pub q: Option<String>,
     /// 关联的消息；`None` 表示不筛选。
     pub message_id: Option<InboxMessageId>,
     /// 关联的业务对象；`None` 表示不筛选。
@@ -226,6 +228,18 @@ impl QueryFilter for IntegrationErrorTaskFilter {
             filter.insert("owner_role", owner_role);
         }
         insert_literal_regex_filter(&mut filter, "owner_user_id", self.owner_user_id.as_deref());
+        keyword_filter(
+            &mut filter,
+            self.q.as_deref(),
+            &[
+                "id",
+                "business_object_id",
+                "message_id",
+                "last_attempt_summary",
+                "error_class",
+            ],
+        );
+        error_label_filter(&mut filter, self.q.as_deref());
         filter
     }
 }
@@ -264,6 +278,8 @@ pub struct ReconciliationDifferenceRow {
 /// 对账差异列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ReconciliationDifferenceFilter {
+    /// 字面量关键词；分页和计数共同使用。
+    pub q: Option<String>,
     /// 差异对象类型；`None` 表示不筛选。
     pub business_object_type: Option<String>,
     /// 差异对象 ID；`None` 表示不筛选。
@@ -306,6 +322,21 @@ impl QueryFilter for ReconciliationDifferenceFilter {
             self.created_at_from,
             self.created_at_to,
         );
+        keyword_filter(
+            &mut filter,
+            self.q.as_deref(),
+            &[
+                "id",
+                "business_object_id",
+                "business_object_type",
+                "difference_type",
+                "left_fact_reference",
+                "right_fact_reference",
+            ],
+        );
+        if self.q.as_deref().is_some_and(|q| "对账差异".contains(q)) {
+            filter.remove("$or");
+        }
         filter
     }
 }
@@ -710,7 +741,7 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Do
     let field = sort_by
         .filter(|field| allowed.contains(field))
         .unwrap_or("created_at");
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 向查询条件追加秒级时间戳闭区间范围（BSON Int64 形态，与 `Instant`/`created_at`
@@ -860,6 +891,7 @@ mod tests {
     #[test]
     fn error_task_filter_maps_enums_to_stable_codes() {
         let filter = IntegrationErrorTaskFilter {
+            q: None,
             message_id: None,
             business_object_id: Some("so-1".to_string()),
             error_class: Some(ErrorClass::TransientFailure),
@@ -889,6 +921,7 @@ mod tests {
     #[test]
     fn difference_filter_applies_object_key_and_time_range() {
         let filter = ReconciliationDifferenceFilter {
+            q: None,
             business_object_type: Some("mall_order".to_string()),
             business_object_id: Some("MO-1".to_string()),
             difference_type: Some("amount_mismatch".to_string()),
@@ -913,24 +946,110 @@ mod tests {
     fn sort_doc_defaults_to_created_at_and_rejects_non_whitelisted_fields() {
         assert_eq!(
             sort_doc(None, false, INBOX_SORT_FIELDS),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
         assert_eq!(
             sort_doc(Some("received_at"), true, INBOX_SORT_FIELDS),
-            doc! { "received_at": 1 }
+            doc! { "received_at": 1, "id": 1 }
         );
         assert_eq!(
             sort_doc(Some("payload_schema_version"), true, INBOX_SORT_FIELDS),
-            doc! { "created_at": 1 },
+            doc! { "created_at": 1, "id": 1 },
             "白名单外字段必须回退 created_at，禁止透传"
         );
         assert_eq!(
             sort_doc(Some("last_attempt_at"), false, ERROR_TASK_SORT_FIELDS),
-            doc! { "last_attempt_at": -1 }
+            doc! { "last_attempt_at": -1, "id": -1 }
         );
         assert_eq!(
             sort_doc(Some("business_object_id"), false, DIFFERENCE_SORT_FIELDS),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
+    }
+}
+
+/// 字面量多字段匹配，结构化范围保留为 AND 条件。
+fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&str]) {
+    let Some(q) = q else {
+        return;
+    };
+    let clauses = fields
+        .iter()
+        .map(|field| {
+            let mut clause = Document::new();
+            insert_literal_regex_filter(&mut clause, field, Some(q));
+            clause
+        })
+        .collect::<Vec<_>>();
+    filter.insert("$or", clauses);
+}
+
+#[cfg(test)]
+mod keyword_tests {
+    use super::*;
+
+    /// 关键词按字面量 OR 匹配且不覆盖状态、归属与软删除条件。
+    #[test]
+    fn literal_keyword_keeps_structured_constraints() {
+        let filter = IntegrationErrorTaskFilter {
+            q: Some("event.[x]".into()),
+            message_id: None,
+            business_object_id: None,
+            error_class: None,
+            status: Some(ErrorTaskStatus::Pending),
+            owner_role: None,
+            owner_user_id: Some("alice".into()),
+            page: 3,
+            page_size: 50,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        let document = filter.to_doc();
+        assert_eq!(document.get_str("status").unwrap(), "pending");
+        assert!(document.contains_key("deleted_at"));
+        assert!(document.contains_key("owner_user_id"));
+        let clauses = document.get_array("$or").unwrap();
+        assert!(clauses
+            .iter()
+            .any(|clause| clause.as_document().unwrap().contains_key("last_attempt_summary")));
+        assert_eq!(
+            clauses[0]
+                .as_document()
+                .unwrap()
+                .get_document("id")
+                .unwrap()
+                .get_str("$regex")
+                .unwrap(),
+            r"event\.\[x\]"
+        );
+        assert_eq!(
+            sort_doc(Some("created_at"), false, ERROR_TASK_SORT_FIELDS),
+            doc! { "created_at": -1, "id": -1 }
+        );
+    }
+}
+
+/// 保留队列现有中文错误类别搜索，别名仅扩展类别 OR 分支。
+fn error_label_filter(filter: &mut Document, q: Option<&str>) {
+    let Some(q) = q else {
+        return;
+    };
+    let aliases = [
+        (ErrorClass::CapabilityGap, "能力不足"),
+        (ErrorClass::MappingError, "参数/映射错误"),
+        (ErrorClass::BusinessRejected, "供应商业务拒绝"),
+        (ErrorClass::TransientFailure, "临时故障"),
+        (ErrorClass::ResultUnknown, "结果未知"),
+        (ErrorClass::AuthSignature, "鉴权/签名失败"),
+        (ErrorClass::RateLimited, "调用次数受限"),
+        (ErrorClass::OutOfOrder, "通知顺序异常"),
+    ];
+    let codes = aliases
+        .iter()
+        .filter(|(class, label)| label.contains(q) || class.label().contains(q))
+        .map(|(class, _)| class.as_str())
+        .collect::<Vec<_>>();
+    if let Ok(clauses) = filter.get_array_mut("$or") {
+        clauses.push(doc! { "error_class": { "$in": codes } }.into());
     }
 }

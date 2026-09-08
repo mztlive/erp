@@ -68,7 +68,7 @@ export function ContractsTablePanel({
         settlementPartyOptions,
         ownerOptions,
         pageRows,
-        sorted,
+        total,
         sorting,
         pagination,
         handleSortingChange,
@@ -143,7 +143,7 @@ export function ContractsTablePanel({
                     resultStatus={listWorkspaceFilterStatusText({
                         loading: isPending,
                         failed: isError,
-                        resultCount: isPending ? undefined : sorted.length,
+                        resultCount: isPending ? undefined : total,
                         noun: "份合同",
                         loadingLabel: "正在加载合同…",
                     })}
@@ -163,7 +163,7 @@ export function ContractsTablePanel({
                     data={pageRows}
                     columns={columns}
                     getRowId={(row) => row.contractId}
-                    rowCount={sorted.length}
+                    rowCount={total}
                     sorting={sorting}
                     onSortingChange={handleSortingChange}
                     pagination={pagination}

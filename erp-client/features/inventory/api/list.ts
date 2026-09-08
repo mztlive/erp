@@ -176,12 +176,14 @@ export async function fetchInventoryList(
     let dataWatermark = ""
 
     if (query.view === "balance") {
-        // availability filter not on backend — documented gap; still pass warehouse/sku
         const res = await fetchTargetView<BackendPage<BackendStockBalance>>(
             "/admin/stock-balances",
             {
+                balance_id: query.balanceId,
+                availability: query.availability,
                 page,
                 page_size: pageSize,
+                q: query.q?.trim() || undefined,
                 warehouse_id: query.warehouseId,
                 sku_id: query.skuId,
                 sort_by,
@@ -190,45 +192,14 @@ export async function fetchInventoryList(
         )
         if (!res) return permissionRevoked()
         balances = res.items.map(mapBalance)
-        // client-side availability narrow only when backend can't — mark as gap adaptation
-        if (query.availability && query.availability !== "all") {
-            balances = balances.filter((b) => {
-                if (query.availability === "zero")
-                    return b.availableQuantity === "0"
-                if (query.availability === "positive")
-                    return b.availableQuantity !== "0"
-                if (query.availability === "reserved")
-                    return b.hasActiveReservation
-                return true
-            })
-        }
-        if (query.balanceId) {
-            balances = balances.filter((b) => b.balanceId === query.balanceId)
-        }
         total = res.total
-        if (query.q?.trim()) {
-            const q = query.q.trim().toUpperCase()
-            balances = balances.filter((b) =>
-                [
-                    b.skuCode,
-                    b.skuName,
-                    b.specSummary,
-                    b.warehouseName,
-                    b.warehouseCode,
-                ]
-                    .join(" ")
-                    .toUpperCase()
-                    .includes(q),
-            )
-            // q filter not on backend — total becomes page-local (gap)
-            total = balances.length
-        }
     } else if (query.view === "movement") {
         const res = await fetchTargetView<BackendPage<BackendStockMovement>>(
             "/admin/stock-movements",
             {
                 page,
                 page_size: pageSize,
+                q: query.q?.trim() || undefined,
                 warehouse_id: query.warehouseId,
                 sku_id: query.skuId,
                 movement_type: backendMovementTypeFilter(query.movementType),
@@ -256,6 +227,7 @@ export async function fetchInventoryList(
             {
                 page,
                 page_size: pageSize,
+                q: query.q?.trim() || undefined,
                 warehouse_id: query.warehouseId,
                 sku_id: query.skuId,
                 sales_order_line_id: query.salesOrderLineId,
@@ -271,8 +243,11 @@ export async function fetchInventoryList(
         const res = await fetchTargetView<BackendPage<BackendStockAdjustment>>(
             "/admin/stock-adjustments",
             {
+                adjustment_id: query.adjustmentId,
+                sku_id: query.skuId,
                 page,
                 page_size: pageSize,
+                q: query.q?.trim() || undefined,
                 warehouse_id: query.warehouseId,
                 sort_by: sort_by ?? "created_at",
                 sort_dir: sort_dir ?? "desc",
@@ -286,7 +261,10 @@ export async function fetchInventoryList(
                     const detail = await apiGet<BackendStockAdjustmentDetail>(
                         `/admin/stock-adjustments/${encodeURIComponent(a.id)}`,
                     )
-                    const line = detail.lines[0]
+                    const line =
+                        detail.lines.find(
+                            (line) => line.sku_id === query.skuId,
+                        ) ?? detail.lines[0]
                     return mapAdjustment(
                         detail.adjustment,
                         line,
@@ -297,14 +275,6 @@ export async function fetchInventoryList(
                 }
             }),
         )
-        if (query.adjustmentId) {
-            adjustments = adjustments.filter(
-                (a) => a.adjustmentId === query.adjustmentId,
-            )
-        }
-        if (query.skuId) {
-            adjustments = adjustments.filter((a) => a.skuId === query.skuId)
-        }
         total = res.total
     }
 

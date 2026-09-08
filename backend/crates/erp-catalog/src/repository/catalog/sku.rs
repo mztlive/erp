@@ -518,14 +518,31 @@ impl<'a> CatalogRepository<'a> {
         keyword: &str,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SkuId>> {
+        self.keyword_sku_ids(keyword, false, executor).await
+    }
+
+    /// 解析库存搜索的 SKU 编码、当前名称和规格，不匹配历史修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败。
+    pub async fn inventory_sku_ids(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
+        self.keyword_sku_ids(keyword, true, executor).await
+    }
+
+    /// 共享当前修订匹配规则；库存搜索额外包含规格。
+    async fn keyword_sku_ids(
+        &self,
+        keyword: &str,
+        include_specification: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuId>> {
         let mut sku_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut sku_filter, "sku_no", Some(keyword));
         let mut skus = SkuRepository::new(self.db, SKUS)
             .find_many(sku_filter, executor)
             .await?;
 
-        let mut revision_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut revision_filter, "name", Some(keyword));
+        let revision_filter = sku_revision_keyword_filter(keyword, include_specification);
         let revisions = SkuRevisionRepository::new(self.db, SKU_REVISIONS)
             .find_many(revision_filter, executor)
             .await?;
@@ -1144,5 +1161,41 @@ mod tests {
         assert!(matches!(wire_doc.get("weight_kg"), Some(Bson::Decimal128(_))));
         let back: SkuRevision = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, revision);
+    }
+}
+
+/// SKU 当前修订的名称匹配；仅库存搜索包含规格，保留既有调用方语义。
+fn sku_revision_keyword_filter(keyword: &str, include_specification: bool) -> Document {
+    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+    let mut name = Document::new();
+    insert_literal_regex_filter(&mut name, "name", Some(keyword));
+    if !include_specification {
+        filter.extend(name);
+        return filter;
+    }
+    let mut specification = Document::new();
+    insert_literal_regex_filter(&mut specification, "specification", Some(keyword));
+    filter.insert("$or", vec![name, specification]);
+    filter
+}
+
+#[cfg(test)]
+mod inventory_keyword_tests {
+    use super::*;
+    /// 库存额外支持字面量规格，既有商品编号与名称搜索保持原语义。
+    #[test]
+    fn inventory_search_includes_literal_specification_without_changing_other_consumers() {
+        let regular = sku_revision_keyword_filter("500ml.[x]", false);
+        assert!(regular.contains_key("name"));
+        assert!(!regular.contains_key("$or"));
+        let inventory = sku_revision_keyword_filter("500ml.[x]", true);
+        assert!(inventory.contains_key("deleted_at"));
+        let clauses = inventory.get_array("$or").unwrap();
+        let spec = clauses[1]
+            .as_document()
+            .unwrap()
+            .get_document("specification")
+            .unwrap();
+        assert_eq!(spec.get_str("$regex").unwrap(), r"500ml\.\[x\]");
     }
 }

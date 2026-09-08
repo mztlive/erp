@@ -39,6 +39,8 @@ pub struct StockBalanceRow {
 /// 库存余额列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct StockBalanceFilter {
+    /// Service 解析的搜索条件；只允许服务端构造。
+    pub search: super::InventorySearch,
     /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
@@ -69,6 +71,7 @@ impl QueryFilter for StockBalanceFilter {
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
         }
+        self.search.apply(&mut filter);
         filter
     }
 }
@@ -506,6 +509,7 @@ mod filter_tests {
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockBalanceFilter {
         StockBalanceFilter {
+            search: Default::default(),
             warehouse_ids,
             sku_id: None,
             page: 1,

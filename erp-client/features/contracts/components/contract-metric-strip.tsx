@@ -1,13 +1,9 @@
 "use client"
 
 import { MetricItem, MetricStrip } from "@/components/business"
-import { computeContractMetrics } from "@/features/contracts/lib/filter-contracts"
+import type { ContractMetrics } from "@/features/contracts/lib/filter-contracts"
 
-export function ContractMetricStrip({
-    metrics,
-}: {
-    metrics: ReturnType<typeof computeContractMetrics>
-}) {
+export function ContractMetricStrip({ metrics }: { metrics: ContractMetrics }) {
     return (
         <MetricStrip columns={5} aria-label="合同指标">
             <MetricItem

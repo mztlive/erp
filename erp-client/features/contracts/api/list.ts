@@ -59,16 +59,49 @@ function mapListRow(row: BackendContractView): ContractListRow {
     }
 }
 
-/**
- * 合同列表（全量拉取一页大容量；页面本地筛选/指标仍可用 filter-contracts）。
- */
-export async function fetchContracts(): Promise<ContractListRow[]> {
-    const page = await apiGet<Page<BackendContractView>>("/admin/contracts", {
-        page: 1,
-        page_size: 100,
-        sort_by: "created_at",
-        sort_dir: "desc",
-    })
+/** 服务端完整结果集分页，指标与候选项来自当前可见合同范围。 */
+export type ContractListData = {
+    items: ContractListRow[]
+    total: number
+    metrics: import("../lib/filter-contracts").ContractMetrics
+    settlementOptions: { value: string; label: string }[]
+    ownerOptions: { value: string; label: string }[]
+}
 
-    return page.items.map(mapListRow)
+export async function fetchContracts(
+    query: import("../lib/contracts-url-state").ContractsUrlState,
+): Promise<ContractListData> {
+    const page = await apiGet<
+        Page<BackendContractView> & {
+            metrics: {
+                all: number
+                effective: number
+                expiring_30d: number
+                expired: number
+                terminated: number
+            }
+            settlement_options: { value: string; label: string }[]
+            owner_options: { value: string; label: string }[]
+        }
+    >("/admin/contracts", {
+        q: query.q?.trim() || undefined,
+        metric: query.metric,
+        customer_id: query.customerId,
+        settlement_party_id: query.settlementPartyId,
+        owner: query.owner,
+        page: query.page,
+        page_size: query.pageSize,
+        sort_by:
+            query.sort === "contractNo"
+                ? "contract_no"
+                : query.sort || "expiry_priority",
+        sort_dir: query.dir || "asc",
+    })
+    return {
+        items: page.items.map(mapListRow),
+        total: page.total,
+        metrics: page.metrics,
+        settlementOptions: page.settlement_options,
+        ownerOptions: page.owner_options,
+    }
 }

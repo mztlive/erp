@@ -429,6 +429,18 @@ impl MongoInventoryCatalogFacts {
 
 #[async_trait]
 impl CatalogFactsPort for MongoInventoryCatalogFacts {
+    async fn matching_sku_ids(
+        &self,
+        q: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_inventory::Result<Vec<SkuId>> {
+        self.db
+            .catalog()
+            .inventory_sku_ids(q, executor)
+            .await
+            .map_err(erp_inventory::Error::from)
+    }
+
     async fn skus_by_ids(
         &self,
         ids: &[String],

@@ -1,3 +1,4 @@
+import { collectQueuePages } from "./queue-pagination"
 /**
  * W29 队列请求函数。
  * 从 requests.ts 拆出；requests.ts 统一再导出 fetchIntegrationQueue。
@@ -41,19 +42,19 @@ export async function fetchIntegrationQueue(
                     ? undefined
                     : "manual_required"
 
-        const tasks = await apiGet<Page<BackendErrorTask>>(
-            "/admin/integration/error-tasks",
-            {
-                page: 1,
+        const tasks = await collectQueuePages((page) =>
+            apiGet<Page<BackendErrorTask>>("/admin/integration/error-tasks", {
+                page,
+                q: query.q?.trim() || undefined,
                 page_size: pageSize,
                 error_class: errorClassToBackend(query.errorClass),
                 status: query.view === "resolved" ? "resolved" : status,
                 owner_user_id: query.owner === "me" ? "me" : undefined,
                 sort_by: "created_at",
                 sort_dir: "desc",
-            },
+            }),
         )
-        for (const t of tasks.items ?? []) {
+        for (const t of tasks) {
             items.push(
                 mapErrorTask(
                     t,
@@ -66,22 +67,25 @@ export async function fetchIntegrationQueue(
 
         // Also fetch pending if view is mine/all
         if (query.view === "mine" || query.view === "result_unknown") {
-            const more = await apiGet<Page<BackendErrorTask>>(
-                "/admin/integration/error-tasks",
-                {
-                    page: 1,
-                    page_size: pageSize,
-                    error_class:
-                        query.view === "result_unknown"
-                            ? "result_unknown"
-                            : errorClassToBackend(query.errorClass),
-                    status: "pending",
-                    sort_by: "created_at",
-                    sort_dir: "desc",
-                },
+            const more = await collectQueuePages((page) =>
+                apiGet<Page<BackendErrorTask>>(
+                    "/admin/integration/error-tasks",
+                    {
+                        page,
+                        q: query.q?.trim() || undefined,
+                        page_size: pageSize,
+                        error_class:
+                            query.view === "result_unknown"
+                                ? "result_unknown"
+                                : errorClassToBackend(query.errorClass),
+                        status: "pending",
+                        sort_by: "created_at",
+                        sort_dir: "desc",
+                    },
+                ),
             )
             const seen = new Set(items.map((i) => i.identity.id))
-            for (const t of more.items ?? []) {
+            for (const t of more) {
                 if (!seen.has(t.id)) {
                     items.push(
                         mapErrorTask(
@@ -109,16 +113,19 @@ export async function fetchIntegrationQueue(
             query.view !== "security" &&
             query.view !== "auto_retry"
         ) {
-            const diffs = await apiGet<Page<BackendDifference>>(
-                "/admin/integration/differences",
-                {
-                    page: 1,
-                    page_size: pageSize,
-                    sort_by: "created_at",
-                    sort_dir: "desc",
-                },
+            const diffs = await collectQueuePages((page) =>
+                apiGet<Page<BackendDifference>>(
+                    "/admin/integration/differences",
+                    {
+                        page,
+                        q: query.q?.trim() || undefined,
+                        page_size: pageSize,
+                        sort_by: "created_at",
+                        sort_dir: "desc",
+                    },
+                ),
             )
-            for (const d of diffs.items ?? []) {
+            for (const d of diffs) {
                 items.push(
                     mapDifference(
                         d,
@@ -145,7 +152,12 @@ export async function fetchIntegrationQueue(
             if (i.classification.severity === "high") return 3
             return 4
         }
-        return rank(a) - rank(b)
+        return (
+            rank(a) - rank(b) ||
+            b.createdAt.localeCompare(a.createdAt) ||
+            a.identity.itemType.localeCompare(b.identity.itemType) ||
+            a.identity.id.localeCompare(b.identity.id)
+        )
     })
 
     const filterParts = [
@@ -176,20 +188,24 @@ export async function fetchIntegrationQueue(
     return {
         items: filtered,
         metrics: {
-            resultUnknown: items.filter(
+            resultUnknown: filtered.filter(
                 (i) => i.classification.errorClass === "result-unknown",
             ).length,
-            manualRequired: items.filter((i) => i.status.label.includes("人工"))
-                .length,
-            securityFaults: items.filter(
+            manualRequired: filtered.filter((i) =>
+                i.status.label.includes("人工"),
+            ).length,
+            securityFaults: filtered.filter(
                 (i) =>
                     i.classification.errorClass ===
                     "authentication-or-signature",
             ).length,
-            openDifferences: items.filter(
+            openDifferences: filtered.filter(
                 (i) => i.identity.itemType === "RECONCILIATION_DIFFERENCE",
             ).length,
-            longestAgeLabel: items[0]?.ageLabel ?? "—",
+            longestAgeLabel:
+                [...filtered].sort((a, b) =>
+                    a.createdAt.localeCompare(b.createdAt),
+                )[0]?.ageLabel ?? "—",
         },
         context: {
             queueContextId: query.queueContextId ?? `queue:W29:${query.view}`,

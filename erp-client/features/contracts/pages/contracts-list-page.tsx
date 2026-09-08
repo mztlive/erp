@@ -16,14 +16,11 @@ import { ContractsTablePanel } from "@/features/contracts/components/contracts-t
 import { useContractListActions } from "@/features/contracts/hooks/use-contract-list-actions"
 import { useContractListColumns } from "@/features/contracts/hooks/use-contract-list-columns"
 import { useContractsList } from "@/features/contracts/hooks/use-contracts-list"
-import {
-    useContractCenterQuery,
-    useContractsQuery,
-} from "@/features/contracts/hooks/queries"
+import { useContractCenterQuery } from "@/features/contracts/hooks/queries"
 
 export function ContractsListPage() {
-    const contractsQuery = useContractsQuery()
-    const list = useContractsList(contractsQuery.data)
+    const list = useContractsList()
+    const { contractsQuery } = list
     const { customerId } = list
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
@@ -32,7 +29,7 @@ export function ContractsListPage() {
 
     const previewRow = React.useMemo(
         () =>
-            (contractsQuery.data ?? []).find(
+            (contractsQuery.data?.items ?? []).find(
                 (item) => item.contractId === previewId,
             ) ?? null,
         [contractsQuery.data, previewId],
@@ -42,7 +39,7 @@ export function ContractsListPage() {
     const paperDetailQuery = useContractCenterQuery(paperId ?? "")
 
     const actions = useContractListActions({
-        filteredCount: list.filtered.length,
+        filteredCount: list.total,
         filterSnapshotLabel: list.filterSnapshotLabel,
     })
 
@@ -91,9 +88,7 @@ export function ContractsListPage() {
                                 ? LoaderCircleIcon
                                 : DownloadIcon,
                             variant: "outline",
-                            disabled:
-                                list.filtered.length === 0 ||
-                                actions.exportPending,
+                            disabled: list.total === 0 || actions.exportPending,
                             onClick: () => {
                                 void actions.handleExport()
                             },

@@ -49,6 +49,7 @@ impl InventoryService {
         let page_size = query.paging.page_size;
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
+        let catalog = std::sync::Arc::clone(&self.catalog_facts);
         let actor = actor.clone();
         let client = db.client().clone();
         let (page, authorization) = client
@@ -58,7 +59,23 @@ impl InventoryService {
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存读取权限".to_string()));
                     }
+                    let search = super::search::sku_filter(
+                        catalog.as_ref(),
+                        query.q.as_deref(),
+                        query.sku_id.as_ref(),
+                        session,
+                    )
+                    .await?;
+                    let search = super::search::balance_filter(
+                        &db,
+                        search,
+                        query.balance_id.as_deref(),
+                        query.availability,
+                        session,
+                    )
+                    .await?;
                     let filter = StockBalanceFilter {
+                        search,
                         warehouse_ids: authorization
                             .balance_list_scope()
                             .repository_warehouse_ids(query.warehouse_id),
@@ -189,6 +206,7 @@ impl InventoryService {
             })
             .await?;
         let filter = StockMovementFilter {
+            search: Default::default(),
             warehouse_ids: Some(vec![balance.warehouse_id.clone()]),
             sku_id: Some(balance.sku_id.clone()),
             movement_type: None,

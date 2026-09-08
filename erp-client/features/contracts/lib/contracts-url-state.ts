@@ -19,7 +19,7 @@ const CONTRACTS_URL_FIELDS = [
         values: CONTRACT_METRIC_VALUES,
         defaultValue: "all",
     },
-    { key: "page", type: "number", defaultValue: 1 },
+    { key: "page", type: "number", defaultValue: 1, min: 1 },
     { key: "pageSize", type: "number", defaultValue: 20, min: 1, max: 100 },
     { key: "sort", type: "string" },
     { key: "dir", type: "enum", values: ["asc", "desc"] as const },

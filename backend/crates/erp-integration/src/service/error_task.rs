@@ -19,6 +19,7 @@ impl IntegrationOpsService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = ErrorTaskFilter {
+            q: query.q,
             message_id: query.message_id,
             business_object_id: query.business_object_id,
             error_class: query.error_class,

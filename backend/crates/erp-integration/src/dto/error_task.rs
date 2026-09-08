@@ -30,6 +30,10 @@ pub struct CreateErrorTaskRequest {
 /// 错误任务列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ErrorTaskListParams {
+    /// 编号、业务对象、事件或差异摘要的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+
     /// 关联消息 ID 筛选。
     pub message_id: Option<crate::entity::integration_ops::InboxMessageId>,
     /// 关联业务对象 ID 筛选。
@@ -57,6 +61,9 @@ pub struct ErrorTaskListParams {
 /// 归一化后的错误任务列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ErrorTaskListQuery {
+    /// 编号、业务对象、事件或差异摘要的字面量关键词。
+    pub q: Option<String>,
+
     /// 关联消息 ID 筛选。
     pub message_id: Option<crate::entity::integration_ops::InboxMessageId>,
     /// 关联业务对象 ID 筛选。
@@ -86,6 +93,7 @@ impl ErrorTaskListParams {
     pub(crate) fn normalized(&self) -> Result<ErrorTaskListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, ERROR_TASK_SORT_FIELDS)?;
         Ok(ErrorTaskListQuery {
+            q: normalized_text(self.q.as_deref()),
             message_id: self.message_id.clone(),
             business_object_id: normalized_text(self.business_object_id.as_deref()),
             error_class: self.error_class,
@@ -201,6 +209,7 @@ mod tests {
     #[test]
     fn error_task_list_params_normalize_flat_filters() {
         let params = ErrorTaskListParams {
+            q: Some("  needle.[x]  ".to_string()),
             message_id: None,
             business_object_id: Some(" so-2026-001 ".to_string()),
             error_class: Some(ErrorClass::TransientFailure),
@@ -213,6 +222,7 @@ mod tests {
             sort_dir: Some("asc".to_string()),
         };
         let query = params.normalized().unwrap();
+        assert_eq!(query.q.as_deref(), Some("needle.[x]"));
         assert_eq!(query.business_object_id.as_deref(), Some("so-2026-001"));
         assert_eq!(query.error_class, Some(ErrorClass::TransientFailure));
         assert_eq!(query.status, Some(ErrorTaskStatus::AutoRetrying));

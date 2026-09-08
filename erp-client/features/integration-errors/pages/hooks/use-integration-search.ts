@@ -5,9 +5,7 @@ export function useIntegrationSearch({ q }: { q: string | undefined }) {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(q ?? "")
-        }
+        setSearchDraft(q ?? "")
     }, [q])
 
     React.useEffect(() => {

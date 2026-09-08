@@ -52,6 +52,10 @@ pub struct CreateDifferenceRequest {
 /// 对账差异列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct DifferenceListParams {
+    /// 编号、业务对象、事件或差异摘要的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+
     /// 差异对象类型筛选。
     pub business_object_type: Option<String>,
     /// 差异对象 ID 筛选。
@@ -77,6 +81,9 @@ pub struct DifferenceListParams {
 /// 归一化后的对账差异列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DifferenceListQuery {
+    /// 编号、业务对象、事件或差异摘要的字面量关键词。
+    pub q: Option<String>,
+
     /// 差异对象类型筛选。
     pub business_object_type: Option<String>,
     /// 差异对象 ID 筛选。
@@ -104,6 +111,7 @@ impl DifferenceListParams {
     pub(crate) fn normalized(&self) -> Result<DifferenceListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, DIFFERENCE_SORT_FIELDS)?;
         Ok(DifferenceListQuery {
+            q: normalized_text(self.q.as_deref()),
             business_object_type: normalized_text(self.business_object_type.as_deref()),
             business_object_id: normalized_text(self.business_object_id.as_deref()),
             difference_type: normalized_text(self.difference_type.as_deref()),
@@ -233,6 +241,7 @@ mod tests {
     #[test]
     fn difference_list_params_normalize_and_reject_unbounded_page_size() {
         let params = DifferenceListParams {
+            q: Some("  needle.[x]  ".to_string()),
             business_object_type: Some(" mall_order ".to_string()),
             business_object_id: None,
             difference_type: None,
@@ -246,6 +255,7 @@ mod tests {
         assert!(params.validate().is_err());
 
         let params = DifferenceListParams {
+            q: Some("  needle.[x]  ".to_string()),
             business_object_type: Some(" mall_order ".to_string()),
             business_object_id: Some("MO-1".to_string()),
             difference_type: Some("amount_mismatch".to_string()),
@@ -257,6 +267,7 @@ mod tests {
             sort_dir: Some("desc".to_string()),
         };
         let query = params.normalized().unwrap();
+        assert_eq!(query.q.as_deref(), Some("needle.[x]"));
         assert_eq!(query.business_object_type.as_deref(), Some("mall_order"));
         assert_eq!(query.business_object_id.as_deref(), Some("MO-1"));
         assert_eq!(query.created_at_to, Some(1_700_000_100));

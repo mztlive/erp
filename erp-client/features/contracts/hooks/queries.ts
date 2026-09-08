@@ -17,10 +17,12 @@ const contractKeys = {
     selectable: () => [...contractKeys.all, "selectable-for-so"] as const,
 }
 
-export function useContractsQuery() {
+export function useContractsQuery(
+    query: import("../lib/contracts-url-state").ContractsUrlState,
+) {
     return useQuery({
-        queryKey: contractKeys.list(),
-        queryFn: fetchContracts,
+        queryKey: [...contractKeys.list(), query],
+        queryFn: () => fetchContracts(query),
     })
 }
 

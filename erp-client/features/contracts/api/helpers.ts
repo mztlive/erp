@@ -46,8 +46,15 @@ export function isExpiringWithin30Days(
     validTo?: string | null,
 ): boolean {
     if (status !== "EFFECTIVE" || !validTo) return false
-    const d = daysUntil(validTo)
-    return d >= 0 && d <= 30
+    const today = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date())
+    const days =
+        (Date.parse(validTo) - Date.parse(today)) / (24 * 60 * 60 * 1000)
+    return days >= 0 && days <= 30
 }
 
 export function paymentTermCodeFromLabel(label: string): string {

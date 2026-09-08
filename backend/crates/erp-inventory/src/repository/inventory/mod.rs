@@ -7,6 +7,8 @@ mod adjustment;
 mod balance;
 mod movement;
 mod reservation;
+mod search;
+pub use search::InventorySearch;
 mod shared;
 
 use mongodb::Database;

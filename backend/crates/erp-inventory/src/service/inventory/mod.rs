@@ -15,6 +15,7 @@ mod balance;
 mod mapping;
 mod movement;
 mod reservation;
+mod search;
 mod stock_write;
 mod update;
 

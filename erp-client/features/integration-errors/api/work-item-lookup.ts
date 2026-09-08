@@ -1,3 +1,4 @@
+import { collectQueuePages } from "./queue-pagination"
 /**
  * W29 正式处理责任的批量查询：按业务对象键归集 work item 投影。
  * 从 requests.ts 拆出，供队列与详情请求函数共用。
@@ -23,15 +24,18 @@ export async function fetchW29WorkItems(
         : owner === "assigned"
           ? "managed"
           : "mine"
-    const page = await listWorkItems({
-        scope,
-        timezone:
-            Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-        page: 1,
-        pageSize: 100,
-    })
+    const items = await collectQueuePages((page) =>
+        listWorkItems({
+            scope,
+            timezone:
+                Intl.DateTimeFormat().resolvedOptions().timeZone ||
+                "Asia/Shanghai",
+            page,
+            pageSize: 100,
+        }),
+    )
     const byObject = new Map<string, WorkItemProjection>()
-    for (const dto of page.items) {
+    for (const dto of items) {
         const item = mapWorkItemDto(dto)
         const objectType = item.businessObjectType.trim().toUpperCase()
         if (

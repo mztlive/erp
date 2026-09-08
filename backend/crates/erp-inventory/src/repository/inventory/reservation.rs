@@ -44,6 +44,8 @@ pub struct StockReservationRow {
 /// 库存预占列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct StockReservationFilter {
+    /// Service 解析的搜索条件；只允许服务端构造。
+    pub search: super::InventorySearch,
     /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
     pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
@@ -84,6 +86,7 @@ impl QueryFilter for StockReservationFilter {
         if let Some(sales_order_line_id) = &self.sales_order_line_id {
             filter.insert("sales_order_line_id", sales_order_line_id.to_string());
         }
+        self.search.apply(&mut filter);
         filter
     }
 }
@@ -521,6 +524,7 @@ mod filter_tests {
 
     fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockReservationFilter {
         StockReservationFilter {
+            search: Default::default(),
             warehouse_ids,
             sku_id: None,
             status: None,

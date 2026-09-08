@@ -5,17 +5,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
-    computeContractMetrics,
+    EMPTY_CONTRACT_METRICS,
     contractMetricLabel,
-    filterContracts,
     type ContractMetricFilter,
 } from "@/features/contracts/lib/filter-contracts"
-import { sortRows } from "@/features/contracts/lib/contract-list-sort"
+import { useContractsQuery } from "./queries"
 import {
     contractsUrlCodec,
     type ContractsUrlState,
 } from "@/features/contracts/lib/contracts-url-state"
-import type { ContractListRow } from "@/features/contracts/types"
 
 /** 可被单独移除的已生效条件。 */
 export type ContractFilterKey =
@@ -35,13 +33,11 @@ export type ContractAppliedChip = Readonly<{
  * Applied 在 URL（唯一事实源），Draft 本地受控不触发请求，UI 态（面板展开）本地保存。
  * 关键词与「更多筛选」草稿经显式提交（查询）一次性写 URL 并回第 1 页。
  */
-export function useContractsList(rows: readonly ContractListRow[] | undefined) {
+export function useContractsList() {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-
-    const allRows = React.useMemo(() => rows ?? [], [rows])
 
     // Applied：稳定序列化签名派生，避免每次 render 新对象导致重复回填
     const appliedQuery = searchParams.toString()
@@ -61,6 +57,13 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         owner,
         upload,
     } = url
+
+    const contractsQuery = useContractsQuery(url)
+    const allRows = React.useMemo(
+        () => contractsQuery.data?.items ?? [],
+        [contractsQuery.data],
+    )
+    const total = contractsQuery.data?.total ?? 0
 
     // Draft：本地受控，变化不请求
     const [searchDraft, setSearchDraft] = React.useState(q ?? "")
@@ -153,9 +156,7 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
 
     // URL 回填：仅同步 Draft；面板展开态不在此重置
     React.useEffect(() => {
-        if (document.activeElement !== searchInputRef.current) {
-            setSearchDraft(q ?? "")
-        }
+        setSearchDraft(q ?? "")
     }, [q])
 
     React.useEffect(() => {
@@ -189,31 +190,9 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         return () => window.removeEventListener("keydown", onKeyDown)
     }, [])
 
-    // 派生筛选只读 Applied（URL）
-    const filtered = React.useMemo(() => {
-        let rowsFiltered = filterContracts(allRows, {
-            search: q ?? "",
-            metricKey: metric,
-            statusFilter: "all",
-            settlementPartyId,
-            owner,
-        })
-        if (customerId) {
-            rowsFiltered = rowsFiltered.filter(
-                (r) => r.customer.customerId === customerId,
-            )
-        }
-        return rowsFiltered
-    }, [allRows, customerId, metric, owner, q, settlementPartyId])
-
     const sorting = React.useMemo<SortingState>(
         () => (sort ? [{ id: sort, desc: dir === "desc" }] : []),
         [dir, sort],
-    )
-
-    const sorted = React.useMemo(
-        () => sortRows(filtered, sorting),
-        [filtered, sorting],
     )
 
     const pagination = React.useMemo<PaginationState>(
@@ -221,15 +200,8 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         [page, pageSize],
     )
 
-    const pageRows = React.useMemo(() => {
-        const start = pagination.pageIndex * pagination.pageSize
-        return sorted.slice(start, start + pagination.pageSize)
-    }, [pagination.pageIndex, pagination.pageSize, sorted])
-
-    const metrics = React.useMemo(
-        () => computeContractMetrics(allRows),
-        [allRows],
-    )
+    const pageRows = allRows
+    const metrics = contractsQuery.data?.metrics ?? EMPTY_CONTRACT_METRICS
 
     // 来源锁定与结构化条件的展示名；数据外深链回退为「未知」，仍提供可移除 chip
     const lockedCustomerLabel = React.useMemo(
@@ -240,9 +212,10 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
     )
     const selectedSettlementPartyLabel = React.useMemo(
         () =>
-            allRows.find((r) => r.settlementParty.partyId === settlementPartyId)
-                ?.settlementParty.displayName ?? "未知",
-        [allRows, settlementPartyId],
+            contractsQuery.data?.settlementOptions.find(
+                (option) => option.value === settlementPartyId,
+            )?.label ?? "未知",
+        [contractsQuery.data?.settlementOptions, settlementPartyId],
     )
 
     /** 全部已生效条件 → chip；查询、摘要、计数、导出只读 Applied。 */
@@ -323,29 +296,8 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         settlementPartyId,
     ])
 
-    // 面板字段选项：由当前业务范围行派生，避免额外字典请求
-    const settlementPartyOptions = React.useMemo(
-        () =>
-            [
-                ...new Map(
-                    allRows.map((r) => [
-                        r.settlementParty.partyId,
-                        r.settlementParty.displayName,
-                    ]),
-                ).entries(),
-            ]
-                .map(([value, label]) => ({ value, label }))
-                .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
-        [allRows],
-    )
-
-    const ownerOptions = React.useMemo(
-        () =>
-            [...new Set(allRows.map((r) => r.ownerLabel))]
-                .map((label) => ({ value: label, label }))
-                .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
-        [allRows],
-    )
+    const settlementPartyOptions = contractsQuery.data?.settlementOptions ?? []
+    const ownerOptions = contractsQuery.data?.ownerOptions ?? []
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -381,6 +333,8 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         Boolean(owner)
 
     return {
+        contractsQuery,
+        total,
         url,
         q,
         metric,
@@ -402,9 +356,7 @@ export function useContractsList(rows: readonly ContractListRow[] | undefined) {
         setOwnerDraft,
         panelOpen,
         setPanelOpen,
-        filtered,
         sorting,
-        sorted,
         pagination,
         pageRows,
         metrics,

@@ -17,7 +17,17 @@ use crate::error::Result;
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 
 /// 合同列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
-pub(crate) const CONTRACT_SORT_FIELDS: &[&str] = &["created_at", "contract_no"];
+pub(crate) const CONTRACT_SORT_FIELDS: &[&str] = &[
+    "created_at",
+    "contract_no",
+    "customer",
+    "settlement",
+    "validity",
+    "revision",
+    "sales",
+    "owner",
+    "expiry_priority",
+];
 
 /// 排序方向。
 pub use application_core::SortDir;
@@ -217,6 +227,16 @@ pub enum ContractListScope {
 /// 合同列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ContractListParams {
+    /// 合同号、客户编号/名称、结算主体、当前负责人关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+    /// 快捷状态或到期条件。
+    pub metric: Option<ContractMetric>,
+    /// 结算主体精确筛选。
+    pub settlement_party_id: Option<String>,
+    /// 当前负责人显示名精确筛选，兼容已有 URL。
+    pub owner: Option<String>,
+
     /// 合同编号（字面量模糊筛选）。
     pub contract_no: Option<String>,
     /// 客户筛选。
@@ -240,6 +260,15 @@ pub struct ContractListParams {
 /// 归一化后的合同列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContractListQuery {
+    /// 合同号、客户编号/名称、结算主体、当前负责人关键词。
+    pub q: Option<String>,
+    /// 快捷状态或到期条件。
+    pub metric: Option<ContractMetric>,
+    /// 结算主体精确筛选。
+    pub settlement_party_id: Option<String>,
+    /// 当前负责人显示名精确筛选，兼容已有 URL。
+    pub owner: Option<String>,
+
     /// 合同编号筛选。
     pub contract_no: Option<String>,
     /// 客户筛选。
@@ -266,6 +295,10 @@ impl ContractListParams {
     pub(crate) fn normalized(&self) -> Result<ContractListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CONTRACT_SORT_FIELDS)?;
         Ok(ContractListQuery {
+            q: normalized_text(self.q.as_deref()),
+            metric: self.metric,
+            settlement_party_id: normalized_text(self.settlement_party_id.as_deref()),
+            owner: normalized_text(self.owner.as_deref()),
             contract_no: normalized_text(self.contract_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
             scope: self.scope.unwrap_or_default(),
@@ -585,4 +618,43 @@ mod tests {
             })
         );
     }
+}
+
+/// 合同快捷筛选，与列表指标采用相同规则。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractMetric {
+    All,
+    Effective,
+    #[serde(rename = "expiring_30d")]
+    Expiring30d,
+    Expired,
+    Terminated,
+}
+
+/// 合同范围指标；不随关键词、快捷筛选或页码变化。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ContractMetrics {
+    pub all: i64,
+    pub effective: i64,
+    pub expiring_30d: i64,
+    pub expired: i64,
+    pub terminated: i64,
+}
+
+/// 当前可见合同范围的筛选候选值。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContractFilterOption {
+    pub value: String,
+    pub label: String,
+}
+
+/// 合同分页列表；保留 Page 字段并追加全范围指标和候选项。
+#[derive(Debug, Clone, Serialize)]
+pub struct ContractListView {
+    #[serde(flatten)]
+    pub page: PageView<ContractView>,
+    pub metrics: ContractMetrics,
+    pub settlement_options: Vec<ContractFilterOption>,
+    pub owner_options: Vec<ContractFilterOption>,
 }

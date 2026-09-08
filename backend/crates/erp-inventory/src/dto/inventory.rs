@@ -346,9 +346,31 @@ pub struct StockBalanceDetailView {
     pub pending_adjustments: Vec<StockAdjustmentView>,
 }
 
+/// 余额可用量筛选；所有条件均在分页前应用。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StockAvailability {
+    /// 不限制数量。
+    All,
+    /// 可用量等于零。
+    Zero,
+    /// 可用量严格大于零。
+    Positive,
+    /// 存在有效预占。
+    Reserved,
+}
+
 /// 库存余额列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct StockBalanceListParams {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+    /// 精确定位余额。
+    pub balance_id: Option<String>,
+    /// 可用量条件，在分页和计数前执行。
+    pub availability: Option<StockAvailability>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// SKU 筛选。
@@ -368,6 +390,13 @@ pub struct StockBalanceListParams {
 /// 归一化后的库存余额列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StockBalanceListQuery {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    pub q: Option<String>,
+    /// 精确定位余额。
+    pub balance_id: Option<String>,
+    /// 可用量条件，在分页和计数前执行。
+    pub availability: Option<StockAvailability>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// SKU 筛选。
@@ -389,6 +418,9 @@ impl StockBalanceListParams {
     pub(crate) fn normalized(&self) -> Result<StockBalanceListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_BALANCE_SORT_FIELDS)?;
         Ok(StockBalanceListQuery {
+            q: application_core::normalized_text(self.q.as_deref()),
+            balance_id: application_core::normalized_text(self.balance_id.as_deref()),
+            availability: self.availability,
             warehouse_id: self.warehouse_id.clone(),
             sku_id: self.sku_id.clone(),
             paging: PageParams {
@@ -404,6 +436,10 @@ impl StockBalanceListParams {
 /// 库存流水列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct StockMovementListParams {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// SKU 筛选。
@@ -431,6 +467,9 @@ pub struct StockMovementListParams {
 /// 归一化后的库存流水列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StockMovementListQuery {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    pub q: Option<String>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// SKU 筛选。
@@ -465,6 +504,7 @@ impl StockMovementListParams {
         }
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_MOVEMENT_SORT_FIELDS)?;
         Ok(StockMovementListQuery {
+            q: application_core::normalized_text(self.q.as_deref()),
             warehouse_id: self.warehouse_id.clone(),
             sku_id: self.sku_id.clone(),
             movement_type: self.movement_type,
@@ -484,6 +524,10 @@ impl StockMovementListParams {
 /// 库存预占列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct StockReservationListParams {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// SKU 筛选。
@@ -507,6 +551,9 @@ pub struct StockReservationListParams {
 /// 归一化后的库存预占列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StockReservationListQuery {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    pub q: Option<String>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// SKU 筛选。
@@ -533,6 +580,7 @@ impl StockReservationListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, STOCK_RESERVATION_SORT_FIELDS)?;
         Ok(StockReservationListQuery {
+            q: application_core::normalized_text(self.q.as_deref()),
             warehouse_id: self.warehouse_id.clone(),
             sku_id: self.sku_id.clone(),
             status: self.status,
@@ -550,6 +598,14 @@ impl StockReservationListParams {
 /// 库存调整单列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct StockAdjustmentListParams {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+    /// 精确定位调整单。
+    pub adjustment_id: Option<String>,
+    /// 任一明细包含该 SKU。
+    pub sku_id: Option<SkuId>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// 单据状态筛选。
@@ -569,6 +625,13 @@ pub struct StockAdjustmentListParams {
 /// 归一化后的库存调整单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StockAdjustmentListQuery {
+    /// SKU 编码、当前名称或规格的字面量关键词。
+    pub q: Option<String>,
+    /// 精确定位调整单。
+    pub adjustment_id: Option<String>,
+    /// 任一明细包含该 SKU。
+    pub sku_id: Option<SkuId>,
+
     /// 仓库筛选。
     pub warehouse_id: Option<WarehouseId>,
     /// 单据状态筛选。
@@ -591,6 +654,9 @@ impl StockAdjustmentListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, STOCK_ADJUSTMENT_SORT_FIELDS)?;
         Ok(StockAdjustmentListQuery {
+            q: application_core::normalized_text(self.q.as_deref()),
+            adjustment_id: application_core::normalized_text(self.adjustment_id.as_deref()),
+            sku_id: self.sku_id.clone(),
             warehouse_id: self.warehouse_id.clone(),
             status: self.status,
             paging: PageParams {
@@ -791,6 +857,9 @@ mod tests {
     #[test]
     fn balance_list_params_normalize_paging_and_filters() {
         let params = StockBalanceListParams {
+            q: None,
+            balance_id: None,
+            availability: None,
             warehouse_id: Some(WarehouseId::new("wh-1")),
             sku_id: Some(SkuId::new("sku-1")),
             page: Some(2),
@@ -809,6 +878,7 @@ mod tests {
     #[test]
     fn movement_list_params_reject_inverted_time_range() {
         let params = StockMovementListParams {
+            q: None,
             warehouse_id: None,
             sku_id: None,
             movement_type: Some(MovementType::PurchaseReceiptIn),
@@ -826,6 +896,9 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let balance = StockBalanceListParams {
+            q: None,
+            balance_id: None,
+            availability: None,
             warehouse_id: None,
             sku_id: None,
             page: Some(0),
@@ -836,6 +909,7 @@ mod tests {
         assert!(balance.validate().is_err());
 
         let reservation = StockReservationListParams {
+            q: None,
             warehouse_id: None,
             sku_id: None,
             status: Some(ReservationStatus::Active),
@@ -848,6 +922,9 @@ mod tests {
         assert!(reservation.validate().is_err());
 
         let adjustment = StockAdjustmentListParams {
+            q: None,
+            adjustment_id: None,
+            sku_id: None,
             warehouse_id: None,
             status: Some(StockAdjustmentState::InApproval),
             page: Some(1),
