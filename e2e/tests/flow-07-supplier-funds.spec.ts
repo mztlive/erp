@@ -28,9 +28,10 @@ import {
 } from "@playwright/test";
 
 import { ACCOUNTS } from "../helpers/accounts";
+import { headedAwareViewport } from "../helpers/headed";
 import { loginViaUi, newLoggedInContext } from "../helpers/login";
 
-test.use({ viewport: { width: 1440, height: 960 } });
+test.use(headedAwareViewport({ width: 1440, height: 960 }));
 test.setTimeout(12 * 60 * 1000);
 
 const SKU_NAME = "狮峰明前龙井礼盒";

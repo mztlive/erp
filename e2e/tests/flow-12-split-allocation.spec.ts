@@ -20,9 +20,8 @@ import { expect, test, type Browser, type BrowserContext, type Locator, type Pag
 import { ensureZeroBalanceDimension, singleSalesLineId } from "../helpers/inventory"
 import { payOnlySupplierTask } from "../helpers/payments"
 import { ACCOUNTS } from "../helpers/accounts"
+import { headedContextOptions } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
-
-test.use({ viewport: { width: 1440, height: 900 } })
 
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:10001"
 const FRONTEND_BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000"
@@ -98,7 +97,7 @@ async function openSession(browser: Browser, loginName: string): Promise<Session
     } catch {
         // 回退到 loginViaUi，兼容 helper 尚未封装独立 context 的情况。
     }
-    const context = await browser.newContext()
+    const context = await browser.newContext(headedContextOptions())
     const page = await context.newPage()
     await page.goto(`${FRONTEND_BASE}/login`)
     await loginViaUi(page, cred as never)

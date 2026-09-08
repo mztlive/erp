@@ -36,7 +36,6 @@ import { ACCOUNTS } from "../helpers/accounts"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
 import "../helpers/ui"
 
-test.use({ viewport: { width: 1440, height: 900 } })
 test.describe.configure({ mode: "serial" })
 
 const UI_TIMEOUT = 20_000

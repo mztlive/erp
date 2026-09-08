@@ -1,6 +1,7 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 
 import { resolveAccount, type LoginIdentity } from "./accounts"
+import { headedContextOptions, maximizePageIfHeaded } from "./headed"
 
 export type { LoginIdentity }
 
@@ -21,6 +22,7 @@ export async function loginViaUi(
     password?: string,
 ): Promise<void> {
     const cred = resolveAccount(identity, password)
+    await maximizePageIfHeaded(page)
     if (!/\/login(?:\?|$)/.test(page.url())) {
         await page.goto("/login")
     }
@@ -72,8 +74,9 @@ export async function newLoggedInContext(
     browser: Browser,
     identity: LoginIdentity,
 ): Promise<LoggedInSession> {
-    const context = await browser.newContext()
+    const context = await browser.newContext(headedContextOptions())
     const page = await context.newPage()
+    await maximizePageIfHeaded(page)
     await loginViaUi(page, identity)
     return { context, page }
 }

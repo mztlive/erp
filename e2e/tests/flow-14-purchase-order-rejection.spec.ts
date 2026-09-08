@@ -33,6 +33,7 @@ import {
 
 import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
+import { headedContextOptions } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
 import "../helpers/ui"
 
@@ -107,7 +108,6 @@ type PurchaseSnapshot = {
 }
 
 test.describe.configure({ mode: "serial" })
-test.use({ viewport: { width: 1440, height: 900 } })
 
 function accountCred(login: LoginName): { account: string; password: string } {
     const bag = ACCOUNTS as Record<
@@ -162,7 +162,7 @@ async function openSession(browser: Browser, login: LoginName): Promise<Session>
         )
         return session
     } catch {
-        const context = await browser.newContext()
+        const context = await browser.newContext(headedContextOptions())
         const page = await context.newPage()
         await loginViaUi(page, cred as never)
         await page.goto("/workspace")

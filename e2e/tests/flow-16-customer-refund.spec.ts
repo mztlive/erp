@@ -26,12 +26,13 @@ import { fileURLToPath } from "node:url"
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 
 import { ACCOUNTS } from "../helpers/accounts"
+import { headedAwareViewport } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
 import "../helpers/ui"
 
 // 两个退款用例各自创建业务数据；单 worker 顺序执行，前一个失败也必须执行后一个。
 test.describe.configure({ mode: "default" })
-test.use({ viewport: { width: 1440, height: 960 } })
+test.use(headedAwareViewport({ width: 1440, height: 960 }))
 
 const TIMEOUT = 20_000
 const LONG = 40_000

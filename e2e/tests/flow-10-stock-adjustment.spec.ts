@@ -31,6 +31,7 @@ import { expect, test, type Browser, type Locator, type Page } from "@playwright
 
 import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
+import { headedContextOptions } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
 import "../helpers/ui"
 
@@ -449,7 +450,7 @@ async function expectEmptyPurchaseAndFulfillment(): Promise<void> {
 }
 
 async function expectCaiwuCannotSubmit(browser: Browser): Promise<void> {
-    const context = await browser.newContext()
+    const context = await browser.newContext(headedContextOptions())
     const page = await context.newPage()
     try {
         await loginViaUi(page, loginName("caiwu"))

@@ -33,11 +33,12 @@ import {
 
 import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
+import { headedAwareViewport } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
 import { expectToast } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
-test.use({ viewport: { width: 1440, height: 960 } })
+test.use(headedAwareViewport({ width: 1440, height: 960 }))
 
 const TIMEOUT = 20_000
 const LONG = 40_000

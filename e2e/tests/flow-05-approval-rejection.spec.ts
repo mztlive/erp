@@ -17,6 +17,7 @@ import path from 'node:path'
 import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
 
 import { ACCOUNTS } from '../helpers/accounts'
+import { headedContextOptions } from '../helpers/headed'
 import { loginViaUi, newLoggedInContext } from '../helpers/login'
 
 const VISIBLE = { timeout: 20_000 } as const
@@ -111,7 +112,7 @@ async function openSession(browser: Browser, creds: AccountCred): Promise<Sessio
   if (opened && typeof opened === 'object' && 'page' in opened) {
     return opened as Session
   }
-  const context = await browser.newContext()
+  const context = await browser.newContext(headedContextOptions())
   const page = await context.newPage()
   await loginViaUi(page, creds)
   return { context, page }

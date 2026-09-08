@@ -16,6 +16,7 @@ import path from 'node:path'
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
 
 import { ACCOUNTS } from '../helpers/accounts'
+import { headedContextOptions } from '../helpers/headed'
 import { loginViaUi, newLoggedInContext } from '../helpers/login'
 
 const PASSWORD = '123456'
@@ -79,7 +80,7 @@ async function openSession(browser: Browser, role: 'sales' | 'procurement' | 'fi
   const cred = accountOf(role)
   const session = (await newLoggedInContext(browser, cred.account)) as Session
   if (session?.page && session?.context) return session
-  const context = await browser.newContext()
+  const context = await browser.newContext(headedContextOptions())
   const page = await context.newPage()
   await loginViaUi(page, cred.account, cred.password)
   await expect(page.getByRole('heading', { name: '我的工作台' })).toBeVisible({ timeout: TIMEOUT })
