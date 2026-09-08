@@ -17,22 +17,13 @@ import {
 import type {
     AvailabilityStatusFilter,
     OfferingSourceFilter,
-    OfferingStatusFilter,
     SupplierOfferingAppliedChip,
     SupplierOfferingFilterKey,
 } from "@/features/supplier-offerings/hooks/use-supplier-offerings-page-state"
 import {
     AVAILABILITY_STATUS_LABELS,
-    OFFERING_STATUS_LABELS,
     SOURCE_TYPE_LABELS,
 } from "@/features/supplier-offerings/types"
-
-const OFFERING_STATUS_FILTER_OPTIONS = [
-    { value: "all", label: "全部" },
-    { value: "ACTIVE", label: OFFERING_STATUS_LABELS.ACTIVE },
-    { value: "PAUSED", label: OFFERING_STATUS_LABELS.PAUSED },
-    { value: "STOPPED", label: OFFERING_STATUS_LABELS.STOPPED },
-] as const
 
 const SOURCE_TYPE_FILTER_OPTIONS = [
     { value: "all", label: "全部" },
@@ -69,8 +60,6 @@ export type SupplierOfferingsToolbarProps = {
     onApplyFilters: () => void
     onClearFilters: () => void
     onResetMoreFilters: () => void
-    statusDraft: OfferingStatusFilter
-    onStatusDraftChange: (value: OfferingStatusFilter) => void
     sourceTypeDraft: OfferingSourceFilter
     onSourceTypeDraftChange: (value: OfferingSourceFilter) => void
     availabilityStatusDraft: AvailabilityStatusFilter
@@ -101,8 +90,6 @@ export function SupplierOfferingsToolbar({
     onApplyFilters,
     onClearFilters,
     onResetMoreFilters,
-    statusDraft,
-    onStatusDraftChange,
     sourceTypeDraft,
     onSourceTypeDraftChange,
     availabilityStatusDraft,
@@ -149,16 +136,6 @@ export function SupplierOfferingsToolbar({
             morePanelAriaLabel="供应商供给更多筛选条件"
             onResetMore={onResetMoreFilters}
             resetMoreButtonId="supplier-offerings-toolbar-reset-more"
-            commonFilters={
-                <FixedOptionRadioFilter
-                    idPrefix="supplier-offerings-toolbar-filter-status"
-                    label="关系状态"
-                    variant="quiet"
-                    value={statusDraft}
-                    onValueChange={onStatusDraftChange}
-                    options={OFFERING_STATUS_FILTER_OPTIONS}
-                />
-            }
             morePanel={
                 <div className="grid min-w-0 gap-5">
                     <FixedOptionRadioFilter

@@ -29,7 +29,6 @@ import {
     useSupplierOfferingsQuery,
     useSupplierSupplyExceptionWorkItemQuery,
 } from "@/features/supplier-offerings/hooks/queries"
-import { isCurrentlyAvailable } from "@/features/supplier-offerings/lib/presentation"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 
 const PAGE_SIZE = 50
@@ -61,8 +60,6 @@ export const SupplierOfferingsPage = () => {
     const taskOffering = taskQuery.data
         ? items.find((item) => item.id === taskQuery.data.businessObjectId)
         : undefined
-    const activeCount = items.filter((item) => item.status === "ACTIVE").length
-    const availableCount = items.filter(isCurrentlyAvailable).length
     const totalPages = Math.max(
         1,
         Math.ceil((query.data?.total ?? 0) / PAGE_SIZE),
@@ -170,43 +167,26 @@ export const SupplierOfferingsPage = () => {
                                 {
                                     id: "supplier-offerings-view-all",
                                     label: "全部供给",
-                                    count: query.data?.total ?? 0,
-                                    active:
-                                        !state.urlState.status &&
-                                        !state.urlState.availabilityStatus,
+                                    active: !state.urlState.status,
                                     onClick: () =>
                                         state.patchUrl({
                                             status: undefined,
-                                            availabilityStatus: undefined,
                                             page: 1,
                                         }),
                                 },
-                                {
-                                    id: "supplier-offerings-view-active",
-                                    label: "已启用",
-                                    count: activeCount,
-                                    active: state.urlState.status === "ACTIVE",
+                                ...(
+                                    [
+                                        ["ACTIVE", "active", "已启用"],
+                                        ["PAUSED", "paused", "已暂停"],
+                                        ["STOPPED", "stopped", "已停止"],
+                                    ] as const
+                                ).map(([status, id, label]) => ({
+                                    id: `supplier-offerings-view-${id}`,
+                                    label,
+                                    active: state.urlState.status === status,
                                     onClick: () =>
-                                        state.patchUrl({
-                                            status: "ACTIVE",
-                                            availabilityStatus: undefined,
-                                            page: 1,
-                                        }),
-                                },
-                                {
-                                    id: "supplier-offerings-view-available",
-                                    label: "当前可供",
-                                    count: availableCount,
-                                    active:
-                                        state.urlState.availabilityStatus ===
-                                        "AVAILABLE",
-                                    onClick: () =>
-                                        state.patchUrl({
-                                            availabilityStatus: "AVAILABLE",
-                                            status: undefined,
-                                            page: 1,
-                                        }),
-                                },
+                                        state.patchUrl({ status, page: 1 }),
+                                })),
                             ]}
                         />
                     }
@@ -222,8 +202,6 @@ export const SupplierOfferingsPage = () => {
                             onApplyFilters={state.applyFilters}
                             onClearFilters={state.clearFilters}
                             onResetMoreFilters={state.resetMoreFilters}
-                            statusDraft={state.statusDraft}
-                            onStatusDraftChange={state.setStatusDraft}
                             sourceTypeDraft={state.sourceTypeDraft}
                             onSourceTypeDraftChange={state.setSourceTypeDraft}
                             availabilityStatusDraft={

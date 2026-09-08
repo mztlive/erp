@@ -10,14 +10,11 @@ import {
 } from "@/features/supplier-offerings/lib/url-state"
 import {
     AVAILABILITY_STATUS_LABELS,
-    OFFERING_STATUS_LABELS,
     SOURCE_TYPE_LABELS,
     type AvailabilityStatus,
     type OfferingSourceType,
-    type OfferingStatus,
 } from "@/features/supplier-offerings/types"
 
-export type OfferingStatusFilter = OfferingStatus | "all"
 export type OfferingSourceFilter = OfferingSourceType | "all"
 export type AvailabilityStatusFilter = AvailabilityStatus | "all"
 
@@ -28,7 +25,6 @@ export type SupplierOfferingFilterKey =
     | "skuNo"
     | "productNo"
     | "supplierId"
-    | "status"
     | "sourceType"
     | "availabilityStatus"
 
@@ -38,7 +34,7 @@ export type SupplierOfferingAppliedChip = Readonly<{
 }>
 
 /**
- * 把全部已生效条件派生为可单独移除的 chip（docs/ui-filter-design.md §3.6）。
+ * 把 Tab 以外的已生效条件派生为可单独移除的 chip（docs/ui-filter-design.md §3.6）。
  * 公司 SKU 显示业务编号、供应商显示业务名称，不展示内部 ID（§4.5）；
  * 列表暂无数据时回退为「已选择」。
  */
@@ -72,12 +68,6 @@ export function buildSupplierOfferingAppliedChips(
         chips.push({
             key: "supplierId",
             label: `供应商：${labels.supplierNameLabel ?? "已选择"}`,
-        })
-    }
-    if (urlState.status) {
-        chips.push({
-            key: "status",
-            label: `关系状态：${OFFERING_STATUS_LABELS[urlState.status]}`,
         })
     }
     if (urlState.sourceType) {
@@ -157,9 +147,6 @@ export function useSupplierOfferingsPageState() {
     const [supplierIdDraft, setSupplierIdDraft] = React.useState<string | null>(
         urlState.supplierId ?? null,
     )
-    const [statusDraft, setStatusDraft] = React.useState<OfferingStatusFilter>(
-        urlState.status ?? "all",
-    )
     const [sourceTypeDraft, setSourceTypeDraft] =
         React.useState<OfferingSourceFilter>(urlState.sourceType ?? "all")
     const [availabilityStatusDraft, setAvailabilityStatusDraft] =
@@ -189,7 +176,6 @@ export function useSupplierOfferingsPageState() {
             skuNo: skuNoDraft.trim() || undefined,
             productNo: productNoDraft.trim() || undefined,
             supplierId: supplierIdDraft || undefined,
-            status: statusDraft === "all" ? undefined : statusDraft,
             sourceType: sourceTypeDraft === "all" ? undefined : sourceTypeDraft,
             availabilityStatus:
                 availabilityStatusDraft === "all"
@@ -206,7 +192,6 @@ export function useSupplierOfferingsPageState() {
         skuIdDraft,
         skuNoDraft,
         sourceTypeDraft,
-        statusDraft,
         supplierIdDraft,
     ])
 
@@ -243,11 +228,6 @@ export function useSupplierOfferingsPageState() {
                 patchUrl({ supplierId: undefined, page: 1 })
                 return
             }
-            if (key === "status") {
-                setStatusDraft("all")
-                patchUrl({ status: undefined, page: 1 })
-                return
-            }
             if (key === "sourceType") {
                 setSourceTypeDraft("all")
                 patchUrl({ sourceType: undefined, page: 1 })
@@ -281,7 +261,6 @@ export function useSupplierOfferingsPageState() {
         setSkuNoDraft("")
         setProductNoDraft("")
         setSupplierIdDraft(null)
-        setStatusDraft("all")
         setSourceTypeDraft("all")
         setAvailabilityStatusDraft("all")
         setFilterPanelOpen(false)
@@ -335,7 +314,6 @@ export function useSupplierOfferingsPageState() {
         setSkuNoDraft(urlState.skuNo ?? "")
         setProductNoDraft(urlState.productNo ?? "")
         setSupplierIdDraft(urlState.supplierId ?? null)
-        setStatusDraft(urlState.status ?? "all")
         setSourceTypeDraft(urlState.sourceType ?? "all")
         setAvailabilityStatusDraft(urlState.availabilityStatus ?? "all")
     }, [urlState])
@@ -346,9 +324,6 @@ export function useSupplierOfferingsPageState() {
         urlState.skuNo ? `SKU 编号包含“${urlState.skuNo}”` : null,
         urlState.productNo ? `SPU 编号包含“${urlState.productNo}”` : null,
         urlState.supplierId ? "已选择供应商" : null,
-        urlState.status
-            ? `关系状态：${OFFERING_STATUS_LABELS[urlState.status]}`
-            : null,
         urlState.sourceType
             ? `登记来源：${SOURCE_TYPE_LABELS[urlState.sourceType]}`
             : null,
@@ -363,7 +338,6 @@ export function useSupplierOfferingsPageState() {
         skuNoDraft.trim() !== (urlState.skuNo ?? "") ||
         productNoDraft.trim() !== (urlState.productNo ?? "") ||
         supplierIdDraft !== (urlState.supplierId ?? null) ||
-        statusDraft !== (urlState.status ?? "all") ||
         sourceTypeDraft !== (urlState.sourceType ?? "all") ||
         availabilityStatusDraft !== (urlState.availabilityStatus ?? "all")
 
@@ -384,8 +358,6 @@ export function useSupplierOfferingsPageState() {
         setProductNoDraft,
         supplierIdDraft,
         setSupplierIdDraft,
-        statusDraft,
-        setStatusDraft,
         sourceTypeDraft,
         setSourceTypeDraft,
         availabilityStatusDraft,
