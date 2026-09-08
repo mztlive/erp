@@ -23,6 +23,10 @@ import {
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
 import { FULFILLMENT_RESPONSIBILITY_LABEL } from "@/features/purchase-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import {
+    canSplitSourcingProduct,
+    sourcingQuantityStep,
+} from "../lib/sourcing-quantity"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 
 export type PurchaseOrderCreateSourcingTableProps = {
@@ -141,76 +145,12 @@ export function PurchaseOrderCreateSourcingTable({
                                     />
                                 </TableCell>
                                 <TableCell className="min-w-64">
-                                    <form.AppField
-                                        name={`lines[${index}].basisId`}
-                                    >
-                                        {(field) => (
-                                            <field.SelectField
-                                                id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-sourcing-option`}
-                                                label={`履约方案，${product.itemName}`}
-                                                hideLabel
-                                                allowClear={
-                                                    product.options.length > 1
-                                                }
-                                                placeholder="选择履约方案"
-                                                options={product.options.map(
-                                                    (option) => ({
-                                                        value: option.basisId,
-                                                        label:
-                                                            option.sourceType ===
-                                                            "EXISTING_STOCK"
-                                                                ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
-                                                                : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
-                                                        keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
-                                                    }),
-                                                )}
-                                                onValueChange={(
-                                                    value: string,
-                                                ) => {
-                                                    const option =
-                                                        findSourcingOption(
-                                                            product,
-                                                            value,
-                                                        )
-                                                    if (!option) return
-                                                    const lines =
-                                                        form.state.values.lines
-                                                    const current =
-                                                        lines[index]
-                                                            ?.quantity ?? ""
-                                                    if (
-                                                        !current ||
-                                                        current ===
-                                                            product.remainingQuantity
-                                                    ) {
-                                                        form.setFieldValue(
-                                                            `lines[${index}].quantity`,
-                                                            option.maxCreateQuantity,
-                                                        )
-                                                    }
-                                                    form.setFieldValue(
-                                                        `lines[${index}].expectedDeliveryDate`,
-                                                        option.expectedDeliveryDate,
-                                                    )
-                                                    if (
-                                                        option.sourceType !==
-                                                            "PURCHASE" ||
-                                                        option.fulfillmentResponsibility !==
-                                                            "WAREHOUSE"
-                                                    ) {
-                                                        form.setFieldValue(
-                                                            `lines[${index}].targetWarehouseId`,
-                                                            "",
-                                                        )
-                                                        form.setFieldValue(
-                                                            `lines[${index}].targetWarehouseName`,
-                                                            "",
-                                                        )
-                                                    }
-                                                }}
-                                            />
-                                        )}
-                                    </form.AppField>
+                                    <SourcingOptionField
+                                        form={form}
+                                        index={index}
+                                        rowKey={input.rowKey}
+                                        product={product}
+                                    />
                                 </TableCell>
                                 <TableCell className="min-w-52">
                                     <SourcingTargetWarehouseField
@@ -235,7 +175,11 @@ export function PurchaseOrderCreateSourcingTable({
                                                 type="number"
                                                 inputMode="decimal"
                                                 min="0"
-                                                step="any"
+                                                step={
+                                                    sourcingQuantityStep(
+                                                        product.quantityScale,
+                                                    ) ?? "1"
+                                                }
                                                 inputClassName="num text-right"
                                                 testId={`purchase-sourcing-quantity-${input.rowKey}`}
                                             />
@@ -268,6 +212,12 @@ export function PurchaseOrderCreateSourcingTable({
                                             variant="ghost"
                                             aria-label={`拆分 ${product.itemName}`}
                                             title="拆分履约"
+                                            disabled={
+                                                !canSplitSourcingProduct(
+                                                    product,
+                                                    siblingCount,
+                                                )
+                                            }
                                             onClick={() =>
                                                 onAddSplit(
                                                     input.salesOrderLineId,
@@ -302,7 +252,7 @@ export function PurchaseOrderCreateSourcingTable({
 }
 
 /** 只有「采购 + 入仓」方案必须在建单前选定目标仓。 */
-function SourcingTargetWarehouseField({
+export function SourcingTargetWarehouseField({
     form,
     index,
     rowKey,
@@ -382,7 +332,7 @@ function SourcingTargetWarehouseField({
 }
 
 /** 采购来源可确认预计交期；现有库存只建立预留，不伪造采购交期。 */
-function SourcingExpectedDeliveryField({
+export function SourcingExpectedDeliveryField({
     form,
     index,
     rowKey,
@@ -492,5 +442,71 @@ function SourcingOptionFacts({
                 )
             }}
         </form.Subscribe>
+    )
+}
+
+/** 供给方案选择器；表格与工作台卡片共用选源后的数量、仓库和交期联动。 */
+export function SourcingOptionField({
+    form,
+    index,
+    rowKey,
+    product,
+    hideLabel = true,
+}: {
+    form: PurchaseOrderCreateFormApi
+    index: number
+    rowKey: string
+    product: SourcingSalesOrder["lines"][number]
+    hideLabel?: boolean
+}) {
+    return (
+        <form.AppField name={`lines[${index}].basisId`}>
+            {(field) => (
+                <field.SelectField
+                    id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-sourcing-option`}
+                    label={`履约方案，${product.itemName}`}
+                    hideLabel={hideLabel}
+                    allowClear={product.options.length > 1}
+                    placeholder="选择履约方案"
+                    options={product.options.map((option) => ({
+                        value: option.basisId,
+                        label:
+                            option.sourceType === "EXISTING_STOCK"
+                                ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
+                                : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                        keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
+                    }))}
+                    onValueChange={(value: string) => {
+                        const option = findSourcingOption(product, value)
+                        if (!option) return
+                        const lines = form.state.values.lines
+                        const current = lines[index]?.quantity ?? ""
+                        if (!current || current === product.remainingQuantity) {
+                            form.setFieldValue(
+                                `lines[${index}].quantity`,
+                                option.maxCreateQuantity,
+                            )
+                        }
+                        form.setFieldValue(
+                            `lines[${index}].expectedDeliveryDate`,
+                            option.expectedDeliveryDate,
+                        )
+                        if (
+                            option.sourceType !== "PURCHASE" ||
+                            option.fulfillmentResponsibility !== "WAREHOUSE"
+                        ) {
+                            form.setFieldValue(
+                                `lines[${index}].targetWarehouseId`,
+                                "",
+                            )
+                            form.setFieldValue(
+                                `lines[${index}].targetWarehouseName`,
+                                "",
+                            )
+                        }
+                    }}
+                />
+            )}
+        </form.AppField>
     )
 }

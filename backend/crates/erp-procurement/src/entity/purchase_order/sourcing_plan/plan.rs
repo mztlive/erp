@@ -32,6 +32,9 @@ pub enum SourcingPlanError {
     /// 仓库履约契约违规。
     #[error("{0}")]
     WarehouseContract(String),
+    /// 分配数量不符合单位粒度或单位精度缺失。
+    #[error("{0}")]
+    QuantityContract(String),
 }
 
 /// 把采购与库存选源行按精确依据分组并校验总量不变式的计划值对象。
@@ -108,6 +111,7 @@ impl SourcingPlan {
                 let line = latest
                     .line_for(&requested.sales_order_line_id)
                     .ok_or(SourcingPlanError::StaleFacts)?;
+                validate_quantity(&line.coverage, requested.quantity)?;
                 add_requested_total(
                     &mut line_totals,
                     &mut line_caps,
@@ -165,6 +169,7 @@ impl SourcingPlan {
                     .iter()
                     .find(|line| stable_line_id(line) == requested.sales_order_line_id)
                     .ok_or(SourcingPlanError::StaleFacts)?;
+                validate_quantity(&basis.coverage, requested.quantity)?;
                 *line_totals
                     .entry(requested.sales_order_line_id.clone())
                     .or_insert(rust_decimal::Decimal::ZERO) += requested.quantity.to_decimal();
@@ -392,6 +397,7 @@ fn validate_combined_line_totals(
                 .iter()
                 .find(|line| stable_line_id(line) == requested.sales_order_line_id)
                 .ok_or(SourcingPlanError::StaleFacts)?;
+            validate_quantity(&line.coverage, requested.quantity)?;
             add_requested_total(
                 &mut totals,
                 &mut caps,
@@ -407,6 +413,7 @@ fn validate_combined_line_totals(
                 .group
                 .line_for(&requested.sales_order_line_id)
                 .ok_or(SourcingPlanError::StaleFacts)?;
+            validate_quantity(&line.coverage, requested.quantity)?;
             add_requested_total(
                 &mut totals,
                 &mut caps,
@@ -546,4 +553,17 @@ fn exceeds_any_cap(
 /// 只用于边界比较，不代表缺失业务数量。
 pub(super) fn zero_quantity() -> Quantity {
     Quantity::from_str("0").expect("零数量合法")
+}
+
+/// 用当前依据单位精度校验采购与库存分配；缺失或不符统一返回数量合同错误。
+fn validate_quantity(
+    coverage: &crate::entity::purchase_order::SalesProcurementCoverageLine,
+    quantity: Quantity,
+) -> std::result::Result<(), SourcingPlanError> {
+    crate::entity::purchase_order::ensure_sourcing_quantity(
+        quantity,
+        coverage.quantity_scale,
+        &coverage.goods_line.base_unit_code,
+    )
+    .map_err(|error| SourcingPlanError::QuantityContract(error.to_string()))
 }

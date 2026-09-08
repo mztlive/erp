@@ -45,6 +45,7 @@ const sampleLine: SourcingProductLine = {
     salesOrderLineId: "l-1",
     itemName: "测试SKU",
     unit: "件",
+    quantityScale: 6,
     salesQuantity: "10",
     coveredQuantity: "0",
     remainingQuantity: "10",

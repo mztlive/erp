@@ -1,9 +1,10 @@
-/** 卡券类目的创建 / 修订命令；停用按业务规则直接拒绝。 */
+/** 卡券类目的创建、资料修订与启停命令。 */
 
 import { apiPost, apiPut } from "@/lib/api"
 import type { VoucherCategoryProfileDto } from "@/features/master-data/api/contracts"
 import { isFutureDate } from "@/features/master-data/api/list-mappers"
 import { isoNow } from "@/features/master-data/api/presentation"
+import { centerVoucher } from "@/features/master-data/api/centers/voucher"
 import type {
     CreateMasterDataInput,
     CreateRevisionInput,
@@ -78,6 +79,7 @@ export async function createVoucherCategory(
 
 export async function updateVoucherCategoryRevision(
     input: CreateRevisionInput,
+    status?: "active" | "disabled",
 ): Promise<MasterDataMutationResult> {
     const fields = input.fields as VoucherCategoryFields
     try {
@@ -87,10 +89,18 @@ export async function updateVoucherCategoryRevision(
                 version: input.expectedLockVersion,
                 name: input.name.trim(),
                 description: (fields.description || input.name).trim(),
+                ...(status ? { status } : {}),
                 effective_from: input.effectiveFrom || null,
                 effective_to: input.effectiveTo || null,
             },
         )
+        if (status && updated.status !== status) {
+            return {
+                outcome: "blocked",
+                code: "STATUS_NOT_UPDATED",
+                message: "状态未更新，请刷新页面后重试。",
+            }
+        }
         return {
             outcome: "succeeded",
             stableId: updated.sku_id,
@@ -116,11 +126,27 @@ export async function updateVoucherCategoryRevision(
 }
 
 export async function disableVoucherCategory(
-    _input: DisableMasterDataInput,
+    input: DisableMasterDataInput,
 ): Promise<MasterDataMutationResult> {
-    return {
-        outcome: "blocked",
-        code: "VOUCHER_NO_DISABLE",
-        message: "卡券类目不支持停用。",
-    }
+    const detail = await centerVoucher(input.stableId)
+    if (!detail)
+        return {
+            outcome: "blocked",
+            code: "NOT_FOUND",
+            message: "卡券类目不存在，请刷新列表。",
+        }
+    return updateVoucherCategoryRevision(
+        {
+            ...input,
+            name: detail.name,
+            fields: {
+                voucherNo: detail.stableNo,
+                description:
+                    detail.currentRevision.fields.find(
+                        (field) => field.label === "说明",
+                    )?.value ?? detail.name,
+            },
+        },
+        "disabled",
+    )
 }

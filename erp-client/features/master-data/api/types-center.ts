@@ -20,6 +20,8 @@ export type RevisionTimelineEntry = Readonly<{
     revisionTiming: RevisionTiming
     timingLabel: string
     nameSnapshot: string
+    /** 卡券扩展修订保存的描述；历史记录不使用当前商品名称冒充快照。 */
+    descriptionSnapshot?: string
     actor: string
     effectiveFrom: string
     effectiveTo?: string

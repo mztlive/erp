@@ -131,7 +131,7 @@ impl CatalogService {
     ///
     /// # 参数
     /// * `sku_id` - 卡券类目 SKU 稳定 ID
-    /// * `req` - 名称、描述、生效区间与商品期望版本
+    /// * `req` - 名称、描述、可选启停状态、生效区间与商品期望版本
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -521,7 +521,7 @@ impl CatalogService {
             .await?
             .ok_or_else(|| Error::NotFound("卡券类目扩展修订不存在".to_string()))?;
         let effective_from = req.effective_from.unwrap_or_else(BusinessDate::today);
-        let product_revision = current_product_revision.content_successor(
+        let mut product_revision = current_product_revision.content_successor(
             ProductRevisionId::new(next_id()),
             self.next_product_revision_no(&ProductId::new(product.base.id.clone()))
                 .await?,
@@ -530,8 +530,12 @@ impl CatalogService {
             effective_from,
             req.effective_to,
         )?;
+        // 只设置尚未落库的后继修订，历史快照保持不可变。
+        if let Some(status) = req.status {
+            product_revision.status = status;
+        }
         product.attach_revision(&product_revision, actor.id())?;
-        let sku_revision = current_sku_revision.content_successor(
+        let mut sku_revision = current_sku_revision.content_successor(
             SkuRevisionId::new(next_id()),
             self.next_sku_revision_no(&sku_id).await?,
             req.name,
@@ -539,17 +543,24 @@ impl CatalogService {
             effective_from,
             req.effective_to,
         )?;
+        if let Some(status) = req.status {
+            sku_revision.status = status;
+        }
+        // attach_revision 统一同步稳定状态，并执行停用即下架的 SKU 约束。
         sku.attach_revision(&sku_revision, actor.id())?;
         let latest_voucher_revision_no = self
             .db
             .catalog()
             .latest_voucher_profile_revision_no(&sku_id, &mut NoTransaction)
             .await?;
-        let voucher_revision = current_voucher_revision.content_successor(
+        let mut voucher_revision = current_voucher_revision.content_successor(
             VoucherCategoryProfileRevisionId::new(next_id()),
             next_revision_no(latest_voucher_revision_no)?,
             req.description,
         )?;
+        if let Some(status) = req.status {
+            voucher_revision.status = status;
+        }
         Ok(VoucherCategoryUpdateDraft {
             product,
             product_revision,

@@ -1086,7 +1086,10 @@ mod tests {
         sorted.dedup();
         assert_eq!(ids.len(), sorted.len(), "预定义角色 ID 必须唯一");
         assert!(ids.iter().all(|id| id.starts_with("role-")));
-        assert!(!ids.contains(&"role-root"), "root 由 ensure_root_role 单独维护");
+        assert!(
+            !ids.contains(&"role-root"),
+            "root 由 ensure_root_role 单独维护，含公司级 DataScope"
+        )
     }
 
     #[test]

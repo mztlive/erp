@@ -41,6 +41,7 @@ export type SourcingProductLine = Readonly<{
     itemName: string
     itemSku?: string
     unit: string
+    quantityScale?: number | null
     salesQuantity: string
     coveredQuantity: string
     remainingQuantity: string
@@ -175,6 +176,7 @@ export function buildSourcingWorkspace(
                     itemName: line.itemName,
                     itemSku: line.itemSku,
                     unit: line.unit,
+                    quantityScale: line.quantityScale,
                     salesQuantity: line.salesQuantity,
                     coveredQuantity: line.coveredQuantity,
                     remainingQuantity: line.remainingQuantity,

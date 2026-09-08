@@ -32,6 +32,8 @@ use super::types::PurchaseLineType;
 /// 当前销售版本单行的采购覆盖信息。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SalesProcurementCoverageLine {
+    /// 基础单位允许的数量小数位；缺失时禁止提交供给数量。
+    pub quantity_scale: Option<u8>,
     /// 销售当前版本公共行。
     pub revision_line: SalesOrderRevisionLine,
     /// 销售当前版本商品/服务子类型行。
@@ -59,6 +61,8 @@ pub struct SalesProcurementCoverage {
 /// 计算规则，完整性、指针选择与超覆盖校验由 [`build_procurement_coverage`] 负责。
 #[derive(Debug, Clone, Default)]
 pub struct ProcurementCoverageFacts {
+    /// SKU 基础单位的小数位；按稳定单位身份查询，不以单位名称猜测。
+    pub quantity_scales: HashMap<String, u8>,
     /// 销售单当前版本文档；指针缺失或版本文档缺失时为空。
     pub revision: Option<SalesOrderRevision>,
     /// 销售当前版本全部公共行（Repository 已按行号升序返回）。
@@ -119,7 +123,7 @@ pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<Sal
         &mut covered,
     )?;
     accumulate_stock_coverage(&facts.reservations, &mut covered)?;
-    build_coverage(revision, targets, covered, product_kinds)
+    build_coverage(revision, targets, covered, product_kinds, facts.quantity_scales)
 }
 
 /// 将当前版本公共行与商品子类型行一一连接。
@@ -502,6 +506,7 @@ fn build_coverage(
     targets: Vec<(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)>,
     covered: HashMap<String, Quantity>,
     product_kinds: HashMap<String, ProductKind>,
+    quantity_scales: HashMap<String, u8>,
 ) -> Result<SalesProcurementCoverage> {
     let mut total = Decimal::ZERO;
     let mut total_covered = Decimal::ZERO;
@@ -519,6 +524,7 @@ fn build_coverage(
         total += summary.total_quantity.to_decimal();
         total_covered += summary.covered_quantity.to_decimal();
         lines.push(SalesProcurementCoverageLine {
+            quantity_scale: quantity_scales.get(goods_line.sku_id.as_ref()).copied(),
             revision_line,
             goods_line,
             product_kind,
@@ -820,6 +826,7 @@ mod tests {
     /// 构造覆盖事实：一行目标、一个草稿提交、一个正式版本及现有库存预占。
     fn facts_with_two_coverage_sources() -> ProcurementCoverageFacts {
         ProcurementCoverageFacts {
+            quantity_scales: Default::default(),
             revision: Some(revision("1")),
             revision_lines: vec![revision_line("sorl-1", "sol-1", 1)],
             goods_lines: vec![goods_line("sorl-1", "sku-1", "10")],

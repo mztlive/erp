@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
 use erp_procurement::entity::purchase_order::ProcurementCoverageFacts;
 use erp_sales::entity::sales_order::LineType;
-use mongodb::Database;
+use mongodb::{bson::doc, Database};
 
 use super::mapping::{
     product_fact, reservation_fact, sales_goods_fact, sales_line_fact, sales_revision_fact, sku_fact,
@@ -83,6 +83,29 @@ pub async fn load_procurement_coverage_facts(
         .into_iter()
         .map(|sku| (sku.base.id.clone(), sku))
         .collect::<HashMap<_, _>>();
+    let unit_ids = skus
+        .values()
+        .map(|sku| sku.base_unit_id.to_string())
+        .collect::<Vec<_>>();
+    let units = db
+        .unit_of_measures()
+        .find_many(
+            doc! { "id": { "$in": unit_ids }, "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON },
+            executor,
+        )
+        .await?;
+    let unit_scales = units
+        .into_iter()
+        .map(|unit| (unit.base.id, unit.quantity_scale))
+        .collect::<HashMap<_, _>>();
+    let quantity_scales = skus
+        .iter()
+        .filter_map(|(id, sku)| {
+            unit_scales
+                .get(sku.base_unit_id.as_ref())
+                .map(|scale| (id.clone(), *scale))
+        })
+        .collect();
     let product_ids = skus
         .values()
         .map(|sku| sku.product_id.clone())
@@ -108,6 +131,7 @@ pub async fn load_procurement_coverage_facts(
         .existing_stock_reservations_for_sales_lines(&target_sales_line_ids, executor)
         .await?;
     Ok(ProcurementCoverageFacts {
+        quantity_scales,
         revision: Some(sales_revision_fact(revision)),
         revision_lines: revision_lines.into_iter().map(sales_line_fact).collect(),
         goods_lines: goods_lines.into_iter().map(sales_goods_fact).collect(),

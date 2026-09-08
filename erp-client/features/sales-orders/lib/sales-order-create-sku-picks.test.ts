@@ -35,6 +35,7 @@ describe("appendSellablePicksToLines", () => {
         )
         expect(next).toHaveLength(2)
         expect(next[0]?.sku).toBe("sku-1")
+        expect(next[0]?.specification).toBe("颜色：红")
         expect(next[0]?.rowKey).toBe(empty.rowKey)
         expect(next[0]?.unit).toBe("件")
         expect(next[0]?.unitPriceGross).toBe("12.00")
@@ -82,6 +83,7 @@ describe("replaceLineWithSellablePick", () => {
             "physical_service",
         )
         expect(replaced?.sku).toBe("sku-new")
+        expect(replaced?.specification).toBe("颜色：红")
         expect(replaced?.name).toBe("新名")
         expect(replaced?.quantity).toBe("5")
         expect(replaced?.rowKey).toBe(line.rowKey)

@@ -466,6 +466,7 @@ mod tests {
     /// 构造一条销售覆盖目标行。
     fn coverage_line(stable_line_id: &str, total: &str, covered: &str) -> SalesProcurementCoverageLine {
         SalesProcurementCoverageLine {
+            quantity_scale: Some(6),
             revision_line: revision_line("sorl-1", stable_line_id),
             goods_line: goods_line("sorl-1"),
             product_kind: ProductKind::Physical,

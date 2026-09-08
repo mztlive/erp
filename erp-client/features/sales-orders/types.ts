@@ -20,6 +20,8 @@ export type SalesOrderDraftLineInput = {
     sku: string
     /** 公司商品池返回并由销售单锁定的精确 SKU 修订 ID。 */
     skuRevisionId: string
+    /** 商品池提供的可读规格，与 SKU 身份分开保存。 */
+    specification?: string
     /** 采购责任解析使用的服务区域；空值表示不按区域限定。 */
     serviceRegion?: string
     quantity: string

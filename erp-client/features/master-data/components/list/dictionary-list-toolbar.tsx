@@ -24,6 +24,7 @@ export function DictionaryListToolbar({
     resultCount,
     loading,
     failed,
+    showRevisionFilter = true,
 }: {
     idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -33,6 +34,7 @@ export function DictionaryListToolbar({
     resultCount?: number
     loading: boolean
     failed: boolean
+    showRevisionFilter?: boolean
 }) {
     const prefix = idPrefix ?? "master-data-list-dictionary-list-toolbar"
 
@@ -53,7 +55,7 @@ export function DictionaryListToolbar({
             }
             clearButtonId={`${prefix}-clear-filters`}
             commonFilters={
-                <>
+                showRevisionFilter ? (
                     <FixedOptionRadioFilter
                         idPrefix={`${prefix}-revision`}
                         label="版本"
@@ -63,7 +65,7 @@ export function DictionaryListToolbar({
                         options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
                         aria-label={masterDataCopy.filterVersionAria}
                     />
-                </>
+                ) : undefined
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

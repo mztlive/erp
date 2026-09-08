@@ -63,6 +63,7 @@ fn goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
 /// 构造一条销售覆盖目标行；剩余量等于目标减覆盖。
 fn coverage_line(stable_line_id: &str, total: &str, covered: &str) -> SalesProcurementCoverageLine {
     SalesProcurementCoverageLine {
+        quantity_scale: Some(6),
         revision_line: revision_line(&format!("sorl-{stable_line_id}"), stable_line_id),
         goods_line: goods_line(&format!("sorl-{stable_line_id}")),
         product_kind: ProductKind::Physical,
@@ -929,4 +930,48 @@ fn sourcing_plan_error_messages_are_stable() {
         SourcingPlanError::WarehouseContract("仓库履约必须先选择目标收货仓".to_string()).to_string(),
         "仓库履约必须先选择目标收货仓"
     );
+}
+
+/// 采购与库存路径都不能绕过整件精度；最新单位配置也必须重新验证。
+#[test]
+fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
+    let order = sales_order("1");
+    let mut purchase = basis_group(
+        "supplier-1",
+        "NET30",
+        FulfillmentResponsibility::SupplierDirect,
+        "1",
+        &[("line-1", "1", "0")],
+    );
+    purchase.lines[0].coverage.quantity_scale = Some(0);
+    let mut stock = stock_basis_group("balance-1", "wh-1", "1", &[("line-1", "1", "0")]);
+    stock.lines[0].coverage.quantity_scale = Some(0);
+    let purchase_id = basis_id_for(&order, &purchase, "wi-1", None);
+    let stock_id = stock_basis_id_for(&order, &stock, "wi-1");
+    for (basis_id, source) in [
+        (&purchase_id, SupplySourceType::Purchase),
+        (&stock_id, SupplySourceType::ExistingStock),
+    ] {
+        let selected =
+            SourcingAssignmentSet::normalize(&[assignment("line-1", basis_id, source, None, "0.5")]).unwrap();
+        assert!(matches!(
+            SourcingPlan::plan(&order, &[purchase.clone()], &[stock.clone()], "wi-1", &selected),
+            Err(SourcingPlanError::QuantityContract(_))
+        ));
+    }
+    stock.lines[0].coverage.quantity_scale = Some(1);
+    let selected = SourcingAssignmentSet::normalize(&[assignment(
+        "line-1",
+        &stock_id,
+        SupplySourceType::ExistingStock,
+        None,
+        "0.5",
+    )])
+    .unwrap();
+    let plan = SourcingPlan::plan(&order, &[], &[stock.clone()], "wi-1", &selected).unwrap();
+    stock.lines[0].coverage.quantity_scale = Some(0);
+    assert!(matches!(
+        plan.validate_against_latest_stock(&[stock]),
+        Err(SourcingPlanError::QuantityContract(_))
+    ));
 }

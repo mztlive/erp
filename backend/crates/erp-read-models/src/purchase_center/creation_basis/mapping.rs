@@ -92,6 +92,7 @@ pub(super) fn build_stock_basis_view(
         let sales_delivery_deadline =
             business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string();
         lines.push(CreationBasisLineView {
+            quantity_scale: line.coverage.quantity_scale,
             sales_order_line_id: line.coverage.revision_line.sales_order_line_id.to_string(),
             sales_order_revision_line_id: line.coverage.revision_line.base.id.clone(),
             sales_line_no: line.coverage.revision_line.line_no,
@@ -164,6 +165,7 @@ fn basis_line_view(
 ) -> Result<CreationBasisLineView> {
     let sales_delivery_deadline = business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string();
     Ok(CreationBasisLineView {
+        quantity_scale: line.coverage.quantity_scale,
         sales_order_line_id: stable_line_id(line).to_string(),
         sales_order_revision_line_id: line.coverage.revision_line.base.id.clone(),
         sales_line_no: line.coverage.revision_line.line_no,

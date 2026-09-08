@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import { salesLineSpecification } from "@/features/sales-orders/lib/sales-line-specification"
 import { compareDecimal, formatCurrencyFixed } from "@/lib/fixed-decimal"
 import type {
     BackendSalesOrderDetail,
@@ -238,7 +239,9 @@ function salesContentToFacts(
     const voucher = businessType === "VOUCHER"
     const linesSource = content.lines ?? []
     const moreCount = Math.max(0, linesSource.length - LINE_LIMIT)
-    const lines = linesSource.slice(0, LINE_LIMIT).map(mapLine)
+    const lines = linesSource
+        .slice(0, LINE_LIMIT)
+        .map((line) => mapLine(line, content.voucher_category_sku_id))
     const sections: WorkspaceFactSection[] = []
     pushSection(sections, "客户", content.customer_name)
     pushSection(sections, "业务性质", voucher ? "卡券" : "实物及服务")
@@ -283,8 +286,16 @@ function salesContentToFacts(
     }
 }
 
-function mapLine(line: BackendWorkingCopyLine): WorkspaceFactLine {
-    const title = [line.item_name_snapshot, line.spec_snapshot]
+function mapLine(
+    line: BackendWorkingCopyLine,
+    voucherCategorySkuId?: string | null,
+): WorkspaceFactLine {
+    const specification = salesLineSpecification(
+        line.spec_snapshot,
+        line.sku_id ?? voucherCategorySkuId,
+        line.sku_revision_id,
+    )
+    const title = [line.item_name_snapshot, specification]
         .map((part) => part?.trim())
         .filter(Boolean)
         .join(" ")

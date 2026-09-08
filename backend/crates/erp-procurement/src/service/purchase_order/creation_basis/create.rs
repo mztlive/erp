@@ -220,6 +220,11 @@ pub fn validate_requested_quantities(
             .iter()
             .find(|line| stable_line_id(line) == requested_line.sales_order_line_id)
             .ok_or_else(procurement_quantity_changed)?;
+        crate::entity::purchase_order::ensure_sourcing_quantity(
+            requested_line.quantity,
+            basis.coverage.quantity_scale,
+            &basis.coverage.goods_line.base_unit_code,
+        )?;
         if requested_line.quantity > basis.coverage.summary.remaining_quantity
             || requested_line.quantity > basis.max_create_quantity
         {

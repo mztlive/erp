@@ -265,6 +265,7 @@ mod tests {
         StockBasisLine {
             max_create_quantity: q("5"),
             coverage: SalesProcurementCoverageLine {
+                quantity_scale: Some(6),
                 revision_line: SalesRevisionLineFact {
                     base: FactIdentity {
                         id: format!("revision-{id}"),

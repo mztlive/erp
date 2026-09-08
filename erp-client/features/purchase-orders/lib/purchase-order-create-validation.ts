@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { sourcingUnitQuantityError } from "./sourcing-quantity"
 
 import {
     findSourcingOption,
@@ -133,10 +134,12 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     maximumByBasisId.get(
                         `${line.salesOrderLineId}:${line.basisId}`,
                     ) ?? "0"
-                const quantityMessage = sourcingQuantityError(
-                    line.quantity,
-                    maximum,
-                )
+                const quantityMessage =
+                    sourcingQuantityError(line.quantity, maximum) ??
+                    sourcingUnitQuantityError(
+                        line.quantity,
+                        product?.quantityScale,
+                    )
                 if (quantityMessage) {
                     context.addIssue({
                         code: "custom",
@@ -146,6 +149,7 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                             : quantityMessage,
                     })
                 }
+                if (option.sourceType === "EXISTING_STOCK") return
                 if (!isBusinessDate(line.expectedDeliveryDate)) {
                     context.addIssue({
                         code: "custom",

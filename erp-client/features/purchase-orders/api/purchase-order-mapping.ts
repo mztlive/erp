@@ -132,7 +132,8 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
     )
     const approval = mapPurchaseOrderApproval(center.approval)
     const hasActiveChange = (center.changes ?? []).some(
-        (change) => change.status === "DRAFT" || change.status === "IN_APPROVAL",
+        (change) =>
+            change.status === "DRAFT" || change.status === "IN_APPROVAL",
     )
 
     return {
@@ -238,12 +239,20 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         approval,
         allowedActions: Array.from(
             new Set([
-                ...deriveAllowedActions(status).filter((action) => !hasActiveChange || action !== "START_CHANGE"),
+                ...deriveAllowedActions(status).filter(
+                    (action) => !hasActiveChange || action !== "START_CHANGE",
+                ),
                 ...(approval?.allowedActions ?? []),
             ]),
         ),
         actionBlockers: hasActiveChange
-            ? [{ action: "START_CHANGE", code: "CHANGE_IN_PROGRESS", message: "已有进行中的采购变更，请先处理现有变更。" }]
+            ? [
+                  {
+                      action: "START_CHANGE",
+                      code: "CHANGE_IN_PROGRESS",
+                      message: "已有进行中的采购变更，请先处理现有变更。",
+                  },
+              ]
             : [],
         fieldVisibility: {},
     }
@@ -331,6 +340,7 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                     line.max_create_quantity ?? remainingQuantity,
                 ),
                 unit: line.unit ?? "",
+                quantityScale: line.quantity_scale,
                 unitCostGross: String(line.latest_cost_gross ?? "0"),
                 inputTaxRate: String(line.input_tax_rate ?? "0"),
                 expectedDeliveryDate: line.expected_delivery_date ?? "",

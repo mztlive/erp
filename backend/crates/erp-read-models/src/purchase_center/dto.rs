@@ -256,6 +256,8 @@ pub struct CreationBasisListParams {
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
+    /// 基础单位允许数量小数位；缺失时客户端不得推断可拆分精度。
+    pub quantity_scale: Option<u8>,
     /// 销售稳定行身份。
     pub sales_order_line_id: String,
     /// 销售当前版本行身份。

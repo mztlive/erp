@@ -16,6 +16,7 @@ function lineFromPick(
         name: pick.name,
         sku: pick.skuId,
         skuRevisionId: pick.skuRevisionId,
+        specification: pick.specificationLabel,
         unit: pick.baseUnit || base.unit,
         unitPriceGross: pick.salesVisiblePriceGross || base.unitPriceGross,
     }

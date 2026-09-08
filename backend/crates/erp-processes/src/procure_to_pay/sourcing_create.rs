@@ -415,7 +415,9 @@ fn latest_stock_group<'a>(groups: &'a [StockBasisGroup], balance_id: &str) -> Re
 fn map_sourcing_plan_error(error: SourcingPlanError) -> Error {
     match error {
         SourcingPlanError::StaleFacts => procurement_quantity_changed(),
-        SourcingPlanError::WarehouseContract(message) => Error::ValidationError(message),
+        SourcingPlanError::WarehouseContract(message) | SourcingPlanError::QuantityContract(message) => {
+            Error::ValidationError(message)
+        }
     }
 }
 

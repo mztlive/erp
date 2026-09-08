@@ -4,11 +4,18 @@ import * as React from "react"
 import { SparklesIcon } from "lucide-react"
 
 import { OptionCombobox } from "@/components/business/option-combobox"
+import { cn } from "@/lib/utils"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import type { SourcingSupplierOption } from "@/features/purchase-orders/lib/purchase-order-create-model"
 import { FULFILLMENT_RESPONSIBILITY_LABEL } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderCreateBatchBarProps = {
+    compact?: boolean
     selectedCount: number
     options: readonly SourcingSupplierOption[]
     disabled?: boolean
@@ -21,6 +28,7 @@ export type PurchaseOrderCreateBatchBarProps = {
  * 批量指定共同履约方案，或一键为全部明细匹配最优方案。
  */
 export function PurchaseOrderCreateBatchBar({
+    compact = false,
     selectedCount,
     options,
     disabled,
@@ -36,60 +44,79 @@ export function PurchaseOrderCreateBatchBar({
     }, [basisId, options])
 
     return (
-        <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2">
-            <p className="text-sm text-muted-foreground">
-                已选 {selectedCount} 行
-            </p>
-            <OptionCombobox
-                id="procurement-orders-create-batch-option"
-                className="w-64"
-                value={basisId}
-                onValueChange={setBasisId}
-                allowClear={false}
-                disabled={disabled || options.length === 0}
-                placeholder={
-                    selectedCount === 0 && options.length === 0
-                        ? "请先勾选明细"
-                        : options.length === 0
-                          ? "选中行没有可指定的履约方案"
-                          : "批量指定履约方案"
-                }
-                aria-label="批量指定履约方案"
-                options={options.map((option) => ({
-                    value: option.basisId,
-                    label:
-                        option.sourceType === "EXISTING_STOCK"
-                            ? `${option.supplierName} · 现货`
-                            : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
-                    keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
-                }))}
-            />
-            <Button
-                id="procurement-orders-create-batch-apply"
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={disabled || !basisId || options.length === 0}
-                onClick={() => {
-                    if (basisId) onApply(basisId)
-                }}
-                data-testid="purchase-create-batch-apply"
-            >
-                应用到选中行
-            </Button>
-            <Button
-                id="procurement-orders-create-batch-match"
-                type="button"
-                size="sm"
-                variant="outline"
-                className="sm:ml-auto"
-                disabled={disabled || matchDisabled}
-                onClick={onMatchBest}
-                data-testid="purchase-create-match-best"
-            >
-                <SparklesIcon data-icon="inline-start" />
-                重新自动分配
-            </Button>
+        <div
+            className={cn(
+                "flex flex-wrap items-center gap-2",
+                (!compact || selectedCount > 1) &&
+                    "rounded-md bg-muted/40 px-3 py-2",
+            )}
+        >
+            {!compact || selectedCount > 1 ? (
+                <>
+                    <p className="text-sm text-muted-foreground">
+                        已选 {selectedCount} 行
+                    </p>
+                    <OptionCombobox
+                        id="procurement-orders-create-batch-option"
+                        className="w-full min-w-0 sm:w-64"
+                        value={basisId}
+                        onValueChange={setBasisId}
+                        allowClear={false}
+                        disabled={disabled || options.length === 0}
+                        placeholder={
+                            selectedCount === 0 && options.length === 0
+                                ? "请先勾选明细"
+                                : options.length === 0
+                                  ? "选中行没有可指定的履约方案"
+                                  : "批量指定履约方案"
+                        }
+                        aria-label="批量指定履约方案"
+                        options={options.map((option) => ({
+                            value: option.basisId,
+                            label:
+                                option.sourceType === "EXISTING_STOCK"
+                                    ? `${option.supplierName} · 现货`
+                                    : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                            keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
+                        }))}
+                    />
+                    <Button
+                        id="procurement-orders-create-batch-apply"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={disabled || !basisId || options.length === 0}
+                        onClick={() => {
+                            if (basisId) onApply(basisId)
+                        }}
+                        data-testid="purchase-create-batch-apply"
+                    >
+                        应用到选中行
+                    </Button>
+                </>
+            ) : null}
+            <Tooltip>
+                <TooltipTrigger
+                    render={
+                        <Button
+                            id="procurement-orders-create-batch-match"
+                            type="button"
+                            size="sm"
+                            variant={compact ? "ghost" : "outline"}
+                            className="ml-auto"
+                            disabled={disabled || matchDisabled}
+                            onClick={onMatchBest}
+                            data-testid="purchase-create-match-best"
+                        />
+                    }
+                >
+                    <SparklesIcon data-icon="inline-start" />
+                    重新自动分配
+                </TooltipTrigger>
+                <TooltipContent>
+                    重新推荐全部明细，将替换当前手工调整与拆分方案。
+                </TooltipContent>
+            </Tooltip>
         </div>
     )
 }

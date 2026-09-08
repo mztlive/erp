@@ -93,6 +93,30 @@ export function PurchaseOrderCreateSourcePanel({
         ? salesOrderOpenHref(selectedOrder.salesOrderId, salesOrderReturnTo)
         : undefined
 
+    if (flat && disabled) {
+        return selectedOrder &&
+            (selectedOrder.contractNumber || selectedOrder.salesOwnerName) ? (
+            <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-border/60 px-5 py-3 text-xs text-muted-foreground">
+                {selectedOrder.contractNumber ? (
+                    <span>
+                        合同{" "}
+                        <span className="text-foreground">
+                            {selectedOrder.contractNumber}
+                        </span>
+                    </span>
+                ) : null}
+                {selectedOrder.salesOwnerName ? (
+                    <span>
+                        销售负责人{" "}
+                        <span className="text-foreground">
+                            {selectedOrder.salesOwnerName}
+                        </span>
+                    </span>
+                ) : null}
+            </div>
+        ) : null
+    }
+
     return (
         <section className={cn("overflow-hidden", surfaceClassName(flat))}>
             <div

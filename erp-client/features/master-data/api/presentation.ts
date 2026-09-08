@@ -330,22 +330,15 @@ export const commonActions = (
             ],
         }
     }
-    // 卡券类目：仅新建 + 编辑；不提供查看详情 / 停用。
     if (resource === "voucher-categories") {
         return {
-            allowedActions: ["CREATE_REVISION", "EXPORT_ROW"],
-            actionBlockers: [
-                {
-                    action: "VIEW",
-                    code: "VOUCHER_NO_DETAIL",
-                    message: "卡券类目在列表原地编辑，不提供独立查看。",
-                },
-                {
-                    action: "DISABLE",
-                    code: "VOUCHER_NO_DISABLE",
-                    message: "卡券类目不支持停用。",
-                },
+            allowedActions: [
+                "VIEW",
+                "CREATE_REVISION",
+                "EXPORT_ROW",
+                lifecycle === "ENABLED" ? "DISABLE" : "ENABLE",
             ],
+            actionBlockers: [],
         }
     }
     // 计量单位：列表 Dialog 更新 / 停用，无侧边预览与独立详情。

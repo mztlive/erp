@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import type { ColumnDef } from "@tanstack/react-table"
+import { flexRender, type ColumnDef } from "@tanstack/react-table"
 
 import {
     blockerColumn,
@@ -15,6 +15,7 @@ import {
     updateOnlyActionsColumn,
     warehouseActionsColumn,
 } from "@/features/master-data/components/list/list-column-primitives"
+import { VoucherCategoryStatusButton } from "@/features/master-data/components/list/voucher-category-status-dialog"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 export function useBrandListColumns({
@@ -67,13 +68,19 @@ export function useVoucherCategoryListColumns({
     lastFocusedRowId,
     rows,
     onReviseTarget,
+    onStatusTarget,
 }: {
     lastFocusedRowId: React.MutableRefObject<string | null>
     rows: readonly MasterDataListItem[]
     onReviseTarget: (item: MasterDataListItem) => void
+    onStatusTarget: (item: MasterDataListItem) => void
 }) {
-    return React.useMemo<ColumnDef<MasterDataListItem>[]>(
-        () => [
+    return React.useMemo<ColumnDef<MasterDataListItem>[]>(() => {
+        const actions = updateOnlyActionsColumn({
+            lastFocusedRowId,
+            onReviseTarget,
+        })
+        return [
             stableNoColumn(),
             nameColumn(),
             revisionNoColumn(),
@@ -81,10 +88,25 @@ export function useVoucherCategoryListColumns({
             revisionTimingColumn(),
             effectivePeriodColumn(),
             ...blockerColumn(rows),
-            updateOnlyActionsColumn({ lastFocusedRowId, onReviseTarget }),
-        ],
-        [lastFocusedRowId, onReviseTarget, rows],
-    )
+            {
+                ...actions,
+                cell: (context) => (
+                    <div className="flex items-center gap-1">
+                        {flexRender(actions.cell, context)}
+                        <VoucherCategoryStatusButton
+                            row={context.row.original}
+                            surface="table"
+                            onClick={() => {
+                                lastFocusedRowId.current =
+                                    context.row.original.stableId
+                                onStatusTarget(context.row.original)
+                            }}
+                        />
+                    </div>
+                ),
+            },
+        ]
+    }, [lastFocusedRowId, onReviseTarget, onStatusTarget, rows])
 }
 
 export function useWarehouseListColumns({

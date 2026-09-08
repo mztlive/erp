@@ -76,3 +76,6 @@ pub use sourcing_plan::{
     SourcingPlan, SourcingPlanError, StockAllocationPlan, StockBasisGroup, StockBasisLine, SupplySourceType,
 };
 pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+
+mod sourcing_quantity;
+pub use sourcing_quantity::ensure_sourcing_quantity;

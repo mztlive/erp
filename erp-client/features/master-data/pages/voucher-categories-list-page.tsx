@@ -1,5 +1,9 @@
 "use client"
 
+import { useState } from "react"
+import type { MasterDataListItem } from "@/features/master-data/types"
+import { VoucherCategoryStatusDialog } from "@/features/master-data/components/list/voucher-category-status-dialog"
+
 import { DownloadIcon, PlusIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
@@ -11,6 +15,7 @@ import { LifecycleMetricStrip } from "@/features/master-data/components/list/lif
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { dictionaryListStyles } from "./dictionary-list-styles"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
+import { VoucherCategoryPreviewSheet } from "@/features/master-data/components/list/voucher-category-preview-sheet"
 import { useVoucherCategoryListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
@@ -20,11 +25,16 @@ import {
 } from "@/features/master-data/lib/copy"
 
 export function VoucherCategoriesListPage() {
+    const [statusTarget, setStatusTarget] = useState<MasterDataListItem | null>(
+        null,
+    )
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useDictionaryListState({
         resource: "voucher-categories",
         createPermission: "voucher_category_profile:create",
+        enablePreview: true,
+        enableRevisionFilter: false,
         searchInputRef,
     })
     const exportPending =
@@ -44,12 +54,11 @@ export function VoucherCategoriesListPage() {
         lastFocusedRowId,
         rows: state.rows,
         onReviseTarget: state.setReviseTarget,
+        onStatusTarget: setStatusTarget,
     })
     const { filters } = state
     const hasActiveFilters =
-        filters.q.trim() !== "" ||
-        filters.lifecycleStatus !== "all" ||
-        filters.revisionTiming !== "all"
+        filters.q.trim() !== "" || filters.lifecycleStatus !== "all"
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
 
     return (
@@ -105,6 +114,7 @@ export function VoucherCategoriesListPage() {
                         idPrefix="master-data-voucher-categories-list-toolbar"
                         searchInputRef={searchInputRef}
                         filters={filters}
+                        showRevisionFilter={false}
                         searchPlaceholder={masterDataSearchPlaceholder(
                             "voucher-categories",
                         )}
@@ -149,14 +159,26 @@ export function VoucherCategoriesListPage() {
                         }
                         onRowPreview={(row) => {
                             lastFocusedRowId.current = row.stableId
-                            state.setReviseTarget(row)
+                            state.setPreviewId(row.stableId)
                         }}
                         onRowOpen={(row) => {
                             lastFocusedRowId.current = row.stableId
-                            state.setReviseTarget(row)
+                            state.setPreviewId(row.stableId)
                         }}
                     />
                 }
+            />
+            <VoucherCategoryPreviewSheet
+                row={state.previewRow}
+                detailQuery={state.previewDetailQuery}
+                lastFocusedRowId={lastFocusedRowId}
+                onClose={() => state.setPreviewId(null)}
+                onRevise={state.setReviseTarget}
+                onStatusChange={setStatusTarget}
+            />
+            <VoucherCategoryStatusDialog
+                target={statusTarget}
+                onClose={() => setStatusTarget(null)}
             />
             <VoucherCategoryFormDialog
                 idPrefix="master-data-voucher-categories-list-create-dialog"

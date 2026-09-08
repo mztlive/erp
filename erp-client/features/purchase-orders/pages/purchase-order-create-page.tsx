@@ -37,6 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast"
 import { PurchaseOrderCreateBatchBar } from "@/features/purchase-orders/components/purchase-order-create-batch-bar"
 import { PurchaseOrderCreatePreviewDialog } from "@/features/purchase-orders/components/purchase-order-create-preview"
+import { PurchaseOrderCreateSourcingCards } from "@/features/purchase-orders/components/purchase-order-create-sourcing-cards"
 import { PurchaseOrderCreateSourcingTable } from "@/features/purchase-orders/components/purchase-order-create-sourcing-table"
 import { PurchaseOrderCreateSourcePanel } from "@/features/purchase-orders/components/purchase-order-create-source-panel"
 import {
@@ -61,6 +62,7 @@ import {
     sourcingFormValidationError,
 } from "@/features/purchase-orders/lib/purchase-order-create-validation"
 import { cn } from "@/lib/utils"
+import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 
 /**
  * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建并提交审批；成功后回到列表。
@@ -88,6 +90,9 @@ export function PurchaseOrderCreatePage({
         props: SalesOrderPaperPreviewRenderProps,
     ) => ReactNode
 }) {
+    const SourcingEditor = embedded
+        ? PurchaseOrderCreateSourcingCards
+        : PurchaseOrderCreateSourcingTable
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -391,6 +396,10 @@ export function PurchaseOrderCreatePage({
                 (line) => line.salesOrderLineId === salesOrderLineId,
             )
             if (!product) return
+            const allocationCount = lines.filter(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            ).length
+            if (!canSplitSourcingProduct(product, allocationCount)) return
             const used = new Set(
                 lines
                     .filter(
@@ -549,6 +558,17 @@ export function PurchaseOrderCreatePage({
         )
     }
 
+    const batchBar = (
+        <PurchaseOrderCreateBatchBar
+            compact={embedded}
+            selectedCount={selectedCount}
+            options={commonSourcingOptions}
+            onApply={applyBatchSupplier}
+            matchDisabled={!canMatchBest}
+            onMatchBest={applyBestSourcingOptions}
+        />
+    )
+
     const sourcingTotalItems = [
         {
             id: "orders",
@@ -705,26 +725,28 @@ export function PurchaseOrderCreatePage({
                                         !embedded && "py-5",
                                     )}
                                 >
-                                    <div className="flex items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <h2 className="font-heading text-sm font-semibold">
                                             销售明细与供给方案
                                         </h2>
                                         <span className="text-xs text-muted-foreground">
                                             {selectedOrder.lines.length} 行
                                         </span>
+                                        {embedded && selectedCount <= 1 ? (
+                                            <div className="ml-auto">
+                                                {batchBar}
+                                            </div>
+                                        ) : null}
                                     </div>
-                                    <PurchaseOrderCreateBatchBar
-                                        selectedCount={selectedCount}
-                                        options={commonSourcingOptions}
-                                        onApply={applyBatchSupplier}
-                                        matchDisabled={!canMatchBest}
-                                        onMatchBest={applyBestSourcingOptions}
-                                    />
+                                    {!embedded || selectedCount > 1
+                                        ? batchBar
+                                        : null}
+
                                     {sourcingFormLinesReady(
                                         lines,
                                         selectedOrder,
                                     ) ? (
-                                        <PurchaseOrderCreateSourcingTable
+                                        <SourcingEditor
                                             form={
                                                 form as unknown as PurchaseOrderCreateFormApi
                                             }
@@ -735,9 +757,11 @@ export function PurchaseOrderCreatePage({
                                     ) : (
                                         <Skeleton className="h-40" />
                                     )}
-                                    <p className="text-xs text-muted-foreground">
-                                        页面已自动优先分配现有库存；库存不足时，再按可覆盖数量、成本和交期推荐采购。可调整或拆分，同一采购维度会合并为一张采购单。
-                                    </p>
+                                    {!embedded ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            页面已自动优先分配现有库存；库存不足时，再按可覆盖数量、成本和交期推荐采购。可调整或拆分，同一采购维度会合并为一张采购单。
+                                        </p>
+                                    ) : null}
                                 </div>
                             </section>
                         ) : null}
@@ -761,14 +785,18 @@ export function PurchaseOrderCreatePage({
                             )}
                         >
                             <PurchaseOrderCreateFooterTotals
-                                items={sourcingTotalItems}
+                                items={sourcingTotalItems.filter(
+                                    (item) => item.id !== "lines",
+                                )}
                                 action={previewAction}
                             />
                         </div>
                     }
                 >
                     <PurchaseOrderCreateFooterTotals
-                        items={sourcingTotalItems}
+                        items={sourcingTotalItems.filter(
+                            (item) => item.id !== "lines",
+                        )}
                         action={previewAction}
                     />
                 </WorkspaceTaskFooter>
@@ -856,8 +884,8 @@ function PurchaseOrderCreateFooterTotals({
     action: ReactNode
 }) {
     return (
-        <div className="flex w-full min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+        <div className="@container flex w-full min-w-0 flex-col items-stretch gap-3 @min-[640px]/document:flex-row @min-[640px]/document:items-center @min-[640px]/document:justify-between">
+            <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 @min-[540px]:grid-cols-3">
                 {items.map((item) => (
                     <div key={item.id} className="min-w-0">
                         <dt className="text-xs text-muted-foreground">

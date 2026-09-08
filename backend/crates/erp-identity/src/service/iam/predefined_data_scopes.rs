@@ -2,7 +2,7 @@
 //!
 //! 指定到人的人工任务仍要求责任人具备可证明的数据范围。第一期单公司部署下，
 //! 尚未配置任何范围的预定义岗位补齐公司级范围；管理员已配置、收窄或软删除的
-//! 范围不会被覆盖或重建。
+//! 范围不会被覆盖或重建。`role-root` 由 [`super::ensure_root_role`] 按同一规则单独补齐。
 
 use super::predefined_roles::PREDEFINED_ROLES;
 use super::SharedRbacService;

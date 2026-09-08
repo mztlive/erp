@@ -325,6 +325,7 @@ mod tests {
         let remaining = Quantity::from_str(remaining).unwrap();
         let covered = Quantity::try_from(total.to_decimal() - remaining.to_decimal()).expect("剩余量合法");
         SalesProcurementCoverageLine {
+            quantity_scale: Some(6),
             revision_line: SalesOrderRevisionLine {
                 base: FactIdentity {
                     id: format!("sorl-{stable_line_id}"),

@@ -32,6 +32,7 @@ import type {
     ProductListingStatus,
 } from "@/features/master-data/types"
 import { optionKeys } from "@/hooks/use-options"
+import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 export const masterDataKeys = {
@@ -170,6 +171,28 @@ export function useCreateRevisionMutation() {
             ) {
                 await invalidateMasterDataCaches(queryClient)
             }
+        },
+    })
+}
+
+/** 卡券启停通过既有更新权限提交，完成后同步列表、详情和选择器缓存。 */
+export function useVoucherCategoryStatusMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({
+            input,
+            status,
+        }: {
+            input: CreateRevisionInput
+            status: "active" | "disabled"
+        }) => updateVoucherCategoryRevision(input, status),
+        onSettled: async () => {
+            await Promise.all([
+                invalidateMasterDataCaches(queryClient),
+                queryClient.invalidateQueries({
+                    queryKey: ["sales-orders", "voucher-category"],
+                }),
+            ])
         },
     })
 }

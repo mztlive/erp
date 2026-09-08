@@ -285,6 +285,7 @@ export type PurchaseCreationBasis = Readonly<{
         remainingQuantity: string
         maxCreateQuantity: string
         unit: string
+        quantityScale?: number | null
         unitCostGross: string
         inputTaxRate: string
         expectedDeliveryDate: string

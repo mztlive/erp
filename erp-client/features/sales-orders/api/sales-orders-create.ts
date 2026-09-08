@@ -27,6 +27,7 @@ import {
     throwValidation,
 } from "@/features/sales-orders/api/mappers"
 import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
+import { salesLineSpecification } from "@/features/sales-orders/lib/sales-line-specification"
 import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
@@ -84,7 +85,12 @@ function buildDraftPayload(
             line_type: businessType,
             sales_tax_rate: taxRate,
             item_name_snapshot: line.name.trim(),
-            spec_snapshot: line.sku.trim() || null,
+            spec_snapshot:
+                salesLineSpecification(
+                    line.specification,
+                    line.sku,
+                    line.skuRevisionId,
+                ) || null,
             unit_snapshot: line.unit.trim() || null,
             goods: null as null | Record<string, unknown>,
             voucher: null as null | Record<string, unknown>,
@@ -298,6 +304,11 @@ function mapDraftLines(
             name: line.item_name_snapshot,
             sku: isVoucher ? (voucherCategorySkuId ?? "") : (line.sku_id ?? ""),
             skuRevisionId: isVoucher ? "" : (line.sku_revision_id ?? ""),
+            specification: salesLineSpecification(
+                line.spec_snapshot,
+                isVoucher ? voucherCategorySkuId : line.sku_id,
+                line.sku_revision_id,
+            ),
             serviceRegion: isVoucher ? "" : (line.service_region ?? ""),
             quantity: isVoucher
                 ? String(line.card_count ?? 1)

@@ -2,10 +2,10 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
-import { ArrowUpRightIcon } from "lucide-react"
+import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
-import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
+import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
@@ -352,9 +352,7 @@ function WorkspaceDocumentTaskDetail({
             ? facts.impact
             : item.impactSummary
     const detailFacts = splitDetailSections(summarySections, counterpartyName)
-    const [primaryAmount, ...otherAmounts] = item.amountSummary
-        ? [item.amountSummary]
-        : detailFacts.amounts
+    const [primaryAmount, ...otherAmounts] = detailFacts.amounts
     const documentFields = [
         ...(detailFacts.submitter
             ? [{ label: "申请人", value: detailFacts.submitter }]
@@ -376,78 +374,34 @@ function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
-    const actions = approvalTask ? (
-        <ApprovalActionBar
-            presentation="workspace"
-            id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
-            allowedActions={item.allowedActions}
-            recoveryOptions={recoveryQuery.data?.actions ?? []}
-            workItemId={item.workItemId}
-            expectedTaskVersion={item.taskVersion}
-            instance={instance}
-            canReadSensitive={canReadSensitive}
-            hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
-            decisionContext={{
-                documentLabel: item.objectTitle,
-                amountLabel: primaryAmount?.value,
-                currentNodeLabel: instance?.currentNodeName,
-                impactSummary,
-            }}
-            onDecisionApplied={(view) =>
-                onDecisionApplied?.(view, item.workItemId)
-            }
-        />
-    ) : documentHref &&
-      (trackingTask || item.allowedActions.includes("PROCESS")) ? (
-        <Button
-            id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-            type="button"
-            data-testid={`work-item-open-document-${item.workItemId}`}
-            render={
-                <a
-                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-                    href={documentHref}
-                    aria-label={openActionLabel}
-                />
-            }
-        >
-            {openActionLabel}
-        </Button>
-    ) : null
-
-    const paneFooter = (
-        <div className="flex w-full min-w-0 flex-col gap-3">
-            {item.nextActionHint ? (
-                <p className="text-xs text-muted-foreground">
-                    {item.nextActionHint}
-                </p>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                {canReadPaper && currentPaperKind ? (
-                    <Button
-                        id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        data-testid={`work-item-read-document-${item.workItemId}`}
-                        onClick={() =>
-                            setPaper({
-                                kind: currentPaperKind,
-                                objectId: item.businessObjectId,
-                                title: item.stableNumber,
-                            })
-                        }
-                    >
-                        {readActionLabel}
-                    </Button>
-                ) : (
-                    <span />
-                )}
-                {actions ? (
-                    <div className="ml-auto min-w-0">{actions}</div>
-                ) : null}
-            </div>
-        </div>
+    const actions =
+        approvalTask && !trackingTask ? (
+            <ApprovalActionBar
+                presentation="workspace"
+                id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
+                allowedActions={item.allowedActions}
+                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                workItemId={item.workItemId}
+                expectedTaskVersion={item.taskVersion}
+                instance={instance}
+                canReadSensitive={canReadSensitive}
+                hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
+                decisionContext={{
+                    documentLabel: item.objectTitle,
+                    amountLabel: primaryAmount?.value,
+                    currentNodeLabel: instance?.currentNodeName,
+                    impactSummary,
+                }}
+                onDecisionApplied={(view) =>
+                    onDecisionApplied?.(view, item.workItemId)
+                }
+            />
+        ) : null
+    const canOpenDocument = Boolean(
+        documentHref &&
+        (approvalTask ||
+            trackingTask ||
+            item.allowedActions.includes("PROCESS")),
     )
 
     return (
@@ -459,20 +413,40 @@ function WorkspaceDocumentTaskDetail({
                         {item.workItemTypeLabel}
                     </h2>
                     <WorkspaceTaskHeaderActions item={item}>
-                        {approvalTask && documentHref ? (
+                        {canReadPaper && currentPaperKind ? (
+                            <IconActionButton
+                                id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
+                                label={readActionLabel}
+                                testId={`work-item-read-document-${item.workItemId}`}
+                                onClick={() =>
+                                    setPaper({
+                                        kind: currentPaperKind,
+                                        objectId: item.businessObjectId,
+                                        title: item.stableNumber,
+                                    })
+                                }
+                            >
+                                <FileTextIcon aria-hidden="true" />
+                            </IconActionButton>
+                        ) : null}
+                        {canOpenDocument && documentHref ? (
                             <IconActionButton
                                 id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
                                 label={openActionLabel}
                                 testId={`work-item-open-document-${item.workItemId}`}
                                 href={documentHref}
                             >
-                                <ArrowUpRightIcon aria-hidden="true" />
+                                {canReadPaper ? (
+                                    <ArrowUpRightIcon aria-hidden="true" />
+                                ) : (
+                                    <FileTextIcon aria-hidden="true" />
+                                )}
                             </IconActionButton>
                         ) : null}
                     </WorkspaceTaskHeaderActions>
                 </>
             }
-            footer={paneFooter}
+            footer={actions}
             aria-label="当前任务"
         >
             <div className="flex w-full flex-col">
@@ -653,8 +627,8 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
                 {approvalTask && instance ? (
-                    <DetailBlock title="审批">
-                        <RuntimeSummary instance={instance} compact />
+                    <DetailBlock>
+                        <WorkspaceApprovalProgress instance={instance} />
                     </DetailBlock>
                 ) : null}
             </div>

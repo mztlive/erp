@@ -26,6 +26,7 @@ export type DictionaryAppliedChip = Readonly<{
  */
 export function useLifecycleListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
+    { enableRevisionFilter = true }: { enableRevisionFilter?: boolean } = {},
 ) {
     const {
         searchParams,
@@ -41,9 +42,9 @@ export function useLifecycleListFilters(
     const lifecycleStatus = parseLifecycleStatus(
         searchParams.get("lifecycleStatus"),
     )
-    const revisionTiming = parseRevisionTiming(
-        searchParams.get("revisionTiming"),
-    )
+    const revisionTiming = enableRevisionFilter
+        ? parseRevisionTiming(searchParams.get("revisionTiming"))
+        : "all"
     const metricKey = lifecycleStatus
     const hasStructuredListFilters =
         lifecycleStatus !== "all" || revisionTiming !== "all"
@@ -93,12 +94,20 @@ export function useLifecycleListFilters(
         patchUrl({
             q: searchDraft.trim() || null,
             revisionTiming:
-                revisionTimingDraft === "all" ? null : revisionTimingDraft,
+                !enableRevisionFilter || revisionTimingDraft === "all"
+                    ? null
+                    : revisionTimingDraft,
             page: null,
         })
         resetPagination()
         setFilterPanelOpen(false)
-    }, [patchUrl, resetPagination, revisionTimingDraft, searchDraft])
+    }, [
+        enableRevisionFilter,
+        patchUrl,
+        resetPagination,
+        revisionTimingDraft,
+        searchDraft,
+    ])
 
     /** 移除单个普通筛选条件，保留当前启停 Tab。 */
     const removeFilter = React.useCallback(
@@ -113,7 +122,7 @@ export function useLifecycleListFilters(
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
-        revisionTimingDraft !== revisionTiming
+        (enableRevisionFilter && revisionTimingDraft !== revisionTiming)
 
     /** 字典页无更多面板；保留草稿重置以免外部仍调用。 */
     const resetMoreFilters = React.useCallback(() => {

@@ -124,6 +124,7 @@ export type BackendBasisLine = {
     sales_quantity?: string | null
     covered_quantity?: string | null
     remaining_quantity?: string | null
+    quantity_scale?: number | null
     max_create_quantity?: string | null
     latest_cost_gross: string
     input_tax_rate: string

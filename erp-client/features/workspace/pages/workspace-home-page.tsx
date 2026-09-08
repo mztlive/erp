@@ -30,10 +30,10 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet"
 import {
-    WorkspaceFamilyNav,
+    // WorkspaceFamilyNav,
     WorkspaceQueueScopeNav,
-    WorkspaceQueueStatusNav,
-    WorkspaceQueueToolbar,
+    // WorkspaceQueueStatusNav,
+    // WorkspaceQueueToolbar,
 } from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
 import { WorkspacePaneActionsProvider } from "@/features/workspace/components/workspace-pane-actions"
@@ -66,8 +66,8 @@ export function WorkspaceHomeView({
         refreshing,
         activeMetric,
         hasActiveFilter,
-        searchDraft,
-        setSearchDraft,
+        // searchDraft,
+        // setSearchDraft,
         narrowDetailOpen,
         setNarrowDetailOpen,
         setNarrowDetailSettledOpen,
@@ -77,9 +77,9 @@ export function WorkspaceHomeView({
         clearFilters,
         onSelectTask,
         applyDecisionAfter,
-        onFamilyChange,
-        onSortChange,
-        applySearch,
+        // onFamilyChange,
+        // onSortChange,
+        // applySearch,
         clearSearch,
         refresh,
     } = home
@@ -234,34 +234,35 @@ export function WorkspaceHomeView({
         </Button>
     ) : undefined
 
-    const queueToolbar = (
-        <WorkspaceQueueToolbar
-            urlState={urlState}
-            searchDraft={searchDraft}
-            onSearchDraftChange={setSearchDraft}
-            onSortChange={onSortChange}
-            onSearch={applySearch}
-            onClearSearch={clearSearch}
-            showSort={!startedView}
-            searchAriaLabel={startedView ? "搜索我发起的审批" : "搜索待办"}
-            filters={
-                !startedView ? (
-                    <>
-                        <WorkspaceFamilyNav
-                            urlState={urlState}
-                            counts={view.familyCounts}
-                            onFamilyChange={onFamilyChange}
-                        />
-                        <WorkspaceQueueStatusNav
-                            metrics={metrics}
-                            activeMetric={activeMetric}
-                            onMetricClick={onMetricClick}
-                        />
-                    </>
-                ) : undefined
-            }
-        />
-    )
+    // 暂停展示搜索、类型、超期和排序控件；恢复时一并取消相关导入与状态解构的注释。
+    // const queueToolbar = (
+    //     <WorkspaceQueueToolbar
+    //         urlState={urlState}
+    //         searchDraft={searchDraft}
+    //         onSearchDraftChange={setSearchDraft}
+    //         onSortChange={onSortChange}
+    //         onSearch={applySearch}
+    //         onClearSearch={clearSearch}
+    //         showSort={!startedView}
+    //         searchAriaLabel={startedView ? "搜索我发起的审批" : "搜索待办"}
+    //         filters={
+    //             !startedView ? (
+    //                 <>
+    //                     <WorkspaceFamilyNav
+    //                         urlState={urlState}
+    //                         counts={view.familyCounts}
+    //                         onFamilyChange={onFamilyChange}
+    //                     />
+    //                     <WorkspaceQueueStatusNav
+    //                         metrics={metrics}
+    //                         activeMetric={activeMetric}
+    //                         onMetricClick={onMetricClick}
+    //                     />
+    //                 </>
+    //             ) : undefined
+    //         }
+    //     />
+    // )
 
     const paneActions = detailItem ? (
         <>
@@ -302,11 +303,7 @@ export function WorkspaceHomeView({
         <PageScaffold className="min-h-0" density="compact">
             <p
                 key={completionAnnouncement.sequence}
-                className={
-                    completionAnnouncement.text
-                        ? "rounded-lg bg-muted/40 px-3 py-2 text-sm"
-                        : "sr-only"
-                }
+                className="sr-only"
                 role="status"
                 aria-live="polite"
                 aria-atomic="true"
@@ -349,9 +346,9 @@ export function WorkspaceHomeView({
                     onMetricClick={onMetricClick}
                 />
             </div>
-            <section aria-label="任务筛选" className="space-y-2">
-                {queueToolbar}
-                {hasEffectiveFilter ? (
+            {/* 暂停展示筛选栏：{queueToolbar} */}
+            {hasEffectiveFilter ? (
+                <section aria-label="当前筛选" className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span>
                             {[
@@ -378,8 +375,8 @@ export function WorkspaceHomeView({
                             清除筛选
                         </Button>
                     </div>
-                ) : null}
-            </section>
+                </section>
+            ) : null}
             <div
                 className={cn(
                     surfacePanelClassName,

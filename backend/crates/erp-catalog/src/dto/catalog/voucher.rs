@@ -166,6 +166,10 @@ pub struct UpdateVoucherCategoryRequest {
     /// 卡券类目描述（写入商品修订与卡券类目扩展修订）。
     #[validate(custom(function = "non_blank", message = "卡券类目描述不能为空"))]
     pub description: String,
+    /// 同步商品、SKU 与卡券类目后继修订的启停状态；省略时保持原状态。
+    /// 停用会使 SKU 下架；重新启用不自动恢复上架。
+    #[serde(default)]
+    pub status: Option<EnableStatus>,
     /// 生效开始日；缺省为服务端当天。
     #[serde(default)]
     pub effective_from: Option<BusinessDate>,
@@ -287,6 +291,31 @@ impl VoucherCategoryProfileListParams {
 
 #[cfg(test)]
 mod tests {
+    /// 旧客户端省略启停字段时保持兼容，显式状态只接受既定枚举。
+    #[test]
+    fn voucher_update_accepts_optional_status_and_rejects_invalid_input() {
+        let base = serde_json::json!({ "version": 1, "name": "体验卡", "description": "体验卡描述" });
+        let original: super::UpdateVoucherCategoryRequest = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(original.status, None);
+        for (wire, expected) in [
+            ("active", super::EnableStatus::Active),
+            ("disabled", super::EnableStatus::Disabled),
+        ] {
+            let mut value = base.clone();
+            value["status"] = serde_json::json!(wire);
+            let request: super::UpdateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+            assert_eq!(request.status, Some(expected));
+            assert!(validator::Validate::validate(&request).is_ok());
+        }
+        let mut invalid = base.clone();
+        invalid["status"] = serde_json::json!("unknown");
+        assert!(serde_json::from_value::<super::UpdateVoucherCategoryRequest>(invalid).is_err());
+        let mut stale = base;
+        stale["version"] = serde_json::json!(0);
+        let request: super::UpdateVoucherCategoryRequest = serde_json::from_value(stale).unwrap();
+        assert!(validator::Validate::validate(&request).is_err());
+    }
+
     use std::str::FromStr;
 
     use erp_core::ids::UnitOfMeasureId;

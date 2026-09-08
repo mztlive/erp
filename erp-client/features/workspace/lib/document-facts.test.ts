@@ -1,4 +1,5 @@
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
+import { apiGet } from "@/lib/api"
 
 import type {
     BackendPaymentReversal,
@@ -8,7 +9,45 @@ import type {
 import {
     paymentReversalDocumentFacts,
     shouldLoadDocumentFacts,
+    fetchWorkspaceDocumentFacts,
 } from "./document-facts"
+
+vi.mock("@/lib/api", () => ({ apiGet: vi.fn() }))
+
+test("销售明细不把误存的 SKU ID 当作规格，但保留真正规格与数量金额", async () => {
+    const sku = "afaa5f33a7714dfc84e3f6557c8bcc32"
+    for (const spec of [sku, "250g 礼盒"]) {
+        vi.mocked(apiGet).mockResolvedValue({
+            business_type: "GOODS_SERVICE",
+            submissions: [],
+            working_copy: {
+                gross_amount: "1288.00",
+                net_amount: "1288.00",
+                tax_amount: "0.00",
+                lines: [
+                    {
+                        item_name_snapshot: "狮峰明前龙井礼盒 250g",
+                        spec_snapshot: spec,
+                        sku_id: sku,
+                        gross_amount: "1288.00",
+                        quantity: "1",
+                        unit_snapshot: "盒",
+                    },
+                ],
+            },
+        })
+        const facts = await fetchWorkspaceDocumentFacts({
+            businessObjectType: "sales_order",
+            businessObjectId: "so-1",
+        })
+        expect(facts?.lines[0].title).toBe(
+            spec === sku
+                ? "狮峰明前龙井礼盒 250g"
+                : "狮峰明前龙井礼盒 250g 250g 礼盒",
+        )
+        expect(facts?.lines[0].quantity).toBe("1 盒 · ¥1,288")
+    }
+})
 
 const reversal: BackendPaymentReversal = {
     id: "reversal-1",
