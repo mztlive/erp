@@ -6,17 +6,14 @@ import {
     useListUrl,
     useSearchDraft,
 } from "@/features/master-data/hooks/use-list-url"
-import {
-    lifecycleFilterLabel,
-    revisionTimingFilterLabel,
-} from "@/features/master-data/lib/copy"
+import { revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
 import {
     parseLifecycleStatus,
     parseRevisionTiming,
 } from "@/features/master-data/lib/list-filters"
 
 /** 可被单独移除的已生效条件。 */
-export type DictionaryFilterKey = "q" | "lifecycleStatus" | "revisionTiming"
+export type DictionaryFilterKey = "q" | "revisionTiming"
 
 export type DictionaryAppliedChip = Readonly<{
     key: DictionaryFilterKey
@@ -47,29 +44,21 @@ export function useLifecycleListFilters(
     const revisionTiming = parseRevisionTiming(
         searchParams.get("revisionTiming"),
     )
-    const metricKey = searchParams.get("metricKey") ?? "all"
+    const metricKey = lifecycleStatus
     const hasStructuredListFilters =
         lifecycleStatus !== "all" || revisionTiming !== "all"
 
     const [filterPanelOpen, setFilterPanelOpen] = React.useState(
         hasStructuredListFilters,
     )
-    const [lifecycleStatusDraft, setLifecycleStatusDraft] =
-        React.useState(lifecycleStatus)
     const [revisionTimingDraft, setRevisionTimingDraft] =
         React.useState(revisionTiming)
 
-    /** 所有已生效条件均可从 chip 单独撤销。 */
+    /** Tab 以外的已生效条件可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly DictionaryAppliedChip[]>(() => {
         const chips: DictionaryAppliedChip[] = []
         if (q.trim()) {
             chips.push({ key: "q", label: `搜索：${q.trim()}` })
-        }
-        if (lifecycleStatus !== "all") {
-            chips.push({
-                key: "lifecycleStatus",
-                label: `启停：${lifecycleFilterLabel(lifecycleStatus)}`,
-            })
         }
         if (revisionTiming !== "all") {
             chips.push({
@@ -78,7 +67,7 @@ export function useLifecycleListFilters(
             })
         }
         return chips
-    }, [lifecycleStatus, q, revisionTiming])
+    }, [q, revisionTiming])
 
     const commitSearch = React.useCallback(() => {
         const next = searchDraft.trim()
@@ -103,35 +92,20 @@ export function useLifecycleListFilters(
     const applyListFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || null,
-            lifecycleStatus:
-                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
-            metricKey:
-                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
             revisionTiming:
                 revisionTimingDraft === "all" ? null : revisionTimingDraft,
             page: null,
         })
         resetPagination()
         setFilterPanelOpen(false)
-    }, [
-        lifecycleStatusDraft,
-        patchUrl,
-        resetPagination,
-        revisionTimingDraft,
-        searchDraft,
-    ])
+    }, [patchUrl, resetPagination, revisionTimingDraft, searchDraft])
 
-    /** 移除单个已生效条件；启停同时移除指标高亮参数。 */
+    /** 移除单个普通筛选条件，保留当前启停 Tab。 */
     const removeFilter = React.useCallback(
         (key: DictionaryFilterKey) => {
             if (key === "q") setSearchDraft("")
-            if (key === "lifecycleStatus") setLifecycleStatusDraft("all")
             if (key === "revisionTiming") setRevisionTimingDraft("all")
-            patchUrl(
-                key === "lifecycleStatus"
-                    ? { lifecycleStatus: null, metricKey: null, page: null }
-                    : { [key]: null, page: null },
-            )
+            patchUrl({ [key]: null, page: null })
             resetPagination()
         },
         [patchUrl, resetPagination, setSearchDraft],
@@ -139,7 +113,6 @@ export function useLifecycleListFilters(
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
-        lifecycleStatusDraft !== lifecycleStatus ||
         revisionTimingDraft !== revisionTiming
 
     /** 字典页无更多面板；保留草稿重置以免外部仍调用。 */
@@ -149,7 +122,6 @@ export function useLifecycleListFilters(
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
-        setLifecycleStatusDraft("all")
         setRevisionTimingDraft("all")
         setFilterPanelOpen(false)
         patchUrl({
@@ -163,7 +135,6 @@ export function useLifecycleListFilters(
     }, [patchUrl, resetPagination, setSearchDraft])
 
     React.useEffect(() => {
-        setLifecycleStatusDraft(lifecycleStatus)
         setRevisionTimingDraft(revisionTiming)
     }, [lifecycleStatus, revisionTiming])
 
@@ -177,8 +148,6 @@ export function useLifecycleListFilters(
         setSearchDraft,
         filterPanelOpen,
         setFilterPanelOpen,
-        lifecycleStatusDraft,
-        setLifecycleStatusDraft,
         revisionTimingDraft,
         setRevisionTimingDraft,
         hasPendingChanges,

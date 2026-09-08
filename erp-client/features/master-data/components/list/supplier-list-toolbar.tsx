@@ -11,12 +11,8 @@ import {
     ListWorkspaceFilterBar,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
+import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
-    masterDataCopy,
-    masterDataSearchPlaceholder,
-} from "@/features/master-data/lib/copy"
-import {
-    LIFECYCLE_RADIO_FILTER_OPTIONS,
     SUPPLIER_CAPABILITY_OPTIONS,
     SUPPLIER_QUALIFICATION_HEALTH_OPTIONS,
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
@@ -81,15 +77,6 @@ export function SupplierListToolbar({
             onResetMore={f.resetMoreFilters}
             commonFilters={
                 <>
-                    <FixedOptionRadioFilter
-                        id={`${prefix}-filter-lifecycle`}
-                        label="启停"
-                        variant="quiet"
-                        value={f.lifecycleStatusDraft}
-                        onValueChange={f.setLifecycleStatusDraft}
-                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                        aria-label={masterDataCopy.filterLifecycleAria}
-                    />
                     <FixedOptionRadioFilter
                         id={`${prefix}-filter-qualification-health`}
                         label="资质状态"

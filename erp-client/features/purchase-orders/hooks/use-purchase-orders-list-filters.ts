@@ -3,14 +3,9 @@
 import * as React from "react"
 
 import { usePurchaseOrdersListUrl } from "@/features/purchase-orders/hooks/use-purchase-orders-list-url"
-import {
-    PO_METRIC_LABEL,
-    PO_STATUS_FILTER_LABEL,
-} from "@/features/purchase-orders/types"
-import type { PurchaseOrderStatusFilter } from "@/features/purchase-orders/types"
 
 /** 可被单独移除的已生效筛选条件。 */
-export type PurchaseOrderFilterKey = "q" | "status" | "metric"
+export type PurchaseOrderFilterKey = "q"
 
 /** 已生效条件的 chip 展示；所有被查询消费的参数都必须显性可见。 */
 export type PurchaseOrderAppliedChip = Readonly<{
@@ -51,8 +46,6 @@ export function usePurchaseOrdersListFilters(
         effectiveMetric !== "all"
 
     const [searchDraft, setSearchDraft] = React.useState(search)
-    const [statusDraft, setStatusDraft] =
-        React.useState<PurchaseOrderStatusFilter>(statusFilter)
 
     // URL 回填草稿：正在输入搜索框时不覆盖尚未提交的关键词
     React.useEffect(() => {
@@ -61,33 +54,18 @@ export function usePurchaseOrdersListFilters(
         }
     }, [search, searchInputRef])
 
-    React.useEffect(() => {
-        setStatusDraft(statusFilter)
-    }, [statusFilter])
-
     const applyFilters = React.useCallback(() => {
         pushUrl({
             q: searchDraft.trim() || undefined,
-            status: statusDraft,
-            // 指标与主状态是同一筛选维度：应用状态时清除指标粗筛，
-            // 避免服务端按 metric 静默覆盖用户刚应用的状态
-            metric: "all",
             page: 1,
         })
-    }, [pushUrl, searchDraft, statusDraft])
+    }, [pushUrl, searchDraft])
 
     /** 移除单个已生效条件；chip 关闭按钮只移除该条件。 */
     const removeFilter = React.useCallback(
         (key: PurchaseOrderFilterKey) => {
             if (key === "q") setSearchDraft("")
-            if (key === "status") setStatusDraft("all")
-            pushUrl(
-                key === "q"
-                    ? { q: undefined, page: 1 }
-                    : key === "status"
-                      ? { status: "all", page: 1 }
-                      : { metric: "all", page: 1 },
-            )
+            pushUrl({ q: undefined, page: 1 })
         },
         [pushUrl],
     )
@@ -95,13 +73,11 @@ export function usePurchaseOrdersListFilters(
     /** 无更多面板，重置为空操作。 */
     const resetMoreFilters = React.useCallback(() => {}, [])
 
-    const hasPendingChanges =
-        searchDraft.trim() !== search.trim() || statusDraft !== statusFilter
+    const hasPendingChanges = searchDraft.trim() !== search.trim()
 
     /** 清除全部：Draft 与 URL 筛选参数一并重置；排序与导航上下文保留。 */
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
-        setStatusDraft("all")
         pushUrl({ q: undefined, status: "all", metric: "all", page: 1 })
     }, [pushUrl])
 
@@ -111,20 +87,8 @@ export function usePurchaseOrdersListFilters(
         const chips: PurchaseOrderAppliedChip[] = []
         const q = url.q?.trim()
         if (q) chips.push({ key: "q", label: `搜索：${q}` })
-        if (statusFilter !== "all") {
-            chips.push({
-                key: "status",
-                label: `状态：${PO_STATUS_FILTER_LABEL[statusFilter]}`,
-            })
-        }
-        if (effectiveMetric !== "all") {
-            chips.push({
-                key: "metric",
-                label: `指标：${PO_METRIC_LABEL[url.metric]}`,
-            })
-        }
         return chips
-    }, [effectiveMetric, statusFilter, url.metric, url.q])
+    }, [url.q])
 
     return {
         // URL 派生值：查询 / 导出 / 摘要只读 Applied
@@ -145,8 +109,6 @@ export function usePurchaseOrdersListFilters(
         // 草稿与 UI 态
         searchDraft,
         setSearchDraft,
-        statusDraft,
-        setStatusDraft,
         hasActiveFilters,
         hasStructuredFilters,
         hasPendingChanges,

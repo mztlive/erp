@@ -20,7 +20,6 @@ import type { ProductAppliedChip } from "@/features/master-data/hooks/use-produc
 import type { useProductListFilters } from "@/features/master-data/hooks/use-product-list-filters"
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import {
-    LIFECYCLE_RADIO_FILTER_OPTIONS,
     PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS,
     PRODUCT_KIND_RADIO_FILTER_OPTIONS,
     PRODUCT_LISTING_RADIO_FILTER_OPTIONS,
@@ -28,7 +27,6 @@ import {
 } from "@/features/master-data/lib/list-filters"
 
 const MORE_CHIP_KEYS = [
-    "lifecycleStatus",
     "revisionTiming",
     "productListingStatus",
     "productSupplyCoverage",
@@ -132,13 +130,6 @@ export function ProductListToolbar({
                             状态
                         </legend>
                         <div className="grid min-w-0 gap-3">
-                            <FixedOptionRadioFilter
-                                label="启停"
-                                value={f.lifecycleStatusDraft}
-                                onValueChange={f.setLifecycleStatusDraft}
-                                options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                                aria-label="启用状态"
-                            />
                             <FixedOptionRadioFilter
                                 label="版本"
                                 value={f.revisionTimingDraft}

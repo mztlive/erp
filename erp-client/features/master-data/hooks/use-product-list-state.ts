@@ -23,10 +23,7 @@ import {
     PRODUCT_COVERAGE_FILTER_OPTIONS,
     PRODUCT_LISTING_FILTER_OPTIONS,
 } from "@/features/master-data/lib/list-filters"
-import {
-    lifecycleFilterLabel,
-    revisionTimingFilterLabel,
-} from "@/features/master-data/lib/copy"
+import { revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type {
     MasterDataListItem,
@@ -150,12 +147,7 @@ export function useProductListState(
                 label: `类型：${PRODUCT_KIND_LABELS[filters.productKind]}`,
             })
         }
-        if (filters.lifecycleStatus !== "all") {
-            chips.push({
-                key: "lifecycleStatus",
-                label: `启停：${lifecycleFilterLabel(filters.lifecycleStatus)}`,
-            })
-        }
+
         if (filters.revisionTiming !== "all") {
             chips.push({
                 key: "revisionTiming",
@@ -215,7 +207,6 @@ export function useProductListState(
         filters.productBrandId,
         filters.productCategoryId,
         filters.productKind,
-        filters.lifecycleStatus,
         filters.productListingStatus,
         filters.productSalesPriceMax,
         filters.productSalesPriceMin,

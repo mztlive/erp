@@ -139,8 +139,6 @@ export function usePurchaseOrdersListController() {
         filters: {
             searchDraft: filters.searchDraft,
             setSearchDraft: filters.setSearchDraft,
-            statusDraft: filters.statusDraft,
-            setStatusDraft: filters.setStatusDraft,
             hasActiveFilters: filters.hasActiveFilters,
             hasStructuredFilters: filters.hasStructuredFilters,
             hasPendingChanges: filters.hasPendingChanges,

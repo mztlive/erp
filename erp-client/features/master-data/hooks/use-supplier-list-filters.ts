@@ -19,7 +19,6 @@ import type { SupplierQualificationHealth } from "@/features/master-data/types"
 /** 可被单独移除的已生效条件。 */
 export type SupplierFilterKey =
     | "q"
-    | "lifecycleStatus"
     | "supplierQualificationHealth"
     | "supplierCapabilityCodes"
     | "supplierQualificationTypes"
@@ -71,7 +70,7 @@ export function useSupplierListFilters(
                 option.value ===
                     searchParams.get("supplierQualificationHealth"),
         )?.value as SupplierQualificationHealth | undefined
-    const metricKey = searchParams.get("metricKey") ?? "all"
+    const metricKey = lifecycleStatus
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||
         supplierQualificationHealth ||
@@ -81,8 +80,6 @@ export function useSupplierListFilters(
 
     const [supplierFilterPanelOpen, setSupplierFilterPanelOpen] =
         React.useState(hasStructuredSupplierFilters)
-    const [lifecycleStatusDraft, setLifecycleStatusDraft] =
-        React.useState(lifecycleStatus)
     const [supplierCapabilityCodesDraft, setSupplierCapabilityCodesDraft] =
         React.useState<string[]>(supplierCapabilityCodes)
     const [
@@ -119,10 +116,6 @@ export function useSupplierListFilters(
     const applySupplierFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || null,
-            lifecycleStatus:
-                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
-            metricKey:
-                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
             supplierCapabilityCodes: csvFilterValue(
                 supplierCapabilityCodesDraft,
             ),
@@ -138,7 +131,6 @@ export function useSupplierListFilters(
         resetPagination()
         setSupplierFilterPanelOpen(false)
     }, [
-        lifecycleStatusDraft,
         patchUrl,
         resetPagination,
         searchDraft,
@@ -147,11 +139,10 @@ export function useSupplierListFilters(
         supplierQualificationTypesDraft,
     ])
 
-    /** 移除单个已生效条件；启停同时移除指标高亮参数。 */
+    /** 移除单个普通筛选条件，保留当前启停 Tab。 */
     const removeFilter = React.useCallback(
         (key: SupplierFilterKey) => {
             if (key === "q") setSearchDraft("")
-            if (key === "lifecycleStatus") setLifecycleStatusDraft("all")
             if (key === "supplierQualificationHealth") {
                 setSupplierQualificationHealthDraft("all")
             }
@@ -161,11 +152,7 @@ export function useSupplierListFilters(
             if (key === "supplierQualificationTypes") {
                 setSupplierQualificationTypesDraft([])
             }
-            patchUrl(
-                key === "lifecycleStatus"
-                    ? { lifecycleStatus: null, metricKey: null, page: null }
-                    : { [key]: null, page: null },
-            )
+            patchUrl({ [key]: null, page: null })
             resetPagination()
         },
         [patchUrl, resetPagination, setSearchDraft],
@@ -179,7 +166,6 @@ export function useSupplierListFilters(
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
-        lifecycleStatusDraft !== lifecycleStatus ||
         supplierQualificationHealthDraft !==
             (supplierQualificationHealth ?? "all") ||
         [...supplierCapabilityCodesDraft].sort().join(",") !==
@@ -189,7 +175,6 @@ export function useSupplierListFilters(
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
-        setLifecycleStatusDraft("all")
         setSupplierCapabilityCodesDraft([])
         setSupplierQualificationTypesDraft([])
         setSupplierQualificationHealthDraft("all")
@@ -207,7 +192,6 @@ export function useSupplierListFilters(
     }, [patchUrl, resetPagination, setSearchDraft])
 
     React.useEffect(() => {
-        setLifecycleStatusDraft(lifecycleStatus)
         setSupplierCapabilityCodesDraft(supplierCapabilityCodes)
         setSupplierQualificationTypesDraft(supplierQualificationTypes)
         setSupplierQualificationHealthDraft(
@@ -232,8 +216,6 @@ export function useSupplierListFilters(
         setSearchDraft,
         supplierFilterPanelOpen,
         setSupplierFilterPanelOpen,
-        lifecycleStatusDraft,
-        setLifecycleStatusDraft,
         supplierCapabilityCodesDraft,
         setSupplierCapabilityCodesDraft,
         supplierQualificationTypesDraft,

@@ -13,7 +13,6 @@ import {
     buildSupplierTableDescription,
 } from "@/features/master-data/lib/master-data-list-summaries"
 import { syncListMetrics } from "@/features/master-data/lib/master-data-list-summaries"
-import { lifecycleFilterLabel } from "@/features/master-data/lib/copy"
 import {
     qualificationHealthLabel,
     selectedSupplierOptionLabels,
@@ -64,12 +63,7 @@ export function useSupplierListState(
         if (filters.q.trim()) {
             chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
         }
-        if (filters.lifecycleStatus !== "all") {
-            chips.push({
-                key: "lifecycleStatus",
-                label: `启停：${lifecycleFilterLabel(filters.lifecycleStatus)}`,
-            })
-        }
+
         if (filters.supplierQualificationHealth) {
             chips.push({
                 key: "supplierQualificationHealth",
@@ -96,7 +90,6 @@ export function useSupplierListState(
         }
         return chips
     }, [
-        filters.lifecycleStatus,
         filters.q,
         filters.supplierCapabilityCodes,
         filters.supplierQualificationHealth,

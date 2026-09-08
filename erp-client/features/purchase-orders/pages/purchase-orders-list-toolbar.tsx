@@ -2,39 +2,21 @@
 
 import * as React from "react"
 
-import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import type {
     PurchaseOrderAppliedChip,
     PurchaseOrderFilterKey,
 } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
-import type { PurchaseOrderStatusFilter } from "@/features/purchase-orders/types"
-import { PO_STATUS_FILTER_LABEL } from "@/features/purchase-orders/types"
-
-/** 状态枚举 ≥5：面板内用 Combobox，禁止长 Toggle 横排。 */
-const PO_STATUS_FILTER_OPTIONS = (
-    Object.entries(PO_STATUS_FILTER_LABEL) as Array<
-        [PurchaseOrderStatusFilter, string]
-    >
-)
-    .filter(([value]) => value !== "all")
-    .map(([value, label]) => ({ value, label }))
-
 const prefix = "procurement-orders-list"
 
 export type PurchaseOrdersListToolbarProps = {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: React.Dispatch<React.SetStateAction<string>>
-    statusDraft: PurchaseOrderStatusFilter
-    setStatusDraft: React.Dispatch<
-        React.SetStateAction<PurchaseOrderStatusFilter>
-    >
     appliedChips: readonly PurchaseOrderAppliedChip[]
     removeFilter: (key: PurchaseOrderFilterKey) => void
     applyFilters: () => void
@@ -49,8 +31,6 @@ export function PurchaseOrdersListToolbar({
     searchInputRef,
     searchDraft,
     setSearchDraft,
-    statusDraft,
-    setStatusDraft,
     appliedChips,
     removeFilter,
     applyFilters,
@@ -78,27 +58,6 @@ export function PurchaseOrdersListToolbar({
             }
             queryButtonId={`${prefix}-apply-filters`}
             clearButtonId={`${prefix}-clear-all`}
-            commonFilters={
-                <ListWorkspaceInlineFilter
-                    htmlFor={`${prefix}-status-filter`}
-                    label="主状态"
-                >
-                    <OptionCombobox
-                        id={`${prefix}-status-filter`}
-                        className="w-full sm:w-60"
-                        value={statusDraft === "all" ? null : statusDraft}
-                        onValueChange={(value) =>
-                            setStatusDraft(
-                                (value as PurchaseOrderStatusFilter | null) ??
-                                    "all",
-                            )
-                        }
-                        options={PO_STATUS_FILTER_OPTIONS}
-                        aria-label="主状态"
-                        placeholder="状态：全部"
-                    />
-                </ListWorkspaceInlineFilter>
-            }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,
                 failed,

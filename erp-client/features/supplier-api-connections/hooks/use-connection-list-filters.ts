@@ -7,7 +7,6 @@ import {
     CAPABILITY_LABEL,
     CATALOG_LABEL,
     HEALTH_LABEL,
-    STATUS_LABEL,
     type CapabilityCode,
     type CatalogFreshnessState,
     type ConnectionEnvironment,
@@ -15,12 +14,9 @@ import {
     type HealthResult,
 } from "@/features/supplier-api-connections/types"
 
-export type ConnectionStatusFilter = ConnectionStatus | "all"
-
 /** 可被单独移除的已生效条件。 */
 export type ConnectionFilterKey =
     | "q"
-    | "status"
     | "health"
     | "capability"
     | "catalogFreshness"
@@ -133,8 +129,6 @@ export function useConnectionListFilters(
     const hasFilters = Boolean(applied.q || hasStructuredFilters)
 
     const [searchDraft, setSearchDraft] = React.useState(applied.q ?? "")
-    const [statusDraft, setStatusDraft] =
-        React.useState<ConnectionStatusFilter>(applied.status ?? "all")
     const [healthDraft, setHealthDraft] = React.useState<string[]>(
         applied.health,
     )
@@ -154,7 +148,6 @@ export function useConnectionListFilters(
     const applyFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || undefined,
-            status: statusDraft === "all" ? undefined : statusDraft,
             health: healthDraft.length > 0 ? healthDraft.join(",") : undefined,
             capability: capabilityDraft || undefined,
             catalogFreshness:
@@ -171,7 +164,6 @@ export function useConnectionListFilters(
         healthDraft,
         patchUrl,
         searchDraft,
-        statusDraft,
         supplierIdDraft,
     ])
 
@@ -189,11 +181,6 @@ export function useConnectionListFilters(
             if (key === "q") {
                 setSearchDraft("")
                 patchUrl({ q: undefined, page: 1 })
-                return
-            }
-            if (key === "status") {
-                setStatusDraft("all")
-                patchUrl({ status: undefined, page: 1 })
                 return
             }
             if (key === "health") {
@@ -231,7 +218,6 @@ export function useConnectionListFilters(
      */
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
-        setStatusDraft("all")
         setHealthDraft([])
         setCapabilityDraft("")
         setCatalogFreshnessDraft([])
@@ -280,7 +266,6 @@ export function useConnectionListFilters(
 
     // URL 回填结构化草稿；不触碰面板展开态（§5.4、§5.5）。
     React.useEffect(() => {
-        setStatusDraft(applied.status ?? "all")
         setHealthDraft(applied.health)
         setCapabilityDraft(applied.capability ?? "")
         setCatalogFreshnessDraft(applied.catalogFreshness)
@@ -290,7 +275,6 @@ export function useConnectionListFilters(
     /** 表头人读筛选摘要；只读 Applied（§2.1、§14.3）。 */
     const appliedFilterLabels = [
         applied.q ? `搜索“${applied.q}”` : null,
-        applied.status ? `状态：${STATUS_LABEL[applied.status]}` : null,
         applied.health.length > 0
             ? `健康：${applied.health
                   .map((value) => HEALTH_LABEL[value])
@@ -309,7 +293,6 @@ export function useConnectionListFilters(
 
     const hasPendingChanges =
         searchDraft.trim() !== (applied.q ?? "") ||
-        statusDraft !== (applied.status ?? "all") ||
         [...healthDraft].sort().join(",") !==
             [...applied.health].sort().join(",") ||
         capabilityDraft !== (applied.capability ?? "") ||
@@ -324,8 +307,6 @@ export function useConnectionListFilters(
         hasFilters,
         searchDraft,
         setSearchDraft,
-        statusDraft,
-        setStatusDraft,
         healthDraft,
         setHealthDraft,
         capabilityDraft,
@@ -357,12 +338,6 @@ export function buildConnectionAppliedChips(
     const chips: ConnectionAppliedChip[] = []
     if (applied.q) {
         chips.push({ key: "q", label: `搜索：${applied.q}` })
-    }
-    if (applied.status) {
-        chips.push({
-            key: "status",
-            label: `状态：${STATUS_LABEL[applied.status]}`,
-        })
     }
     if (applied.health.length > 0) {
         chips.push({

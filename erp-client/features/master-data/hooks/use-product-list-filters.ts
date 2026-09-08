@@ -24,7 +24,6 @@ import {
 export type ProductFilterKey =
     | "q"
     | "productKind"
-    | "lifecycleStatus"
     | "revisionTiming"
     | "productListingStatus"
     | "productSupplyCoverage"
@@ -73,7 +72,7 @@ export function useProductListFilters(
         searchParams.get("productSalesPriceMin")?.trim() || undefined
     const productSalesPriceMax =
         searchParams.get("productSalesPriceMax")?.trim() || undefined
-    const metricKey = searchParams.get("metricKey") ?? "all"
+    const metricKey = lifecycleStatus
     const hasStructuredProductFilters = Boolean(
         productKind ||
         lifecycleStatus !== "all" ||
@@ -93,8 +92,6 @@ export function useProductListFilters(
     const [productKindDraft, setProductKindDraft] = React.useState<
         ProductKind | "all"
     >(productKind ?? "all")
-    const [lifecycleStatusDraft, setLifecycleStatusDraft] =
-        React.useState(lifecycleStatus)
     const [revisionTimingDraft, setRevisionTimingDraft] =
         React.useState(revisionTiming)
     const [productListingStatusDraft, setProductListingStatusDraft] =
@@ -154,10 +151,6 @@ export function useProductListFilters(
         patchUrl({
             q: searchDraft.trim() || null,
             productKind: productKindDraft === "all" ? null : productKindDraft,
-            lifecycleStatus:
-                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
-            metricKey:
-                lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
             revisionTiming:
                 revisionTimingDraft === "all" ? null : revisionTimingDraft,
             productListingStatus:
@@ -178,7 +171,6 @@ export function useProductListFilters(
         resetPagination()
         setProductFilterPanelOpen(false)
     }, [
-        lifecycleStatusDraft,
         patchUrl,
         productBrandIdDraft,
         productCategoryIdDraft,
@@ -198,7 +190,6 @@ export function useProductListFilters(
         (key: ProductFilterKey) => {
             if (key === "q") setSearchDraft("")
             if (key === "productKind") setProductKindDraft("all")
-            if (key === "lifecycleStatus") setLifecycleStatusDraft("all")
             if (key === "revisionTiming") setRevisionTimingDraft("all")
             if (key === "productListingStatus") {
                 setProductListingStatusDraft("all")
@@ -221,9 +212,7 @@ export function useProductListFilters(
                           productSalesPriceMax: null,
                           page: null,
                       }
-                    : key === "lifecycleStatus"
-                      ? { lifecycleStatus: null, metricKey: null, page: null }
-                      : { [key]: null, page: null },
+                    : { [key]: null, page: null },
             )
             resetPagination()
         },
@@ -232,7 +221,6 @@ export function useProductListFilters(
 
     /** 仅重置更多条件草稿；保留关键词、类型、分类及当前查询结果。 */
     const resetMoreFilters = React.useCallback(() => {
-        setLifecycleStatusDraft("all")
         setRevisionTimingDraft("all")
         setProductListingStatusDraft("all")
         setProductSupplyCoverageDraft("all")
@@ -246,7 +234,6 @@ export function useProductListFilters(
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
         productKindDraft !== (productKind ?? "all") ||
-        lifecycleStatusDraft !== lifecycleStatus ||
         revisionTimingDraft !== revisionTiming ||
         productListingStatusDraft !== (productListingStatus ?? "all") ||
         productSupplyCoverageDraft !== (productSupplyCoverage ?? "all") ||
@@ -259,7 +246,6 @@ export function useProductListFilters(
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setProductKindDraft("all")
-        setLifecycleStatusDraft("all")
         setRevisionTimingDraft("all")
         setProductListingStatusDraft("all")
         setProductSupplyCoverageDraft("all")
@@ -290,7 +276,6 @@ export function useProductListFilters(
 
     React.useEffect(() => {
         setProductKindDraft(productKind ?? "all")
-        setLifecycleStatusDraft(lifecycleStatus)
         setRevisionTimingDraft(revisionTiming)
         setProductListingStatusDraft(productListingStatus ?? "all")
         setProductSupplyCoverageDraft(productSupplyCoverage ?? "all")
@@ -333,8 +318,6 @@ export function useProductListFilters(
         setProductFilterPanelOpen,
         productKindDraft,
         setProductKindDraft,
-        lifecycleStatusDraft,
-        setLifecycleStatusDraft,
         revisionTimingDraft,
         setRevisionTimingDraft,
         productListingStatusDraft,

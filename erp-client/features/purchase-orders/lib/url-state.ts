@@ -51,5 +51,20 @@ const codec = createUrlStateCodec<PurchaseOrdersUrlState>([
     { key: "mode", type: "string" },
 ])
 
-export const parsePurchaseOrdersSearchParams = codec.parse
+/** 旧指标链接归一到主状态，避免指标覆盖 Tab 查询；无后端筛选的指标回到全部。 */
+export const parsePurchaseOrdersSearchParams: typeof codec.parse = (params) => {
+    const state = codec.parse(params)
+    const legacyStatus: Partial<
+        Record<PurchaseOrderMetricFilter, PurchaseOrderStatusFilter>
+    > = {
+        draft: "DRAFT",
+        review: "PENDING_REVIEW",
+        fulfill: "EFFECTIVE",
+    }
+    return {
+        ...state,
+        status: legacyStatus[state.metric] ?? state.status,
+        metric: "all",
+    }
+}
 export const buildPurchaseOrdersSearchParams = codec.build

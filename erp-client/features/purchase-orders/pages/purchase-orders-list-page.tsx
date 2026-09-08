@@ -18,19 +18,20 @@ import {
     listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { usePurchaseOrdersListController } from "@/features/purchase-orders/hooks/use-purchase-orders-list-controller"
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
 import {
-    PO_METRIC_LABEL,
-    type PurchaseOrderMetricFilter,
+    PO_STATUS_FILTER_LABEL,
+    type PurchaseOrderStatusFilter,
 } from "@/features/purchase-orders/types"
 
-const PURCHASE_ORDER_VIEWS = (
-    Object.keys(PO_METRIC_LABEL) as PurchaseOrderMetricFilter[]
-).filter((metric) => metric !== "pending_create")
+const PURCHASE_ORDER_VIEWS = Object.entries(PO_STATUS_FILTER_LABEL) as Array<
+    [PurchaseOrderStatusFilter, string]
+>
 
 export function PurchaseOrdersListPage() {
     const ctrl = usePurchaseOrdersListController()
@@ -49,7 +50,6 @@ export function PurchaseOrdersListPage() {
 
     const { filters } = ctrl
     const listLoadFailed = ctrl.listQuery.isError
-    const metrics = ctrl.listQuery.data?.metrics ?? []
     const updatedAt = ctrl.listQuery.data?.freshness.updatedAt
 
     return (
@@ -149,25 +149,17 @@ export function PurchaseOrdersListPage() {
                     <ListWorkspaceViews
                         ariaLabel="采购单视图"
                         hint="选择采购单查看详情"
-                        items={PURCHASE_ORDER_VIEWS.map((metric) => {
-                            const active = ctrl.url.metric === metric
-                            const metricCount = metrics.find(
-                                (item) => item.key === metric,
-                            )?.count
-                            return {
-                                id: `procurement-orders-list-view-${metric}`,
-                                label: PO_METRIC_LABEL[metric],
-                                count:
-                                    metrics.length > 0
-                                        ? metricCount
-                                        : ctrl.listQuery.data && active
-                                          ? ctrl.total
-                                          : undefined,
-                                active,
-                                onClick: () =>
-                                    ctrl.pushUrl({ metric, page: 1 }),
-                            }
-                        })}
+                        items={PURCHASE_ORDER_VIEWS.map(([status, label]) => ({
+                            id: `procurement-orders-list-view-${toAutomationIdSegment(status)}`,
+                            label: status === "all" ? "全部采购单" : label,
+                            active: ctrl.statusFilter === status,
+                            onClick: () =>
+                                ctrl.pushUrl({
+                                    status,
+                                    metric: "all",
+                                    page: 1,
+                                }),
+                        }))}
                     />
                 }
                 toolbar={
@@ -175,8 +167,6 @@ export function PurchaseOrdersListPage() {
                         searchInputRef={ctrl.searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
-                        statusDraft={filters.statusDraft}
-                        setStatusDraft={filters.setStatusDraft}
                         appliedChips={filters.appliedChips}
                         removeFilter={filters.removeFilter}
                         applyFilters={filters.applyFilters}

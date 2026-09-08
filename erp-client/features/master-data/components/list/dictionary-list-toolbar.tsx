@@ -9,10 +9,7 @@ import {
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import {
-    LIFECYCLE_RADIO_FILTER_OPTIONS,
-    REVISION_TIMING_RADIO_FILTER_OPTIONS,
-} from "@/features/master-data/lib/list-filters"
+import { REVISION_TIMING_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type {
     DictionaryFilterKey,
     useLifecycleListFilters,
@@ -57,15 +54,6 @@ export function DictionaryListToolbar({
             clearButtonId={`${prefix}-clear-filters`}
             commonFilters={
                 <>
-                    <FixedOptionRadioFilter
-                        idPrefix={`${prefix}-lifecycle`}
-                        label="启停"
-                        variant="quiet"
-                        value={f.lifecycleStatusDraft}
-                        onValueChange={f.setLifecycleStatusDraft}
-                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                        aria-label={masterDataCopy.filterLifecycleAria}
-                    />
                     <FixedOptionRadioFilter
                         idPrefix={`${prefix}-revision`}
                         label="版本"

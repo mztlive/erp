@@ -2,11 +2,7 @@
 
 import * as React from "react"
 
-import {
-    FixedOptionRadioFilter,
-    MultiOptionCombobox,
-    OptionCombobox,
-} from "@/components/business"
+import { MultiOptionCombobox, OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
@@ -18,14 +14,12 @@ import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
     ConnectionAppliedChip,
     ConnectionFilterKey,
-    ConnectionStatusFilter,
 } from "@/features/supplier-api-connections/hooks/use-connection-list-filters"
 import {
     CAPABILITY_LABEL,
     CATALOG_LABEL,
     ENVIRONMENT_LABEL,
     HEALTH_LABEL,
-    STATUS_LABEL,
     type CapabilityCode,
     type CatalogFreshnessState,
     type ConnectionEnvironment,
@@ -43,17 +37,6 @@ const ENVIRONMENT_FILTER_OPTIONS: ReadonlyArray<{
     { value: "PRODUCTION", label: ENVIRONMENT_LABEL.PRODUCTION },
     { value: "STAGING", label: ENVIRONMENT_LABEL.STAGING },
     { value: "DEVELOPMENT", label: ENVIRONMENT_LABEL.DEVELOPMENT },
-]
-
-const STATUS_FILTER_OPTIONS: ReadonlyArray<{
-    value: ConnectionStatusFilter
-    label: string
-}> = [
-    { value: "all", label: "全部" },
-    { value: "ENABLED", label: STATUS_LABEL.ENABLED },
-    { value: "DISABLED", label: STATUS_LABEL.DISABLED },
-    { value: "FAULTED", label: STATUS_LABEL.FAULTED },
-    { value: "PENDING_CONFIG", label: STATUS_LABEL.PENDING_CONFIG },
 ]
 
 const CAPABILITY_FILTER_OPTIONS: ReadonlyArray<{
@@ -100,8 +83,6 @@ export type ConnectionListToolbarProps = {
     onApplyFilters: () => void
     onClearFilters: () => void
     onResetMoreFilters: () => void
-    statusDraft: ConnectionStatusFilter
-    onStatusDraftChange: SetState<ConnectionStatusFilter>
     healthDraft: readonly string[]
     onHealthDraftChange: SetState<string[]>
     capabilityDraft: string
@@ -129,8 +110,6 @@ export function ConnectionListToolbar({
     onApplyFilters,
     onClearFilters,
     onResetMoreFilters,
-    statusDraft,
-    onStatusDraftChange,
     healthDraft,
     onHealthDraftChange,
     capabilityDraft,
@@ -198,15 +177,6 @@ export function ConnectionListToolbar({
             morePanelAriaLabel="连接列表更多筛选条件"
             onResetMore={onResetMoreFilters}
             resetMoreButtonId="supplier-api-connections-toolbar-reset-more"
-            commonFilters={
-                <FixedOptionRadioFilter
-                    label="状态"
-                    variant="quiet"
-                    value={statusDraft}
-                    onValueChange={onStatusDraftChange}
-                    options={STATUS_FILTER_OPTIONS}
-                />
-            }
             morePanel={
                 <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <ListWorkspaceFilterField

@@ -91,8 +91,6 @@ export function ConnectionList({
         () => buildConnectionAppliedChips(urlState, supplierNameLabel),
         [supplierNameLabel, urlState],
     )
-    const noStatusOrHealthView =
-        !urlState.status && !urlState.health && !urlState.catalogFreshness
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -167,85 +165,27 @@ export function ConnectionList({
                             {
                                 id: "supplier-api-connections-view-all",
                                 label: "全部连接",
-                                count: data?.total ?? 0,
-                                active: noStatusOrHealthView,
+                                active: !filters.applied.status,
                                 onClick: () =>
-                                    patchUrl({
-                                        status: undefined,
-                                        health: undefined,
-                                        catalogFreshness: undefined,
-                                        page: 1,
-                                    }),
+                                    patchUrl({ status: undefined, page: 1 }),
                             },
-                            {
-                                id: "supplier-api-connections-metric-enabled",
-                                label: "已启用",
-                                count: data?.metrics.enabled ?? 0,
-                                active: urlState.status === "ENABLED",
-                                onClick: () =>
-                                    patchUrl({
-                                        status:
-                                            urlState.status === "ENABLED"
-                                                ? undefined
-                                                : "ENABLED",
-                                        page: 1,
-                                    }),
-                            },
-                            {
-                                id: "supplier-api-connections-metric-faulted",
-                                label: "故障",
-                                count: data?.metrics.faulted ?? 0,
-                                active: urlState.status === "FAULTED",
-                                onClick: () =>
-                                    patchUrl({
-                                        status:
-                                            urlState.status === "FAULTED"
-                                                ? undefined
-                                                : "FAULTED",
-                                        page: 1,
-                                    }),
-                            },
-                            {
-                                id: "supplier-api-connections-metric-pending",
-                                label: "待配置",
-                                count: data?.metrics.pendingConfig ?? 0,
-                                active: urlState.status === "PENDING_CONFIG",
-                                onClick: () =>
-                                    patchUrl({
-                                        status:
-                                            urlState.status === "PENDING_CONFIG"
-                                                ? undefined
-                                                : "PENDING_CONFIG",
-                                        page: 1,
-                                    }),
-                            },
-                            {
-                                id: "supplier-api-connections-metric-health",
-                                label: "健康异常",
-                                count: data?.metrics.healthAbnormal ?? 0,
-                                active: Boolean(urlState.health),
-                                onClick: () =>
-                                    patchUrl({
-                                        health: urlState.health
-                                            ? undefined
-                                            : "FAILED,AUTH_FAILED,PARTIAL,UNKNOWN",
-                                        page: 1,
-                                    }),
-                            },
-                            {
-                                id: "supplier-api-connections-metric-catalog",
-                                label: "目录陈旧",
-                                count: data?.metrics.catalogStale ?? 0,
-                                active: Boolean(urlState.catalogFreshness),
-                                onClick: () =>
-                                    patchUrl({
-                                        catalogFreshness:
-                                            urlState.catalogFreshness
-                                                ? undefined
-                                                : "STALE,FAILED",
-                                        page: 1,
-                                    }),
-                            },
+                            ...(
+                                [
+                                    ["ENABLED", "enabled", "已启用"],
+                                    ["DISABLED", "disabled", "已停用"],
+                                    ["FAULTED", "faulted", "故障"],
+                                    [
+                                        "PENDING_CONFIG",
+                                        "pending-config",
+                                        "待配置",
+                                    ],
+                                ] as const
+                            ).map(([status, id, label]) => ({
+                                id: `supplier-api-connections-view-${id}`,
+                                label,
+                                active: filters.applied.status === status,
+                                onClick: () => patchUrl({ status, page: 1 }),
+                            })),
                         ]}
                     />
                 }
@@ -263,8 +203,6 @@ export function ConnectionList({
                         onApplyFilters={filters.applyFilters}
                         onClearFilters={filters.clearFilters}
                         onResetMoreFilters={filters.resetMoreFilters}
-                        statusDraft={filters.statusDraft}
-                        onStatusDraftChange={filters.setStatusDraft}
                         healthDraft={filters.healthDraft}
                         onHealthDraftChange={filters.setHealthDraft}
                         capabilityDraft={filters.capabilityDraft}
