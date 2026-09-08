@@ -56,7 +56,9 @@ export function SupplierOfferingRowActions({
     const rowId = toAutomationIdSegment(offering.id)
     const blocker = statusRevisionBlocker(offering)
     const label =
-        offering.sku_name?.trim() || offering.sku_no || offering.supplier_sku_code
+        offering.sku_name?.trim() ||
+        offering.sku_no ||
+        offering.supplier_sku_code
     return (
         <DropdownMenu>
             <DropdownMenuTrigger

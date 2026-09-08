@@ -48,13 +48,13 @@ test("行上只露出操作菜单，启用中可从菜单暂停或停止", () =>
     )
 
     expect(screen.queryByRole("menuitem", { name: "暂停" })).toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "操作" }))
+    fireEvent.click(screen.getByRole("button", { name: /操作/ }))
     fireEvent.click(screen.getByRole("menuitem", { name: "更新可供" }))
-    fireEvent.click(screen.getByRole("button", { name: "操作" }))
+    fireEvent.click(screen.getByRole("button", { name: /操作/ }))
     fireEvent.click(screen.getByRole("menuitem", { name: "修订条款" }))
-    fireEvent.click(screen.getByRole("button", { name: "操作" }))
+    fireEvent.click(screen.getByRole("button", { name: /操作/ }))
     fireEvent.click(screen.getByRole("menuitem", { name: "暂停" }))
-    fireEvent.click(screen.getByRole("button", { name: "操作" }))
+    fireEvent.click(screen.getByRole("button", { name: /操作/ }))
     fireEvent.click(screen.getByRole("menuitem", { name: "停止" }))
 
     expect(onUpdateAvailability).toHaveBeenCalledTimes(1)
@@ -81,7 +81,7 @@ test("已停止的行菜单只给出启用，不再提供停止", () => {
         />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "操作" }))
+    fireEvent.click(screen.getByRole("button", { name: /操作/ }))
     expect(screen.getByRole("menuitem", { name: "启用" })).toBeTruthy()
     expect(screen.queryByRole("menuitem", { name: "停止" })).toBeNull()
     expect(screen.queryByRole("menuitem", { name: "暂停" })).toBeNull()

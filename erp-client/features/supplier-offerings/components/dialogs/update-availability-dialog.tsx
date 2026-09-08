@@ -70,6 +70,19 @@ export function UpdateAvailabilityDialog({
             <DialogContent
                 closeButtonId="supplier-offerings-dialog-availability-close"
                 className="sm:max-w-lg"
+                onKeyDownCapture={(event) => {
+                    if (event.key !== "Escape" || mutation.isPending) return
+                    const target = event.target
+                    if (
+                        target instanceof Element &&
+                        target.closest('[aria-expanded="true"]')
+                    ) {
+                        return
+                    }
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onOpenChange(false)
+                }}
             >
                 <DialogHeader>
                     <DialogTitle>更新当前可供情况</DialogTitle>
@@ -100,6 +113,7 @@ export function UpdateAvailabilityDialog({
                                 <OptionCombobox
                                     id="supplier-offerings-dialog-availability-status"
                                     value={field.state.value}
+                                    allowClear={false}
                                     onValueChange={(value) =>
                                         field.handleChange(
                                             (value ??

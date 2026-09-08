@@ -6,8 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    MetricItem,
-    MetricStrip,
     OptionCombobox,
     PageScaffold,
 } from "@/components/business"
@@ -38,7 +36,7 @@ import {
 } from "../url-state"
 
 const POLICY_OPTIONS = [
-    { value: "ALL", label: "全部政策" },
+    { value: "ALL", label: "全部要求" },
     { value: "PROCESS_REQUIRED", label: "必须审批" },
     { value: "NO_APPROVAL", label: "无需审批" },
 ] as const
@@ -71,6 +69,7 @@ export function ApprovalProcessesPage() {
             ),
         [searchParams],
     )
+    const [moreOpen, setMoreOpen] = React.useState(false)
     const [searchDraft, setSearchDraft] = React.useState(urlState.q)
     const [policyDraft, setPolicyDraft] = React.useState(urlState.policy)
     const [statusDraft, setStatusDraft] = React.useState(urlState.status)
@@ -138,7 +137,7 @@ export function ApprovalProcessesPage() {
             ? [
                   {
                       key: "policy",
-                      label: `政策：${
+                      label: `要求：${
                           POLICY_OPTIONS.find(
                               (option) => option.value === urlState.policy,
                           )?.label ?? urlState.policy
@@ -175,12 +174,15 @@ export function ApprovalProcessesPage() {
 
     if (unknownParams) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
+            <PageScaffold
+                density="compact"
+                className={`${styles.page} bg-muted/15 [&_form]:w-full`}
+            >
                 <ListWorkspaceHeader
-                    className="pb-6 md:pb-6"
+                    className="pb-5 md:pb-5"
                     eyebrow="系统"
                     title="审批流程配置"
-                    description="按固定单据类型维护审批节点与审批人。"
+                    description="设置各类单据的审批流程，发布后用于新建单据。"
                 />
                 <BusinessFailureState
                     kind="validation"
@@ -204,12 +206,15 @@ export function ApprovalProcessesPage() {
 
     if (profileQuery.data && !canReadCatalog(permissions)) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
+            <PageScaffold
+                density="compact"
+                className={`${styles.page} bg-muted/15 [&_form]:w-full`}
+            >
                 <ListWorkspaceHeader
-                    className="pb-6 md:pb-6"
+                    className="pb-5 md:pb-5"
                     eyebrow="系统"
                     title="审批流程配置"
-                    description="按固定单据类型维护审批节点与审批人。"
+                    description="设置各类单据的审批流程，发布后用于新建单据。"
                 />
                 <BusinessFailureState
                     kind="permission"
@@ -221,39 +226,89 @@ export function ApprovalProcessesPage() {
     }
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
+        <PageScaffold
+            density="compact"
+            className={`${styles.page} bg-muted/15 [&_form]:w-full`}
+        >
             <ListWorkspaceHeader
-                className="pb-6 md:pb-6"
+                className="pb-5 md:pb-5"
                 eyebrow="系统"
                 title="审批流程配置"
-                description="按固定单据类型维护审批节点与审批人。"
+                description="设置各类单据的审批流程，发布后用于新建单据。"
             />
 
-            <MetricStrip className="mb-4" columns={4}>
-                <MetricItem
-                    label="必须审批"
-                    value={required.length}
-                    density="compact"
-                />
-                <MetricItem
-                    label="配置缺失"
-                    value={missing.length}
-                    density="compact"
-                />
-                <MetricItem
-                    label="有草稿"
-                    value={drafts.length}
-                    density="compact"
-                />
-                <MetricItem
-                    label="无需审批"
-                    value={items.length - required.length}
-                    density="compact"
-                />
-            </MetricStrip>
-
             <ListWorkSurface
-                toolbarClassName="pt-3 pb-2"
+                toolbarClassName="pt-3 pb-1"
+                views={
+                    <div
+                        className="flex flex-wrap items-center gap-1"
+                        role="group"
+                        aria-label="审批配置快捷筛选"
+                    >
+                        {[
+                            {
+                                key: "all",
+                                label: "全部",
+                                policy: "ALL",
+                                status: "ALL",
+                                count: items.length,
+                            },
+                            {
+                                key: "missing",
+                                label: "待配置",
+                                policy: "ALL",
+                                status: "MISSING_CONFIGURATION",
+                                count: missing.length,
+                            },
+                            {
+                                key: "draft",
+                                label: "有草稿",
+                                policy: "ALL",
+                                status: "HAS_DRAFT",
+                                count: drafts.length,
+                            },
+                            {
+                                key: "no-approval",
+                                label: "无需审批",
+                                policy: "NO_APPROVAL",
+                                status: "ALL",
+                                count: items.length - required.length,
+                            },
+                        ].map((view) => (
+                            <Button
+                                key={view.key}
+                                id={`governance-approval-processes-catalog-view-${view.key}`}
+                                size="sm"
+                                variant={
+                                    urlState.policy === view.policy &&
+                                    urlState.status === view.status
+                                        ? "secondary"
+                                        : "ghost"
+                                }
+                                aria-pressed={
+                                    urlState.policy === view.policy &&
+                                    urlState.status === view.status
+                                }
+                                className="gap-2 rounded-lg"
+                                onClick={() =>
+                                    replaceState({
+                                        ...urlState,
+                                        policy: view.policy as CatalogUrlState["policy"],
+                                        status: view.status as CatalogUrlState["status"],
+                                        page: 1,
+                                    })
+                                }
+                            >
+                                {view.label}
+                                {catalogQuery.isSuccess ? (
+                                    <span className="text-xs tabular-nums text-muted-foreground">
+                                        {view.count}
+                                    </span>
+                                ) : null}
+                            </Button>
+                        ))}
+                    </div>
+                }
                 ariaLabel="审批流程单据类型目录"
                 toolbar={
                     <ListWorkspaceFilterBar
@@ -270,16 +325,22 @@ export function ApprovalProcessesPage() {
                                 aria-label="搜索单据类型"
                             />
                         }
-                        commonFilters={
-                            <>
+                        moreOpen={moreOpen}
+                        onToggleMore={() => setMoreOpen((open) => !open)}
+                        moreCount={
+                            Number(urlState.policy !== "ALL") +
+                            Number(urlState.status !== "ALL")
+                        }
+                        morePanel={
+                            <div className="flex flex-col gap-3 lg:flex-row lg:gap-6">
                                 <ListWorkspaceInlineFilter
                                     htmlFor="governance-approval-processes-catalog-policy"
-                                    label="审批政策"
+                                    label="审批要求"
                                 >
                                     <OptionCombobox
                                         id="governance-approval-processes-catalog-policy"
                                         className="w-full sm:w-44"
-                                        aria-label="审批政策"
+                                        aria-label="审批要求"
                                         options={[...POLICY_OPTIONS]}
                                         value={policyDraft}
                                         allowClear={false}
@@ -317,7 +378,7 @@ export function ApprovalProcessesPage() {
                                         }
                                     />
                                 </ListWorkspaceInlineFilter>
-                            </>
+                            </div>
                         }
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: catalogQuery.isPending,
