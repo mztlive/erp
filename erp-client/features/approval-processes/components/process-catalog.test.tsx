@@ -36,7 +36,7 @@ test("已发布和草稿同时展示，继续编辑传回对应单据", () => {
     expect(onContinueDraft).toHaveBeenCalledWith(item)
 })
 
-test("分组覆盖全部固定单据，无需审批没有写入口", () => {
+test("表格覆盖全部固定单据，无需审批没有写入口", () => {
     const items: DefinitionCatalogItem[] = DOCUMENT_TYPES.map((type) => ({
         ...item,
         document_type: type,
