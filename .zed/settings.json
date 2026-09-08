@@ -1,0 +1,18 @@
+{
+  "lsp": {
+    "rust-analyzer": {
+      "binary": {
+        "path": "rustup",
+        "arguments": ["run", "nightly", "rust-analyzer"]
+      },
+      "initialization_options": {
+        "linkedProjects": ["backend/Cargo.toml"],
+        "cargo": {
+          "extraEnv": {
+            "RUSTUP_TOOLCHAIN": "nightly"
+          }
+        }
+      }
+    }
+  }
+}

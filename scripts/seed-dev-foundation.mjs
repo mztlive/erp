@@ -334,6 +334,32 @@ async function ensureDefaultFinanceRules(adminToken, people) {
   }
 }
 
+async function ensureDefaultProcurementRule(adminToken, owner) {
+  const path = "/admin/procurement-responsibility-rules";
+  const rows = [];
+  for (let page = 1; ; page += 1) {
+    const result = await call("GET", `${path}?page=${page}&page_size=200`, { token: adminToken });
+    rows.push(...(Array.isArray(result) ? result : result.items));
+    if (Array.isArray(result) || rows.length >= result.total) break;
+  }
+  const defaults = rows.filter((row) => row.rule_type === "DEFAULT_DISPATCHER");
+  const existing = defaults.find((row) => row.status === "active") ?? defaults[0];
+  if (existing?.status === "active" && existing.owner_user_id === owner.id) {
+    console.log(`默认采购调度人已是 ${owner.account}，跳过`);
+    return;
+  }
+  await call(existing ? "PUT" : "POST", existing ? `${path}/${encodeURIComponent(existing.id)}` : path, {
+    token: adminToken,
+    body: {
+      rule_type: "DEFAULT_DISPATCHER",
+      owner_user_id: owner.id,
+      status: "active",
+      ...(existing ? { version: existing.version } : {}),
+    },
+  });
+  console.log(`已配置默认采购调度人: ${owner.account}`);
+}
+
 async function listWarehouses(adminToken) {
   const page = await call(
     "GET",
@@ -410,6 +436,7 @@ async function main() {
   };
   await verifyFinanceEligibility(adminToken, financePeople);
   await ensureDefaultFinanceRules(adminToken, financePeople);
+  await ensureDefaultProcurementRule(adminToken, seeded.procurement);
 
   let customer = await findCustomer(adminToken);
   if (customer) {
@@ -458,6 +485,7 @@ async function main() {
   );
   console.log("销售负责人: xiaoshou");
   console.log("库存调整经办: cangchu（caiwu 只审批）");
+  console.log("默认采购调度人: caigou");
   console.log("采购单审批人（财务总监）: caiwu");
   console.log("默认付款任务负责人（出纳）: fukuan");
   console.log("默认开票负责人: kaipiao");

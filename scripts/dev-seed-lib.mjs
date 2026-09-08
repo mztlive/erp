@@ -128,12 +128,12 @@ export async function call(method, path, { token, body, form } = {}) {
     );
   }
   if (res.status === 401 || parsed?.status === 401) {
-    throw new Error(`API ${method} ${path} 未授权`);
+    throw Object.assign(new Error(`API ${method} ${path} 未授权`), { status: 401 });
   }
   if (!res.ok || parsed?.success === false) {
-    throw new Error(
+    throw Object.assign(new Error(
       `API ${method} ${path} 失败（HTTP ${res.status}）: ${parsed?.errorMessage ?? text}`,
-    );
+    ), { status: res.status });
   }
   return parsed.data;
 }
@@ -146,10 +146,18 @@ export async function call(method, path, { token, body, form } = {}) {
  * @returns {Promise<string>} token
  */
 export async function login(account, password) {
-  const data = await call("POST", "/login", {
-    body: { account, password, account_kind: "admin" },
-  });
-  return data.token;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const data = await call("POST", "/login", {
+        body: { account, password, account_kind: "admin" },
+      });
+      return data.token;
+    } catch (error) {
+      if (error.status !== 429 || attempt >= 1) throw error;
+      console.log("登录触发限流，等待 60 秒后重试一次（不重置密码）");
+      await new Promise((resolve) => setTimeout(resolve, 60_000));
+    }
+  }
 }
 
 /**
@@ -173,8 +181,9 @@ async function accountCanLogin(credentials) {
   try {
     await login(credentials.account, credentials.password);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.status === 401) return false;
+    throw error;
   }
 }
 

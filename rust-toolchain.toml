@@ -1,0 +1,8 @@
+# Workspace-root pin so IDEs (Zed / rust-analyzer) opened on the monorepo
+# use nightly Cargo. backend/.cargo/config.toml sets profile.dev codegen-backend
+# (Cranelift), which Cargo 1.97 stable cannot parse.
+# Docker/CI rust:1.97 does not copy this file; release still uses LLVM.
+# Keep in sync with backend/rust-toolchain.toml.
+[toolchain]
+channel = "nightly"
+components = ["rustc-codegen-cranelift-preview", "rustfmt", "clippy", "rust-analyzer", "rust-src"]

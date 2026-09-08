@@ -1,5 +1,6 @@
 # 本地 dev 使用 nightly，以便 profile.dev 走 Cranelift。
 # Docker/CI 镜像固定 rust:1.97，且不复制本文件，release 仍用稳定版 LLVM。
+# 与仓库根目录 rust-toolchain.toml 保持同步：Zed 打开 monorepo 根目录时走根文件。
 [toolchain]
 channel = "nightly"
-components = ["rustc-codegen-cranelift-preview", "rustfmt", "clippy"]
+components = ["rustc-codegen-cranelift-preview", "rustfmt", "clippy", "rust-analyzer", "rust-src"]

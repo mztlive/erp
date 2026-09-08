@@ -23,6 +23,7 @@ E2E_DIR="${REPO_ROOT}/e2e"
 RESET="${E2E_RESET:-1}"
 HEADED="${E2E_HEADED:-0}"
 SLOW_MO="${E2E_SLOW_MO:-}"
+PREFLIGHT_DONE=0
 
 if [[ ! -f "${E2E_DIR}/playwright.config.ts" ]]; then
     echo "找不到 ${E2E_DIR}/playwright.config.ts，Playwright 工程应在 e2e/ 目录。" >&2
@@ -86,6 +87,20 @@ run_one() {
     echo "############################################################"
 
     bash "${SCRIPT_DIR}/ensure-services.sh"
+
+    if [[ "${PREFLIGHT_DONE}" == "0" ]]; then
+        echo "-- 校验 E2E 基础账号 --"
+        if ! (cd "${REPO_ROOT}" && node --input-type=module -e '
+            import { ADMIN, login } from "./scripts/dev-seed-lib.mjs";
+            try { await login(ADMIN.account, ADMIN.password); }
+            catch (error) { console.error(error.message); process.exitCode = error.status === 401 ? 2 : 1; }
+        '); then
+            echo "错误: E2E 管理员登录检查失败，尚未执行本流程清库。新库或账号未初始化时请先运行以下命令；网络或限流错误请按上方原因处理。" >&2
+            echo "初始化命令: E2E_RESET=1 E2E_ALLOW_REMOTE_RESET=1 bash scripts/reset-db.sh" >&2
+            exit 2
+        fi
+        PREFLIGHT_DONE=1
+    fi
 
     if [[ "${RESET}" == "1" ]]; then
         echo "-- 数据库 reset（E2E 只清库） --"

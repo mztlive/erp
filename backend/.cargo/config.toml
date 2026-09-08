@@ -9,8 +9,9 @@ index = "https://rsproxy.cn/crates.io-index"
 [net]
 git-fetch-with-cli = true
 
-# Cranelift 仅用于本地 dev（cargo build/test/run）。cargo check 不做 codegen，不受影响。
-# 需要 nightly（见 rust-toolchain.toml）。release / Docker（rust:1.97）不复制本文件，仍走 LLVM。
+# Cranelift 仅用于本地 nightly dev（见仓库根目录与 backend/ 的 rust-toolchain.toml）。
+# Cargo 1.97 stable 无法解析 profile.dev.codegen-backend，IDE rust-analyzer 必须走 nightly。
+# release / Docker（rust:1.97）不复制本文件，仍走 LLVM。
 [unstable]
 codegen-backend = true
 
