@@ -1,4 +1,4 @@
-# ID Generator（id-generator）
+# id-generator：内部 ID 与业务编号
 
 共享 ID 与可展示业务编号生成能力。
 
@@ -69,17 +69,15 @@ SS=Supplier Settlement）。**前缀一经启用不得变更**（历史编号依
 - upsert 保证首次取号自动建立计数器并从 1 开始；
 - **取号成功即消费序号**——消费发生在取号瞬间，与后续业务步骤是否成功无关。
 
-## 4. 事务与回滚行为（重要）
+## 4. 事务与回滚要求
 
 - `next_number(kind, date, executor)` 接收执行器，以便在 `with_transaction` 事务代码内
   以相同签名调用（传入 `&mut ClientSession`），单集合独立取号时传 `&mut NoTransaction`；
 - **计数器自增始终以自动提交方式独立执行，不挂到调用方事务会话上**：即使传入
   事务执行器，事务回滚也不会撤销已消费的序号；
 - 因此"事务内取号 → 回滚 → 再取号"得到 `SO20260701-000001` 与 `SO20260701-000002`，
-  1 号不再被回收——正式单据序列出现 1 号空缺（**跳号是预期行为**）；
-- 原因（取舍）：**防重复优先于防跳号**。`*_no` 一经形成正式事实不得复用
-  （数据模型 4.1）；跳号只影响编号美观，回收复用则会造成两张正式单据同号，
-  破坏唯一性、对账与追溯；
+  1 号不再被回收，正式单据序列允许出现空缺；
+- 已消费序号不得回收或复用；调用方必须允许失败操作产生跳号。
 - 取号时机约定：只在正式化（提交/过账/登记）时取正式号；草稿不预占正式号，
   逻辑删除的草稿不进入编号连续性（数据模型 4.5 第 2 条）。
 
@@ -101,20 +99,22 @@ let number = generator
 // number == "SO20260701-000123"
 ```
 
-## 6. 测试
+## 6. 依赖与代码入口
 
-- 单元测试（无数据库环境）：`cargo test -p id-generator`
-  ——覆盖全部 kind 的前缀/中文名/阶段、serde snake_case、日期段格式、序号补零；
-- 集成测试（需真实 MongoDB；事务测试需副本集）：
-  - `tests/number_concurrency.rs`：50 任务 × 20 次并发取号，断言 1000 个号
-    全部唯一且序号段为 `1..=1000` 的连续排列（无跳号）；
-  - `tests/number_rollback.rs`：事务内取号后回滚，断言序号不回收、不回收到
-    同一号（正式序列跳号），计数器继续前进不回退；
-- 集成测试以 `#[ignore]` 门控并读取环境变量 `ERP_TEST_MONGO_URI`，未设置时跳过：
+本 crate 依赖 `persistence-core` 和 MongoDB 完成业务编号原子取号；`next_id()` 本身不访问数据库。业务前缀和计数器规则集中在本 crate，领域调用方不得另建同类编号生成器。
 
-  ```bash
-  ERP_TEST_MONGO_URI=mongodb://127.0.0.1:27017 \
-    cargo test -p id-generator -- --include-ignored
-  ```
+| 入口 | 用途 |
+| --- | --- |
+| [src/lib.rs](src/lib.rs) | `next_id` 和公共导出 |
+| [src/document_number.rs](src/document_number.rs) | `DocumentNumberGenerator`、编号种类及格式规则 |
 
-  多文档事务测试需要副本集连接串（如 `scripts/dev-mongo.sh` 启动的单节点副本集 `rs0`）。
+## 验证要求
+
+以下命令在 `backend/` 目录执行：
+
+```bash
+cargo check -p id-generator --locked
+env -u ERP_TEST_MONGO_URI cargo test -p id-generator --lib --locked
+```
+
+代码变更还须执行[统一质量门禁](../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。

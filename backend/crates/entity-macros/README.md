@@ -1,62 +1,30 @@
-# Entity-Derive Crate
+# entity-macros：实体与 ID 过程宏
 
-## 简介
+## 职责合同
 
-`entity-macros` crate 是一个过程宏库，提供自定义的派生宏，用于简化实体（Entity）结构体的定义和实现。通过宏生成常用的实现代码，提高开发效率并减少重复代码。
+- Entity 派生宏，为带 base 字段的类型实现 entity_core::HasBaseModel。
+- id_type! 生成透明字符串 ID newtype 及访问、转换和序列化实现。
 
-## 主要功能
+## 使用与边界要求
 
-- **实体宏**: 提供 `Entity` 派生宏，自动生成实体相关的实现代码。
-- **简化开发**: 减少手动编写重复的代码，提升代码的可维护性和可读性。
-- **集成基础模型**: 与 `entity-core` crate 集成，扩展基础模型的功能。
+1. Entity 要求目标类型含有名为 base、类型为 entity_core::BaseModel 的字段；消费 crate 必须声明 entity-core 依赖。
+2. id_type! 接受单个类型标识符，消费 crate 必须声明 serde 依赖；生成类型不负责 ID 分配或格式校验。
+3. 宏不生成 Repository、不校验业务字段，也不自动插入 serde(flatten)；这些合同由消费方显式声明。
+4. 修改展开代码后须检查实际消费 crate；只编译过程宏本身不能验证生成代码的类型约束。
 
-## 安装与使用
+## 代码入口
 
-### 环境要求
+| 入口 | 用途 |
+| --- | --- |
+| [src/lib.rs](src/lib.rs) | derive_entity 与 id_type 宏实现 |
 
-- Rust 1.56 及以上版本
-- 使用 `proc-macro` 功能
+## 验证要求
 
-### 使用方式
+以下命令在 `backend/` 目录执行：
 
-1. 在 `Cargo.toml` 中添加依赖：
+```bash
+cargo check -p entity-macros --locked
+env -u ERP_TEST_MONGO_URI cargo test -p entity-macros --lib --locked
+```
 
-   ```toml
-   [dependencies]
-   entity-macros = { path = "../entity-macros" }
-   entity-core = { path = "../entity-core" }
-   serde = { version = "1.0", features = ["derive"] }
-   ```
-
-2. 在实体定义中使用宏：
-   ```rust
-   use entity_macros::Entity;
-   use entity_core::BaseModel;
-   use serde::{Serialize, Deserialize};
-
-   #[derive(Debug, Serialize, Deserialize, Entity)]
-   pub struct Product {
-       #[serde(flatten)]
-       pub base: BaseModel,
-       pub name: String,
-       pub price: f64,
-   }
-
-   impl Product {
-       pub fn new(id: String, name: String, price: f64) -> Self {
-           Self {
-               base: BaseModel::new(id),
-               name,
-               price,
-           }
-       }
-   }
-   ```
-
-## 贡献
-
-欢迎提交问题和合并请求。请确保在提交之前运行所有测试并遵循项目的代码风格。
-
-## 许可证
-
-该项目使用 MIT 许可证。详情请参阅 LICENSE 文件。
+代码变更还须执行[统一质量门禁](../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。

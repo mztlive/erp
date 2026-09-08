@@ -1,60 +1,30 @@
-# Entity-Base Crate
+# entity-core：实体基础元数据
 
-## 简介
+## 职责合同
 
-`entity-core` crate 提供了项目中实体（Entity）的基础模型和接口，定义了各类实体的公共字段和行为。通过集成 `serde` 和 `chrono`，实现了实体的序列化、反序列化以及时间管理功能。
+- BaseModel 和 HasBaseModel，提供实体持久化元数据的统一访问。
+- 软删除的零值常量与删除状态判定。
 
-## 主要功能
+## 使用与边界要求
 
-- **基础模型**: 定义了如 `BaseModel` 等基础结构，包含诸如 ID、创建时间、更新时间等公共字段。
-- **时间管理**: 集成 `chrono` 库，用于处理时间相关的操作。
-- **序列化支持**: 利用 `serde` 实现实体的序列化和反序列化，便于数据的存储和传输。
+1. BaseModel 字段为 id、version、created_at、updated_at、deleted_at；调用方通过 serde(flatten) 嵌入实体。
+2. BaseModel::new 接收调用方生成的 ID，使用当前 Unix 秒初始化创建和更新时间，version 从 1 开始，deleted_at 为 0。
+3. BaseModel::fake 仅用于测试；Default 的零值不能代替正式实体构造。
+4. 本 crate 不生成 ID，不提供 CRUD，不执行领域校验；确定性时间场景应由调用方显式构造元数据。
 
-## 安装与使用
+## 代码入口
 
-### 环境要求
+| 入口 | 用途 |
+| --- | --- |
+| [src/lib.rs](src/lib.rs) | BaseModel、HasBaseModel 与软删除常量 |
 
-- Rust 1.56 及以上版本
+## 验证要求
 
-### 使用方式
+以下命令在 `backend/` 目录执行：
 
-1. 在 `Cargo.toml` 中添加依赖：
+```bash
+cargo check -p entity-core --locked
+env -u ERP_TEST_MONGO_URI cargo test -p entity-core --lib --locked
+```
 
-   ```toml
-   [dependencies]
-   entity-core = { path = "../entity-core" }
-   serde = { version = "1.0", features = ["derive"] }
-   chrono = "0.4"
-   ```
-
-2. 使用基础模型：
-   ```rust
-   use entity_core::BaseModel;
-   use serde::{Serialize, Deserialize};
-
-   #[derive(Debug, Serialize, Deserialize)]
-   pub struct User {
-       #[serde(flatten)]
-       pub base: BaseModel,
-       pub name: String,
-       pub email: String,
-   }
-
-   impl User {
-       pub fn new(id: String, name: String, email: String) -> Self {
-           Self {
-               base: BaseModel::new(id),
-               name,
-               email,
-           }
-       }
-   }
-   ```
-
-## 贡献
-
-欢迎提交问题和合并请求。请确保在提交之前运行所有测试并遵循项目的代码风格。
-
-## 许可证
-
-该项目使用 MIT 许可证。详情请参阅 LICENSE 文件。
+代码变更还须执行[统一质量门禁](../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。

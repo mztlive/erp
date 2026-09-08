@@ -1,4 +1,4 @@
-# Storage Crate
+# storage：S3 对象存储
 
 `storage` 负责 S3 对象存储，不包含 HTTP 或 Multipart 协议类型。
 
@@ -36,3 +36,28 @@ let public_url = storage.public_url("images/example.png")?;
 
 `read` 会将 S3 `NoSuchKey` 转换为 `storage::Error::NotFound`。`delete` 先通过
 `HeadObject` 确认对象存在，对象不存在时返回同样的 `NotFound`。
+
+## 代码入口与修改要求
+
+| 入口 | 用途 |
+| --- | --- |
+| [src/s3.rs](src/s3.rs) | `S3Storage`、配置及 S3 操作 |
+| [src/path.rs](src/path.rs) | 对象相对路径与键规则 |
+| [src/error.rs](src/error.rs) | 稳定存储错误 |
+| [src/lib.rs](src/lib.rs) | 公共导出 |
+
+1. 对象键必须通过统一路径校验，公开 URL 必须使用 `public_url` 生成，保持前缀和 URL 编码一致。
+2. 凭证由应用配置注入，不得硬编码真实密钥或输出凭证日志。
+3. 文件资产元数据与附件关系由 `erp-support` 维护；S3 I/O 必须位于数据库事务之外。
+4. 修改存储行为时使用库内模拟 HTTP 客户端测试覆盖请求与错误映射，不连接真实 S3。
+
+## 验证要求
+
+以下命令在 `backend/` 目录执行：
+
+```bash
+cargo check -p storage --locked
+env -u ERP_TEST_MONGO_URI cargo test -p storage --lib --locked
+```
+
+代码变更还须执行[统一质量门禁](../README.md#质量门禁)。测试范围限定为库单元测试，不执行集成测试或真实外部服务测试。
