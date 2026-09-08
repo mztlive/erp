@@ -5,6 +5,7 @@
 
 /** 角色项（GET /admin/roles、GET /admin/roles/assignable）。 */
 export type AdminRole = {
+    system?: boolean
     id: string
     name: string
     /** 权限字符串（resource:action），如 "admin:list"。 */

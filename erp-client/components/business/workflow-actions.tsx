@@ -195,6 +195,11 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     cancelLabel?: string
     fromStatus: WorkflowStatus
     toStatus: WorkflowStatus
+    /** 提交前需要核对的业务对象、金额等摘要。 */
+    summary?: readonly React.ReactNode[]
+    summaryTitle?: string
+    /** 显式指定动作风险；未传时兼容既有调用。 */
+    actionVariant?: "default" | "destructive"
     lockedFields?: readonly React.ReactNode[]
     effects?: readonly React.ReactNode[]
     /** 需要随正式动作一并提交的显式业务字段。 */
@@ -228,6 +233,9 @@ function FormalActionConfirmDialog({
     cancelLabel = "返回修改",
     fromStatus,
     toStatus,
+    summary = [],
+    summaryTitle = "核对信息",
+    actionVariant,
     lockedFields = [],
     effects = [],
     formContent,
@@ -252,6 +260,7 @@ function FormalActionConfirmDialog({
         defaultOpen,
         onOpenChange,
     })
+    const confirmRunning = React.useRef(false)
     const [internalPending, setInternalPending] = React.useState(false)
     const [confirmError, setConfirmError] = React.useState<string | null>(null)
     const isPending = pending || internalPending
@@ -263,6 +272,8 @@ function FormalActionConfirmDialog({
     const targetStatus = normalizeStatus(toStatus, "info", CircleCheckIcon)
 
     const handleConfirm = React.useCallback(async () => {
+        if (confirmRunning.current || pending) return
+        confirmRunning.current = true
         setInternalPending(true)
         setConfirmError(null)
         try {
@@ -272,11 +283,13 @@ function FormalActionConfirmDialog({
             setConfirmError(messageFromError(error))
             onConfirmError?.(error)
         } finally {
+            confirmRunning.current = false
             setInternalPending(false)
         }
-    }, [onConfirm, onConfirmError, setOpen])
+    }, [onConfirm, onConfirmError, setOpen, pending])
 
     const hasDetails =
+        summary.length > 0 ||
         lockedFields.length > 0 ||
         effects.length > 0 ||
         formContent != null ||
@@ -293,7 +306,9 @@ function FormalActionConfirmDialog({
                 render={<div />}
                 className="col-start-2 text-left"
             >
-                {description ?? "请核对状态变化和业务影响后再继续。"}
+                {description === undefined
+                    ? "请核对状态变化和业务影响后再继续。"
+                    : description}
             </AlertDialogDescription>
             {layout === "stack" ? (
                 <div className="col-start-2 mt-1">
@@ -308,7 +323,12 @@ function FormalActionConfirmDialog({
     )
 
     return (
-        <AlertDialog open={resolvedOpen} onOpenChange={setOpen}>
+        <AlertDialog
+            open={resolvedOpen}
+            onOpenChange={(next) => {
+                if (!isPending) setOpen(next)
+            }}
+        >
             {trigger ? <AlertDialogTrigger render={trigger} /> : null}
             <AlertDialogContent
                 className={cn(
@@ -333,6 +353,11 @@ function FormalActionConfirmDialog({
 
                 {hasDetails ? (
                     <div className="flex flex-col gap-4">
+                        <WorkflowDetailList
+                            title={summaryTitle}
+                            icon={ListChecksIcon}
+                            items={summary}
+                        />
                         <WorkflowDetailList
                             title="提交后锁定字段"
                             icon={LockIcon}
@@ -388,9 +413,10 @@ function FormalActionConfirmDialog({
                     <AlertDialogAction
                         id={`${baseId}-confirm`}
                         variant={
-                            irreversibleEffects.length > 0
+                            actionVariant ??
+                            (irreversibleEffects.length > 0
                                 ? "destructive"
-                                : "default"
+                                : "default")
                         }
                         disabled={isPending || confirmDisabled}
                         onClick={() => void handleConfirm()}

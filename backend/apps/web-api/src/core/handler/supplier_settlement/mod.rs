@@ -4,6 +4,8 @@
 //! 直接复用 供应链领域及组合层的 DTO，禁止重复定义同构类型、
 //! 禁止直连数据库。
 
+pub mod reviewer_options;
+
 use application_core::AuditActor;
 use axum::{
     extract::{Path, Query, State},

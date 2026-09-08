@@ -45,7 +45,7 @@ export function ReferenceBindDialog({
     onSubmit: () => Promise<void>
 }) {
     const isProd = conn.environment === "PRODUCTION"
-    const kindLabel = kind === "credential" ? "密钥引用" : "地址引用"
+    const kindLabel = kind === "credential" ? "密钥配置" : "地址配置"
     const ref =
         kind === "credential"
             ? conn.safeReferences.credential
@@ -56,8 +56,8 @@ export function ReferenceBindDialog({
             : "supplier-api-connections-reference-bind-endpoint-input"
     const errorFallback =
         kind === "credential"
-            ? "无法取得密钥管理引用列表，请重试后再选择。"
-            : "无法取得地址配置引用列表，请重试后再选择。"
+            ? "无法取得密钥配置列表，请重试后再选择。"
+            : "无法取得地址配置列表，请重试后再选择。"
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -65,14 +65,12 @@ export function ReferenceBindDialog({
             >
                 <DialogHeader>
                     <DialogTitle>
-                        {isProd
-                            ? `轮换生产环境${kindLabel}`
-                            : `绑定/轮换${kindLabel}`}
+                        {`${ref.state === "MISSING" ? "绑定" : "更换"}${isProd ? "生产环境" : ""}${kindLabel}`}
                     </DialogTitle>
                     <DialogDescription>
                         {kind === "credential"
-                            ? "只能从密钥管理系统选择不透明引用。无明文密钥输入框；页面、URL 与结果均不返回正文。"
-                            : "只能从系统提供的地址配置引用中选择，不能自由输入地址。"}
+                            ? "从已配置的密钥中选择。"
+                            : "从已配置的接口地址中选择。"}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -85,9 +83,7 @@ export function ReferenceBindDialog({
                         </Alert>
                     ) : null}
                     <Label htmlFor={inputId}>
-                        {kind === "credential"
-                            ? "密钥管理引用"
-                            : "地址配置引用"}
+                        {kind === "credential" ? "密钥配置" : "地址配置"}
                     </Label>
                     <OpaqueReferenceSearchCombobox
                         kind={kind}
@@ -98,8 +94,8 @@ export function ReferenceBindDialog({
                         }}
                         placeholder={
                             kind === "credential"
-                                ? "选择不透明引用"
-                                : "选择地址配置引用"
+                                ? "选择密钥配置"
+                                : "选择地址配置"
                         }
                         allowClear={false}
                     />
@@ -139,8 +135,8 @@ export function ReferenceBindDialog({
                         {pending
                             ? "绑定中…"
                             : kind === "credential"
-                              ? "确认绑定引用"
-                              : "确认绑定地址"}
+                              ? "保存密钥配置"
+                              : "保存地址配置"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

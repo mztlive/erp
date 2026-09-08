@@ -61,7 +61,7 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
             header: "发生 / 记录",
             meta: { label: "时间", width: "default", numeric: true },
             cell: ({ row }) => (
-                <div className="num text-xs text-muted-foreground">
+                <div className="num text-[13px] text-muted-foreground">
                     <div>
                         发生{" "}
                         {formatDateTime(
@@ -92,7 +92,7 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
                         type="button"
                         variant="link"
                         size="xs"
-                        className="h-auto px-0"
+                        className="h-auto px-0 text-sm"
                         render={
                             <Link
                                 href={row.original.sourceHref}

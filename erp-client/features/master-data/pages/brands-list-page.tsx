@@ -133,6 +133,11 @@ export function BrandsListPage() {
                         id="master-data-brands-list-table"
                         data={state.pageRows}
                         columns={columns}
+                        defaultColumnVisibility={{
+                            revisionNo: false,
+                            revisionTiming: false,
+                            blocker: false,
+                        }}
                         getRowId={(row) => row.stableId}
                         rowCount={state.rows.length}
                         pagination={filters.pagination}

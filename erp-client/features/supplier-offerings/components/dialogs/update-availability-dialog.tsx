@@ -87,7 +87,7 @@ export function UpdateAvailabilityDialog({
                 <DialogHeader>
                     <DialogTitle>更新当前可供情况</DialogTitle>
                     <DialogDescription>
-                        该信息独立于商业条款版本，可由人工或供应商接口高频更新。
+                        不修改供给价格和条款。
                     </DialogDescription>
                 </DialogHeader>
                 {submitError ? (

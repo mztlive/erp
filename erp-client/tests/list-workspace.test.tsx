@@ -1,4 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react"
+import {
+    cleanup,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+} from "@testing-library/react"
 import { afterEach, beforeAll, expect, test } from "vitest"
 
 import { DataTable } from "@/components/business/data-table"
@@ -120,4 +126,33 @@ test("自定义工具栏继续在列表原有插槽显示列设置", () => {
             .getByRole("button", { name: "列设置" })
             .closest('[data-slot="table-frame-view-options"]'),
     ).not.toBeNull()
+})
+
+test("默认摘要列可以显示全部并恢复，不丢失记录或行身份", async () => {
+    const { container } = render(
+        <DataTable
+            id="column-preset-results"
+            data={[{ id: "one", name: "商品", reference: "SKU-001" }]}
+            columns={[
+                { accessorKey: "name", header: "名称", enableHiding: false },
+                { accessorKey: "reference", header: "资料编号" },
+            ]}
+            defaultColumnVisibility={{ reference: false }}
+            getRowId={(row) => row.id}
+            rowCount={1}
+            onRowPreview={() => undefined}
+        />,
+    )
+    expect(screen.queryByText("SKU-001")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "列设置" }))
+    fireEvent.click(await screen.findByRole("button", { name: "显示全部列" }))
+    await waitFor(() => expect(screen.getByText("SKU-001")).toBeTruthy())
+    expect(screen.getByRole("checkbox", { name: "资料编号" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认列" }))
+    await waitFor(() => expect(screen.queryByText("SKU-001")).toBeNull())
+    expect(
+        container.querySelector("#column-preset-results-row-one"),
+    ).not.toBeNull()
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1)
+    expect(container.querySelectorAll("th")).toHaveLength(2)
 })

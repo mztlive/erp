@@ -19,7 +19,7 @@ export function SupplierPaymentSubmitConfirmDialog({
     paymentAmount: string
     recipient?: PaymentRecipient
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void
+    onConfirm: () => void | Promise<void>
     id?: string
     idPrefix?: string
 }) {
@@ -31,6 +31,7 @@ export function SupplierPaymentSubmitConfirmDialog({
 
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id={id}
             idPrefix={idPrefix ?? "supplier-payables-payment-submit-confirm"}
             open={open}
@@ -41,7 +42,7 @@ export function SupplierPaymentSubmitConfirmDialog({
             fromStatus={{ label: "待付款", tone: "neutral" }}
             toStatus={{ label: "已过账", tone: "success" }}
             description="确认后立即过账并核销。"
-            lockedFields={[
+            summary={[
                 `收款户名 ${recipient?.accountName ?? "未加载"}`,
                 `开户行 ${bankLabel}`,
                 `收款账号 ${recipient?.accountNumberMasked ?? "未加载"}`,
@@ -49,9 +50,7 @@ export function SupplierPaymentSubmitConfirmDialog({
             ]}
             irreversibleEffects={["纠错须走付款冲正或供应商退款"]}
             pending={pending}
-            onConfirm={() => {
-                void onConfirm()
-            }}
+            onConfirm={onConfirm}
         />
     )
 }

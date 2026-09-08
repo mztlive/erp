@@ -47,7 +47,7 @@ export function useSupplierOrdersListColumns({
                             type="button"
                             variant="link"
                             size="xs"
-                            className="num h-auto justify-start px-0"
+                            className="num h-auto justify-start px-0 text-sm"
                             aria-label={`预览 ${row.original.orderNo}`}
                             ref={(element) => {
                                 if (element) {
@@ -69,7 +69,7 @@ export function useSupplierOrdersListColumns({
                         >
                             {row.original.orderNo}
                         </Button>
-                        <span className="truncate text-tiny text-muted-foreground">
+                        <span className="truncate text-xs text-muted-foreground">
                             {row.original.supplierName}
                         </span>
                     </div>
@@ -83,7 +83,7 @@ export function useSupplierOrdersListColumns({
                 cell: ({ row }) => (
                     <StatusTrackSummary
                         variant="inline"
-                        className="flex-nowrap gap-x-2 gap-y-0"
+                        className="max-w-64 flex-wrap gap-x-2 gap-y-1"
                         aria-label={`${row.original.orderNo} 三轨状态`}
                         tracks={[
                             {
@@ -121,7 +121,7 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "供应商外部单号", width: "reference" },
                 cell: ({ row }) =>
                     row.original.externalOrderNo ? (
-                        <span className="num text-xs">
+                        <span className="num text-[13px]">
                             {row.original.externalOrderNo}
                         </span>
                     ) : (
@@ -136,7 +136,7 @@ export function useSupplierOrdersListColumns({
                 header: "更新时间",
                 meta: { label: "更新时间", width: "default" },
                 cell: ({ row }) => (
-                    <span className="num text-xs text-muted-foreground">
+                    <span className="num text-[13px] text-muted-foreground">
                         {formatDateTime(
                             row.original.lastBusinessAt,
                             "monthDayIntl",
@@ -156,7 +156,7 @@ export function useSupplierOrdersListColumns({
                     numeric: true,
                 },
                 cell: ({ row }) => (
-                    <span className="num text-xs">
+                    <span className="num text-[13px]">
                         {row.original.itemCount}
                     </span>
                 ),
@@ -217,7 +217,7 @@ export function useSupplierOrdersListColumns({
                                             : "查询原结果"}
                                     </Button>
                                     {!canQuery && queryBlocker ? (
-                                        <span className="max-w-[14rem] text-tiny leading-tight text-muted-foreground">
+                                        <span className="max-w-[14rem] text-xs leading-tight text-muted-foreground">
                                             {queryBlocker.message}
                                             {queryBlocker.destinationWorkspaceId ? (
                                                 <>

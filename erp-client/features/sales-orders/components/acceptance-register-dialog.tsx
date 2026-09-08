@@ -78,11 +78,7 @@ export function AcceptanceRegisterDialog({
               isPositiveQty(fact.eligibleQuantity),
           )
         : []
-    const allPass =
-        !selection.hasExceptionResult &&
-        selection.selected.size === pendingCount &&
-        pendingCount > 0
-    const primaryLabel = allPass ? "全部通过并确认" : "确认本次验收"
+    const primaryLabel = "核对验收结果"
     const exceptionHint = selection.hasExceptionResult
         ? " · 含短少、拒收或不通过"
         : ""
@@ -97,7 +93,7 @@ export function AcceptanceRegisterDialog({
                 <DialogHeader className="shrink-0 border-b border-grid px-6 py-4 text-left">
                     <DialogTitle>登记客户验收</DialogTitle>
                     <DialogDescription>
-                        商品选通过、短少或拒收；服务选通过或不通过。打开时默认全部通过，也可把某批改成这次不验。
+                        默认选中全部待验批次并设为通过，请按实际结果调整；未验收的批次选“这次不验”。
                     </DialogDescription>
                 </DialogHeader>
 

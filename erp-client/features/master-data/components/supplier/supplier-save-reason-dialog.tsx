@@ -43,17 +43,17 @@ export function SupplierSaveReasonDialog({
             >
                 <DialogHeader>
                     <DialogTitle>
-                        {isCreate ? "确认创建" : "确认保存"}
+                        {isCreate ? "创建供应商" : "保存供应商资料"}
                     </DialogTitle>
                     <DialogDescription>
-                        {isCreate
-                            ? "创建后生成供应商档案；请填写创建说明。"
-                            : "保存将生成新版本；变更原因必填。"}
+                        {isCreate ? "请填写创建说明。" : "历史版本将保留。"}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-save-reason">
-                        {masterDataCopy.fieldChangeReason}
+                        {isCreate
+                            ? "创建说明"
+                            : masterDataCopy.fieldChangeReason}
                         <span className="text-destructive">*</span>
                     </Label>
                     <Textarea
@@ -62,9 +62,7 @@ export function SupplierSaveReasonDialog({
                         onChange={(event) => onReasonChange(event.target.value)}
                         rows={3}
                         placeholder={
-                            isCreate
-                                ? "新建原因"
-                                : "说明本次修改内容，保存后形成新版本"
+                            isCreate ? "新建原因" : "例如：更新结算信息"
                         }
                     />
                     {reasonError ? (

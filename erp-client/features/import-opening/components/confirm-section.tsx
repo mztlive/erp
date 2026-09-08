@@ -81,7 +81,7 @@ function ReturnForFixDialog({
                         退回{CONFIRMATION_SCOPE_LABEL[confirmation.scope]}修复
                     </DialogTitle>
                     <DialogDescription>
-                        本次试算会形成已退回结论并完成当前任务；修复并重新试算后，系统才会创建新任务。
+                        退回修复后，需重新试算并确认。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -310,6 +310,7 @@ export function ConfirmSection({
 
             {confirming ? (
                 <FormalActionConfirmDialog
+                    actionVariant="default"
                     id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirming.confirmationId)}-dialog`}
                     open
                     onOpenChange={(open) => {
@@ -317,13 +318,11 @@ export function ConfirmSection({
                     }}
                     title={`确认${CONFIRMATION_SCOPE_LABEL[confirming.scope]}`}
                     actionLabel="确认本范围"
-                    description="系统将记录本范围正式确认事实，并在同一操作中完成当前任务。"
+                    description="确认本范围的试算结果。"
                     fromStatus={{ label: "待确认", tone: "warning" }}
                     toStatus={{ label: "已确认", tone: "success" }}
                     effects={["记录责任范围确认结论", "完成当前处理任务"]}
-                    irreversibleEffects={[
-                        "结论写入审计，试算变化后由新任务重新确认",
-                    ]}
+                    irreversibleEffects={["试算结果变化后需要重新确认"]}
                     pending={isCompleting}
                     onConfirm={() => complete(confirming, "CONFIRM_SCOPE")}
                 />

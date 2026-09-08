@@ -120,6 +120,7 @@ export function SalesOrdersListTable(props: {
             id="sales-orders-list-table"
             data={items}
             columns={columns}
+            defaultColumnVisibility={{ nature: false, submittedAt: false }}
             getRowId={(row) => row.id}
             rowCount={total}
             sorting={sorting}

@@ -7,7 +7,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function SupplierOrderCenterDialogs({
     order,
-    taskVersion,
+    taskVersion: _taskVersion,
     completionEvidence,
     replayOpen,
     onReplayOpenChange,
@@ -45,11 +45,12 @@ export function SupplierOrderCenterDialogs({
     return (
         <>
             <FormalActionConfirmDialog
+                actionVariant="destructive"
                 id="supplier-order-center-dialog-replay"
                 open={replayOpen}
                 onOpenChange={onReplayOpenChange}
                 actionLabel="安全重发"
-                title="确认沿用原任务号重新提交"
+                title="重新向供应商提交订单"
                 description="仅在确认无结果且系统判定可安全重试时允许。重发不会新建业务订单。"
                 fromStatus={{
                     label: order.fulfillmentLabel,
@@ -68,21 +69,32 @@ export function SupplierOrderCenterDialogs({
             />
 
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id="supplier-order-center-dialog-complete"
                 open={completeOpen}
                 onOpenChange={onCompleteOpenChange}
-                actionLabel="完成正式任务"
+                actionLabel="完成任务"
                 title="确认处理结果并完成任务"
-                description="提交时将重新核对供应商动作结果、订单数据和当前处理权；任一不一致都保持原任务待处理。"
+                description="核对供应商处理结果，确认后完成当前任务。"
                 fromStatus={{
                     label: order.fulfillmentLabel,
                     tone: order.fulfillmentTone,
                 }}
                 toStatus={{ label: "任务已完成", tone: "success" }}
-                lockedFields={[
+                summary={[
                     `订单 ${order.orderNo}`,
-                    `任务版本 ${taskVersion ?? "—"}`,
-                    `处理凭证 ${completionEvidence?.verifiedSupplierActionResultId ?? "—"}`,
+                    `供应商 ${order.supplierName}`,
+                    ...(completionEvidence
+                        ? [
+                              `核实结果：${completionEvidence.outcomeLabel}`,
+                              completionEvidence.summary,
+                              ...(completionEvidence.externalOrderNo
+                                  ? [
+                                        `供应商订单号：${completionEvidence.externalOrderNo}`,
+                                    ]
+                                  : []),
+                          ]
+                        : []),
                 ]}
                 effects={["保存已核实的业务结果", "一并完成当前任务"]}
                 pending={completePending}
@@ -90,6 +102,7 @@ export function SupplierOrderCenterDialogs({
             />
 
             <FormalActionConfirmDialog
+                actionVariant="destructive"
                 id={
                     afterSalesRequest?.action
                         ? `supplier-order-center-dialog-aftersales-${toAutomationIdSegment(afterSalesRequest.action)}`
@@ -115,7 +128,7 @@ export function SupplierOrderCenterDialogs({
                               afterSalesRequest.action === "CANCEL"
                                   ? "取消"
                                   : "退款"
-                          }请求，引用售后请求 ${afterSalesRequest.requestNo}；重复提交返回原结果。`
+                          }请求，售后申请单 ${afterSalesRequest.requestNo}。`
                         : undefined
                 }
                 fromStatus={{
@@ -131,7 +144,7 @@ export function SupplierOrderCenterDialogs({
                 }}
                 effects={[
                     `引用售后请求 ${afterSalesRequest?.requestNo ?? "—"}`,
-                    "重复提交返回原结果，不会重复发起",
+                    "处理结果待供应商确认",
                 ]}
                 irreversibleEffects={[
                     `将向供应商发起${

@@ -37,7 +37,7 @@ function renderDialog(ui: ReactElement) {
 afterEach(cleanup)
 
 describe("SupplierPaymentDetailDialog", () => {
-    it("以分区 Dialog 展示付款详情，取消会通知上层", () => {
+    it("以分区 Dialog 展示付款详情，关闭会通知上层", () => {
         const onOpenChange = vi.fn()
         renderDialog(
             <SupplierPaymentDetailDialog
@@ -52,13 +52,13 @@ describe("SupplierPaymentDetailDialog", () => {
         )
 
         expect(screen.getByRole("heading", { name: "付款详情" })).toBeTruthy()
-        expect(
-            screen.getByText("查看付款记录、收款信息、银行回单与核销明细。"),
-        ).toBeTruthy()
+        expect(screen.getByText("付款记录与核销明细。")).toBeTruthy()
         expect(screen.getByRole("tab", { name: "基本信息" })).toBeTruthy()
         expect(screen.getByDisplayValue("FK-1")).toBeTruthy()
 
-        fireEvent.click(screen.getByRole("button", { name: "取消" }))
+        fireEvent.click(
+            document.getElementById("supplier-payables-payment-detail-cancel")!,
+        )
         expect(onOpenChange).toHaveBeenCalledWith(false)
     })
 })

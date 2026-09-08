@@ -43,7 +43,7 @@ export function PickSupplierDialog({
                             : "选择供应商 · 登记进项发票"}
                     </DialogTitle>
                     <DialogDescription>
-                        本次核销创建后锁定供应商；不同供应商目标不会进入同一核销池。
+                        创建后不可更换供应商。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-2">
@@ -75,7 +75,7 @@ export function PickSupplierDialog({
                             onConfirm()
                         }}
                     >
-                        进入本次核销
+                        {track === "payment" ? "登记付款" : "登记进项发票"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

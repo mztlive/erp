@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { productSkuPriceRange } from "@/features/master-data/lib/list-filters"
 import {
     blockerColumn,
@@ -58,7 +59,7 @@ export function useProductListColumns({
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
         () => [
             stableNoColumn(),
-            nameColumn(),
+            nameColumn({ showNumber: true }),
             revisionNoColumn(),
             lifecycleColumn(),
             {
@@ -106,7 +107,12 @@ export function useProductListColumns({
             {
                 id: "skuPriceRange",
                 header: "SKU 售价",
-                meta: { label: "SKU 售价", width: "amount" },
+                meta: {
+                    label: "SKU 售价",
+                    width: "amount",
+                    align: "end",
+                    numeric: true,
+                },
                 cell: ({ row }) => (
                     <span className="num text-sm">
                         {productSkusPending
@@ -124,7 +130,12 @@ export function useProductListColumns({
             {
                 id: "skuCount",
                 header: "SKU 数量",
-                meta: { label: "SKU 数量", width: "amount" },
+                meta: {
+                    label: "SKU 数量",
+                    width: "quantity",
+                    align: "end",
+                    numeric: true,
+                },
                 cell: ({ row }) => (
                     <span className="num text-sm">
                         {row.original.skuCount ?? 0} 个
@@ -155,10 +166,11 @@ export function useProductListColumns({
                             : "无供给"
                     return (
                         <Button
+                            id={`master-data-product-${toAutomationIdSegment(item.stableId)}-supply`}
                             type="button"
                             size="xs"
                             variant="ghost"
-                            className="h-auto gap-1.5 px-1 py-0.5"
+                            className="h-auto flex-col items-start gap-1 px-0 py-0.5"
                             aria-label={`${item.name}供给详情：${statusLabel}`}
                             onClick={(event) => {
                                 event.stopPropagation()
@@ -209,8 +221,16 @@ export function useProductListColumns({
                               ? "部分上架"
                               : "已下架"
                     return (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-start gap-1.5">
                             <Switch
+                                nativeButton
+                                render={
+                                    <button
+                                        type="button"
+                                        aria-label={`${item.name}整组上架状态`}
+                                    />
+                                }
+                                id={`master-data-product-${toAutomationIdSegment(item.stableId)}-listing`}
                                 size="sm"
                                 checked={inherited === "LISTED"}
                                 disabled={

@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -21,17 +20,11 @@ import {
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrdersListColumnsOptions = {
-    pageRows: readonly PurchaseOrderListItem[]
-    focusedIndex: number
     listReturnHref: string
-    rowRefs: React.RefObject<Map<string, HTMLElement>>
 }
 
 export function buildPurchaseOrdersListColumns({
-    pageRows,
-    focusedIndex,
     listReturnHref,
-    rowRefs,
 }: PurchaseOrdersListColumnsOptions): ColumnDef<PurchaseOrderListItem>[] {
     return [
         {
@@ -40,41 +33,14 @@ export function buildPurchaseOrdersListColumns({
             header: "采购单号",
             meta: { label: "采购单号", width: "reference" },
             cell: ({ row }) => (
-                <div
-                    className="flex min-w-0 items-center gap-2"
-                    ref={(el) => {
-                        if (el) {
-                            rowRefs.current.set(
-                                row.original.purchaseOrderId,
-                                el,
-                            )
-                        } else {
-                            rowRefs.current.delete(row.original.purchaseOrderId)
-                        }
-                    }}
-                    data-focused={
-                        pageRows[focusedIndex]?.purchaseOrderId ===
-                        row.original.purchaseOrderId
-                            ? "true"
-                            : undefined
-                    }
-                    style={
-                        pageRows[focusedIndex]?.purchaseOrderId ===
-                        row.original.purchaseOrderId
-                            ? {
-                                  backgroundColor: "var(--accent)",
-                                  borderRadius: "0.375rem",
-                              }
-                            : undefined
-                    }
-                >
+                <div className="flex min-w-0 items-center gap-2">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                             <Button
                                 type="button"
                                 variant="link"
                                 size="xs"
-                                className="num px-0"
+                                className="num h-auto px-0 text-sm"
                                 aria-label={`打开采购单 ${displayPurchaseOrderNo(row.original)}`}
                                 render={
                                     <Link

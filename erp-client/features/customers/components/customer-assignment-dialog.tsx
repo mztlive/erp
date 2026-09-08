@@ -75,6 +75,7 @@ export function CustomerAssignmentDialog({
             onOpenChange(false)
         },
     })
+    const role = useSelector(form.store, (state) => state.values.role)
     const dirty = useSelector(form.store, (state) => state.isDirty)
 
     React.useEffect(() => {
@@ -103,7 +104,9 @@ export function CustomerAssignmentDialog({
                     <DialogDescription>
                         {ending
                             ? "结束日期当日起不再计入协作范围，历史责任关系保留。"
-                            : "换任负责人会结束重叠的旧负责人归属；新增协作不会改变负责人。"}
+                            : role === "OWNER"
+                              ? "换任后结束重叠的旧负责人归属，历史责任保留。"
+                              : "新增协作，不改变当前负责人。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form

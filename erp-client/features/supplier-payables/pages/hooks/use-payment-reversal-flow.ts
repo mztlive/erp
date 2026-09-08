@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SubmissionResultUnknownError } from "@/lib/submission-result"
 
 import {
     useCommitPaymentReversalMutation,
@@ -77,7 +78,7 @@ export function usePaymentReversalFlow(args: {
     }
 
     /**
-     * 冻结本地付款冲正意图并打开提交确认，不写入后端。
+     * 从原因表单提交付款冲正，保持同一意图的重试标识。
      *
      * @param reason 非空冲正原因。
      */
@@ -88,17 +89,15 @@ export function usePaymentReversalFlow(args: {
         const current = request ?? reversalRequest
         if (!current) return
         const slot = bindReversalSlot(current.sourcePaymentId, reason)
-        setPendingCommit({
+        const intent = {
             sourcePaymentId: current.sourcePaymentId,
             amount: current.amount,
             reason,
-        })
+        }
+        setPendingCommit(intent)
         reversalSlotRef.current = slot
         setReversalDraft(null)
-        setReversalRequest(null)
-        // 抽屉与确认弹窗同帧挂载时，Base UI 两个同级 portal 会互相标记 aria-hidden，
-        // 顶层弹窗按钮会从无障碍树消失（getByRole 不可见）；把弹窗推迟到下一帧再打开。
-        setTimeout(() => setReversalSubmitOpen(true), 0)
+        await confirmReversalSubmit(intent)
     }
 
     /**
@@ -125,12 +124,15 @@ export function usePaymentReversalFlow(args: {
     /**
      * 按冻结路线提交付款冲正审批。
      */
-    async function confirmReversalSubmit() {
+    async function confirmReversalSubmit(
+        intent?: NonNullable<typeof pendingCommit>,
+    ) {
+        const submitted = intent ?? pendingCommit
         const slot = reversalSlotRef.current
-        if (!slot || (!pendingCommit && !reversalDraft)) return
-        const res = pendingCommit
+        if (!slot || (!submitted && !reversalDraft)) return
+        const res = submitted
             ? await commitReversalMutation.mutateAsync({
-                  ...pendingCommit,
+                  ...submitted,
                   idempotencyKey: slot.key,
               })
             : await submitReversalMutation.mutateAsync({
@@ -147,11 +149,13 @@ export function usePaymentReversalFlow(args: {
                 operationId: res.idempotencyKey,
             })
             setReversalSubmitOpen(false)
+            if (intent) throw new SubmissionResultUnknownError(res.message)
             return
         }
         if (res.status === "failed") {
             setActionError(res.message)
             setReversalSubmitOpen(false)
+            if (intent) throw new Error(res.message)
             return
         }
         setLastResult({
@@ -168,6 +172,7 @@ export function usePaymentReversalFlow(args: {
         setPendingCommit(null)
         setReversalDraft(res.reversal)
         setReversalSubmitOpen(false)
+        setReversalRequest(null)
         openReversalPreview(res.reversal.reversalId)
     }
 

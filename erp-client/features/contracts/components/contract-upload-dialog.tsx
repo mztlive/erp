@@ -63,7 +63,7 @@ export function ContractUploadDialog({
                 <DialogHeader className="px-6 pt-6">
                     <DialogTitle>上传合同 PDF</DialogTitle>
                     <DialogDescription>
-                        系统不新建或编辑合同正文；上传已签署电子档并补充检索信息后，形成可引用的合同版本。
+                        上传已签署的合同 PDF，并填写合同信息。
                     </DialogDescription>
                 </DialogHeader>
                 <form

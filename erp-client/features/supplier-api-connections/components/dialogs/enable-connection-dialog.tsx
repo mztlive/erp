@@ -38,8 +38,8 @@ export function EnableConnectionDialog({
                         {isProd ? "启用生产环境连接" : "启用连接"}
                     </DialogTitle>
                     <DialogDescription>
-                        启用后连接将恢复对外接口可用，后续下单、查询等业务请求将按能力声明放行。
-                        {isProd ? " 生产环境操作需谨慎核对。" : ""}
+                        启用后恢复此连接的接口请求。
+                        {isProd ? " 请核对生产环境连接。" : ""}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

@@ -26,6 +26,14 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-settlement-statements/{id}/reviewer-options",
+            with_permission(
+                get(supplier_settlement::reviewer_options::supplier_settlement_reviewer_options),
+                rbac,
+                supplier_settlement::supplier_settlement_statement_submit_review_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-settlement-statements",
             with_permission(
                 get(supplier_settlement::supplier_settlement_statement_list),

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SubmissionResultUnknownError } from "@/lib/submission-result"
 
 import type { ResultState } from "@/components/business/feedback"
 import type { ReverseRequest } from "@/features/customer-receivables/components/customer-account-detail-preview"
@@ -121,23 +122,23 @@ export function useReverseFlow(args: {
     }
 
     /**
-     * 冻结本地退款意图并打开提交确认，不写入后端。
+     * 从原因表单提交退款，保持同一意图的重试标识。
      *
      * @param reason 非空退款原因。
      */
     async function prepareRefundDraft(reason: string) {
         if (!reverseConfirm || reverseConfirm.kind !== "refund") return
         const slot = bindRefundSlot(reverseConfirm.sourceFactId, reason)
-        setPendingRefund({
+        const intent = {
             sourceFactId: reverseConfirm.sourceFactId,
             amount: reverseConfirm.amount,
             reason,
-        })
+        }
+        setPendingRefund(intent)
         refundSlotRef.current = slot
         setRefundDraft(null)
         setReverseReason(reason)
-        setReverseConfirm(null)
-        setRefundSubmitOpen(true)
+        await confirmRefundSubmit(intent)
     }
 
     /**
@@ -178,23 +179,23 @@ export function useReverseFlow(args: {
     }
 
     /**
-     * 冻结本地回款冲正意图并打开提交确认，不写入后端。
+     * 从原因表单提交回款冲正，保持同一意图的重试标识。
      *
      * @param reason 非空冲正原因。
      */
     async function prepareReversalDraft(reason: string) {
         if (!reverseConfirm || reverseConfirm.kind !== "receipt_reverse") return
         const slot = bindReversalSlot(reverseConfirm.sourceFactId, reason)
-        setPendingReversal({
+        const intent = {
             sourceFactId: reverseConfirm.sourceFactId,
             amount: reverseConfirm.amount,
             reason,
-        })
+        }
+        setPendingReversal(intent)
         reversalSlotRef.current = slot
         setReversalDraft(null)
         setReverseReason(reason)
-        setReverseConfirm(null)
-        setReversalSubmitOpen(true)
+        await confirmReversalSubmit(intent)
     }
 
     /**
@@ -221,13 +222,16 @@ export function useReverseFlow(args: {
     /**
      * 按冻结路线提交回款冲正审批。
      */
-    async function confirmReversalSubmit() {
+    async function confirmReversalSubmit(
+        intent?: NonNullable<typeof pendingReversal>,
+    ) {
+        const submitted = intent ?? pendingReversal
         const slot = reversalSlotRef.current
-        if (!slot || (!pendingReversal && !reversalDraft)) return
-        if (pendingReversal) {
+        if (!slot || (!submitted && !reversalDraft)) return
+        if (submitted) {
             const committed = await reverseMutation.mutateAsync({
                 kind: "receipt_reverse",
-                ...pendingReversal,
+                ...submitted,
                 idempotencyKey: slot.key,
             })
             if (committed.status === "unknown") {
@@ -238,11 +242,14 @@ export function useReverseFlow(args: {
                     reference: committed.idempotencyKey,
                 })
                 setReversalSubmitOpen(false)
+                if (intent)
+                    throw new SubmissionResultUnknownError(committed.message)
                 return
             }
             if (committed.status === "failed") {
                 setActionError(committed.message)
                 setReversalSubmitOpen(false)
+                if (intent) throw new Error(committed.message)
                 return
             }
             setLastResult({
@@ -258,6 +265,7 @@ export function useReverseFlow(args: {
             setReversalSubmitOpen(false)
             setReverseReason("")
             setReverseAmount("")
+            setReverseConfirm(null)
             openReversalPreview(committed.reverseFactId)
             onChanged?.()
             return
@@ -304,13 +312,16 @@ export function useReverseFlow(args: {
     /**
      * 按冻结路线提交客户退款审批。
      */
-    async function confirmRefundSubmit() {
+    async function confirmRefundSubmit(
+        intent?: NonNullable<typeof pendingRefund>,
+    ) {
+        const submitted = intent ?? pendingRefund
         const slot = refundSlotRef.current
-        if (!slot || (!pendingRefund && !refundDraft)) return
-        if (pendingRefund) {
+        if (!slot || (!submitted && !refundDraft)) return
+        if (submitted) {
             const committed = await reverseMutation.mutateAsync({
                 kind: "refund",
-                ...pendingRefund,
+                ...submitted,
                 idempotencyKey: slot.key,
             })
             if (committed.status === "unknown") {
@@ -321,11 +332,14 @@ export function useReverseFlow(args: {
                     reference: committed.idempotencyKey,
                 })
                 setRefundSubmitOpen(false)
+                if (intent)
+                    throw new SubmissionResultUnknownError(committed.message)
                 return
             }
             if (committed.status === "failed") {
                 setActionError(committed.message)
                 setRefundSubmitOpen(false)
+                if (intent) throw new Error(committed.message)
                 return
             }
             setLastResult({
@@ -341,6 +355,7 @@ export function useReverseFlow(args: {
             setRefundSubmitOpen(false)
             setReverseReason("")
             setReverseAmount("")
+            setReverseConfirm(null)
             openRefundPreview(committed.reverseFactId)
             onChanged?.()
             return

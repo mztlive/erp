@@ -34,7 +34,7 @@ export function createReceivableColumns({
         {
             id: "order",
             header: "销售单 / 子账",
-            meta: { label: "销售单", width: "reference" },
+            meta: { label: "销售单", width: "default" },
             cell: ({ row }) => (
                 <div className="flex flex-col items-start gap-1">
                     <span className="num text-sm">
@@ -79,12 +79,19 @@ export function createReceivableColumns({
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex items-center justify-end gap-1.5 text-right">
-                    <MoneyValue value={row.original.invoicedTotal} />
-                    <span className="text-xs text-muted-foreground">
-                        / 可开
-                    </span>
-                    <MoneyValue value={row.original.openInvoiceableTotal} />
+                <div className="flex flex-col items-end gap-1 text-right">
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            可开
+                        </span>
+                        <MoneyValue value={row.original.openInvoiceableTotal} />
+                    </div>
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            净已开票
+                        </span>
+                        <MoneyValue value={row.original.invoicedTotal} />
+                    </div>
                 </div>
             ),
         },
@@ -93,7 +100,7 @@ export function createReceivableColumns({
             header: "到期",
             meta: { label: "到期" },
             cell: ({ row }) => (
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-start gap-1.5">
                     <span className="num text-sm">{row.original.dueDate}</span>
                     <BusinessStatusBadge
                         context="list"
@@ -112,9 +119,9 @@ export function createReceivableColumns({
         {
             id: "status",
             header: "状态",
-            meta: { label: "状态" },
+            meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-start gap-1.5">
                     <BusinessStatusBadge
                         context="list"
                         label={row.original.statusLabel}

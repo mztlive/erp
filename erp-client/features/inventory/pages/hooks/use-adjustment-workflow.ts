@@ -101,7 +101,6 @@ export function useAdjustmentWorkflow({
     const [adjustMeta, setAdjustMeta] = React.useState<AdjustmentMeta | null>(
         null,
     )
-    const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
     const [actionError, setActionError] = React.useState<string | null>(null)
     const [pendingPayload, setPendingPayload] =
@@ -119,8 +118,8 @@ export function useAdjustmentWorkflow({
         validators: {
             onChange: adjustSchema,
         },
-        onSubmit: async () => {
-            setConfirmOpen(true)
+        onSubmit: async (): Promise<void> => {
+            await doSubmit()
         },
     })
 
@@ -128,7 +127,7 @@ export function useAdjustmentWorkflow({
         setAdjustDraftId(null)
         setAdjustBalanceId(null)
         setAdjustMeta(null)
-        setConfirmOpen(false)
+
         setPendingPayload(null)
     }, [])
 
@@ -204,7 +203,8 @@ export function useAdjustmentWorkflow({
         ],
     )
 
-    const doSubmit = React.useCallback(async () => {
+    const doSubmit = React.useCallback(async (): Promise<void> => {
+        if (submitMutation.isPending || lastResult?.status === "unknown") return
         if (!adjustDraftId || !adjustMeta) return
         const submitCommand = adjustMeta.approval?.submitCommand
         if (
@@ -212,7 +212,7 @@ export function useAdjustmentWorkflow({
             !adjustMeta.approval?.allowedActions.includes("SUBMIT")
         ) {
             setActionError("当前调整单不能提交，请关闭后重新发起。")
-            setConfirmOpen(false)
+
             return
         }
         const values = form.state.values
@@ -238,7 +238,13 @@ export function useAdjustmentWorkflow({
         }
         setPendingPayload(payload)
         setActionError(null)
-        const result = await submitMutation.mutateAsync(payload)
+        let result
+        try {
+            result = await submitMutation.mutateAsync(payload)
+        } catch (cause) {
+            setActionError(getErrorMessage(cause, "提交未完成，请重试。"))
+            return
+        }
         if (result.status === "succeeded") {
             setLastResult({
                 status: "succeeded",
@@ -249,7 +255,7 @@ export function useAdjustmentWorkflow({
                 ),
                 reference: result.outcome.reference,
             })
-            setConfirmOpen(false)
+
             closeAdjustment()
             return
         }
@@ -261,7 +267,7 @@ export function useAdjustmentWorkflow({
                 reference: result.idempotencyKey,
                 pendingIdempotencyKey: result.idempotencyKey,
             })
-            setConfirmOpen(false)
+
             return
         }
         if (
@@ -270,15 +276,15 @@ export function useAdjustmentWorkflow({
         ) {
             setAdjustLockVersion(result.latestLockVersion)
             setActionError(result.message)
-            setConfirmOpen(false)
+
             return
         }
         setActionError(result.message)
-        setConfirmOpen(false)
     }, [
         adjustDraftId,
         adjustMeta,
         adjustLockVersion,
+        lastResult?.status,
         form.state.values,
         submitMutation,
         closeAdjustment,
@@ -311,6 +317,7 @@ export function useAdjustmentWorkflow({
                 pendingIdempotencyKey: r.idempotencyKey,
             })
         } else {
+            setLastResult(null)
             setActionError(r.message)
         }
     }, [
@@ -324,8 +331,6 @@ export function useAdjustmentWorkflow({
         form,
         adjustDraftId,
         adjustMeta,
-        confirmOpen,
-        setConfirmOpen,
         lastResult,
         actionError,
         pendingPayload,

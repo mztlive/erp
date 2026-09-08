@@ -98,9 +98,9 @@ export function ConnectionCreateDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent closeButtonId="supplier-api-connections-create-close">
                 <DialogHeader>
-                    <DialogTitle>新建连接身份</DialogTitle>
+                    <DialogTitle>新建连接</DialogTitle>
                     <DialogDescription>
-                        连接代码全局唯一，不可与环境组合复用。创建成功后可在结果中打开连接详情完成配置。
+                        连接代码不可重复，不同环境请使用不同代码。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -194,7 +194,7 @@ export function ConnectionCreateDialog({
                                         className="text-xs text-muted-foreground"
                                         role="status"
                                     >
-                                        正在创建生产环境连接身份
+                                        当前环境：生产
                                     </p>
                                 ) : null}
                             </div>

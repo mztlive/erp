@@ -65,7 +65,10 @@ function ProductEffectiveSection({
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor={`${prefix}-reason`}>
-                        {masterDataCopy.fieldChangeReason} *
+                        {isCreate
+                            ? "创建说明"
+                            : masterDataCopy.fieldChangeReason}{" "}
+                        *
                     </Label>
                     <Textarea
                         id={`${prefix}-reason`}
@@ -78,9 +81,7 @@ function ProductEffectiveSection({
                         onChange={(e) => setChangeReason(e.target.value)}
                         rows={2}
                         placeholder={
-                            isCreate
-                                ? "新建原因"
-                                : "说明本次修改内容，保存后形成新版本"
+                            isCreate ? "新建原因" : "例如：调整售价或商品规格"
                         }
                     />
                     {reasonInvalid ? (

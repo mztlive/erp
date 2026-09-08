@@ -330,6 +330,12 @@ export function ProfitLossRowsPanel({
                         id="actual-profit-loss-table"
                         data={pageRows}
                         columns={columns}
+                        defaultColumnVisibility={{
+                            benefitScenarios: false,
+                            fulfillmentModes: false,
+                            latestCostOccurredAt: false,
+                        }}
+                        defaultColumnPinning={{ left: ["identityLabel"] }}
                         getRowId={(row) => row.rowId}
                         rowCount={data.rows.total}
                         pagination={pagination}

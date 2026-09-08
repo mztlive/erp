@@ -162,6 +162,7 @@ export function ContractsTablePanel({
                     id="card-contracts-list-table"
                     data={pageRows}
                     columns={columns}
+                    defaultColumnVisibility={{ revision: false }}
                     getRowId={(row) => row.contractId}
                     rowCount={total}
                     sorting={sorting}

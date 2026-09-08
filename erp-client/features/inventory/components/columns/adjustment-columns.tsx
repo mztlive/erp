@@ -17,7 +17,7 @@ export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
                     <div className="num font-medium">
                         {row.original.adjustmentNo}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-[13px] text-muted-foreground">
                         {row.original.reasonTypeLabel} ·{" "}
                         {row.original.direction === "increase"
                             ? "增加"
@@ -34,7 +34,7 @@ export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
             cell: ({ row }) => (
                 <div className="text-sm">
                     <div>{row.original.warehouseName}</div>
-                    <div className="num text-xs text-muted-foreground">
+                    <div className="num text-[13px] text-muted-foreground">
                         {row.original.skuCode} · {row.original.skuName}
                     </div>
                 </div>
@@ -71,7 +71,7 @@ export function buildAdjustmentColumns(): ColumnDef<StockAdjustmentRow>[] {
             header: "创建 / 确认入账",
             meta: { label: "时间", width: "default", numeric: true },
             cell: ({ row }) => (
-                <div className="num text-xs text-muted-foreground">
+                <div className="num text-[13px] text-muted-foreground">
                     <div>
                         创建{" "}
                         {formatDateTime(

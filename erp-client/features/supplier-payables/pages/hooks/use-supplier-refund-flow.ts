@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SubmissionResultUnknownError } from "@/lib/submission-result"
 
 import {
     useCommitSupplierRefundMutation,
@@ -74,22 +75,22 @@ export function useSupplierRefundFlow(args: {
     }
 
     /**
-     * 冻结本地退款意图并打开提交确认，不写入后端。
+     * 从原因表单提交退款，保持同一意图的重试标识。
      *
      * @param reason 非空退款原因。
      */
     async function prepareRefundDraft(reason: string) {
         if (!refundRequest) return
         const slot = bindRefundSlot(refundRequest.sourcePaymentId, reason)
-        setPendingCommit({
+        const intent = {
             sourcePaymentId: refundRequest.sourcePaymentId,
             amount: refundRequest.amount,
             reason,
-        })
+        }
+        setPendingCommit(intent)
         refundSlotRef.current = slot
         setRefundDraft(null)
-        setRefundRequest(null)
-        setRefundSubmitOpen(true)
+        await confirmRefundSubmit(intent)
     }
 
     /**
@@ -116,12 +117,15 @@ export function useSupplierRefundFlow(args: {
     /**
      * 按冻结路线提交供应商退款审批。
      */
-    async function confirmRefundSubmit() {
+    async function confirmRefundSubmit(
+        intent?: NonNullable<typeof pendingCommit>,
+    ) {
+        const submitted = intent ?? pendingCommit
         const slot = refundSlotRef.current
-        if (!slot || (!pendingCommit && !refundDraft)) return
-        const res = pendingCommit
+        if (!slot || (!submitted && !refundDraft)) return
+        const res = submitted
             ? await commitRefundMutation.mutateAsync({
-                  ...pendingCommit,
+                  ...submitted,
                   idempotencyKey: slot.key,
               })
             : await submitRefundMutation.mutateAsync({
@@ -138,11 +142,13 @@ export function useSupplierRefundFlow(args: {
                 operationId: res.idempotencyKey,
             })
             setRefundSubmitOpen(false)
+            if (intent) throw new SubmissionResultUnknownError(res.message)
             return
         }
         if (res.status === "failed") {
             setActionError(res.message)
             setRefundSubmitOpen(false)
+            if (intent) throw new Error(res.message)
             return
         }
         setLastResult({
@@ -159,6 +165,7 @@ export function useSupplierRefundFlow(args: {
         setPendingCommit(null)
         setRefundDraft(res.refund)
         setRefundSubmitOpen(false)
+        setRefundRequest(null)
         openRefundPreview(res.refund.refundId)
     }
 

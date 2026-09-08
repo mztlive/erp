@@ -1,6 +1,7 @@
 // 后端 access_control + iam 原始 DTO：只做契约描述，映射逻辑见 mappers.ts。
 
 type BackendRole = {
+    system?: boolean
     id: string
     name: string
     permissions: string[]

@@ -1,3 +1,4 @@
+import type { ChangeConfirmation } from "../hooks/use-change-confirmation"
 import * as React from "react"
 
 import {
@@ -27,6 +28,8 @@ export function createProductFormBindings(
     values: ProductEditorFormValues,
     isCreate: boolean,
     fallbackName: string | undefined,
+    confirmChange: (request: ChangeConfirmation) => void,
+    offerUndo?: (undo: () => void) => void,
 ) {
     const fields = values.fields
     const title = isCreate
@@ -94,15 +97,17 @@ export function createProductFormBindings(
             (sku) => !signatures.has(sku.specificationSignature ?? ""),
         )
         if (removed.length) {
-            const labels = removed
-                .map((sku) => `${sku.skuNo} · ${sku.specLabel}`)
-                .join("\n")
-            if (
-                !window.confirm(
-                    `应用规格后将移除以下 ${removed.length} 个 SKU，并生成 ${next.skus.length} 个 SKU：\n${labels}\n\n被移除 SKU 的价格、主图、条码和供给关联不会转入新 SKU。此操作先更新当前编辑内容，保存商品后生效。确定应用？`,
-                )
-            )
-                return null
+            confirmChange({
+                title: `移除 ${removed.length} 个 SKU？`,
+                description: `应用后将得到 ${next.skus.length} 个 SKU。被移除 SKU 的价格、主图、条码和供给关联无法继承；保存商品后生效。`,
+                details: removed.map(
+                    (sku) => `${sku.skuNo || "未编码"} · ${sku.specLabel}`,
+                ),
+                confirmLabel: "应用规格",
+                destructive: true,
+                onConfirm: () => setFields(next),
+            })
+            return null
         }
         setFields(next)
         return null
@@ -133,25 +138,65 @@ export function createProductFormBindings(
         const hasAny =
             values.batchSalePrice.trim() || values.batchMarketPrice.trim()
         if (!hasAny) return
-        const hasFilled = values.fields.skus.some(
-            (sku) => sku.salePrice?.trim() || sku.marketPrice?.trim(),
+        const sale = values.batchSalePrice.trim()
+        const market = values.batchMarketPrice.trim()
+        const overwritten = values.fields.skus.filter(
+            (sku) =>
+                (sale && sku.salePrice?.trim() && sku.salePrice !== sale) ||
+                (market &&
+                    sku.marketPrice?.trim() &&
+                    sku.marketPrice !== market),
         )
-        const message = hasFilled
-            ? `将把批量价格应用到全部 ${values.fields.skus.length} 个 SKU，并覆盖已填写的销售价/市场价。确定继续？`
-            : `将把批量价格应用到全部 ${values.fields.skus.length} 个 SKU。确定继续？`
-        if (!window.confirm(message)) return
-        setFields((previous) => ({
-            ...previous,
-            skus: previous.skus.map((sku) => ({
-                ...sku,
-                salePrice:
-                    values.batchSalePrice.trim() || sku.salePrice || undefined,
-                marketPrice:
-                    values.batchMarketPrice.trim() ||
-                    sku.marketPrice ||
-                    undefined,
-            })),
-        }))
+        const fieldsChanged = [sale && "销售价", market && "市场价"]
+            .filter(Boolean)
+            .join("、")
+        const previous = fields.skus
+        const apply = () => {
+            setFields((current) => ({
+                ...current,
+                skus: current.skus.map((sku) => ({
+                    ...sku,
+                    salePrice: sale || sku.salePrice,
+                    marketPrice: market || sku.marketPrice,
+                })),
+            }))
+            offerUndo?.(() =>
+                setFields((current) => ({
+                    ...current,
+                    skus: current.skus.map((sku) => {
+                        const old = previous.find(
+                            (before) =>
+                                before.specificationSignature ===
+                                    sku.specificationSignature &&
+                                before.skuNo === sku.skuNo,
+                        )
+                        if (!old) return sku
+                        return {
+                            ...sku,
+                            salePrice:
+                                sale && sku.salePrice === sale
+                                    ? old.salePrice
+                                    : sku.salePrice,
+                            marketPrice:
+                                market && sku.marketPrice === market
+                                    ? old.marketPrice
+                                    : sku.marketPrice,
+                        }
+                    }),
+                })),
+            )
+        }
+        if (overwritten.length) {
+            confirmChange({
+                title: `覆盖 ${overwritten.length} 个 SKU 的价格？`,
+                description: `本次应用${fieldsChanged}，保存商品后生效。`,
+                details: overwritten.map(
+                    (sku) => `${sku.skuNo || "未编码"} · ${sku.specLabel}`,
+                ),
+                confirmLabel: "应用价格",
+                onConfirm: apply,
+            })
+        } else apply()
     }
 
     return {

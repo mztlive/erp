@@ -109,7 +109,7 @@ export function CapConfigDialog({
                 <DialogHeader>
                     <DialogTitle>配置连接能力</DialogTitle>
                     <DialogDescription>
-                        由系统管理员统一配置，配置后能力需重新验证；不复用采购确认写入口。
+                        保存后需重新验证所选能力。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -174,9 +174,7 @@ export function CapConfigDialog({
                                     aria-hidden="true"
                                 />
                             ) : null}
-                            {pending || isSubmitting
-                                ? "提交中…"
-                                : "提交能力配置"}
+                            {pending || isSubmitting ? "提交中…" : "保存配置"}
                         </Button>
                     </DialogFooter>
                 </form>

@@ -22,12 +22,13 @@ export function CustomerReceiptSubmitConfirmDialog({
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void
+    onConfirm: () => void | Promise<void>
     id?: string
     idPrefix?: string
 }) {
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id={idPrefix ?? id}
             open={open}
             onOpenChange={onOpenChange}
@@ -37,24 +38,16 @@ export function CustomerReceiptSubmitConfirmDialog({
             toStatus={{ label: "审批中", tone: "warning" }}
             description={
                 <div className="space-y-3">
-                    <p>确认后启动审批。任一层驳回后将从第一节点开始下一轮。</p>
+                    <p>审批期间不可修改；驳回后重新提交将从首节点审批。</p>
                     <CustomerReceiptApprovalArea
                         phase="confirm"
                         approval={approval}
                     />
                 </div>
             }
-            lockedFields={["往来主体", "到账金额", "已绑定的审批流程"]}
-            effects={[
-                "内容锁定并进入审批",
-                "按已绑定的审批流程办理",
-                "全部节点通过后过账并核销",
-            ]}
-            irreversibleEffects={["形成提交并进入审批"]}
+            effects={["全部节点通过后过账并核销"]}
             pending={pending}
-            onConfirm={() => {
-                void onConfirm()
-            }}
+            onConfirm={onConfirm}
         />
     )
 }

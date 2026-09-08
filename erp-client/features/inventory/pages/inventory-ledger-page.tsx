@@ -1,5 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+
 import * as React from "react"
 
 import { PageScaffold } from "@/components/business"
@@ -18,7 +20,6 @@ import {
 } from "@/features/inventory/types"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
-import { AdjustmentConfirmDialog } from "./components/adjustment-confirm-dialog"
 import { AdjustmentDetailSheet } from "./components/adjustment-detail-sheet"
 import { AdjustmentDialog } from "./components/adjustment-dialog"
 import { AdjustmentResultBanner } from "./components/adjustment-result-banner"
@@ -460,15 +461,40 @@ export function InventoryLedgerPage() {
                 open={adjustment.adjustDraftId != null}
                 meta={adjustment.adjustMeta}
                 form={adjustment.form}
-                onCancel={adjustment.closeAdjustment}
-            />
-
-            <AdjustmentConfirmDialog
-                open={adjustment.confirmOpen}
                 pending={adjustment.isSubmitting}
-                meta={adjustment.adjustMeta}
-                onOpenChange={adjustment.setConfirmOpen}
-                onConfirm={() => void adjustment.doSubmit()}
+                unresolved={adjustment.lastResult?.status === "unknown"}
+                feedback={
+                    <>
+                        {adjustment.actionError ? (
+                            <Alert variant="destructive">
+                                <AlertDescription>
+                                    {adjustment.actionError}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                        {adjustment.lastResult?.status === "unknown" ? (
+                            <Alert>
+                                <AlertDescription>
+                                    {adjustment.lastResult.description}
+                                    <Button
+                                        id="inventory-adjustment-dialog-resolve"
+                                        type="button"
+                                        variant="outline"
+                                        disabled={adjustment.isResolving}
+                                        onClick={() =>
+                                            void adjustment.resolveLastUnknown()
+                                        }
+                                    >
+                                        {adjustment.isResolving
+                                            ? "查询中…"
+                                            : "查询提交结果"}
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                    </>
+                }
+                onCancel={adjustment.closeAdjustment}
             />
         </PageScaffold>
     )

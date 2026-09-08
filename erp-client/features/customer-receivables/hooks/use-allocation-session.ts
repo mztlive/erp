@@ -78,9 +78,15 @@ export function useAllocationSession({
     const [draftSavedAt, setDraftSavedAt] = React.useState(session.savedAt)
     const [postedLocally, setPostedLocally] = React.useState(false)
     const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
-    const [pendingRemove, setPendingRemove] = React.useState<string | null>(
-        null,
-    )
+    const [removedLine, setRemovedLine] = React.useState<{
+        line: AllocationDraftLine
+        index: number
+    } | null>(null)
+    React.useEffect(() => {
+        if (!removedLine) return
+        const timer = setTimeout(() => setRemovedLine(null), 8000)
+        return () => clearTimeout(timer)
+    }, [removedLine])
     const idempotencyRef = React.useRef<string | null>(null)
     const lastPostInputRef = React.useRef<PostAllocationInput | null>(null)
     const baselineRef = React.useRef("")
@@ -108,6 +114,7 @@ export function useAllocationSession({
         JSON.stringify({ values: form.state.values, allocations })
 
     React.useEffect(() => {
+        setRemovedLine(null)
         setAllocations(session.allocations.map((a) => ({ ...a })))
         setEditVersion(session.editVersion)
         setDraftSavedAt(session.savedAt)
@@ -284,7 +291,45 @@ export function useAllocationSession({
     }
 
     function removeLine(lineKey: string) {
-        setAllocations((prev) => prev.filter((a) => a.lineKey !== lineKey))
+        if (
+            !canOperate ||
+            locked ||
+            saveMutation.isPending ||
+            postMutation.isPending
+        )
+            return
+        const index = allocations.findIndex((line) => line.lineKey === lineKey)
+        if (index < 0) return
+        setRemovedLine({ line: allocations[index], index })
+        setAllocations((prev) =>
+            prev.filter((line) => line.lineKey !== lineKey),
+        )
+    }
+
+    function undoRemoveLine() {
+        if (
+            !removedLine ||
+            !canOperate ||
+            locked ||
+            saveMutation.isPending ||
+            postMutation.isPending
+        )
+            return
+        const { line, index } = removedLine
+        setAllocations((prev) => {
+            if (
+                prev.some(
+                    (item) =>
+                        item.targetId === line.targetId &&
+                        item.targetKind === line.targetKind,
+                )
+            )
+                return prev
+            const restored = [...prev]
+            restored.splice(Math.min(index, restored.length), 0, line)
+            return restored
+        })
+        setRemovedLine(null)
     }
 
     function fillLineAmount(target: AllocationDraftLine) {
@@ -305,6 +350,7 @@ export function useAllocationSession({
     }
 
     async function doSaveDraft() {
+        setRemovedLine(null)
         if (!canOperate) {
             setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
             return
@@ -328,6 +374,7 @@ export function useAllocationSession({
     }
 
     async function doPost() {
+        setRemovedLine(null)
         if (!canOperate) {
             setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
             setConfirmOpen(false)
@@ -478,8 +525,8 @@ export function useAllocationSession({
         setConfirmOpen,
         leaveConfirmOpen,
         setLeaveConfirmOpen,
-        pendingRemove,
-        setPendingRemove,
+        removedLine,
+        undoRemoveLine,
         issues,
         canSubmit,
         factAmountStr,

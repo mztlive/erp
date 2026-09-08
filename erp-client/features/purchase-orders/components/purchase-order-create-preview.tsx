@@ -41,8 +41,10 @@ export type PurchaseOrderCreatePreviewDialogProps = {
     stockAllocations: readonly StockAllocationPreviewLine[]
     sourceOrder?: SourcingSalesOrder
     creating?: boolean
+    unresolved?: boolean
     actionError?: { title: string; description: string } | null
     onOpenChange: (open: boolean) => void
+    description?: string
     onConfirm: () => void
 }
 
@@ -55,9 +57,11 @@ export function PurchaseOrderCreatePreviewDialog({
     stockAllocations,
     sourceOrder,
     creating,
+    unresolved,
     actionError,
     onOpenChange,
     onConfirm,
+    description,
 }: PurchaseOrderCreatePreviewDialogProps) {
     const [activeKey, setActiveKey] = React.useState("")
     const activePreview =
@@ -85,15 +89,21 @@ export function PurchaseOrderCreatePreviewDialog({
     }, [activeKey, open, previews])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!creating && !unresolved) onOpenChange(next)
+            }}
+        >
             <DialogContent
                 className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
                 closeButtonId="procurement-orders-create-preview-close"
+                showCloseButton={!creating && !unresolved}
             >
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <DialogTitle>预览供给分配</DialogTitle>
                     <DialogDescription>
-                        {allocationSummary}确认后由一个后端事务统一处理。
+                        {description ?? allocationSummary}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -165,6 +175,7 @@ export function PurchaseOrderCreatePreviewDialog({
                         id="procurement-orders-create-preview-cancel"
                         type="button"
                         variant="outline"
+                        disabled={creating || unresolved}
                         onClick={() => onOpenChange(false)}
                     >
                         返回编辑
@@ -175,12 +186,17 @@ export function PurchaseOrderCreatePreviewDialog({
                         data-testid="purchase-create-from-basis"
                         disabled={
                             (previews.length === 0 &&
-                                stockAllocations.length === 0) ||
+                                stockAllocations.length === 0 &&
+                                !unresolved) ||
                             creating
                         }
                         onClick={onConfirm}
                     >
-                        {creating ? "提交中…" : confirmLabel}
+                        {creating
+                            ? "提交中…"
+                            : unresolved
+                              ? "核对提交结果"
+                              : confirmLabel}
                     </Button>
                 </DialogFooter>
             </DialogContent>

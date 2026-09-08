@@ -33,12 +33,12 @@ export function buildPayableColumns(input: {
             header: "供应商 / 来源",
             meta: { label: "供应商", width: "reference" },
             cell: ({ row }) => (
-                <div className="flex min-w-0 items-center gap-1.5 text-sm">
+                <div className="flex min-w-0 max-w-64 flex-col items-start gap-1 whitespace-normal text-sm">
                     <span className="truncate font-medium">
                         {row.original.supplierName}
                     </span>
-                    <span className="shrink-0 text-muted-foreground">·</span>
-                    <span className="truncate text-xs text-muted-foreground">
+                    <span className="sr-only">·</span>
+                    <span className="break-words text-xs text-muted-foreground">
                         {row.original.sourceTypeLabel} ·{" "}
                         <span className="num">
                             {row.original.sourceDocumentNo}
@@ -57,15 +57,19 @@ export function buildPayableColumns(input: {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex items-center justify-end gap-1 text-end text-sm">
-                    <MoneyValue value={row.original.grossTotal} />
-                    <span className="text-xs text-muted-foreground">
-                        / 开放
-                    </span>
-                    <MoneyValue
-                        className="text-xs"
-                        value={row.original.openTotal}
-                    />
+                <div className="space-y-1 text-end text-sm">
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            开放
+                        </span>
+                        <MoneyValue value={row.original.openTotal} />
+                    </div>
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            应付
+                        </span>
+                        <MoneyValue value={row.original.grossTotal} />
+                    </div>
                 </div>
             ),
         },
@@ -79,11 +83,19 @@ export function buildPayableColumns(input: {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <div className="flex items-center justify-end gap-1.5 text-end text-xs text-muted-foreground">
-                    <span>付款</span>{" "}
-                    <MoneyValue value={row.original.settledTotal} />
-                    <span>/ 收票</span>{" "}
-                    <MoneyValue value={row.original.invoicedTotal} />
+                <div className="space-y-1 text-end text-sm">
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            付款
+                        </span>
+                        <MoneyValue value={row.original.settledTotal} />
+                    </div>
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            收票
+                        </span>
+                        <MoneyValue value={row.original.invoicedTotal} />
+                    </div>
                 </div>
             ),
         },
@@ -92,7 +104,7 @@ export function buildPayableColumns(input: {
             header: "到期",
             meta: { label: "到期", width: "default" },
             cell: ({ row }) => (
-                <div className="flex items-center gap-1.5 text-sm">
+                <div className="flex flex-col items-start gap-1 text-sm">
                     <span className="num">{row.original.dueDate}</span>
                     <span className="text-xs text-muted-foreground">
                         {row.original.dueStateLabel}
@@ -105,7 +117,7 @@ export function buildPayableColumns(input: {
             header: "状态",
             meta: { label: "状态", width: "status" },
             cell: ({ row }) => (
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-col items-start gap-1.5">
                     <BusinessStatusBadge
                         context="list"
                         label={row.original.statusLabel}
@@ -114,7 +126,7 @@ export function buildPayableColumns(input: {
                     {row.original.paymentGateSummary &&
                     row.original.paymentGateSummary.state !==
                         "NOT_APPLICABLE" ? (
-                        <span className="text-tiny text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                             先款条件{" "}
                             {row.original.paymentGateSummary.state ===
                             "SATISFIED"

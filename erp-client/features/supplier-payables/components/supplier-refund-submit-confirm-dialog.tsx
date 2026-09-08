@@ -22,12 +22,13 @@ export function SupplierRefundSubmitConfirmDialog({
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void
+    onConfirm: () => void | Promise<void>
     id?: string
     idPrefix?: string
 }) {
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id={id}
             idPrefix={idPrefix ?? "supplier-payables-refund-submit-confirm"}
             open={open}
@@ -38,24 +39,16 @@ export function SupplierRefundSubmitConfirmDialog({
             toStatus={{ label: "审批中", tone: "warning" }}
             description={
                 <div className="space-y-3">
-                    <p>确认后启动审批。任一层驳回后将从第一节点开始下一轮。</p>
+                    <p>审批期间不可修改；驳回后重新提交将从首节点审批。</p>
                     <SupplierRefundApprovalArea
                         phase="confirm"
                         approval={approval}
                     />
                 </div>
             }
-            lockedFields={["供应商", "退款金额", "已绑定的审批流程"]}
-            effects={[
-                "内容锁定并进入审批",
-                "按已绑定的审批流程办理",
-                "全部节点通过后过账并入账",
-            ]}
-            irreversibleEffects={["形成提交并进入审批"]}
+            effects={["全部节点通过后过账并入账"]}
             pending={pending}
-            onConfirm={() => {
-                void onConfirm()
-            }}
+            onConfirm={onConfirm}
         />
     )
 }

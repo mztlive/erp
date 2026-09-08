@@ -40,12 +40,9 @@ export function PurchaseOrdersListPage() {
     const columns = React.useMemo(
         () =>
             buildPurchaseOrdersListColumns({
-                pageRows: ctrl.pageRows,
-                focusedIndex: ctrl.focusedIndex,
                 listReturnHref: ctrl.listReturnHref,
-                rowRefs: ctrl.rowRefs,
             }),
-        [ctrl.focusedIndex, ctrl.listReturnHref, ctrl.pageRows, ctrl.rowRefs],
+        [ctrl.listReturnHref],
     )
 
     const { filters } = ctrl
@@ -148,7 +145,7 @@ export function PurchaseOrdersListPage() {
                 views={
                     <ListWorkspaceViews
                         ariaLabel="采购单视图"
-                        hint="选择采购单查看详情"
+                        hint="点击采购单号查看详情"
                         items={PURCHASE_ORDER_VIEWS.map(([status, label]) => ({
                             id: `procurement-orders-list-view-${toAutomationIdSegment(status)}`,
                             label: status === "all" ? "全部采购单" : label,

@@ -152,6 +152,12 @@ function useRoleColumns({
                                 <DropdownMenuContent align="end">
                                     <DropdownMenuItem
                                         id={`operations-access-roles-row-${segment}-delete`}
+                                        disabled={role.system === true}
+                                        title={
+                                            role.system
+                                                ? "系统内置角色不可删除"
+                                                : undefined
+                                        }
                                         variant="destructive"
                                         onClick={() =>
                                             setDeletingRole({

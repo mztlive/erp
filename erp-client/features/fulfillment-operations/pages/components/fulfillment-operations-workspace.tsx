@@ -203,6 +203,7 @@ export function FulfillmentOperationsWorkspace({
             )}
 
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id="fulfillment-operations-workspace-confirm"
                 open={controller.confirmOpen}
                 onOpenChange={controller.setConfirmOpen}

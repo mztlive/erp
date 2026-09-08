@@ -74,6 +74,8 @@ export function CustomerQualityDetailTable({
                         id="customers-quality-detail-table"
                         data={[...items]}
                         columns={columns}
+                        defaultColumnVisibility={{ latestBusinessAt: false }}
+                        defaultColumnPinning={{ left: ["customerName"] }}
                         getRowId={(row) => row.customerId}
                         rowCount={filteredTotal}
                         pagination={pagination}

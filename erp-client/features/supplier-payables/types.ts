@@ -172,6 +172,7 @@ export type SupplierRefundRow = Readonly<{
 
 /** 从已过账付款发起供应商退款所需的原事实。 */
 export type SupplierRefundRequest = Readonly<{
+    supplierName?: string
     sourcePaymentId: string
     sourcePaymentNo: string
     supplierId: string
@@ -197,6 +198,7 @@ export type PaymentReversalRow = Readonly<{
 
 /** 从已过账付款发起付款冲正所需的原事实。 */
 export type PaymentReversalRequest = Readonly<{
+    supplierName?: string
     sourcePaymentId: string
     sourcePaymentNo: string
     amount?: string
@@ -512,5 +514,11 @@ export type SessionState = {
 
 /** 冲正/红票弹窗目标 */
 export type ReverseTarget =
-    | { kind: "payment"; id: string; no: string }
+    | {
+          kind: "payment"
+          id: string
+          no: string
+          amount?: string
+          supplierName?: string
+      }
     | { kind: "invoice"; id: string; no: string }

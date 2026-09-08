@@ -21,7 +21,7 @@ export type PurchaseOrdersActionResult = {
 
 /**
  * 采购单列表页控制器：URL 状态、查询接线、筛选状态模型（Applied/Draft/UI）、
- * 键盘导航与导出/进入建单页的状态逻辑。
+ * 搜索快捷键与导出/进入建单页的状态逻辑。
  */
 export function usePurchaseOrdersListController() {
     const router = useRouter()
@@ -51,11 +51,8 @@ export function usePurchaseOrdersListController() {
     )
     const total = listQuery.data?.total ?? 0
 
-    const [focusedIndex, setFocusedIndex] = React.useState(0)
     const [actionResult, setActionResult] =
         React.useState<PurchaseOrdersActionResult | null>(null)
-
-    const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
     const pagination = React.useMemo<PaginationState>(
         () => ({
@@ -72,23 +69,12 @@ export function usePurchaseOrdersListController() {
     )
 
     React.useEffect(() => {
-        setFocusedIndex(0)
-    }, [metricKey, pageRows.length, search, statusFilter])
-
-    React.useEffect(() => {
         const data = listQuery.data
         if (!data || data.page === url.page) return
         pushUrl({ page: data.page })
     }, [listQuery.data, pushUrl, url.page])
 
-    // 键盘导航：仅列表可见且建单弹层未打开时生效；焦点行滚动到可视区。
-    React.useEffect(() => {
-        const focusedRow = pageRows[focusedIndex]
-        if (!focusedRow) return
-        rowRefs.current.get(focusedRow.purchaseOrderId)?.scrollIntoView({
-            block: "nearest",
-        })
-    }, [focusedIndex, pageRows])
+    usePurchaseOrdersListKeyboard({ createOpen: false })
 
     const openDetail = React.useCallback(
         (purchaseOrderId: string) => {
@@ -96,14 +82,6 @@ export function usePurchaseOrdersListController() {
         },
         [router],
     )
-
-    usePurchaseOrdersListKeyboard({
-        pageRows,
-        focusedIndex,
-        createOpen: false,
-        onFocusIndex: setFocusedIndex,
-        onOpenDetail: openDetail,
-    })
 
     const exportCsv = React.useCallback(async () => {
         const result = await exportQuery.refetch()
@@ -165,11 +143,8 @@ export function usePurchaseOrdersListController() {
         effectiveMetric,
         salesOrderFromUrl,
         // 交互状态
-        focusedIndex,
-        setFocusedIndex,
         actionResult,
         setActionResult,
-        rowRefs,
         // 动作
         exportCsv,
         openCreatePage,

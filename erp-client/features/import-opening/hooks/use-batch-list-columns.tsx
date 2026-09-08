@@ -27,15 +27,21 @@ export function useBatchListColumns({
             {
                 id: "batchNo",
                 header: "批次号",
+                meta: { label: "批次号", width: "reference" },
                 cell: ({ row }) => (
-                    <Button
-                        id={`operations-import-batches-row-${toAutomationIdSegment(row.original.batchId)}-open`}
-                        variant="link"
-                        className="h-auto p-0 font-mono text-sm"
-                        onClick={() => onOpenBatch(row.original.batchId)}
-                    >
-                        {row.original.batchNo}
-                    </Button>
+                    <div className="space-y-1">
+                        <Button
+                            id={`operations-import-batches-row-${toAutomationIdSegment(row.original.batchId)}-open`}
+                            variant="link"
+                            className="h-auto p-0 font-mono text-sm"
+                            onClick={() => onOpenBatch(row.original.batchId)}
+                        >
+                            {row.original.batchNo}
+                        </Button>
+                        <div className="text-xs text-muted-foreground">
+                            {ENVIRONMENT_LABEL[row.original.environment]}
+                        </div>
+                    </div>
                 ),
             },
             {
@@ -111,18 +117,23 @@ export function useBatchListColumns({
                 id: "status",
                 header: "状态",
                 cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={BATCH_STATUS_LABEL[row.original.status]}
-                        tone={BATCH_STATUS_TONE[row.original.status]}
-                    />
+                    <div className="space-y-1">
+                        <BusinessStatusBadge
+                            context="list"
+                            label={BATCH_STATUS_LABEL[row.original.status]}
+                            tone={BATCH_STATUS_TONE[row.original.status]}
+                        />
+                        <div className="text-xs text-muted-foreground">
+                            {PIPELINE_STAGE_LABEL[row.original.stage]}
+                        </div>
+                    </div>
                 ),
             },
             {
                 id: "updated",
                 header: "更新时间",
                 cell: ({ row }) => (
-                    <span className="num text-xs text-muted-foreground">
+                    <span className="num text-[13px] text-muted-foreground">
                         {formatDateTime(
                             row.original.updatedAt,
                             "dateStyle",

@@ -29,7 +29,7 @@ export function useConnectionListColumns(
                                 type="button"
                                 variant="link"
                                 size="xs"
-                                className="num h-auto justify-start px-0 font-medium"
+                                className="num h-auto justify-start px-0 text-sm font-medium"
                                 aria-label={`打开连接 ${r.connectionCode}`}
                                 onClick={() => onOpen(r.connectionId)}
                             >
@@ -75,11 +75,16 @@ export function useConnectionListColumns(
                 header: "状态",
                 meta: { label: "状态", width: "status" },
                 cell: ({ row }) => (
-                    <BusinessStatusBadge
-                        context="list"
-                        label={row.original.statusLabel}
-                        tone={row.original.statusTone}
-                    />
+                    <div className="space-y-1 whitespace-normal">
+                        <BusinessStatusBadge
+                            context="list"
+                            label={row.original.statusLabel}
+                            tone={row.original.statusTone}
+                        />
+                        <div className="max-w-48 text-xs text-muted-foreground">
+                            {row.original.nextStep}
+                        </div>
+                    </div>
                 ),
             },
             {

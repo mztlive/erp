@@ -1,5 +1,7 @@
 "use client"
 
+import { useChangeConfirmation } from "../hooks/use-change-confirmation"
+
 import * as React from "react"
 import { SaveIcon } from "lucide-react"
 import {
@@ -28,6 +30,20 @@ import { cn } from "@/lib/utils"
 
 export function ProductDetailPage({ stableId }: { stableId: string }) {
     const editor = useProductEditor(stableId)
+    const changeConfirmation = useChangeConfirmation(
+        "master-data-product-change",
+    )
+    const [priceUndo, setPriceUndo] = React.useState<{
+        undo: () => void
+    } | null>(null)
+    React.useEffect(() => {
+        if (!priceUndo) return
+        const timer = setTimeout(() => setPriceUndo(null), 8000)
+        return () => clearTimeout(timer)
+    }, [priceUndo])
+    React.useEffect(() => {
+        setPriceUndo(null)
+    }, [stableId, editor.saveOpen])
     const [resetOpen, setResetOpen] = React.useState(false)
     const {
         isCreate,
@@ -109,6 +125,8 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         values,
                         isCreate,
                         data?.name,
+                        changeConfirmation.confirm,
+                        (undo) => setPriceUndo({ undo }),
                     )
                     const {
                         title,
@@ -378,6 +396,26 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     </div>
                                 ) : null}
                             </form>
+                            {changeConfirmation.dialog}
+                            {priceUndo ? (
+                                <div
+                                    role="status"
+                                    className="fixed bottom-20 right-6 z-40 flex items-center gap-3 rounded-lg border bg-background p-3 shadow-md"
+                                >
+                                    批量价格已应用
+                                    <Button
+                                        id="master-data-product-price-undo"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                            priceUndo.undo()
+                                            setPriceUndo(null)
+                                        }}
+                                    >
+                                        撤销
+                                    </Button>
+                                </div>
+                            ) : null}
                             <ProductSaveDialog
                                 open={showSave}
                                 onOpenChange={closeSave}

@@ -239,6 +239,7 @@ export function CustomerReceivablesTable({
                 id="customer-receivables-list-receivable"
                 data={[...data.receivables]}
                 columns={receivableColumns}
+                defaultColumnVisibility={{ settled: false }}
                 getRowId={(r) => r.accountId}
                 rowCount={data.total}
                 pagination={pagination}

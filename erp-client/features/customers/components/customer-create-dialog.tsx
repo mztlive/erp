@@ -31,9 +31,7 @@ export function CustomerCreateDialog({
             >
                 <DialogHeader>
                     <DialogTitle>新建客户</DialogTitle>
-                    <DialogDescription>
-                        创建客户主体与首版资料；名称相似只提示候选，不自动合并。
-                    </DialogDescription>
+                    <DialogDescription>填写客户资料。</DialogDescription>
                 </DialogHeader>
                 <CustomerForm
                     key={open ? "open" : "closed"}

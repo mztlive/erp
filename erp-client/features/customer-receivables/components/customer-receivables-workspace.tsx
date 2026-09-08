@@ -595,7 +595,7 @@ export function CustomerReceivablesWorkspace({
 
             <CustomerRefundRequestDialog
                 open={reverseFlow.reverseConfirm?.kind === "refund"}
-                pending={reverseFlow.refundDraftPending}
+                pending={reverseFlow.refundSubmitPending}
                 sourceLabel={reverseFlow.reverseConfirm?.label}
                 amount={reverseFlow.reverseConfirm?.amount}
                 onOpenChange={(open) => {
@@ -605,11 +605,14 @@ export function CustomerReceivablesWorkspace({
                     }
                 }}
                 onSubmit={(reason) => {
-                    if (!permissions.canRefund) {
+                    if (
+                        !permissions.canRefund ||
+                        !permissions.canSubmitRefund
+                    ) {
                         setActionError(permissions.reason)
-                        return
+                        throw new Error(permissions.reason)
                     }
-                    void reverseFlow.prepareRefundDraft(reason)
+                    return reverseFlow.prepareRefundDraft(reason)
                 }}
             />
 
@@ -632,7 +635,7 @@ export function CustomerReceivablesWorkspace({
 
             <ReceiptReversalRequestDialog
                 open={reverseFlow.reverseConfirm?.kind === "receipt_reverse"}
-                pending={reverseFlow.reversalDraftPending}
+                pending={reverseFlow.reversalSubmitPending}
                 sourceLabel={reverseFlow.reverseConfirm?.label}
                 amount={reverseFlow.reverseConfirm?.amount}
                 onOpenChange={(open) => {
@@ -642,11 +645,14 @@ export function CustomerReceivablesWorkspace({
                     }
                 }}
                 onSubmit={(reason) => {
-                    if (!permissions.canReverseReceipt) {
+                    if (
+                        !permissions.canReverseReceipt ||
+                        !permissions.canSubmitReversal
+                    ) {
                         setActionError(permissions.reason)
-                        return
+                        throw new Error(permissions.reason)
                     }
-                    void reverseFlow.prepareReversalDraft(reason)
+                    return reverseFlow.prepareReversalDraft(reason)
                 }}
             />
 

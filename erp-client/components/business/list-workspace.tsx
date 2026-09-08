@@ -33,7 +33,7 @@ export const listWorkspaceStyles = {
         "min-h-0 flex-1",
         "[&_[data-slot=data-table]]:h-full [&_[data-slot=data-table]]:gap-0",
         "[&_[data-slot=data-table-surface]]:flex-1 [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0",
-        "[&_[data-slot=table-head]]:h-10 [&_[data-slot=table-head]]:py-0 [&_[data-slot=table-head]]:text-xs [&_[data-slot=table-head]]:font-medium [&_[data-slot=table-head]]:tracking-normal",
+        "[&_[data-slot=table-head]]:h-11 [&_[data-slot=table-head]]:py-2 [&_[data-slot=table-head]]:text-[13px] [&_[data-slot=table-head]]:font-medium [&_[data-slot=table-head]]:tracking-normal",
         "[&_[data-slot=table-cell]]:h-16 [&_[data-slot=table-cell]]:py-2.5",
         "[&_[data-slot=table-row]:focus-visible]:outline-2 [&_[data-slot=table-row]:focus-visible]:-outline-offset-2 [&_[data-slot=table-row]:focus-visible]:outline-foreground",
         "[&_[data-slot=data-table-pagination]]:mt-auto [&_[data-slot=data-table-pagination]]:shrink-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-pagination]]:border-border [&_[data-slot=data-table-pagination]]:px-0 [&_[data-slot=data-table-pagination]]:pt-4 [&_[data-slot=data-table-pagination]]:pb-0 [&_[data-slot=data-table-pagination]]:text-xs",

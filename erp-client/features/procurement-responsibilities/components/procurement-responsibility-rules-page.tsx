@@ -196,9 +196,7 @@ function RuleDialog({
                     <DialogTitle>
                         {target ? "编辑采购责任规则" : "新增采购责任规则"}
                     </DialogTitle>
-                    <DialogDescription>
-                        按从具体到通用的层级维护负责人。销售人员只能查看解析结果，不能在销售单上改负责人。
-                    </DialogDescription>
+                    <DialogDescription>更具体的规则优先。</DialogDescription>
                 </DialogHeader>
                 <form
                     className="flex flex-col gap-5"

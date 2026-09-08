@@ -46,6 +46,7 @@ export function RegisterSupplyForSkuDialog({
     fixedSku?: FixedSku
 }) {
     const mutation = useCreateSupplierOfferingMutation()
+    const [logisticsOpen, setLogisticsOpen] = React.useState(false)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const form = useAppForm({
         defaultValues: {
@@ -114,6 +115,23 @@ export function RegisterSupplyForSkuDialog({
         },
     })
 
+    React.useEffect(() => {
+        const unsubscribe = form.store.subscribe(() => {
+            const state = form.store.state
+            if (
+                state.values.dropshipExpress ||
+                state.values.freightAmount ||
+                state.values.serviceFeeAmount ||
+                ["dropshipExpress", "freightAmount", "serviceFeeAmount"].some(
+                    (key) =>
+                        state.fieldMeta[key as keyof typeof state.fieldMeta]
+                            ?.errors.length,
+                )
+            )
+                setLogisticsOpen(true)
+        })
+        return () => unsubscribe.unsubscribe()
+    }, [form])
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -123,8 +141,7 @@ export function RegisterSupplyForSkuDialog({
                 <DialogHeader className="shrink-0">
                     <DialogTitle>添加供给</DialogTitle>
                     <DialogDescription>
-                        供给直接连接公司 SKU
-                        与供应商；供应商订货编码、商业条款和当前可供情况在此维护。
+                        填写供应商的供货价格与条件。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -221,7 +238,7 @@ export function RegisterSupplyForSkuDialog({
                                                 id="supplier-offerings-dialog-register-supplier-sku-code"
                                                 label="供应商 SKU 编码"
                                                 required
-                                                description="用于下单、对账和履约快照"
+                                                description="供应商下单时使用的编码"
                                             />
                                         )}
                                     </form.AppField>
@@ -321,11 +338,22 @@ export function RegisterSupplyForSkuDialog({
                             </div>
 
                             <div className="grid gap-4 lg:grid-cols-2">
-                                <FieldSet className="gap-4 rounded-lg border p-4">
-                                    <FieldLegend variant="label">
-                                        物流与费用
-                                    </FieldLegend>
-                                    <div className="grid gap-3 sm:grid-cols-2">
+                                <details
+                                    className="rounded-lg border p-4"
+                                    open={logisticsOpen}
+                                    onToggle={(event) =>
+                                        setLogisticsOpen(
+                                            event.currentTarget.open,
+                                        )
+                                    }
+                                >
+                                    <summary
+                                        id="supplier-offerings-register-logistics-toggle"
+                                        className="cursor-pointer text-sm font-medium"
+                                    >
+                                        物流与费用（选填）
+                                    </summary>
+                                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                         <form.AppField name="dropshipExpress">
                                             {(field) => (
                                                 <field.TextField
@@ -351,7 +379,7 @@ export function RegisterSupplyForSkuDialog({
                                             )}
                                         </form.AppField>
                                     </div>
-                                </FieldSet>
+                                </details>
 
                                 <FieldSet className="gap-4 rounded-lg border p-4">
                                     <FieldLegend variant="label">

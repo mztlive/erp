@@ -17,7 +17,7 @@ export function VoucherSalesOrderSubmitConfirmDialog({
     pending: boolean
     snapshot: SalesOrderSubmitSnapshot
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void
+    onConfirm: () => void | Promise<void>
 }) {
     return (
         <SalesOrderSubmitConfirmDialog

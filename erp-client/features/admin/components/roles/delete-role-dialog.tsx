@@ -35,7 +35,7 @@ export function DeleteRoleDialog({
                 <AlertDialogHeader>
                     <AlertDialogTitle>删除角色 {role.name}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        删除后该角色及权限策略一并移除，已绑定该角色的账号将失去对应权限。系统内置角色会被后端拒绝删除。
+                        删除后，已绑定账号将失去该角色提供的权限。
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {error ? (

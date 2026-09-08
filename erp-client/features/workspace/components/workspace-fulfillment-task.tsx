@@ -304,7 +304,7 @@ function WorkspaceFulfillmentReassignDialog({
                                     options={options}
                                     placeholder="选择合格人员"
                                     emptyLabel="没有同时满足当前责任约束的人员"
-                                    description="最终提交时会再次校验账号状态、完整操作权限与全部开放任务。"
+                                    description="选择能够接手当前任务的人员。"
                                     loading={candidatesQuery.isPending}
                                     disabled={candidatesQuery.isError}
                                     allowClear={false}

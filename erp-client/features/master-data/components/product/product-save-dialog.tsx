@@ -54,7 +54,7 @@ export function ProductSaveDialog({
                         {effective.isCreate ? "创建商品" : "保存更新"}
                     </DialogTitle>
                     <DialogDescription>
-                        确认本次内容及生效时间，保存后形成新的商品资料版本。
+                        核对修改内容和生效时间。
                     </DialogDescription>
                 </DialogHeader>
                 <form

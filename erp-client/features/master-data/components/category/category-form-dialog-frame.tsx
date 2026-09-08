@@ -121,7 +121,9 @@ export function CategoryFormDialogFrame({
             >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>{description}</DialogDescription>
+                    {description ? (
+                        <DialogDescription>{description}</DialogDescription>
+                    ) : null}
                 </DialogHeader>
                 <DialogScrollBody>
                     {result?.outcome === "blocked" ? (
@@ -206,7 +208,12 @@ export function CategoryFormDialogFrame({
                                 name="changeReason"
                                 children={(field) => (
                                     <field.TextareaField
-                                        label={masterDataCopy.fieldChangeReason}
+                                        label={
+                                            description ===
+                                            masterDataCopy.createDesc
+                                                ? "创建说明"
+                                                : masterDataCopy.fieldChangeReason
+                                        }
                                         id={`${prefix}-change-reason`}
                                         required
                                     />
@@ -223,7 +230,7 @@ export function CategoryFormDialogFrame({
                                         />
                                     }
                                 >
-                                    关闭
+                                    取消
                                 </DialogClose>
                                 <form.AppForm>
                                     <form.SubmitButton

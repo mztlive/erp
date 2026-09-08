@@ -88,14 +88,18 @@ beforeEach(() => {
 describe("product save confirmation", () => {
     function setupSpecs() {
         const { result } = renderHook(() => useProductEditor("product-1"))
+        const confirm = vi.fn()
+        const offerUndo = vi.fn()
         const bindings = () =>
             createProductFormBindings(
                 result.current.form,
                 result.current.form.state.values,
                 false,
                 "礼盒",
+                confirm,
+                offerUndo,
             )
-        return { result, bindings }
+        return { result, bindings, confirm, offerUndo }
     }
     it("preserves SKU edits while typing, reverting and cancelling specification drafts", () => {
         const { result, bindings } = setupSpecs()
@@ -140,8 +144,7 @@ describe("product save confirmation", () => {
         )
     })
     it("requires confirmation for removed SKUs and preserves the table on cancellation", () => {
-        const { result, bindings } = setupSpecs()
-        const confirm = vi.spyOn(window, "confirm").mockReturnValue(false)
+        const { result, bindings, confirm } = setupSpecs()
         const before = structuredClone(result.current.form.state.values.fields)
         act(() =>
             bindings().syncSpecDrafts([createSpecDraft("颜色", ["红色"])]),
@@ -150,22 +153,48 @@ describe("product save confirmation", () => {
             expect(bindings().applySpecDrafts()).toBeNull()
         })
         expect(confirm).toHaveBeenCalledWith(
-            expect.stringContaining("SKU-01 · 默认规格"),
+            expect.objectContaining({
+                details: ["SKU-01 · 默认规格"],
+                confirmLabel: "应用规格",
+            }),
         )
         expect(result.current.form.state.values.fields).toEqual(before)
-        confirm.mockReturnValue(true)
         act(() => {
-            expect(bindings().applySpecDrafts()).toBeNull()
+            confirm.mock.calls[0][0].onConfirm()
         })
         expect(result.current.form.state.values.fields.specs).toEqual([
             { name: "颜色", values: ["红色"] },
         ])
         expect(mocks.revise).not.toHaveBeenCalled()
     })
+    it("fills empty prices directly, restores them on undo and only warns about submitted price fields", () => {
+        const { result, bindings, confirm, offerUndo } = setupSpecs()
+        act(() =>
+            bindings().updateSku(0, { salePrice: "", marketPrice: "900.00" }),
+        )
+        act(() => result.current.form.setFieldValue("batchSalePrice", "600.00"))
+        act(() => bindings().applyBatchReferencePrices())
+        expect(confirm).not.toHaveBeenCalled()
+        expect(result.current.form.state.values.fields.skus[0]).toMatchObject({
+            salePrice: "600.00",
+            marketPrice: "900.00",
+        })
+        act(() => offerUndo.mock.calls[0][0]())
+        expect(result.current.form.state.values.fields.skus[0]).toMatchObject({
+            salePrice: "",
+            marketPrice: "900.00",
+        })
+        act(() => bindings().updateSku(0, { salePrice: "500.00" }))
+        act(() => bindings().applyBatchReferencePrices())
+        expect(confirm.mock.calls[0][0].description).toContain("销售价")
+        expect(confirm.mock.calls[0][0].description).not.toContain("市场价")
+        expect(result.current.form.state.values.fields.skus[0].salePrice).toBe(
+            "500.00",
+        )
+    })
     it("rejects incomplete and duplicate specifications before modifying SKUs", () => {
-        const { result, bindings } = setupSpecs()
+        const { result, bindings, confirm } = setupSpecs()
         const before = structuredClone(result.current.form.state.values.fields)
-        const confirm = vi.spyOn(window, "confirm")
         act(() => bindings().syncSpecDrafts([createSpecDraft("颜色", [""])]))
         expect(bindings().applySpecDrafts()).toContain("补全")
         act(() =>

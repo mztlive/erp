@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input"
 import { SessionFactFields } from "@/features/customer-receivables/components/session-fact-fields"
 import { SessionHeader } from "@/features/customer-receivables/components/session-header"
 import { SessionPool } from "@/features/customer-receivables/components/session-pool"
-import { SessionRemoveLineDialog } from "@/features/customer-receivables/components/session-remove-line-dialog"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
 import { CustomerReceiptSubmitConfirmDialog } from "@/features/customer-receivables/components/customer-receipt-submit-confirm-dialog"
 import { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
@@ -72,8 +71,8 @@ export function AllocationSessionPanel({
         setConfirmOpen,
         leaveConfirmOpen,
         setLeaveConfirmOpen,
-        pendingRemove,
-        setPendingRemove,
+        removedLine,
+        undoRemoveLine,
         issues,
         canSubmit,
         factAmountStr,
@@ -206,6 +205,29 @@ export function AllocationSessionPanel({
                 />
             </div>
 
+            {removedLine ? (
+                <div
+                    role="status"
+                    className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
+                >
+                    <span>已移除 {removedLine.line.label}</span>
+                    <Button
+                        id="customer-receivables-session-undo-remove"
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        onClick={undoRemoveLine}
+                        disabled={
+                            locked ||
+                            !canOperate ||
+                            saveMutation.isPending ||
+                            postMutation.isPending
+                        }
+                    >
+                        撤销
+                    </Button>
+                </div>
+            ) : null}
             <AllocationWorkspace
                 id="customer-receivables-session-allocations"
                 title="本次分配"
@@ -247,7 +269,7 @@ export function AllocationSessionPanel({
                 }
                 addLabel="从池中选择"
                 addDisabledReason="请从左侧同主体池加入目标"
-                onRemoveAllocation={(a) => setPendingRemove(a.lineKey)}
+                onRemoveAllocation={(a) => removeLine(a.lineKey)}
                 columns={[
                     {
                         id: "target",
@@ -391,15 +413,6 @@ export function AllocationSessionPanel({
                 }}
             />
 
-            {/* 移除分配行确认 */}
-            <SessionRemoveLineDialog
-                pendingRemove={pendingRemove}
-                onOpenChange={(open) => {
-                    if (!open) setPendingRemove(null)
-                }}
-                onConfirmRemove={removeLine}
-            />
-
             {isReceipt ? (
                 <CustomerReceiptSubmitConfirmDialog
                     id="customer-receivables-session-receipt-confirm-dialog"
@@ -411,27 +424,33 @@ export function AllocationSessionPanel({
                 />
             ) : (
                 <FormalActionConfirmDialog
+                    actionVariant="default"
                     id="customer-receivables-session-invoice-confirm-dialog"
                     open={confirmOpen}
                     onOpenChange={setConfirmOpen}
                     title="确认登记销项发票并分配"
                     actionLabel="提交"
-                    confirmLabel="确认提交"
+                    confirmLabel="登记销项发票"
                     fromStatus={{ label: "本次草稿", tone: "warning" }}
                     toStatus={{
                         label: "已登记发票",
                         tone: "success",
                     }}
-                    lockedFields={[
-                        "往来主体",
-                        "记录编号（提交后）",
-                        "既有分配行",
-                    ]}
-                    effects={[
-                        "形成发票记录与追加式分配明细",
-                        "同步更新应收开放余额与净分配（系统）",
-                        "未分配余额按系统策略保留并可见",
-                        "重复提交不会重复生成记录",
+                    description="登记后更新应收余额；记录不可编辑，纠错须开红票。"
+                    summary={[
+                        `结算主体：${session.counterpartyPartyName}`,
+                        <span key="amount">
+                            发票金额：
+                            <MoneyValue value={factAmountStr} />
+                        </span>,
+                        <span key="allocations">
+                            分配 {allocations.length} 笔：
+                            <MoneyValue value={proposedAllocated} />
+                        </span>,
+                        <span key="remainder">
+                            未分配：
+                            <MoneyValue value={proposedUnallocated} />
+                        </span>,
                     ]}
                     nextDepartment="财务"
                     pending={postMutation.isPending}

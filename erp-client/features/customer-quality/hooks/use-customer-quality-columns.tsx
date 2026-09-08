@@ -55,7 +55,7 @@ export function useCustomerQualityColumns({
                                         type="button"
                                         variant="link"
                                         size="xs"
-                                        className="h-auto px-0 font-medium"
+                                        className="h-auto px-0 text-sm font-medium"
                                         render={
                                             <Link
                                                 href={customerHref(
@@ -76,7 +76,7 @@ export function useCustomerQualityColumns({
                                         {r.customerName}
                                     </span>
                                 )}
-                                <span className="num text-xs text-muted-foreground">
+                                <span className="num text-[13px] text-muted-foreground">
                                     {r.customerNo}
                                 </span>
                             </div>
@@ -91,26 +91,46 @@ export function useCustomerQualityColumns({
                 id: "tags",
                 header: "经营标签",
                 meta: { label: "经营标签" },
-                cell: ({ row }) => (
-                    <div className="flex flex-wrap gap-1">
-                        {row.original.tags.map((t) => (
-                            <button
-                                id={`customers-quality-detail-row-${toAutomationIdSegment(row.original.customerId)}-tag-${toAutomationIdSegment(t.type)}-${toAutomationIdSegment(t.code)}`}
-                                key={`${t.type}-${t.code}`}
-                                type="button"
-                                className="inline-flex"
-                                onClick={() => onTagClick(t)}
-                                aria-label={`${t.label}：查看规则说明`}
-                            >
-                                <BusinessStatusBadge
-                                    context="list"
-                                    label={t.label}
-                                    tone={t.tone}
-                                />
-                            </button>
-                        ))}
-                    </div>
-                ),
+                cell: ({ row }) => {
+                    const renderTag = (t: BusinessTag) => (
+                        <button
+                            id={`customers-quality-detail-row-${toAutomationIdSegment(row.original.customerId)}-tag-${toAutomationIdSegment(t.type)}-${toAutomationIdSegment(t.code)}`}
+                            key={`${t.type}-${t.code}`}
+                            type="button"
+                            className="inline-flex"
+                            onClick={() => onTagClick(t)}
+                            aria-label={`${t.label}：查看规则说明`}
+                        >
+                            <BusinessStatusBadge
+                                context="list"
+                                label={t.label}
+                                tone={t.tone}
+                            />
+                        </button>
+                    )
+                    return (
+                        <div className="max-w-48 space-y-1 whitespace-normal">
+                            <div className="flex flex-wrap gap-1">
+                                {row.original.tags.slice(0, 2).map(renderTag)}
+                            </div>
+                            {row.original.tags.length > 2 ? (
+                                <details>
+                                    <summary
+                                        id={`customers-quality-${toAutomationIdSegment(row.original.customerId)}-more-tags`}
+                                        className="cursor-pointer text-xs text-muted-foreground"
+                                    >
+                                        另 {row.original.tags.length - 2} 项
+                                    </summary>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                        {row.original.tags
+                                            .slice(2)
+                                            .map(renderTag)}
+                                    </div>
+                                </details>
+                            ) : null}
+                        </div>
+                    )
+                },
             },
             {
                 id: "salesGrossAmount",
@@ -178,24 +198,32 @@ export function useCustomerQualityColumns({
                         )
                     }
                     return (
-                        <div className="text-right text-xs">
-                            <div>
-                                覆盖{" "}
-                                <MoneyValue
-                                    value={r.costCoveredNetRevenue}
-                                    taxBasis="net"
-                                />
-                            </div>
-                            <div className="text-muted-foreground">
-                                未覆盖{" "}
-                                <MoneyValue
-                                    value={r.costUncoveredNetRevenue}
-                                    taxBasis="net"
-                                />
-                            </div>
+                        <div className="space-y-1 text-right text-sm">
                             <div className="num font-medium">
                                 {r.costCoverageRate}
                             </div>
+                            <details>
+                                <summary
+                                    id={`customers-quality-${toAutomationIdSegment(r.customerId)}-coverage-amounts`}
+                                    className="cursor-pointer text-xs text-muted-foreground"
+                                >
+                                    查看金额
+                                </summary>
+                                <div>
+                                    覆盖{" "}
+                                    <MoneyValue
+                                        value={r.costCoveredNetRevenue}
+                                        taxBasis="net"
+                                    />
+                                </div>
+                                <div className="text-muted-foreground">
+                                    未覆盖{" "}
+                                    <MoneyValue
+                                        value={r.costUncoveredNetRevenue}
+                                        taxBasis="net"
+                                    />
+                                </div>
+                            </details>
                         </div>
                     )
                 },
@@ -263,7 +291,7 @@ export function useCustomerQualityColumns({
                     const r = row.original
                     const canW11 = r.allowedDrilldowns.includes("W11")
                     return (
-                        <div className="text-right text-xs">
+                        <div className="space-y-1 text-right text-sm">
                             <div className="flex flex-wrap items-center justify-end gap-1">
                                 <MoneyValue
                                     value={r.receivableOpenGross}
@@ -281,7 +309,7 @@ export function useCustomerQualityColumns({
                                     type="button"
                                     variant="link"
                                     size="xs"
-                                    className="h-auto px-0 text-destructive"
+                                    className="h-auto px-0 text-sm text-destructive"
                                     render={
                                         <Link
                                             href={receivablesHref(
@@ -350,7 +378,7 @@ export function useCustomerQualityColumns({
                 header: "最近业务",
                 meta: { label: "最近业务" },
                 cell: ({ row }) => (
-                    <span className="num text-xs text-muted-foreground">
+                    <span className="num text-[13px] text-muted-foreground">
                         {row.original.latestBusinessAt
                             ? formatDateTime(
                                   row.original.latestBusinessAt,

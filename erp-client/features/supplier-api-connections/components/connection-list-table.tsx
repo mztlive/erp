@@ -61,7 +61,7 @@ export function ConnectionListTable({
             caption="API 供应商连接列表"
             layout="flush"
             enableColumnPinning
-            defaultColumnVisibility={{ owners: false }}
+            defaultColumnVisibility={{ owners: false, nextStep: false }}
             defaultColumnPinning={{
                 left: ["identity"],
                 right: ["actions"],

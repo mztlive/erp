@@ -28,7 +28,9 @@ export function stableNoColumn(): ColumnDef<MasterDataListItem> {
     }
 }
 
-export function nameColumn(): ColumnDef<MasterDataListItem> {
+export function nameColumn({
+    showNumber = false,
+}: { showNumber?: boolean } = {}): ColumnDef<MasterDataListItem> {
     return {
         id: "name",
         accessorKey: "name",
@@ -39,7 +41,14 @@ export function nameColumn(): ColumnDef<MasterDataListItem> {
                 <div className="truncate text-sm font-medium">
                     {row.original.name}
                 </div>
-                {row.original.keyFacts[0] ? (
+                {showNumber ? (
+                    <div
+                        className="num truncate text-xs text-muted-foreground"
+                        title={row.original.stableNo}
+                    >
+                        {row.original.stableNo}
+                    </div>
+                ) : row.original.keyFacts[0] ? (
                     <div className="truncate text-xs text-muted-foreground">
                         {row.original.keyFacts[0].label}：
                         {row.original.keyFacts[0].value}
@@ -76,8 +85,13 @@ export function lifecycleColumn(): ColumnDef<MasterDataListItem> {
                     label={row.original.lifecycleStatusLabel}
                     tone={row.original.lifecycleTone}
                 />
+                {row.original.primaryBlocker ? (
+                    <span className="max-w-48 whitespace-normal text-xs text-destructive">
+                        {row.original.primaryBlocker}
+                    </span>
+                ) : null}
                 {row.original.scheduledLifecycleLabel ? (
-                    <span className="text-tiny text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                         {row.original.scheduledLifecycleLabel}
                     </span>
                 ) : null}
@@ -111,7 +125,7 @@ export function effectivePeriodColumn(): ColumnDef<MasterDataListItem> {
         header: masterDataCopy.colEffective,
         meta: { label: masterDataCopy.colEffective },
         cell: ({ row }) => (
-            <span className="num text-xs">
+            <span className="num text-[13px]">
                 {formatEffectiveRange(
                     row.original.effectiveFrom,
                     row.original.effectiveTo,

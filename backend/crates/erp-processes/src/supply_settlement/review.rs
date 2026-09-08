@@ -24,6 +24,7 @@ use erp_supply::service::supplier_settlement::{
 use erp_workflow::entity::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
+use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
@@ -64,6 +65,13 @@ impl SupplierSettlementProcess {
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         validate_review_submission_snapshot(&statement, &req)?;
+        let auth = crate::adapters::workflow::workflow_auth(
+            self.db.clone(),
+            crate::adapters::identity::shared_rbac_service(self.db.clone()),
+        );
+        let policy_revision = self
+            .authorize_reviewer(&auth, &req.reviewer_user_id, actor.id())
+            .await?;
         let work_item = WorkItem::new(
             WorkItemId::new(next_id()),
             WorkItemData {
@@ -82,7 +90,7 @@ impl SupplierSettlementProcess {
             },
         )?;
         let db = self.db.clone();
-        let client = db.client().clone();
+
         let actor_id = actor.id().to_string();
         let expected_subject_hash = statement.subject_hash.clone();
         let audit_actor = actor.clone();
@@ -90,8 +98,8 @@ impl SupplierSettlementProcess {
         let operation_id_for_tx = operation_id.clone();
         let fingerprint_for_tx = fingerprint.clone();
         let audit_id_for_tx = audit_id.clone();
-        let transaction_result = client
-            .with_transaction(move |session| {
+        let transaction_result = auth
+            .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
                     let mut current = db
                         .supplier_settlement_statements()

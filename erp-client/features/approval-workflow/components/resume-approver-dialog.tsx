@@ -79,7 +79,7 @@ export function ResumeApproverDialog({
                 <DialogHeader>
                     <DialogTitle>恢复当前审批人</DialogTitle>
                     <DialogDescription>
-                        将为原审批人创建新的办理记录和新的待办，不会重开旧任务或重放原决定。
+                        重新通知原审批人处理当前节点，已完成的审批不变。
                     </DialogDescription>
                 </DialogHeader>
                 {conflictMessage ? (

@@ -148,6 +148,27 @@ export function ProductsListPage() {
                         id="master-data-products-list-table"
                         data={state.pageRows}
                         columns={columns}
+                        defaultColumnVisibility={{
+                            stableNo: false,
+                            revisionNo: false,
+                            revisionTiming: false,
+                            skuNames: false,
+                            blocker: false,
+                        }}
+                        defaultColumnOrder={[
+                            "name",
+                            "skuCount",
+                            "skuPriceRange",
+                            "supply",
+                            "lifecycle",
+                            "listing",
+                            "actions",
+                            "stableNo",
+                            "revisionNo",
+                            "revisionTiming",
+                            "skuNames",
+                            "blocker",
+                        ]}
                         getRowId={(row) => row.stableId}
                         rowCount={state.rows.length}
                         pagination={filters.pagination}
@@ -155,7 +176,7 @@ export function ProductsListPage() {
                         loading={state.listQuery.isFetching}
                         layout="flush"
                         defaultColumnPinning={{
-                            left: ["stableNo"],
+                            left: ["name"],
                             right: ["actions"],
                         }}
                         errorState={
@@ -283,6 +304,7 @@ export function ProductsListPage() {
                 }}
                 target={state.disableTarget}
             />
+            {state.listingConfirmationDialog}
         </ListPageFrame>
     )
 }

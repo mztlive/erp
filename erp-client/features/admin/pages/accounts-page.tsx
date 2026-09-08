@@ -125,7 +125,7 @@ export function AccountsPage() {
                 size: 190,
                 header: "创建时间",
                 cell: ({ row }) => (
-                    <span className="num text-xs text-muted-foreground">
+                    <span className="num text-[13px] text-muted-foreground">
                         {formatDateTime(
                             new Date(
                                 row.original.created_at * 1000,
@@ -142,6 +142,11 @@ export function AccountsPage() {
                 header: () => <span className="block text-right">操作</span>,
                 cell: ({ row }) => {
                     const account = row.original
+                    const protectedAccount = account.role_ids.some((id) =>
+                        rolesQuery.data?.some(
+                            (role) => role.id === id && role.system,
+                        ),
+                    )
                     const segment = toAutomationIdSegment(account.id)
                     return (
                         <div className="flex items-center justify-end gap-1">
@@ -179,6 +184,12 @@ export function AccountsPage() {
                             </Button>
                             <Button
                                 id={`governance-admin-accounts-row-${segment}-delete`}
+                                disabled={protectedAccount}
+                                title={
+                                    protectedAccount
+                                        ? "绑定系统角色的账号不可删除"
+                                        : undefined
+                                }
                                 type="button"
                                 size="xs"
                                 variant="ghost"
@@ -197,7 +208,7 @@ export function AccountsPage() {
                 },
             },
         ],
-        [roleNameById],
+        [roleNameById, rolesQuery.data],
     )
 
     const hasSearch = keyword.trim().length > 0

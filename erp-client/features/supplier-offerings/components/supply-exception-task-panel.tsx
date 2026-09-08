@@ -392,19 +392,16 @@ export function SupplyExceptionTaskPanel({
             </Card>
 
             <FormalActionConfirmDialog
+                actionVariant="default"
                 idPrefix="supplier-offerings-exception-complete-confirm"
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
                 actionLabel="确认已核对并完成任务"
                 title="确认完成供应停止核对"
-                description="本动作只完成人工核对责任，不恢复供应商供给，也不恢复任何商品发布。"
+                description="完成核对后，供给与商品发布仍保持暂停。"
                 fromStatus={{ label: "待核对", tone: "warning" }}
                 toStatus={{ label: "任务已完成", tone: "success" }}
-                effects={[
-                    "记录处置证据引用与核对结论",
-                    "完成当前 W21 工作项",
-                    "安全暂停与暂停修订继续生效",
-                ]}
+                effects={["记录核对结论与处置凭证"]}
                 irreversibleEffects={["核对结论进入审计记录"]}
                 pending={completeMutation.isPending}
                 onConfirm={completeTask}

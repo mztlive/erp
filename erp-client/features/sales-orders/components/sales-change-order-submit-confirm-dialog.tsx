@@ -20,10 +20,11 @@ export function SalesChangeOrderSubmitConfirmDialog({
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void
+    onConfirm: () => void | Promise<void>
 }) {
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id="sales-orders-change-submit-confirm"
             open={open}
             onOpenChange={onOpenChange}
@@ -33,24 +34,16 @@ export function SalesChangeOrderSubmitConfirmDialog({
             toStatus={{ label: "审批中", tone: "warning" }}
             description={
                 <div className="space-y-3">
-                    <p>确认后启动审批。任一层驳回后将从第一节点开始下一轮。</p>
+                    <p>审批期间不可修改；驳回后重新提交将从首节点审批。</p>
                     <SalesChangeOrderApprovalArea
                         phase="confirm"
                         approval={approval}
                     />
                 </div>
             }
-            lockedFields={["原销售单当前版本", "改单内容", "已绑定的审批流程"]}
-            effects={[
-                "内容锁定并进入审批",
-                "按已绑定的审批流程办理",
-                "全部节点通过后生成新的销售版本",
-            ]}
-            irreversibleEffects={["形成提交并进入审批"]}
+            effects={["全部节点通过后生成新的销售版本"]}
             pending={pending}
-            onConfirm={() => {
-                void onConfirm()
-            }}
+            onConfirm={onConfirm}
         />
     )
 }

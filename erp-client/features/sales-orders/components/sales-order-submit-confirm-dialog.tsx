@@ -32,7 +32,7 @@ export function SalesOrderSubmitConfirmDialog({
     snapshot: SalesOrderSubmitSnapshot
     description?: string
     onOpenChange: (open: boolean) => void
-    onConfirm: () => void
+    onConfirm: () => void | Promise<void>
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

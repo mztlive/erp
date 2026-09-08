@@ -32,6 +32,7 @@ export function TerminalActionDialog({
         const duplicate = confirm.kind === "CLOSE_DUPLICATE"
         return (
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id={
                     duplicate
                         ? "integration-terminal-action-dialog-close-duplicate"
@@ -43,7 +44,7 @@ export function TerminalActionDialog({
                 }}
                 actionLabel={duplicate ? "关闭重复" : "关闭误派"}
                 title={duplicate ? "确认关闭重复任务" : "确认关闭误派任务"}
-                description="仅关闭当前处理任务；不写业务解决结论，不影响业务记录。"
+                description="关闭当前任务，不改变业务记录。"
                 fromStatus={{ label: item.status.label, tone: "warning" }}
                 toStatus={{ label: "已关闭", tone: "neutral" }}
                 effects={["任务退出待处理队列", "不改变业务记录"]}
@@ -56,6 +57,7 @@ export function TerminalActionDialog({
     if (confirm.kind === "RESOLVE") {
         return (
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id="integration-terminal-action-dialog-resolve"
                 open
                 onOpenChange={(open) => {
@@ -63,7 +65,7 @@ export function TerminalActionDialog({
                 }}
                 actionLabel="标记已解决"
                 title="确认标记已解决"
-                description="处理完成要求证据齐备；系统将按证据策略登记处理凭证。"
+                description="核对处理凭证后完成当前任务。"
                 fromStatus={{ label: item.status.label, tone: "warning" }}
                 toStatus={{ label: "已完成", tone: "success" }}
                 effects={[
@@ -83,6 +85,7 @@ export function TerminalActionDialog({
     const isNoError = confirm.kind === "CONFIRM_NO_ERROR"
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id={
                 isNoError
                     ? "integration-terminal-action-dialog-confirm-no-error"
@@ -94,7 +97,7 @@ export function TerminalActionDialog({
             }}
             actionLabel={isNoError ? "确认无误" : "确认有效差异"}
             title={isNoError ? "确认差异无误" : "确认差异为有效差异"}
-            description="按已选注册原因追加对账处理记录；本操作不涉及任务关闭。"
+            description="登记本次对账结论，不改变两侧业务数据。"
             fromStatus={{ label: item.status.label, tone: "warning" }}
             toStatus={{ label: "已确认", tone: "success" }}
             effects={["按注册原因追加对账处理记录", "不改变两侧业务数据"]}

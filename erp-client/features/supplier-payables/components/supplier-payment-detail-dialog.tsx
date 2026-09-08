@@ -55,9 +55,7 @@ export function SupplierPaymentDetailDialog({
                             />
                         ) : null}
                     </div>
-                    <DialogDescription>
-                        查看付款记录、收款信息、银行回单与核销明细。
-                    </DialogDescription>
+                    <DialogDescription>付款记录与核销明细。</DialogDescription>
                 </DialogHeader>
                 <div className="flex min-h-0 flex-1 flex-col border-t">
                     {isPending ? (
@@ -99,7 +97,7 @@ export function SupplierPaymentDetailDialog({
                         variant="outline"
                         onClick={() => onOpenChange(false)}
                     >
-                        取消
+                        关闭
                     </Button>
                 </DialogFooter>
             </DialogContent>

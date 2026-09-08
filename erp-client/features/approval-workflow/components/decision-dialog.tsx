@@ -137,8 +137,8 @@ export function DecisionDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {defaultDecision === "REJECT"
-                            ? "请核对当前任务。确认后将驳回，并从第一节点开始下一轮审批。"
-                            : "请核对单据、金额、当前节点和结果影响。只有确认后才会提交审批决定。"}
+                            ? "驳回后，重新提交将从首节点审批。"
+                            : "请核对本次审批结果。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -203,7 +203,7 @@ export function DecisionDialog({
                                 label={
                                     form.state.values.decision === "REJECT"
                                         ? "驳回原因"
-                                        : "原因（可选）"
+                                        : "审批意见（可选）"
                                 }
                                 required={
                                     form.state.values.decision === "REJECT"

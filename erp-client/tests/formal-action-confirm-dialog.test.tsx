@@ -1,9 +1,42 @@
-import { render } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import {
+    cleanup,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+} from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { FormalActionConfirmDialog } from "@/components/business"
 
+afterEach(cleanup)
+
 describe("FormalActionConfirmDialog", () => {
+    it("keeps normal submission styling independent of warning text and preserves failure", async () => {
+        const close = vi.fn()
+        const submit = vi.fn().mockRejectedValue(new Error("版本已变化"))
+        render(
+            <FormalActionConfirmDialog
+                open
+                onOpenChange={close}
+                actionLabel="提交审批"
+                confirmLabel="提交审批"
+                actionVariant="default"
+                summary={["采购单 CG-001", "金额 120.00"]}
+                irreversibleEffects={["审批通过后更新库存"]}
+                fromStatus={{ label: "草稿" }}
+                toStatus={{ label: "审批中" }}
+                onConfirm={submit}
+            />,
+        )
+        expect(screen.getByText("核对信息")).toBeTruthy()
+        expect(screen.queryByText("提交后锁定字段")).toBeNull()
+        const button = screen.getByRole("button", { name: "提交审批" })
+        expect(button.className).not.toContain("bg-destructive")
+        fireEvent.click(button)
+        await waitFor(() => expect(screen.getByText("版本已变化")).toBeTruthy())
+        expect(close).not.toHaveBeenCalledWith(false)
+    })
     it("uses a block container when the description contains structured content", () => {
         render(
             <FormalActionConfirmDialog

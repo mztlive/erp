@@ -183,6 +183,12 @@ export function BatchListView({
                         id="operations-import-batches-table"
                         data={[...(data?.rows ?? [])]}
                         columns={columns}
+                        defaultColumnVisibility={{
+                            environment: false,
+                            rule: false,
+                            stage: false,
+                        }}
+                        defaultColumnPinning={{ left: ["batchNo"] }}
                         getRowId={(row) => row.batchId}
                         rowCount={data?.totalCount ?? 0}
                         pagination={pagination}

@@ -3610,6 +3610,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/supplier-settlement-statements/{id}/reviewer-options",
+                description: "提交供应商结算复核",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/supplier-settlement-statements",
                 description: "查询供应商结算单列表",
                 permission: {

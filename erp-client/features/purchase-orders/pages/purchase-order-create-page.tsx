@@ -22,16 +22,6 @@ import {
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast"
@@ -104,12 +94,13 @@ export function PurchaseOrderCreatePage({
         workItemId: initialWorkItemId || undefined,
     })
     const createMutation = useCreateFromSourcingMutation()
+    const [submissionUnknown, setSubmissionUnknown] = React.useState(false)
+    const retrySubmissionRef = React.useRef<(() => Promise<void>) | null>(null)
     const [previewOpen, setPreviewOpen] = React.useState(false)
     const [sourcePaper, setSourcePaper] = React.useState<{
         id: string
         title: string
     } | null>(null)
-    const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [actionError, setActionError] = React.useState<{
         title: string
         description: string
@@ -118,7 +109,6 @@ export function PurchaseOrderCreatePage({
         fingerprint: string
         idempotencyKey: string
     } | null>(null)
-    const submittingFromConfirmRef = React.useRef(false)
 
     const workspace = React.useMemo(
         () => buildSourcingWorkspace(basesQuery.data ?? []),
@@ -174,7 +164,7 @@ export function PurchaseOrderCreatePage({
                     idempotencyKey: `create-sourcing:${order.salesOrderId}:${crypto.randomUUID()}`,
                 }
             }
-            const result = await createMutation.mutateAsync({
+            const input = {
                 workItemId: order.workItemId,
                 salesOrderId: order.salesOrderId,
                 lines: selected.map(({ line, option }) => ({
@@ -186,55 +176,68 @@ export function PurchaseOrderCreatePage({
                     expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
                 idempotencyKey: createIntentRef.current.idempotencyKey,
-            })
-            if (result.status === "succeeded") {
-                createIntentRef.current = null
-                const count = result.data.orders.length
-                const stockCount = result.data.stockReservations.length
-                const taskCompleted = result.data.workItemStatus === "COMPLETED"
-                toast.add({
-                    title: taskCompleted
-                        ? "供给分配已完成"
-                        : "本次供给分配已保存",
-                    description: !taskCompleted
-                        ? "当前责任范围仍有未分配数量，任务继续保留在工作台，请完成剩余供给分配。"
-                        : count === 0
-                          ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
-                          : stockCount > 0
-                            ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
-                            : count > 1
-                              ? `已将缺口拆成 ${count} 张采购单并提交审批。`
-                              : "已创建 1 张采购单并提交审批。",
-                    type: "success",
-                    timeout: 4000,
-                })
-                if (embedded && order.workItemId && taskCompleted) {
-                    onTaskCompleted?.(order.workItemId)
-                } else if (taskCompleted) {
-                    router.replace("/procurement/orders")
-                } else {
-                    await basesQuery.refetch()
-                }
-                return
             }
-            if (result.status === "failed") {
-                createIntentRef.current = null
-                if (result.code === "CONFLICT") {
-                    await basesQuery.refetch()
+            const submitPrepared = async () => {
+                const result = await createMutation.mutateAsync(input)
+
+                if (result.status === "succeeded") {
+                    setSubmissionUnknown(false)
+                    retrySubmissionRef.current = null
+                    setPreviewOpen(false)
+                    createIntentRef.current = null
+                    const count = result.data.orders.length
+                    const stockCount = result.data.stockReservations.length
+                    const taskCompleted =
+                        result.data.workItemStatus === "COMPLETED"
+                    toast.add({
+                        title: taskCompleted
+                            ? "供给分配已完成"
+                            : "本次供给分配已保存",
+                        description: !taskCompleted
+                            ? "当前责任范围仍有未分配数量，任务继续保留在工作台，请完成剩余供给分配。"
+                            : count === 0
+                              ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
+                              : stockCount > 0
+                                ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
+                                : count > 1
+                                  ? `已将缺口拆成 ${count} 张采购单并提交审批。`
+                                  : "已创建 1 张采购单并提交审批。",
+                        type: "success",
+                        timeout: 4000,
+                    })
+                    if (embedded && order.workItemId && taskCompleted) {
+                        onTaskCompleted?.(order.workItemId)
+                    } else if (taskCompleted) {
+                        router.replace("/procurement/orders")
+                    } else {
+                        await basesQuery.refetch()
+                    }
+                    return
                 }
+                if (result.status === "failed") {
+                    setSubmissionUnknown(false)
+                    retrySubmissionRef.current = null
+                    createIntentRef.current = null
+                    if (result.code === "CONFLICT") {
+                        await basesQuery.refetch()
+                    }
+                    setActionError({
+                        title: "供给分配失败",
+                        description:
+                            result.code === "CONFLICT"
+                                ? `${result.message} 创建依据已刷新，请核对后重试。`
+                                : result.message,
+                    })
+                    return
+                }
+                setSubmissionUnknown(true)
+                retrySubmissionRef.current = submitPrepared
                 setActionError({
-                    title: "供给分配失败",
-                    description:
-                        result.code === "CONFLICT"
-                            ? `${result.message} 创建依据已刷新，请核对后重试。`
-                            : result.message,
+                    title: "供给分配结果待确认",
+                    description: `${result.message} 请保留当前页面并使用同一操作重试，系统已记录本次提交，刷新后查看结果。`,
                 })
-                return
             }
-            setActionError({
-                title: "供给分配结果待确认",
-                description: `${result.message} 请保留当前页面并使用同一操作重试，系统已记录本次提交，刷新后查看结果。`,
-            })
+            await submitPrepared()
         },
     })
 
@@ -817,57 +820,16 @@ export function PurchaseOrderCreatePage({
                 stockAllocations={stockPreviews}
                 sourceOrder={selectedOrder}
                 creating={createMutation.isPending}
+                unresolved={submissionUnknown}
                 actionError={actionError}
+                description={confirmationDescription}
                 onOpenChange={setPreviewOpen}
                 onConfirm={() => {
-                    setPreviewOpen(false)
-                    setConfirmOpen(true)
+                    if (retrySubmissionRef.current)
+                        void retrySubmissionRef.current()
+                    else void form.handleSubmit()
                 }}
             />
-
-            <AlertDialog
-                open={confirmOpen}
-                onOpenChange={(open) => {
-                    setConfirmOpen(open)
-                    if (open) {
-                        submittingFromConfirmRef.current = false
-                        return
-                    }
-                    if (!submittingFromConfirmRef.current) {
-                        setPreviewOpen(true)
-                    }
-                }}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>确认供给分配</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {confirmationDescription}
-                            库存和采购会在同一次提交中生效。
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel
-                            id="procurement-orders-create-confirm-cancel"
-                            disabled={createMutation.isPending}
-                        >
-                            返回预览
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            id="procurement-orders-create-confirm"
-                            data-testid="purchase-create-confirm"
-                            disabled={createMutation.isPending}
-                            onClick={() => {
-                                submittingFromConfirmRef.current = true
-                                setConfirmOpen(false)
-                                void form.handleSubmit()
-                            }}
-                        >
-                            {createMutation.isPending ? "提交中…" : "确认提交"}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </PageScaffold>
     )
 }

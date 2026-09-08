@@ -124,6 +124,10 @@ export function SuppliersListPage() {
                         id="master-data-suppliers-list-table"
                         data={state.pageRows}
                         columns={columns}
+                        defaultColumnVisibility={{
+                            revisionNo: false,
+                            blocker: false,
+                        }}
                         getRowId={(row) => row.stableId}
                         rowCount={state.rows.length}
                         pagination={filters.pagination}

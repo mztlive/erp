@@ -142,8 +142,8 @@ export function AccountFormDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {isEdit
-                            ? "修改姓名、角色或密码；密码留空表示不修改。"
-                            : "创建后台管理员账号并绑定角色；账号创建后不可修改。"}
+                            ? "修改账号资料与角色权限。"
+                            : "登录账号创建后不可修改。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form

@@ -278,7 +278,7 @@ export function buildProfitLossColumns(options: {
             header: "最近成本发生",
             meta: { label: "最近成本发生" },
             cell: ({ row }) => (
-                <span className="num text-xs text-muted-foreground">
+                <span className="num text-[13px] text-muted-foreground">
                     {formatDateTime(row.original.latestCostOccurredAt, "full")}
                 </span>
             ),

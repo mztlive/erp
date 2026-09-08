@@ -22,6 +22,8 @@ pub struct UpdateRoleParams {
 /// 角色响应项。
 #[derive(Debug, Serialize)]
 pub struct RoleItem {
+    /// 系统角色不可由普通管理入口修改或删除。
+    pub system: bool,
     pub id: String,
     pub name: String,
     pub permissions: Vec<Permission>,
@@ -35,6 +37,7 @@ impl RoleItem {
     /// 返回不暴露内部持久化字段的角色响应项。
     pub fn from_role(role: Role, permissions: Vec<Permission>) -> Self {
         Self {
+            system: role.system || role.base.id == crate::ROOT_ROLE_ID,
             id: role.base.id,
             name: role.name,
             permissions,
@@ -70,9 +73,32 @@ mod tests {
         assert!(payload.validate().is_err());
     }
 
+    /// 系统角色及保留根角色身份均向客户端声明删除保护。
+    #[test]
+    fn role_item_exposes_builtin_protection() {
+        use crate::entity::role::{Role, RoleData};
+        for (id, system, protected) in [
+            ("role-custom", false, false),
+            ("role-built-in", true, true),
+            (crate::ROOT_ROLE_ID, false, true),
+        ] {
+            let role = Role::new(
+                id.to_string(),
+                RoleData {
+                    name: "测试角色".into(),
+                    description: None,
+                    system,
+                },
+            )
+            .unwrap();
+            assert_eq!(RoleItem::from_role(role, vec![]).system, protected);
+        }
+    }
+
     #[test]
     fn role_item_keeps_existing_json_contract() {
         let item = RoleItem {
+            system: false,
             id: "role-a".to_string(),
             name: "管理员".to_string(),
             permissions: vec![Permission::parse("admin:list").unwrap()],
@@ -82,6 +108,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(item).unwrap(),
             serde_json::json!({
+                "system": false,
                 "id": "role-a",
                 "name": "管理员",
                 "permissions": ["admin:list"],

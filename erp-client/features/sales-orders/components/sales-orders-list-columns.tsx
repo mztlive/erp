@@ -43,7 +43,7 @@ export function buildSalesOrdersListColumns(
                                 id={`sales-orders-list-row-${toAutomationIdSegment(row.original.id)}-open`}
                                 variant="link"
                                 size="xs"
-                                className="num h-auto min-h-0 px-0 text-[13px] leading-5 font-semibold text-foreground"
+                                className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
                                 aria-label={`查看销售单 ${row.original.documentNumber}`}
                                 render={
                                     <Link
@@ -60,7 +60,8 @@ export function buildSalesOrdersListColumns(
                             />
                         </div>
                         <div className="max-w-[14rem] truncate text-xs text-muted-foreground">
-                            {row.original.customerName}
+                            {row.original.customerName} ·{" "}
+                            {NATURE_LABEL[row.original.nature]}
                         </div>
                     </div>
                 </div>
@@ -100,7 +101,7 @@ export function buildSalesOrdersListColumns(
                                 type="button"
                                 variant="link"
                                 size="xs"
-                                className="num h-auto min-h-0 px-0 text-[13px] leading-5 font-semibold text-foreground"
+                                className="num h-auto min-h-0 px-0 text-sm leading-5 font-semibold text-foreground"
                                 disabled={downloading}
                                 aria-label={`下载合同 ${contractNo || order.contractId}`}
                                 onClick={() => {
@@ -140,7 +141,7 @@ export function buildSalesOrdersListColumns(
             cell: ({ row }) => (
                 <StatusTrackSummary
                     variant="inline"
-                    className="flex-nowrap gap-x-2 gap-y-0"
+                    className="max-w-60 flex-wrap gap-x-2 gap-y-1"
                     tracks={[
                         {
                             id: "fulfillment",

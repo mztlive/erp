@@ -12,7 +12,10 @@ import {
     PanelRightIcon,
     PinOffIcon,
 } from "lucide-react"
-import type { Table as TanStackTable } from "@tanstack/react-table"
+import type {
+    Table as TanStackTable,
+    VisibilityState,
+} from "@tanstack/react-table"
 
 import { OptionCombobox } from "@/components/business/option-combobox"
 import type { DataTableLayout } from "@/components/business/data-table-layout"
@@ -29,9 +32,11 @@ import { cn } from "@/lib/utils"
 function DataTableViewOptions<TData>({
     table,
     idPrefix,
+    defaultColumnVisibility = {},
 }: {
     table: TanStackTable<TData>
     idPrefix?: string
+    defaultColumnVisibility?: VisibilityState
 }) {
     const columns = table
         .getAllLeafColumns()
@@ -54,14 +59,17 @@ function DataTableViewOptions<TData>({
                         }
                         type="button"
                         variant="ghost"
-                        className="max-sm:hidden"
+                        size="sm"
                     />
                 }
             >
                 <Columns3Icon data-icon="inline-start" aria-hidden="true" />
                 列设置
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto min-w-72">
+            <PopoverContent
+                align="end"
+                className="w-auto min-w-72 max-w-[calc(100vw-2rem)] max-h-[min(36rem,80vh,var(--available-height))] overflow-y-auto"
+            >
                 <div className="space-y-3">
                     <div>
                         <div className="text-sm font-medium">列设置</div>
@@ -69,10 +77,37 @@ function DataTableViewOptions<TData>({
                             调整顺序、显隐和固定位置
                         </p>
                     </div>
+                    <div className="flex gap-2">
+                        <Button
+                            id={`${idPrefix ?? "data-table"}-columns-show-all`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.toggleAllColumnsVisible(true)}
+                        >
+                            显示全部列
+                        </Button>
+                        <Button
+                            id={`${idPrefix ?? "data-table"}-columns-reset`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                                table.setColumnVisibility(
+                                    defaultColumnVisibility,
+                                )
+                            }
+                        >
+                            恢复默认列
+                        </Button>
+                    </div>
                     <div className="space-y-1">
                         {columns.map((column, index) => {
                             const label =
-                                column.columnDef.meta?.label ?? column.id
+                                column.columnDef.meta?.label ??
+                                (typeof column.columnDef.header === "string"
+                                    ? column.columnDef.header
+                                    : column.id)
                             const pinned = column.getIsPinned()
 
                             return (
@@ -82,6 +117,13 @@ function DataTableViewOptions<TData>({
                                 >
                                     <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
                                         <Checkbox
+                                            nativeButton
+                                            render={
+                                                <button
+                                                    type="button"
+                                                    aria-label={label}
+                                                />
+                                            }
                                             id={
                                                 idPrefix
                                                     ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-visibility`

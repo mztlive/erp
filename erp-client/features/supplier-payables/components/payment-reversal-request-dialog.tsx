@@ -1,39 +1,11 @@
 "use client"
 
-import { z } from "zod"
-
-import { MoneyValue } from "@/components/business"
-import { useAppForm } from "@/components/form"
-import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+import { FinancialRequestDialog } from "@/components/business/financial-request-dialog"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { PaymentReversalApprovalArea } from "@/features/supplier-payables/components/payment-reversal-approval-area"
 
-const reversalReasonSchema = z.object({
-    reason: z.string().trim().min(1, "请填写原因说明"),
-})
-
-/**
- * 付款冲正草稿登记。
- *
- * 原因走 `useAppForm + Zod`；创建后只读展示服务端绑定，不得选择流程或审批人。
- */
-export function PaymentReversalRequestDialog({
-    open,
-    pending,
-    sourceLabel,
-    amount,
-    approval,
-    onOpenChange,
-    onSubmit,
-}: {
+/** Collect the reason and submit the original full-amount intent once. */
+export function PaymentReversalRequestDialog({ approval, ...props }: {
     open: boolean
     pending: boolean
     sourceLabel?: string
@@ -42,83 +14,5 @@ export function PaymentReversalRequestDialog({
     onOpenChange: (open: boolean) => void
     onSubmit: (reason: string) => void | Promise<void>
 }) {
-    const form = useAppForm({
-        defaultValues: {
-            reason: "",
-        },
-        validators: {
-            onChange: reversalReasonSchema,
-        },
-        onSubmit: async ({ value }) => {
-            await onSubmit(value.reason.trim())
-        },
-    })
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId="supplier-payables-reversal-request-close">
-                <DialogHeader>
-                    <DialogTitle>发起付款冲正</DialogTitle>
-                    <DialogDescription>
-                        不编辑、不删除已确认记录与分配；仅追加冲正记录。原单{" "}
-                        {sourceLabel}。冲正表示撤销本次付款记录。
-                    </DialogDescription>
-                </DialogHeader>
-                <form
-                    className="space-y-3"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit()
-                    }}
-                >
-                    <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                        将按原单全额追加冲正
-                        {amount ? (
-                            <>
-                                （
-                                <MoneyValue value={amount} />）
-                            </>
-                        ) : null}
-                        ，原记录保留。
-                    </p>
-                    <form.AppField
-                        name="reason"
-                        children={(field) => (
-                            <field.TextareaField
-                                id="supplier-payables-reversal-request-reason"
-                                label="原因说明"
-                                required
-                                placeholder="业务依据与说明"
-                                disabled={pending}
-                            />
-                        )}
-                    />
-                    {approval ? (
-                        <PaymentReversalApprovalArea
-                            phase="draft"
-                            approval={approval}
-                        />
-                    ) : null}
-                    <DialogFooter>
-                        <Button
-                            id="supplier-payables-reversal-request-cancel"
-                            type="button"
-                            variant="outline"
-                            onClick={() => onOpenChange(false)}
-                            disabled={pending}
-                        >
-                            取消
-                        </Button>
-                        <form.AppForm>
-                            <form.SubmitButton
-                                id="supplier-payables-reversal-request-submit"
-                                label="下一步"
-                                disabled={pending}
-                            />
-                        </form.AppForm>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    )
+    return <FinancialRequestDialog {...props} id="supplier-payables-reversal-request" title="付款冲正" description="审批通过后冲减原付款记录，原记录保留。" submitLabel="提交冲正审批" approvalContent={approval ? <PaymentReversalApprovalArea phase="draft" approval={approval} /> : undefined} />
 }

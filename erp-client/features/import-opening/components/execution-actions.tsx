@@ -72,7 +72,7 @@ function CancelPendingDialog({
                 <DialogHeader>
                     <DialogTitle>取消尚未应用项</DialogTitle>
                     <DialogDescription>
-                        系统只停止本批尚未应用的项；已成功、已跳过及已形成的业务事实保持不变。
+                        仅取消本批尚未应用的项，已成功和已跳过的结果保留。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -212,6 +212,7 @@ export function ImportExecutionActions({
 
             {confirming === "START_APPLY" ? (
                 <FormalActionConfirmDialog
+                    actionVariant="default"
                     id="operations-import-batch-detail-execution-start-apply"
                     open
                     onOpenChange={(open) => {
@@ -219,7 +220,7 @@ export function ImportExecutionActions({
                     }}
                     title="提交导入应用"
                     actionLabel="确认提交应用"
-                    description="系统将再次核验批次和试算版本，随后把批次推进为导入中并启动后台任务。"
+                    description="提交后开始导入当前待应用项。"
                     fromStatus={{ label: "待应用", tone: "success" }}
                     toStatus={{ label: "导入中", tone: "info" }}
                     effects={["启动关联后台任务", "只处理当前仍待应用的项"]}
@@ -231,6 +232,7 @@ export function ImportExecutionActions({
 
             {confirming === "RETRY_FAILED" ? (
                 <FormalActionConfirmDialog
+                    actionVariant="default"
                     id="operations-import-batch-detail-execution-retry-failed"
                     open
                     onOpenChange={(open) => {
@@ -238,14 +240,13 @@ export function ImportExecutionActions({
                     }}
                     title="重新准备失败项"
                     actionLabel="确认重新准备"
-                    description="系统只把上一轮失败行重新准备为待应用，不会在本动作中启动后台任务。"
+                    description="仅准备上轮失败项；准备完成后仍需点击“提交应用”。"
                     fromStatus={{ label: "失败结果", tone: "destructive" }}
                     toStatus={{ label: "待应用", tone: "success" }}
                     effects={[
                         "保留已成功与已跳过结果",
                         "仅清理失败行的上次失败诊断",
                     ]}
-                    irreversibleEffects={["准备完成后仍需再次点击“提交应用”"]}
                     pending={isExecuting}
                     onConfirm={() => execute("RETRY_FAILED")}
                 />

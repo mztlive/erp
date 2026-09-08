@@ -71,6 +71,7 @@ export function PurchaseOrderDetailDialogs({
             />
 
             <FormalActionConfirmDialog
+                actionVariant="destructive"
                 idPrefix="procurement-orders-detail-void-confirm"
                 open={voidConfirmOpen}
                 onOpenChange={onVoidConfirmOpenChange}
@@ -79,7 +80,7 @@ export function PurchaseOrderDetailDialogs({
                 confirmLabel="确认作废"
                 fromStatus={{ label: "草稿", tone: "neutral" }}
                 toStatus={{ label: "已作废", tone: "destructive" }}
-                lockedFields={[
+                summary={[
                     `采购草稿 ${order.identity.draftLabel ?? order.identity.purchaseOrderId}`,
                     `来源销售单 ${order.header.salesOrderNo}`,
                 ]}
@@ -93,6 +94,7 @@ export function PurchaseOrderDetailDialogs({
             />
 
             <FormalActionConfirmDialog
+                actionVariant="default"
                 idPrefix="procurement-orders-detail-change-confirm"
                 open={changeConfirmOpen}
                 onOpenChange={onChangeConfirmOpenChange}
@@ -104,7 +106,7 @@ export function PurchaseOrderDetailDialogs({
                     tone: order.identity.statusTone,
                 }}
                 toStatus={{ label: "变更工作副本", tone: "warning" }}
-                lockedFields={[
+                summary={[
                     `基准版本 v${order.identity.revisionNo ?? 1}`,
                     "已发生入库/发货/付款/发票记录不回退",
                 ]}

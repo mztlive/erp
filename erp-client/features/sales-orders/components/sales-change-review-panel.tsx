@@ -103,6 +103,7 @@ export function SalesChangeReviewPanel({
                 </Button>
             </div>
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id="sales-orders-change-review-approve-dialog"
                 open={actions.approveOpen}
                 onOpenChange={actions.setApproveOpen}
@@ -128,6 +129,7 @@ export function SalesChangeReviewPanel({
                 onConfirm={() => actions.submitDecision("APPROVE")}
             />
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id="sales-orders-change-review-reject-dialog"
                 open={actions.rejectOpen}
                 onOpenChange={actions.setRejectOpen}

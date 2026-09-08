@@ -56,6 +56,11 @@ export function DictionaryListTable({
             id={tableId}
             data={pageRows}
             columns={columns}
+            defaultColumnVisibility={{
+                revisionNo: false,
+                revisionTiming: false,
+                blocker: false,
+            }}
             getRowId={(row) => row.stableId}
             rowCount={rows.length}
             pagination={pagination}

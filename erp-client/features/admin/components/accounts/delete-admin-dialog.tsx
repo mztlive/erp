@@ -37,7 +37,7 @@ export function DeleteAdminDialog({
                         删除账号 {account.account}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                        删除后该账号无法登录后台。系统内置账号会被后端拒绝删除；操作会记录审计日志。
+                        删除后，该账号将无法登录后台。
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {error ? (

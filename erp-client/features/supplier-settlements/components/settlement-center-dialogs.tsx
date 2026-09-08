@@ -1,5 +1,8 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
+import { fetchSettlementReviewerOptions } from "../api/reviewer-options"
+
 import {
     FormalActionConfirmDialog,
     OptionCombobox,
@@ -48,13 +51,13 @@ function SettlementResolveDialog({
                 <DialogHeader>
                     <DialogTitle>登记差异处理结论</DialogTitle>
                     <DialogDescription>
-                        财务经办追加式结论；不修改左右证据原值或历史成本。结论一经登记不可撤回，将写入审计并改变待确认成本差额。
+                        登记后将更新待确认成本差额，结论不可撤回；原始证据和历史成本保留。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1.5">
                         <Label htmlFor="supplier-settlements-resolve-resolution">
-                            受控结论
+                            处理结论
                         </Label>
                         <OptionCombobox
                             id="supplier-settlements-resolve-resolution"
@@ -78,7 +81,7 @@ function SettlementResolveDialog({
                     </div>
                     <div className="space-y-1.5">
                         <Label htmlFor="supplier-settlements-resolve-reason">
-                            原因码
+                            处理原因
                         </Label>
                         <OptionCombobox
                             id="supplier-settlements-resolve-reason"
@@ -163,12 +166,12 @@ function SettlementEvidenceDialog({
                 <DialogHeader>
                     <DialogTitle>追加采购协同证据</DialogTitle>
                     <DialogDescription>
-                        只追加供应商证据或业务意见和审计，不改变差异结论、试算金额或成本基线。
+                        补充供应商证据或业务说明，不修改结论和金额。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-evidence-reference">
-                        正式证据引用
+                        凭证编号或链接
                     </Label>
                     <Input
                         id="supplier-settlements-evidence-reference"
@@ -244,7 +247,7 @@ function SettlementRejectDialog({
                 </DialogHeader>
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-reject-reason">
-                        原因码
+                        处理原因
                     </Label>
                     <OptionCombobox
                         id="supplier-settlements-reject-reason"
@@ -313,13 +316,23 @@ function SettlementSubmitReviewDialog({
     pending: boolean
     onConfirm: () => Promise<void>
 }) {
+    const reviewers = useQuery({
+        queryKey: ["supplier-settlement-reviewer-options", statement.id],
+        queryFn: () => fetchSettlementReviewerOptions(statement.id),
+        enabled: open,
+        staleTime: 0,
+    })
+    const selectedReviewer = reviewers.data?.find(
+        (person) => person.user_id === reviewerUserId,
+    )
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id="supplier-settlements-dialog-submit-review"
             open={open}
             onOpenChange={onOpenChange}
             title="提交复核"
-            description="将冻结来源更新时间、明细与差异结论，并创建唯一复核待办。"
+            description="提交后交由所选人员复核，明细与差异结论不可再修改。"
             actionLabel="提交复核"
             confirmLabel="确认提交"
             fromStatus={{
@@ -327,31 +340,45 @@ function SettlementSubmitReviewDialog({
                 tone: statement.statusTone,
             }}
             toStatus={{ label: "待复核", tone: "warning" }}
-            lockedFields={[
-                statement.statementNo,
-                "来源数据、明细与差异结论已锁定",
-            ]}
-            effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
+            summary={[statement.statementNo]}
+
             formContent={
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-submit-reviewer-input">
-                        复核人用户 ID
+                        复核人
                     </Label>
-                    <Input
+                    <OptionCombobox
                         id="supplier-settlements-submit-reviewer-input"
-                        value={reviewerUserId}
-                        disabled={pending}
-                        onChange={(event) =>
-                            onReviewerUserIdChange(event.target.value)
+                        value={reviewerUserId || null}
+                        disabled={pending || reviewers.isError}
+                        loading={reviewers.isFetching}
+                        onValueChange={(value) =>
+                            onReviewerUserIdChange(value ?? "")
                         }
-                        placeholder="请输入明确的复核人用户 ID"
+                        options={(reviewers.data ?? []).map((person) => ({
+                            value: person.user_id,
+                            label: `${person.display_name}（${person.account}）`,
+                        }))}
+                        placeholder="搜索姓名或账号"
+                        emptyLabel="暂无可复核人员，请联系管理员配置财务权限"
                     />
-                    <p className="text-xs text-muted-foreground">
-                        系统将把复核待办直接分派给该用户。
-                    </p>
+                    {reviewers.isError ? (
+                        <p role="alert" className="text-xs text-destructive">
+                            人员加载失败。
+                            <Button
+                                id="supplier-settlements-reviewers-retry"
+                                variant="link"
+                                onClick={() => void reviewers.refetch()}
+                            >
+                                重试
+                            </Button>
+                        </p>
+                    ) : null}
                 </div>
             }
-            confirmDisabled={!reviewerUserId.trim()}
+            confirmDisabled={
+                !selectedReviewer || reviewers.isFetching || reviewers.isError
+            }
             pending={pending}
             onConfirm={onConfirm}
         />
@@ -375,11 +402,12 @@ function SettlementConfirmSettlementDialog({
 }) {
     return (
         <FormalActionConfirmDialog
+            actionVariant="default"
             id="supplier-settlements-dialog-confirm-settlement"
             open={open}
             onOpenChange={onOpenChange}
-            title="确认结算（不可逆）"
-            description="同一次提交追加成本差额、形成唯一应付并锁定处理结果。经办人不可确认本单。"
+            title="确认结算"
+            description="确认后更新成本差额并生成应付，结果不可撤回；经办人不能确认本单。"
             actionLabel="确认结算"
             confirmLabel="确认结算"
             fromStatus={{
@@ -387,18 +415,14 @@ function SettlementConfirmSettlementDialog({
                 tone: statement.statusTone,
             }}
             toStatus={{ label: "已确认", tone: "success" }}
-            lockedFields={[
+            summary={[
                 statement.statementNo,
                 `应付金额预览 ${statement.supplierAmountGross ?? statement.erpAmountGross}`,
                 `成本差额预览 ${totals.pendingCostDeltaGross ?? "0.00"}`,
                 `经办 ${statement.preparedBy?.displayName ?? "—"}`,
             ]}
-            effects={[
-                "追加成本差额记录",
-                "形成唯一供应商结算应付",
-                "锁定处理结果，不可撤回确认",
-            ]}
-            irreversibleEffects={["确认后付款/进项发票/核销进入供应商往来"]}
+            effects={["追加成本差额记录", "生成供应商应付"]}
+
             nextDepartment="供应商往来"
             pending={pending}
             onConfirm={onConfirm}

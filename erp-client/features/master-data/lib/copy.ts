@@ -132,16 +132,14 @@ export const masterDataCopy = {
     previewHistory: "资料变更历史",
     previewActionBlocked: "当前无法进行的操作",
     createTitle: (resourceLabel: string) => `新建${resourceLabel}`,
-    createDesc:
-        "保存后生成资料编号和第一版内容。以后如需修改，请用「更新资料」，历史记录会保留。",
+    createDesc: "",
     createSuccessTitle: "已新建",
     createSuccessDesc: "资料已可用。历史业务单据不会自动引用这份新资料。",
     createBlockedTitle: "无法新建",
     createSubmit: "保存",
     createSubmitRejected: "暂不可保存",
     reviseTitle: "更新资料",
-    reviseDesc:
-        "会生成新一版内容并保留原因与时间；不会改掉历史业务单据里已经用过的那一版。",
+    reviseDesc: "更新后保留历史版本，不影响已有单据。",
     reviseSuccessTitle: "资料已更新",
     reviseSuccessDesc:
         "若立即生效，列表会显示新内容；若指定了未来日期，到期后自动切换。",
@@ -152,8 +150,7 @@ export const masterDataCopy = {
     reviseNameLabel: "名称",
     reviseSubmit: "保存更新",
     disableTitle: "停用资料",
-    disableDesc:
-        "停用后，业务页面里一般选不到这份资料；资料编号和历史记录会保留，不是删除。",
+    disableDesc: "停用后，新业务不可选用；历史记录保留。",
     disableSuccessTitle: "已停用",
     disableSuccessDesc: "以后业务中默认选不到；历史单据与记录仍可查看。",
     disableBlockedTitle: "无法停用",

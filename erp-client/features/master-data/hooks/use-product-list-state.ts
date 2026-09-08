@@ -1,5 +1,7 @@
 "use client"
 
+import { useChangeConfirmation } from "./use-change-confirmation"
+
 import * as React from "react"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -43,6 +45,9 @@ export type ProductAppliedChip = Readonly<{
 export function useProductListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
+    const listingConfirmation = useChangeConfirmation(
+        "master-data-product-listing",
+    )
     const { canCreate, createBlockedReason } =
         useCreatePermission("product:create")
     const accountQuery = useAccountProfileQuery()
@@ -310,16 +315,8 @@ export function useProductListState(
         rows.length,
     ])
 
-    const updateProductListing = React.useCallback(
+    const applyProductListing = React.useCallback(
         async (item: MasterDataListItem, listed: boolean) => {
-            if (
-                !listed &&
-                !window.confirm(
-                    `下架后，商品「${item.name}」下的全部 SKU 都会退出公司商品池。确定继续？`,
-                )
-            ) {
-                return
-            }
             setListingError(null)
             try {
                 await productListingMutation.mutateAsync({
@@ -327,15 +324,33 @@ export function useProductListState(
                     listingStatus: listed ? "LISTED" : "UNLISTED",
                 })
             } catch (error) {
-                setListingError(
-                    getErrorMessage(error, "上架状态更新失败，请刷新后重试。"),
+                const message = getErrorMessage(
+                    error,
+                    "上架状态更新失败，请刷新后重试。",
                 )
+                setListingError(message)
+                if (!listed) throw new Error(message)
             }
         },
         [productListingMutation],
     )
 
+    const updateProductListing = async (
+        item: MasterDataListItem,
+        listed: boolean,
+    ) => {
+        if (listed) return applyProductListing(item, true)
+        listingConfirmation.confirm({
+            title: "下架商品",
+            description: `商品「${item.name}」下的全部 SKU 将退出公司商品池。`,
+            confirmLabel: "下架商品",
+            destructive: true,
+            onConfirm: () => applyProductListing(item, false),
+        })
+    }
+
     return {
+        listingConfirmationDialog: listingConfirmation.dialog,
         filters,
         listQuery,
         productFilterOptionsQuery,

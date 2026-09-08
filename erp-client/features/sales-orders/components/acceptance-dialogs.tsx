@@ -45,6 +45,7 @@ export function AcceptanceDialogs({
     return (
         <>
             <FormalActionConfirmDialog
+                actionVariant="default"
                 id="sales-orders-acceptance-confirm"
                 open={confirmOpen}
                 onOpenChange={onConfirmOpenChange}
@@ -69,6 +70,7 @@ export function AcceptanceDialogs({
             />
 
             <FormalActionConfirmDialog
+                actionVariant="destructive"
                 id="sales-orders-acceptance-reverse"
                 open={Boolean(reverseTarget)}
                 onOpenChange={onReverseOpenChange}

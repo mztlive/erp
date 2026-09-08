@@ -64,7 +64,7 @@ function AccessChangeDialog({
                 <DialogHeader>
                     <DialogTitle>授权变更影响预览</DialogTitle>
                     <DialogDescription>
-                        提交前先查看变更预览与受影响人员；若数据已被他人更新，需确认后重新提交。
+                        请核对权限变化与受影响人员。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -208,9 +208,6 @@ function AccessChangeDialog({
                                         )}
                                     />
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    提交前系统会按最新配置核对版本；若配置已被他人更新，将提示你重新确认。
-                                </p>
                                 <DialogFooter>
                                     <Button
                                         id="operations-access-change-dialog-cancel"

@@ -116,7 +116,11 @@ export function ReverseDialog({
                                 aria-hidden="true"
                             />
                         ) : null}
-                        {submitting ? "提交中…" : "确认追加反向记录"}
+                        {submitting
+                            ? "提交中…"
+                            : target.kind === "payment"
+                              ? "提交冲正审批"
+                              : "提交红票"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -18,6 +18,8 @@ mod difference;
 mod draft;
 mod evidence;
 mod review;
+mod reviewers;
+pub use reviewers::SettlementReviewerOption;
 mod review_posting;
 mod review_preparation;
 mod shared;

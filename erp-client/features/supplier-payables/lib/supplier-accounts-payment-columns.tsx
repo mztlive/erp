@@ -88,7 +88,7 @@ export function buildPaymentColumns(input: {
                             type="button"
                             size="xs"
                             variant="ghost"
-                            className="num h-auto px-0 font-medium"
+                            className="num h-auto px-0 text-sm font-medium"
                             onClick={(event) => {
                                 event.stopPropagation()
                                 openReversalPreview(latest.reversalId)
@@ -134,7 +134,7 @@ export function buildPaymentColumns(input: {
             header: "付款时间",
             meta: { label: "时间", width: "default", numeric: true },
             cell: ({ row }) => (
-                <span className="num text-xs text-muted-foreground">
+                <span className="num text-[13px] text-muted-foreground">
                     {formatDateTime(row.original.paidAt, "full", "passthrough")}
                 </span>
             ),
@@ -169,6 +169,8 @@ export function buildPaymentColumns(input: {
                                     kind: "payment",
                                     id: row.original.paymentId,
                                     no: row.original.paymentNo,
+                                    amount: row.original.amount,
+                                    supplierName: row.original.supplierName,
                                 })
                             }
                         >
@@ -186,6 +188,7 @@ export function buildPaymentColumns(input: {
                                 setRefundRequest({
                                     sourcePaymentId: row.original.paymentId,
                                     sourcePaymentNo: row.original.paymentNo,
+                                    supplierName: row.original.supplierName,
                                     supplierId: row.original.supplierId,
                                     amount: row.original.amount,
                                 })

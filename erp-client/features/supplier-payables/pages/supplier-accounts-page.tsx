@@ -415,15 +415,18 @@ export function SupplierAccountsPage() {
 
             <SupplierRefundRequestDialog
                 open={Boolean(refundFlow.refundRequest)}
-                pending={refundFlow.refundDraftPending}
-                sourceLabel={refundFlow.refundRequest?.sourcePaymentNo}
+                pending={refundFlow.refundSubmitPending}
+                sourceLabel={[
+                    refundFlow.refundRequest?.sourcePaymentNo,
+                    refundFlow.refundRequest?.supplierName,
+                ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 amount={refundFlow.refundRequest?.amount}
                 onOpenChange={(open) => {
                     if (!open) refundFlow.setRefundRequest(null)
                 }}
-                onSubmit={(reason) =>
-                    void refundFlow.prepareRefundDraft(reason)
-                }
+                onSubmit={(reason) => refundFlow.prepareRefundDraft(reason)}
             />
 
             <SupplierRefundSubmitConfirmDialog
@@ -442,14 +445,26 @@ export function SupplierAccountsPage() {
                     Boolean(reversalFlow.reversalRequest) ||
                     reverseTarget?.kind === "payment"
                 }
-                pending={reversalFlow.reversalDraftPending}
+                pending={reversalFlow.reversalSubmitPending}
                 sourceLabel={
-                    reversalFlow.reversalRequest?.sourcePaymentNo ??
+                    [
+                        reversalFlow.reversalRequest?.sourcePaymentNo,
+                        reversalFlow.reversalRequest?.supplierName,
+                    ]
+                        .filter(Boolean)
+                        .join(" · ") ||
                     (reverseTarget?.kind === "payment"
-                        ? reverseTarget.no
+                        ? [reverseTarget.no, reverseTarget.supplierName]
+                              .filter(Boolean)
+                              .join(" · ")
                         : undefined)
                 }
-                amount={reversalFlow.reversalRequest?.amount}
+                amount={
+                    reversalFlow.reversalRequest?.amount ??
+                    (reverseTarget?.kind === "payment"
+                        ? reverseTarget.amount
+                        : undefined)
+                }
                 onOpenChange={(open) => {
                     if (!open) {
                         reversalFlow.setReversalRequest(null)
@@ -458,18 +473,19 @@ export function SupplierAccountsPage() {
                         }
                     }
                 }}
-                onSubmit={(reason) => {
+                onSubmit={async (reason) => {
                     const request =
                         reverseTarget?.kind === "payment"
                             ? {
                                   sourcePaymentId: reverseTarget.id,
                                   sourcePaymentNo: reverseTarget.no,
+                                  amount: reverseTarget.amount,
+                                  supplierName: reverseTarget.supplierName,
                               }
                             : reversalFlow.reversalRequest
-                    if (reverseTarget?.kind === "payment") {
+                    await reversalFlow.prepareReversalDraft(reason, request)
+                    if (reverseTarget?.kind === "payment")
                         setReverseTarget(null)
-                    }
-                    void reversalFlow.prepareReversalDraft(reason, request)
                 }}
             />
 

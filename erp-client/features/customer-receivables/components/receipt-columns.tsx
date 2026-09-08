@@ -68,10 +68,17 @@ export function createReceiptColumns({
             },
             cell: ({ row }) => (
                 <div className="text-right">
-                    <MoneyValue value={row.original.allocatedTotal} />
-                    <div className="text-xs text-muted-foreground">
-                        未分配{" "}
+                    <div>
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            未分配
+                        </span>
                         <MoneyValue value={row.original.unallocatedAmount} />
+                    </div>
+                    <div className="mt-1">
+                        <span className="mr-2 text-xs text-muted-foreground">
+                            净已分配
+                        </span>
+                        <MoneyValue value={row.original.allocatedTotal} />
                     </div>
                 </div>
             ),

@@ -25,7 +25,7 @@ export function useContractListColumns() {
                             type="button"
                             variant="link"
                             size="xs"
-                            className="num px-0"
+                            className="num h-auto px-0 text-sm"
                             aria-label={`打开合同 ${row.original.contractNo}`}
                             render={
                                 <Link

@@ -104,7 +104,7 @@ export function CreateDraftDialog({
                             item.document_type,
                             item.document_type_label,
                         )}
-                        创建更高版本草稿。必须明确选择来源，不会默认复制历史版本。
+                        创建草稿：选择空白流程，或复制当前已发布版本。
                     </DialogDescription>
                 </DialogHeader>
                 {submitError ? (

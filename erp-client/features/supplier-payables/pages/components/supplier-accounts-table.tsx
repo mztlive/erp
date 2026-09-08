@@ -288,6 +288,7 @@ function SupplierAccountsTableBody({
             <DataTable
                 id="supplier-payables-table-payment"
                 columns={paymentColumns}
+                defaultColumnVisibility={{ bank: false, reversal: false }}
                 data={pageRows as PaymentRow[]}
                 getRowId={(r) => r.paymentId}
                 pagination={pagination}

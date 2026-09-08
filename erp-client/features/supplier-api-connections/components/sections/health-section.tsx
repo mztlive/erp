@@ -54,7 +54,7 @@ export function HealthSection({
                         />
                         {row.original.autoRetryStopped ? (
                             <div
-                                className="text-tiny text-destructive"
+                                className="text-xs text-destructive"
                                 role="status"
                             >
                                 自动重试已停止
@@ -62,7 +62,7 @@ export function HealthSection({
                         ) : null}
                         {row.original.result === "UNKNOWN" ? (
                             <div
-                                className="text-tiny text-warning-soft-foreground"
+                                className="text-xs text-warning-soft-foreground"
                                 role="status"
                             >
                                 结果未知 · 不按失败播报
@@ -108,7 +108,7 @@ export function HealthSection({
                 header: "摘要",
                 meta: { label: "摘要" },
                 cell: ({ row }) => (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-sm text-muted-foreground">
                         {row.original.errorSummary ?? "—"}
                     </span>
                 ),
@@ -134,6 +134,7 @@ export function HealthSection({
                         id="supplier-api-connections-health-table"
                         data={records}
                         columns={columns}
+                        defaultColumnVisibility={{ job: false, trace: false }}
                         getRowId={(r) => r.recordId}
                         rowCount={records.length}
                         caption="健康检查记录"

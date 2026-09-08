@@ -300,7 +300,9 @@ function UnitFormDialogFrame({
             >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>{description}</DialogDescription>
+                    {description ? (
+                        <DialogDescription>{description}</DialogDescription>
+                    ) : null}
                 </DialogHeader>
                 <DialogScrollBody>
                     {result?.outcome === "blocked" ? (
@@ -370,7 +372,12 @@ function UnitFormDialogFrame({
                                 children={(field) => (
                                     <field.TextareaField
                                         id={`${baseId}-change-reason`}
-                                        label={masterDataCopy.fieldChangeReason}
+                                        label={
+                                            description ===
+                                            masterDataCopy.createDesc
+                                                ? "创建说明"
+                                                : masterDataCopy.fieldChangeReason
+                                        }
                                         required
                                     />
                                 )}
@@ -386,7 +393,7 @@ function UnitFormDialogFrame({
                                         />
                                     }
                                 >
-                                    关闭
+                                    取消
                                 </DialogClose>
                                 <form.AppForm>
                                     <form.SubmitButton

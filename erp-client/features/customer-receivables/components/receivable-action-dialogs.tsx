@@ -78,7 +78,7 @@ export function ReceivableActionDialogs({
                                 : "登记销项发票 — 选择往来主体"}
                         </DialogTitle>
                         <DialogDescription>
-                            本次核销创建后锁定往来主体，中途不可更换。
+                            创建后不可更换结算主体。
                             经营客户与结算主体可能不同。
                         </DialogDescription>
                     </DialogHeader>
@@ -128,7 +128,11 @@ export function ReceivableActionDialogs({
                                     aria-hidden="true"
                                 />
                             )}
-                            {createPending ? "创建中…" : "打开核销工作区"}
+                            {createPending
+                                ? "创建中…"
+                                : partyPickerMode === "receipt"
+                                  ? "登记回款"
+                                  : "登记销项发票"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -148,8 +152,7 @@ export function ReceivableActionDialogs({
                                   : "发起回款冲正"}
                         </DialogTitle>
                         <DialogDescription>
-                            不编辑、不删除已确认记录与分配；仅追加反向记录。原单{" "}
-                            {reverseRequest?.label}。
+                            原记录保留。原单 {reverseRequest?.label}。
                             {reverseRequest?.kind === "receipt_reverse"
                                 ? "冲正表示撤销本次回款记录。"
                                 : reverseRequest?.kind === "refund"
@@ -181,7 +184,7 @@ export function ReceivableActionDialogs({
                             </div>
                         ) : (
                             <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                                将按原单全额追加反向记录
+                                按原单全额处理
                                 {reverseRequest?.amount ? (
                                     <>
                                         （
@@ -237,7 +240,7 @@ export function ReceivableActionDialogs({
                                     className="animate-spin"
                                 />
                             ) : null}
-                            {reversePending ? "提交中…" : "确认追加反向记录"}
+                            {reversePending ? "提交中…" : "提交红票"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -273,6 +273,7 @@ function SettlementList({
                         id="supplier-settlements-list-table"
                         data={data?.rows ?? []}
                         columns={columns}
+                        defaultColumnVisibility={{ actors: false }}
                         getRowId={(row) => row.statementId}
                         rowCount={total}
                         pagination={pagination}

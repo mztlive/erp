@@ -36,7 +36,7 @@ describe("SupplierPaymentSubmitConfirmDialog", () => {
         expect(screen.getByText("付款金额 1280.00")).toBeTruthy()
         expect(screen.getByText("已过账")).toBeTruthy()
         expect(screen.getByText("纠错须走付款冲正或供应商退款")).toBeTruthy()
-        expect(screen.queryByText("提交后锁定字段")).toBeTruthy()
+        expect(screen.queryByText("核对信息")).toBeTruthy()
         expect(screen.queryByText("本次动作产生的影响")).toBeNull()
         expect(screen.queryByText(/正式付款事实/)).toBeNull()
         expect(screen.queryByText(/银行回单/)).toBeNull()

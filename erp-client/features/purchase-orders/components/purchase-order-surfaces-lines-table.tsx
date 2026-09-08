@@ -137,7 +137,7 @@ function buildPurchaseOrderLinesColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <span className="num text-xs">
+                <span className="num text-[13px]">
                     {row.original.expectedDeliveryDate ?? "—"}
                 </span>
             ),

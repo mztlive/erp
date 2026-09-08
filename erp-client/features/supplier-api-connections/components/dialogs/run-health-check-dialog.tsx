@@ -38,10 +38,10 @@ export function RunHealthCheckDialog({
                 <DialogHeader>
                     <DialogTitle>执行健康检查</DialogTitle>
                     <DialogDescription>
-                        将对全能力执行健康检查并记录结果。
+                        检查全部接口能力并更新连接健康状态；失败时生成异常待办。
                         {isProd
                             ? "生产环境检查不会创建真实业务订单。"
-                            : "结果可随时在本页健康记录中查看。"}
+                            : "可在本页查看检查结果。"}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

@@ -1,5 +1,7 @@
 "use client"
 
+import { useChangeConfirmation } from "../../hooks/use-change-confirmation"
+
 import * as React from "react"
 import {
     Dialog,
@@ -76,6 +78,9 @@ function SkuRow({
 }: SkuRowProps) {
     const skuSegment = toAutomationIdSegment(
         sku.skuId || sku.specificationSignature || sku.skuNo || `sku-${index}`,
+    )
+    const disableConfirmation = useChangeConfirmation(
+        `master-data-product-sku-${skuSegment}-disable`,
     )
     const [detailsOpen, setDetailsOpen] = React.useState(false)
     const cellPad = "whitespace-normal align-middle"
@@ -167,8 +172,8 @@ function SkuRow({
                             <DialogTitle>SKU 资料</DialogTitle>
                             <DialogDescription>
                                 {canRevise
-                                    ? "修改后返回商品页统一保存；关闭此窗口会保留本次编辑内容。"
-                                    : "查看 SKU 编码、名称和条码。"}
+                                    ? "修改将在保存商品时生效。"
+                                    : "SKU 基础资料。"}
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
@@ -347,19 +352,23 @@ function SkuRow({
                             disabled={!canRevise}
                             checked={sku.lifecycleStatus === "ENABLED"}
                             onCheckedChange={(checked) => {
-                                if (
-                                    !checked &&
-                                    !window.confirm(
-                                        "停用该 SKU 后，新的业务单据将选不到它；历史单据不受影响。确定停用？",
-                                    )
-                                ) {
-                                    return
-                                }
-                                updateSku(index, {
-                                    lifecycleStatus: checked
-                                        ? "ENABLED"
-                                        : "DISABLED",
-                                })
+                                if (!checked) {
+                                    disableConfirmation.confirm({
+                                        title: "停用 SKU",
+                                        description:
+                                            "保存商品后，新的业务单据将选不到此 SKU，历史单据不受影响。",
+                                        details: [skuName, metaText],
+                                        confirmLabel: "停用 SKU",
+                                        destructive: true,
+                                        onConfirm: () =>
+                                            updateSku(index, {
+                                                lifecycleStatus: "DISABLED",
+                                            }),
+                                    })
+                                } else
+                                    updateSku(index, {
+                                        lifecycleStatus: "ENABLED",
+                                    })
                             }}
                             aria-label={`${skuName} SKU 启用`}
                         />
@@ -370,6 +379,7 @@ function SkuRow({
                         </span>
                     </div>
                 </div>
+                {disableConfirmation.dialog}
             </TableCell>
         </TableRow>
     )

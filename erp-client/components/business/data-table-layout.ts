@@ -52,7 +52,7 @@ export function pinningClass(
 ) {
     if (!pinned) return undefined
     return area === "header"
-        ? "sticky z-10 bg-table-header"
+        ? "sticky z-30 bg-table-header"
         : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected [[data-placeholder]_&]:group-hover/row:bg-card"
 }
 

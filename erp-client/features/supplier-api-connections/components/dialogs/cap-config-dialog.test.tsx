@@ -44,7 +44,7 @@ describe("CapConfigDialog", () => {
         )
 
         const submit = screen.getByRole("button", {
-            name: "提交能力配置",
+            name: "保存配置",
         })
         expect(submit.hasAttribute("disabled")).toBe(true)
 

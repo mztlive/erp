@@ -40,10 +40,15 @@ export function useSettlementListColumns(
                 id: "period",
                 accessorFn: (row) => row.periodLabel,
                 header: "期间",
-                meta: { label: "期间", width: "status" },
+                meta: { label: "期间", width: "default" },
                 cell: ({ row }) => (
                     <span className="num text-sm">
-                        {row.original.periodStart} ~ {row.original.periodEnd}
+                        <span className="block">
+                            {row.original.periodStart}
+                        </span>
+                        <span className="block text-[13px] text-muted-foreground">
+                            至 {row.original.periodEnd}
+                        </span>
                     </span>
                 ),
             },
@@ -114,10 +119,7 @@ export function useSettlementListColumns(
                             </div>
                         ) : null}
                         {row.original.unresolvedDifferenceCount > 0 ? (
-                            <Badge
-                                variant="outline"
-                                className="mt-0.5 text-2xs"
-                            >
+                            <Badge variant="outline" className="mt-0.5 text-xs">
                                 未决 {row.original.unresolvedDifferenceCount}
                             </Badge>
                         ) : null}

@@ -91,6 +91,7 @@ export type PermissionGroupCountView = Readonly<{
 }>
 
 export type RoleRow = Readonly<{
+    system?: boolean
     id: string
     roleCode: string
     name: string

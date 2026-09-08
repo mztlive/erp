@@ -123,6 +123,7 @@ function toRoleRow(
     return {
         id: role.id,
         roleCode: role.id,
+        system: role.system,
         name: role.name,
         status: "enabled",
         statusLabel: "启用",

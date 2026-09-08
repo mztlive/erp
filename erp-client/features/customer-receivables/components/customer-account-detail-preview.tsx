@@ -242,9 +242,7 @@ export function CustomerAccountDetailPreview({
                                         className="animate-spin"
                                     />
                                 ) : null}
-                                {startSessionPending
-                                    ? "创建中…"
-                                    : "继续核销"}
+                                {startSessionPending ? "创建中…" : "继续核销"}
                             </Button>
                         ) : null}
                         {showCorrectionActions &&
@@ -265,7 +263,7 @@ export function CustomerAccountDetailPreview({
                                     onRequestReverse({
                                         kind: "receipt_reverse",
                                         sourceFactId: data.receipt!.receiptId,
-                                        label: data.receipt!.receiptNo,
+                                        label: `${data.receipt!.receiptNo} · ${data.receipt!.counterpartyPartyName}`,
                                         amount: data.receipt!.amount,
                                     })
                                 }
@@ -289,7 +287,7 @@ export function CustomerAccountDetailPreview({
                                     onRequestReverse({
                                         kind: "refund",
                                         sourceFactId: data.receipt!.receiptId,
-                                        label: data.receipt!.receiptNo,
+                                        label: `${data.receipt!.receiptNo} · ${data.receipt!.counterpartyPartyName}`,
                                         amount: data.receipt!.amount,
                                     })
                                 }
@@ -327,9 +325,7 @@ export function CustomerAccountDetailPreview({
                                         className="animate-spin"
                                     />
                                 ) : null}
-                                {startSessionPending
-                                    ? "创建中…"
-                                    : "继续分配"}
+                                {startSessionPending ? "创建中…" : "继续分配"}
                             </Button>
                         ) : null}
                         {showCorrectionActions &&
