@@ -10,7 +10,6 @@ import {
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
-    ListWorkspaceViews,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -44,17 +43,21 @@ export function AuditPage() {
     const data = page.data
     const rows = data?.auditEvents ?? []
     const auditPolicy = data?.governancePolicies.auditAccessPolicy
-    const coverageHint =
+    const coverage =
         data?.auditCoverageFrom && data.auditCoverageTo
-            ? `覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")}`
-            : "选择事件查看详情"
+            ? `覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")}。`
+            : null
 
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="审计查询"
-                description="按时间、操作者与对象查询审计事件。"
+                description={
+                    coverage
+                        ? `按时间、操作者与对象查询审计事件。${coverage}`
+                        : "按时间、操作者与对象查询审计事件。"
+                }
             >
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -134,21 +137,6 @@ export function AuditPage() {
 
             <ListWorkSurface
                 ariaLabel="审计事件列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="审计查询视图"
-                        hint={coverageHint}
-                        items={[
-                            {
-                                id: "operations-audit-view-events",
-                                label: "审计事件",
-                                count: rows.length,
-                                active: true,
-                                onClick: () => page.switchView("audit"),
-                            },
-                        ]}
-                    />
-                }
                 toolbar={
                     <AccessListToolbar
                         isAudit

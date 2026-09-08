@@ -14,7 +14,6 @@ import {
     ListWorkSurface,
     ListWorkspaceFilterBar,
     ListWorkspaceFilterField,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
@@ -83,21 +82,6 @@ export function ContractsTablePanel({
     return (
         <ListWorkSurface
             ariaLabel="合同列表"
-            views={
-                <ListWorkspaceViews
-                    ariaLabel="合同视图"
-                    hint="选择合同查看详情"
-                    items={[
-                        {
-                            id: "card-contracts-list-view-all",
-                            label: "全部合同",
-                            count: isPending ? undefined : sorted.length,
-                            active: true,
-                            onClick: () => undefined,
-                        },
-                    ]}
-                />
-            }
             toolbar={
                 <ListWorkspaceFilterBar
                     idPrefix="card-contracts-list"

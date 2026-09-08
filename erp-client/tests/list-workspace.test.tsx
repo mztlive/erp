@@ -3,7 +3,10 @@ import { afterEach, beforeAll, expect, test } from "vitest"
 
 import { DataTable } from "@/components/business/data-table"
 import { ListToolbar } from "@/components/business/list"
-import { ListWorkSurface } from "@/components/business/list-workspace"
+import {
+    ListWorkSurface,
+    ListWorkspaceViews,
+} from "@/components/business/list-workspace"
 
 beforeAll(() => {
     globalThis.ResizeObserver = class {
@@ -54,6 +57,53 @@ test("列设置挂在搜索主行，展开筛选区域不包含列设置", () =>
         container.querySelector('[data-slot="table-frame-view-options"]')
             ?.childElementCount,
     ).toBe(0)
+})
+
+test("只有一个视图时不渲染 tab 行", () => {
+    render(
+        <ListWorkspaceViews
+            ariaLabel="合同视图"
+            hint="选择合同查看详情"
+            items={[
+                {
+                    id: "card-contracts-list-view-all",
+                    label: "全部合同",
+                    count: 1,
+                    active: true,
+                    onClick: () => undefined,
+                },
+            ]}
+        />,
+    )
+
+    expect(screen.queryByRole("button", { name: "全部合同 1" })).toBeNull()
+    expect(screen.queryByText("选择合同查看详情")).toBeNull()
+})
+
+test("多个视图时渲染可切换 tab", () => {
+    render(
+        <ListWorkspaceViews
+            ariaLabel="销售单工作视图"
+            items={[
+                {
+                    id: "sales-orders-list-filter-summary-all",
+                    label: "全部",
+                    count: 12,
+                    active: true,
+                    onClick: () => undefined,
+                },
+                {
+                    id: "sales-orders-list-filter-summary-mine",
+                    label: "我负责的",
+                    active: false,
+                    onClick: () => undefined,
+                },
+            ]}
+        />,
+    )
+
+    expect(screen.getByRole("button", { name: "全部12" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "我负责的" })).toBeTruthy()
 })
 
 test("自定义工具栏继续在列表原有插槽显示列设置", () => {

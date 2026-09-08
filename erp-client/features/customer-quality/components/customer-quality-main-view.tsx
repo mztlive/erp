@@ -38,7 +38,6 @@ export function CustomerQualityMainView({
     onRetryView,
     toolbar,
     loading,
-    hasActiveFilters,
     onClearFilters,
     refreshError,
     refreshing,
@@ -77,7 +76,6 @@ export function CustomerQualityMainView({
     onRetryView: () => void
     toolbar: React.ReactNode
     loading: boolean
-    hasActiveFilters: boolean
     onClearFilters: () => void
     refreshError: string | null
     refreshing: boolean
@@ -118,7 +116,6 @@ export function CustomerQualityMainView({
     const isVoucherOnly = businessType === "VOUCHER"
     const items = data?.customers.items ?? []
     const filteredTotal = data?.customers.filteredTotal ?? 0
-    const total = data?.customers.total ?? 0
     const emptyKind = data?.emptyKind
     const filterSummary = data?.filterSummary ?? ""
 
@@ -221,7 +218,6 @@ export function CustomerQualityMainView({
                         sectionRef={tableSectionRef}
                         items={items}
                         filteredTotal={filteredTotal}
-                        total={total}
                         columns={columns}
                         pagination={pagination}
                         onPaginationChange={onPaginationChange}
@@ -229,7 +225,6 @@ export function CustomerQualityMainView({
                         onSortingChange={onSortingChange}
                         emptyKind={emptyKind}
                         filterSummary={filterSummary}
-                        hasActiveFilters={hasActiveFilters}
                         onClearFilters={onClearFilters}
                         toolbar={toolbar}
                         viewError={viewError}

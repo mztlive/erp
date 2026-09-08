@@ -21,7 +21,6 @@ import {
     ListWorkSurface,
     ListWorkspaceFilterBar,
     ListWorkspaceHeader,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
@@ -273,21 +272,6 @@ export function AccountsPage() {
 
             <ListWorkSurface
                 ariaLabel="账号列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="账号管理视图"
-                        hint="选择账号查看详情"
-                        items={[
-                            {
-                                id: "governance-admin-accounts-view-all",
-                                label: "全部账号",
-                                count: rows.length,
-                                active: true,
-                                onClick: () => undefined,
-                            },
-                        ]}
-                    />
-                }
                 toolbar={
                     <ListWorkspaceFilterBar
                         idPrefix="governance-admin-accounts"

@@ -91,7 +91,8 @@ export function ListWorkspaceViews({
     items: readonly ListWorkspaceViewItem[]
     hint?: string
 }) {
-    if (items.length === 0) return null
+    // 单个视图不是切换，不画 tab 行（例如「全部合同」）。
+    if (items.length < 2) return null
     return (
         <div className={styles.viewBar}>
             <div className={styles.views} role="group" aria-label={ariaLabel}>

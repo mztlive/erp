@@ -13,7 +13,6 @@ import {
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
@@ -566,21 +565,6 @@ export function ProcurementResponsibilityRulesPage() {
             >
                 <ListWorkSurface
                     ariaLabel="采购责任规则列表"
-                    views={
-                        <ListWorkspaceViews
-                            ariaLabel="采购责任规则视图"
-                            hint="支持 SKU、分类与区域、分类、商品类型和默认调度人五个层级。"
-                            items={[
-                                {
-                                    id: "procurement-responsibility-rules-view-all",
-                                    label: "全部规则",
-                                    count: rows.length,
-                                    active: true,
-                                    onClick: () => undefined,
-                                },
-                            ]}
-                        />
-                    }
                     table={
                         <DataTable
                             id="procurement-responsibility-rules-table"

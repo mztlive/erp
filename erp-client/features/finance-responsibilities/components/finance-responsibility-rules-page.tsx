@@ -13,7 +13,6 @@ import {
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
@@ -491,21 +490,6 @@ export function FinanceResponsibilityRulesPage() {
             >
                 <ListWorkSurface
                     ariaLabel="财务责任规则列表"
-                    views={
-                        <ListWorkspaceViews
-                            ariaLabel="财务责任规则视图"
-                            hint="负责人保存时校验账号状态及完整执行权限；缺少有效规则时业务单据不能形成付款或开票任务。"
-                            items={[
-                                {
-                                    id: "finance-responsibilities-rules-view-all",
-                                    label: "全部规则",
-                                    count: rows.length,
-                                    active: true,
-                                    onClick: () => undefined,
-                                },
-                            ]}
-                        />
-                    }
                     table={
                         <DataTable
                             id="finance-responsibilities-rules-table"

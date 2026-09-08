@@ -17,7 +17,6 @@ import {
     ListWorkspaceFilterBar,
     ListWorkspaceHeader,
     ListWorkspaceInlineFilter,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
@@ -256,20 +255,6 @@ export function ApprovalProcessesPage() {
             <ListWorkSurface
                 toolbarClassName="pt-3 pb-2"
                 ariaLabel="审批流程单据类型目录"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="审批流程配置视图"
-                        items={[
-                            {
-                                id: "governance-approval-processes-catalog-view-all",
-                                label: "全部单据类型",
-                                count: filtered.length,
-                                active: true,
-                                onClick: () => undefined,
-                            },
-                        ]}
-                    />
-                }
                 toolbar={
                     <ListWorkspaceFilterBar
                         density="compact"

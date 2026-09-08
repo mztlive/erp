@@ -14,7 +14,6 @@ import {
 } from "@/components/business"
 import {
     ListWorkSurface,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
@@ -28,7 +27,6 @@ export function CustomerQualityDetailTable({
     sectionRef,
     items,
     filteredTotal,
-    total,
     columns,
     pagination,
     onPaginationChange,
@@ -36,7 +34,6 @@ export function CustomerQualityDetailTable({
     onSortingChange,
     emptyKind,
     filterSummary,
-    hasActiveFilters,
     onClearFilters,
     toolbar,
     viewError,
@@ -46,7 +43,6 @@ export function CustomerQualityDetailTable({
     sectionRef: React.RefObject<HTMLDivElement | null>
     items: readonly CustomerQualityRow[]
     filteredTotal: number
-    total: number
     columns: ColumnDef<CustomerQualityRow>[]
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
@@ -54,7 +50,6 @@ export function CustomerQualityDetailTable({
     onSortingChange: (next: SortingState) => void
     emptyKind?: CustomerQualityView["emptyKind"]
     filterSummary: string
-    hasActiveFilters: boolean
     onClearFilters: () => void
     toolbar: React.ReactNode
     viewError: unknown
@@ -73,25 +68,6 @@ export function CustomerQualityDetailTable({
         >
             <ListWorkSurface
                 ariaLabel="客户经营质量明细"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="客户经营质量明细视图"
-                        hint={
-                            hasActiveFilters
-                                ? `筛选：${filterSummary} · 明细 ${filteredTotal}/${total} 户`
-                                : "点击客户进入客户中心；逾期与实际盈亏可分别下钻。"
-                        }
-                        items={[
-                            {
-                                id: "customers-quality-detail-view-all",
-                                label: "客户明细",
-                                count: filteredTotal,
-                                active: true,
-                                onClick: () => undefined,
-                            },
-                        ]}
-                    />
-                }
                 toolbar={toolbar}
                 table={
                     <DataTable

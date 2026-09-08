@@ -166,17 +166,6 @@ export function CustomerQualityPage() {
         ]
     }, [chartFilterSummary, filters.appliedChips])
 
-    const hasActiveFilters = Boolean(
-        qParam ||
-        fundsReview === "reviewed_only" ||
-        businessType ||
-        customerId ||
-        chartCode ||
-        scaleTag ||
-        profitTag ||
-        riskTag,
-    )
-
     const filterToolbar = (
         <CustomerQualityFilterCard
             searchDraft={filters.searchDraft}
@@ -307,7 +296,6 @@ export function CustomerQualityPage() {
             }}
             toolbar={filterToolbar}
             loading={viewQuery.isFetching && !viewQuery.isPending}
-            hasActiveFilters={hasActiveFilters}
             onClearFilters={filters.clearAllFilters}
             refreshError={refreshError}
             refreshing={refreshing}

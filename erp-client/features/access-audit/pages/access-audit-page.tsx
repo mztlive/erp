@@ -15,7 +15,6 @@ import {
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
-    ListWorkspaceViews,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -178,21 +177,6 @@ export function AccessAuditPage() {
 
             <ListWorkSurface
                 ariaLabel="角色权限列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="权限配置视图"
-                        hint="选择角色查看有效权限来源"
-                        items={[
-                            {
-                                id: "operations-access-view-roles",
-                                label: "角色权限",
-                                count: rows.length,
-                                active: true,
-                                onClick: () => page.switchView("roles"),
-                            },
-                        ]}
-                    />
-                }
                 toolbar={
                     <AccessListToolbar
                         isAudit={false}
