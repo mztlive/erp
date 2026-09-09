@@ -54,11 +54,13 @@ export function AcceptanceHistoryList({
     canReverse,
     onReverse,
     className,
+    showGuidance = true,
 }: {
     history: AcceptanceHistoryItem[]
     canReverse: boolean
     onReverse: (item: AcceptanceHistoryItem) => void
     className?: string
+    showGuidance?: boolean
 }) {
     const ordered = [...history].sort(compareHistoryNewestFirst)
     const byId = new Map(history.map((item) => [item.acceptanceId, item]))
@@ -67,7 +69,11 @@ export function AcceptanceHistoryList({
         <DocumentSection
             className={className ?? "py-0"}
             title="验收记录"
-            description="已经确认的不能改；记错了用冲正新增一条反向记录。"
+            description={
+                showGuidance
+                    ? "已经确认的不能改；记错了用冲正新增一条反向记录。"
+                    : undefined
+            }
         >
             {ordered.length === 0 ? (
                 <p className="text-sm text-muted-foreground">

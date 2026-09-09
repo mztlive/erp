@@ -213,30 +213,7 @@ export function RevisionHistoryCard({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <h2 className="text-sm font-medium">版本记录</h2>
-                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                        {`销售单生效后形成 v1，后续改单生效时保留旧版本。当时的合同、客户与金额不会被后来修改盖掉。${
-                            contractRevisionLabel
-                                ? ` 当前关联合同 ${contractRevisionLabel}。`
-                                : ""
-                        }`}
-                    </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {ordered.length > 0 ? (
-                        <Badge variant="outline">{ordered.length} 个版本</Badge>
-                    ) : null}
-                    {currentVersion == null ? (
-                        <Badge variant="outline">尚未生效</Badge>
-                    ) : (
-                        <Badge variant="secondary">
-                            当前 v{currentVersion}
-                        </Badge>
-                    )}
-                </div>
-            </div>
+            <h2 className="text-sm font-semibold">版本记录</h2>
             {ordered.length === 0 ? (
                 <BusinessEmptyState
                     kind="no-data"

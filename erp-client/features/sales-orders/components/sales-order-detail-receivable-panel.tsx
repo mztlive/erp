@@ -2,8 +2,13 @@
 
 import type { ReactNode } from "react"
 import {
+    DetailHint,
+    DetailRecordSection,
+    DetailSummary,
+    DetailSummaryItem,
+} from "./sales-order-detail-presentation"
+import {
     BusinessFailureState,
-    DocumentSection,
     MoneyValue,
     QuickPreviewSheet,
 } from "@/components/business"
@@ -55,18 +60,24 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
                   { maxScale: 2, outputScale: 2 },
               )
             : undefined
-    const summary = [
-        { label: "待收金额", value: total("openTotal") },
-        {
-            label: "已核销回款",
-            value: total("settledTotal") ?? order.receivedAmount,
-        },
-        { label: "待开票金额", value: total("openInvoiceableTotal") },
-        {
-            label: "净已开票",
-            value: total("invoicedTotal") ?? order.invoicedAmount,
-        },
-    ]
+    const summaryAmount = (value?: string) =>
+        value === undefined ? (
+            <span className="text-base font-normal text-muted-foreground">
+                待确认
+            </span>
+        ) : (
+            <MoneyValue value={value} />
+        )
+    const receiptsEmpty =
+        canRead("customer_receipt:list") &&
+        !receipts.isLoading &&
+        !receipts.error &&
+        receipts.data?.total === 0
+    const invoicesEmpty =
+        canRead("invoice:list") &&
+        !invoices.isLoading &&
+        !invoices.error &&
+        invoices.data?.total === 0
     const previewButton = (
         kind: "receivable" | "receipt" | "invoice",
         id: string,
@@ -111,30 +122,56 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
         : undefined
     return (
         <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-                本单应收、回款与开票进展。审批中的回款不计入已核销金额。
-            </p>
-            <dl
-                aria-label="本单票款摘要"
-                className="grid grid-cols-2 gap-4 border-b pb-5 sm:grid-cols-4"
-            >
-                {summary.map((item) => (
-                    <div key={item.label}>
-                        <dt className="text-xs text-muted-foreground">
-                            {item.label}
-                        </dt>
-                        <dd className="mt-2 text-lg font-semibold">
-                            {item.value !== undefined ? (
-                                <MoneyValue value={item.value} />
-                            ) : (
-                                <span className="text-sm font-normal text-muted-foreground">
-                                    待确认
-                                </span>
-                            )}
-                        </dd>
-                    </div>
-                ))}
-            </dl>
+            <DetailSummary label="本单票款摘要">
+                <DetailSummaryItem
+                    title="收款"
+                    label="待收金额"
+                    value={summaryAmount(total("openTotal"))}
+                    detail={
+                        <>
+                            已核销回款{" "}
+                            <span className="font-medium text-foreground">
+                                {summaryAmount(
+                                    total("settledTotal") ??
+                                        order.receivedAmount,
+                                )}
+                            </span>
+                        </>
+                    }
+                    hint={
+                        <DetailHint
+                            id="sales-order-receipt-summary-hint"
+                            label="收款金额"
+                        >
+                            只统计核销到本单的已过账净额。审批中的拟核销金额不计入已核销回款。
+                        </DetailHint>
+                    }
+                />
+                <DetailSummaryItem
+                    title="开票"
+                    label="待开票金额"
+                    value={summaryAmount(total("openInvoiceableTotal"))}
+                    detail={
+                        <>
+                            已开票净额{" "}
+                            <span className="font-medium text-foreground">
+                                {summaryAmount(
+                                    total("invoicedTotal") ??
+                                        order.invoicedAmount,
+                                )}
+                            </span>
+                        </>
+                    }
+                    hint={
+                        <DetailHint
+                            id="sales-order-invoice-summary-hint"
+                            label="开票金额"
+                        >
+                            只统计分配到本单的含税净额，已扣除冲减金额。开票与回款分别统计。
+                        </DetailHint>
+                    }
+                />
+            </DetailSummary>
             {state.profile.isError ? (
                 <BusinessFailureState
                     title="票款权限读取失败"
@@ -142,249 +179,288 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
                     onRetry={() => void state.profile.refetch()}
                 />
             ) : null}
-            <DocumentSection title="本单应收">
-                <ReadState
-                    allowed={canRead("receivable_account:list")}
-                    pending={state.profile.isPending || accounts.isLoading}
-                    error={accounts.error}
-                    retry={() => void accounts.refetch()}
+            <div className="divide-y divide-border/70">
+                <DetailRecordSection
+                    title="应收明细"
+                    count={readableAccounts?.length}
                 >
-                    {!readableAccounts?.length ? (
-                        <p className="text-sm text-muted-foreground">
-                            {order.currentRevisionNo == null
-                                ? "本单尚未生效，尚未形成应收。"
-                                : "本单已生效，当前可见范围未查到应收记录。"}
-                        </p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>应收</TableHead>
-                                    <TableHead>结算主体</TableHead>
-                                    <TableHead>到期日</TableHead>
-                                    <TableHead>状态</TableHead>
-                                    <TableHead data-align="end">
-                                        待收金额
-                                    </TableHead>
-                                    <TableHead>操作</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {readableAccounts.map((row) => (
-                                    <TableRow key={row.accountId}>
-                                        <TableCell>
-                                            子账 #{row.accountSeq}
-                                        </TableCell>
-                                        <TableCell>
-                                            {row.counterpartyPartyName}
-                                        </TableCell>
-                                        <TableCell className="num">
-                                            {row.dueDate || "未约定"}
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge
-                                                label={row.statusLabel}
-                                                tone={row.statusTone}
-                                            />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue value={row.openTotal} />
-                                        </TableCell>
-                                        <TableCell>
-                                            {previewButton(
-                                                "receivable",
-                                                row.accountId,
-                                                `应收子账${row.accountSeq}`,
-                                            )}
-                                        </TableCell>
+                    <ReadState
+                        allowed={canRead("receivable_account:list")}
+                        pending={state.profile.isPending || accounts.isLoading}
+                        error={accounts.error}
+                        retry={() => void accounts.refetch()}
+                    >
+                        {!readableAccounts?.length ? (
+                            <p className="text-sm text-muted-foreground">
+                                {order.currentRevisionNo == null
+                                    ? "本单尚未生效，尚未形成应收。"
+                                    : "本单已生效，当前可见范围未查到应收记录。"}
+                            </p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>应收</TableHead>
+                                        <TableHead>结算主体</TableHead>
+                                        <TableHead>到期日</TableHead>
+                                        <TableHead>状态</TableHead>
+                                        <TableHead data-align="end">
+                                            待收金额
+                                        </TableHead>
+                                        <TableHead>操作</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </ReadState>
-            </DocumentSection>
-            <DocumentSection
-                title="本单回款记录"
-                description="包含已关联本单的审批中回款与已核销记录；单据到账金额和本单核销金额分别列示。"
-            >
-                <ReadState
-                    allowed={canRead("customer_receipt:list")}
-                    pending={state.profile.isPending || receipts.isLoading}
-                    error={receipts.error}
-                    retry={() => void receipts.refetch()}
+                                </TableHeader>
+                                <TableBody>
+                                    {readableAccounts.map((row) => (
+                                        <TableRow key={row.accountId}>
+                                            <TableCell>
+                                                子账 #{row.accountSeq}
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.counterpartyPartyName}
+                                            </TableCell>
+                                            <TableCell className="num">
+                                                {row.dueDate || "未约定"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <StatusBadge
+                                                    label={row.statusLabel}
+                                                    tone={row.statusTone}
+                                                />
+                                            </TableCell>
+                                            <TableCell data-align="end">
+                                                <MoneyValue
+                                                    value={row.openTotal}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                {previewButton(
+                                                    "receivable",
+                                                    row.accountId,
+                                                    `应收子账${row.accountSeq}`,
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </ReadState>
+                </DetailRecordSection>
+                <DetailRecordSection
+                    title="回款记录"
+                    count={
+                        canRead("customer_receipt:list") && !receipts.error
+                            ? receipts.data?.total
+                            : undefined
+                    }
+                    compact={receiptsEmpty}
                 >
-                    {!receipts.data?.items.length ? (
-                        <p className="text-sm text-muted-foreground">
-                            当前没有关联本单的回款记录。
-                        </p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>回款单／到账日期</TableHead>
-                                    <TableHead>状态／当前审批人</TableHead>
-                                    <TableHead data-align="end">
-                                        单据到账金额
-                                    </TableHead>
-                                    <TableHead data-align="end">
-                                        本单已核销
-                                    </TableHead>
-                                    <TableHead data-align="end">
-                                        本单拟核销
-                                    </TableHead>
-                                    <TableHead>操作</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {receipts.data.items.map((row) => (
-                                    <TableRow key={row.receiptId}>
-                                        <TableCell>
-                                            {row.receiptNo}
-                                            <div className="text-xs text-muted-foreground">
-                                                {row.receivedAt.slice(0, 10)}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge
-                                                label={row.statusLabel}
-                                                tone={row.statusTone}
-                                            />
-                                            <div className="text-xs text-muted-foreground">
-                                                {
-                                                    row.approval?.instance
-                                                        ?.currentAssigneeName
-                                                }
-                                            </div>
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue value={row.amount} />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            {rowAmount(row.allocations)}
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            {row.status === "in_approval" ? (
-                                                row.pendingAllocations &&
-                                                targetIds ? (
-                                                    <MoneyValue
-                                                        value={sumFixed(
-                                                            row.pendingAllocations
-                                                                .filter(
-                                                                    (line) =>
-                                                                        targetIds.has(
-                                                                            line.targetId,
-                                                                        ),
-                                                                )
-                                                                .map(
-                                                                    (line) =>
-                                                                        line.amountGross,
-                                                                ),
-                                                            {
-                                                                maxScale: 2,
-                                                                outputScale: 2,
-                                                            },
-                                                        )}
-                                                    />
+                    <ReadState
+                        allowed={canRead("customer_receipt:list")}
+                        pending={state.profile.isPending || receipts.isLoading}
+                        error={receipts.error}
+                        retry={() => void receipts.refetch()}
+                    >
+                        {!receipts.data?.items.length ? (
+                            <p className="text-sm text-muted-foreground">
+                                暂无回款记录
+                            </p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>回款单／到账日期</TableHead>
+                                        <TableHead>状态／当前审批人</TableHead>
+                                        <TableHead data-align="end">
+                                            单据到账金额
+                                        </TableHead>
+                                        <TableHead data-align="end">
+                                            本单已核销
+                                        </TableHead>
+                                        <TableHead data-align="end">
+                                            <span className="inline-flex items-center gap-1">
+                                                本单拟核销
+                                                <DetailHint
+                                                    id="sales-order-pending-allocation-hint"
+                                                    label="拟核销金额"
+                                                >
+                                                    审批中回款拟分配给本单的金额，尚未计入已核销回款。
+                                                </DetailHint>
+                                            </span>
+                                        </TableHead>
+                                        <TableHead>操作</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {receipts.data.items.map((row) => (
+                                        <TableRow key={row.receiptId}>
+                                            <TableCell>
+                                                {row.receiptNo}
+                                                <div className="text-xs text-muted-foreground">
+                                                    {row.receivedAt.slice(
+                                                        0,
+                                                        10,
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <StatusBadge
+                                                    label={row.statusLabel}
+                                                    tone={row.statusTone}
+                                                />
+                                                <div className="text-xs text-muted-foreground">
+                                                    {
+                                                        row.approval?.instance
+                                                            ?.currentAssigneeName
+                                                    }
+                                                </div>
+                                            </TableCell>
+                                            <TableCell data-align="end">
+                                                <MoneyValue
+                                                    value={row.amount}
+                                                />
+                                            </TableCell>
+                                            <TableCell data-align="end">
+                                                {rowAmount(row.allocations)}
+                                            </TableCell>
+                                            <TableCell data-align="end">
+                                                {row.status ===
+                                                "in_approval" ? (
+                                                    row.pendingAllocations &&
+                                                    targetIds ? (
+                                                        <MoneyValue
+                                                            value={sumFixed(
+                                                                row.pendingAllocations
+                                                                    .filter(
+                                                                        (
+                                                                            line,
+                                                                        ) =>
+                                                                            targetIds.has(
+                                                                                line.targetId,
+                                                                            ),
+                                                                    )
+                                                                    .map(
+                                                                        (
+                                                                            line,
+                                                                        ) =>
+                                                                            line.amountGross,
+                                                                    ),
+                                                                {
+                                                                    maxScale: 2,
+                                                                    outputScale: 2,
+                                                                },
+                                                            )}
+                                                        />
+                                                    ) : (
+                                                        "待确认"
+                                                    )
                                                 ) : (
-                                                    "待确认"
-                                                )
-                                            ) : (
-                                                "—"
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {previewButton(
-                                                "receipt",
-                                                row.receiptId,
-                                                row.receiptNo,
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                    {receipts.data ? (
-                        <RecordPages
-                            id="sales-order-receipts"
-                            page={state.receiptPage}
-                            total={receipts.data.total}
-                            onPage={state.setReceiptPage}
-                        />
-                    ) : null}
-                </ReadState>
-            </DocumentSection>
-            <DocumentSection
-                title="本单发票记录"
-                description="金额只统计分配到本单的含税净额，包含冲减记录。"
-            >
-                <ReadState
-                    allowed={canRead("invoice:list")}
-                    pending={state.profile.isPending || invoices.isLoading}
-                    error={invoices.error}
-                    retry={() => void invoices.refetch()}
+                                                    "—"
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {previewButton(
+                                                    "receipt",
+                                                    row.receiptId,
+                                                    row.receiptNo,
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                        {receipts.data &&
+                        (receipts.data.total > 20 || state.receiptPage > 1) ? (
+                            <RecordPages
+                                id="sales-order-receipts"
+                                page={state.receiptPage}
+                                total={receipts.data.total}
+                                onPage={state.setReceiptPage}
+                            />
+                        ) : null}
+                    </ReadState>
+                </DetailRecordSection>
+                <DetailRecordSection
+                    title="发票记录"
+                    count={
+                        canRead("invoice:list") && !invoices.error
+                            ? invoices.data?.total
+                            : undefined
+                    }
+                    compact={invoicesEmpty}
                 >
-                    {!invoices.data?.items.length ? (
-                        <p className="text-sm text-muted-foreground">
-                            当前没有关联本单的发票记录。
-                        </p>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>发票号码／开票日期</TableHead>
-                                    <TableHead>类型</TableHead>
-                                    <TableHead>状态</TableHead>
-                                    <TableHead data-align="end">
-                                        核到本单
-                                    </TableHead>
-                                    <TableHead>操作</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {invoices.data.items.map((row) => (
-                                    <TableRow key={row.invoiceId}>
-                                        <TableCell>
-                                            {row.invoiceNo}
-                                            <div className="text-xs text-muted-foreground">
-                                                {row.invoiceDate}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {row.invoiceKindLabel}
-                                        </TableCell>
-                                        <TableCell>
-                                            <StatusBadge
-                                                label={row.statusLabel}
-                                                tone={row.statusTone}
-                                            />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            {rowAmount(row.allocations)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {previewButton(
-                                                "invoice",
-                                                row.invoiceId,
-                                                row.invoiceNo,
-                                            )}
-                                        </TableCell>
+                    <ReadState
+                        allowed={canRead("invoice:list")}
+                        pending={state.profile.isPending || invoices.isLoading}
+                        error={invoices.error}
+                        retry={() => void invoices.refetch()}
+                    >
+                        {!invoices.data?.items.length ? (
+                            <p className="text-sm text-muted-foreground">
+                                暂无发票记录
+                            </p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>
+                                            发票号码／开票日期
+                                        </TableHead>
+                                        <TableHead>类型</TableHead>
+                                        <TableHead>状态</TableHead>
+                                        <TableHead data-align="end">
+                                            核到本单
+                                        </TableHead>
+                                        <TableHead>操作</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                    {invoices.data ? (
-                        <RecordPages
-                            id="sales-order-invoices"
-                            page={state.invoicePage}
-                            total={invoices.data.total}
-                            onPage={state.setInvoicePage}
-                        />
-                    ) : null}
-                </ReadState>
-            </DocumentSection>
+                                </TableHeader>
+                                <TableBody>
+                                    {invoices.data.items.map((row) => (
+                                        <TableRow key={row.invoiceId}>
+                                            <TableCell>
+                                                {row.invoiceNo}
+                                                <div className="text-xs text-muted-foreground">
+                                                    {row.invoiceDate}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.invoiceKindLabel}
+                                            </TableCell>
+                                            <TableCell>
+                                                <StatusBadge
+                                                    label={row.statusLabel}
+                                                    tone={row.statusTone}
+                                                />
+                                            </TableCell>
+                                            <TableCell data-align="end">
+                                                {rowAmount(row.allocations)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {previewButton(
+                                                    "invoice",
+                                                    row.invoiceId,
+                                                    row.invoiceNo,
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                        {invoices.data &&
+                        (invoices.data.total > 20 || state.invoicePage > 1) ? (
+                            <RecordPages
+                                id="sales-order-invoices"
+                                page={state.invoicePage}
+                                total={invoices.data.total}
+                                onPage={state.setInvoicePage}
+                            />
+                        ) : null}
+                    </ReadState>
+                </DetailRecordSection>
+            </div>
             <QuickPreviewSheet
                 id="sales-order-finance-preview"
                 open={state.preview != null}

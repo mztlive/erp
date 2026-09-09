@@ -21,10 +21,12 @@ export function AcceptanceProgressTable({
     progress,
     pendingHint,
     className,
+    showSummary = true,
 }: {
     progress: AcceptanceOrderProgress
     pendingHint?: string
     className?: string
+    showSummary?: boolean
 }) {
     const unit = progress.unitCode ?? ""
     const summary = progress.unitCode
@@ -35,7 +37,7 @@ export function AcceptanceProgressTable({
             className={className ?? "py-0"}
             title="验收进度"
             description={
-                pendingHint ? (
+                !showSummary ? undefined : pendingHint ? (
                     <div className="flex flex-col gap-1">
                         <p>{summary}</p>
                         <p>{pendingHint}</p>

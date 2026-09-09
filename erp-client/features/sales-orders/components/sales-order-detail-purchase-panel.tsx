@@ -7,7 +7,6 @@ import {
     DocumentSection,
     MoneyValue,
     RelatedDocumentList,
-    surfaceInsetClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { PurchaseOrderPaperDialog } from "@/features/purchase-orders/components/purchase-order-paper-dialog"
@@ -18,10 +17,12 @@ import type {
     PurchaseOrderStatus,
 } from "@/features/purchase-orders/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import { SectionLead } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
+import {
+    DetailSummary,
+    DetailSummaryItem,
+} from "./sales-order-detail-presentation"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
 
@@ -88,36 +89,37 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     const statusSummary = purchaseOrderStatusSummary(listedRows)
 
     return (
-        <div className="flex flex-col gap-4">
-            <SectionLead>
-                本销售单的供给覆盖与已创建采购单。现有库存可直接形成预占，采购缺口继续查看审批、履约和付款进度。
-            </SectionLead>
-
-            <div className={cn(surfaceInsetClassName, "px-3 py-3")}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                        <h3 className="text-sm font-medium">本单供给与采购</h3>
-                        <p
-                            className="mt-1 text-xs text-muted-foreground"
-                            data-testid="sales-order-purchase-status"
-                        >
-                            采购单 {purchaseCount} 笔
-                            {statusSummary
-                                ? ` · ${statusSummary}`
-                                : ` · ${progress.label}`}
-                        </p>
-                        <p
-                            className="num mt-1 text-xs text-muted-foreground"
-                            data-testid="sales-order-purchase-progress"
-                        >
+        <div className="space-y-6">
+            <DetailSummary label="采购进度摘要">
+                <DetailSummaryItem
+                    title="供给覆盖"
+                    label="待覆盖数量"
+                    value={progress.remainingQuantity}
+                    detail={
+                        <span data-testid="sales-order-purchase-progress">
                             供给目标 {progress.salesQuantity} · 已覆盖{" "}
-                            {progress.coveredQuantity} · 剩余{" "}
-                            {progress.remainingQuantity}
-                            {statusSummary ? ` · ${progress.label}` : null}
-                        </p>
-                    </div>
-                </div>
-            </div>
+                            {progress.coveredQuantity}
+                        </span>
+                    }
+                />
+                <DetailSummaryItem
+                    title="采购"
+                    label="已创建采购单"
+                    value={
+                        <>
+                            {purchaseCount}{" "}
+                            <span className="text-sm font-normal text-muted-foreground">
+                                笔
+                            </span>
+                        </>
+                    }
+                    detail={
+                        <span data-testid="sales-order-purchase-status">
+                            {statusSummary || progress.label}
+                        </span>
+                    }
+                />
+            </DetailSummary>
 
             {permissions.accountQuery.isPending ? (
                 <div
@@ -144,7 +146,8 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                 />
             ) : (
                 <DocumentSection
-                    title="已创建的采购单"
+                    title="采购明细"
+                    className="border-0 py-0 [&_h2]:text-sm [&>div:last-child]:pt-3"
                     description={
                         listQuery.data &&
                         listQuery.data.total > RELATED_PURCHASE_PAGE_SIZE

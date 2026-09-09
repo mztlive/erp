@@ -147,7 +147,7 @@ it("有全部票款权限时仍只读，并区分单据金额、本单已核销�
     expect(within(row).queryByText("¥420.00")).toBeNull()
     expect(within(row).getByText("财务甲")).toBeTruthy()
     expect(
-        screen.queryByRole("button", { name: /登记|核销|冲正|通过|驳回/ }),
+        screen.queryByRole("button", { name: /^(登记|核销|冲正|通过|驳回)/ }),
     ).toBeNull()
 })
 
@@ -163,8 +163,8 @@ it("回款失败保留失败提示，其他记录继续显示；不伪装成空�
     )
     renderWithQuery(<ReceivablePanel order={order} />)
     expect(screen.getByText("记录加载失败")).toBeTruthy()
-    expect(screen.queryByText("当前没有关联本单的回款记录。")).toBeNull()
-    expect(screen.getByText("当前没有关联本单的发票记录。")).toBeTruthy()
+    expect(screen.queryByText("暂无回款记录")).toBeNull()
+    expect(screen.getByText("暂无发票记录")).toBeTruthy()
 })
 
 it("没有明细权限时隐藏缓存记录，保留销售单摘要且明确权限限制", () => {

@@ -1,5 +1,6 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import { BusinessFailureState } from "@/components/business"
 import { DefinitionBindingCard } from "./definition-binding-card"
 import { ExecutionHistory } from "./execution-history"
@@ -11,9 +12,11 @@ import type { DocumentApprovalView } from "../types"
 export function ApprovalReadonly({
     approval,
     id,
+    className,
 }: {
     approval?: DocumentApprovalView
     id: string
+    className?: string
 }) {
     const instanceId = approval?.instance?.id
     const history = useApprovalHistoryInfiniteQuery(
@@ -23,7 +26,7 @@ export function ApprovalReadonly({
     if (!approval)
         return <p className="text-sm text-muted-foreground">暂无审批记录。</p>
     return (
-        <div className="space-y-4">
+        <div className={cn("space-y-4", className)}>
             {approval.instance ? (
                 <RuntimeSummary instance={approval.instance} compact />
             ) : (
