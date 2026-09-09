@@ -165,7 +165,11 @@ export function SupplierAccountsToolbar({
             }
             moreCount={moreCount}
             moreOpen={panelOpen}
-            onToggleMore={() => setPanelOpen((open) => !open)}
+            onToggleMore={
+                view === "payable"
+                    ? () => setPanelOpen((open) => !open)
+                    : undefined
+            }
             morePanelId={panelId}
             morePanelAriaLabel="供应商往来更多筛选条件"
             onResetMore={resetMoreFilters}
@@ -201,40 +205,40 @@ export function SupplierAccountsToolbar({
                 ) : null
             }
             morePanel={
-                <div className="grid min-w-0 gap-5">
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-supplier-filter`}
-                        label="供应商"
-                    >
-                        <SupplierSearchCombobox
-                            id={`${prefix}-supplier-filter`}
-                            className="w-full sm:w-60"
-                            value={supplierDraft ?? undefined}
-                            onValueChange={(id) => setSupplierDraft(id ?? null)}
-                            purpose="filter"
-                            aria-label="供应商"
-                            placeholder="全部供应商"
+                view === "payable" ? (
+                    <div className="grid min-w-0 gap-5">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-supplier-filter`}
+                            label="供应商"
+                        >
+                            <SupplierSearchCombobox
+                                id={`${prefix}-supplier-filter`}
+                                className="w-full sm:w-60"
+                                value={supplierDraft ?? undefined}
+                                onValueChange={(id) =>
+                                    setSupplierDraft(id ?? null)
+                                }
+                                purpose="filter"
+                                aria-label="供应商"
+                                placeholder="全部供应商"
+                            />
+                        </ListWorkspaceFilterField>
+                        <FixedOptionRadioFilter
+                            idPrefix={`${prefix}-filter-source-type`}
+                            label="来源类型"
+                            value={sourceTypeDraft}
+                            onValueChange={setSourceTypeDraft}
+                            options={SOURCE_TYPE_OPTIONS}
                         />
-                    </ListWorkspaceFilterField>
-                    {view === "payable" ? (
-                        <>
-                            <FixedOptionRadioFilter
-                                idPrefix={`${prefix}-filter-source-type`}
-                                label="来源类型"
-                                value={sourceTypeDraft}
-                                onValueChange={setSourceTypeDraft}
-                                options={SOURCE_TYPE_OPTIONS}
-                            />
-                            <FixedOptionRadioFilter
-                                idPrefix={`${prefix}-filter-payment-gate`}
-                                label="先款条件"
-                                value={paymentGateDraft}
-                                onValueChange={setPaymentGateDraft}
-                                options={PAYMENT_GATE_OPTIONS}
-                            />
-                        </>
-                    ) : null}
-                </div>
+                        <FixedOptionRadioFilter
+                            idPrefix={`${prefix}-filter-payment-gate`}
+                            label="先款条件"
+                            value={paymentGateDraft}
+                            onValueChange={setPaymentGateDraft}
+                            options={PAYMENT_GATE_OPTIONS}
+                        />
+                    </div>
+                ) : undefined
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

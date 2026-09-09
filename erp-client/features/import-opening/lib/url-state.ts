@@ -84,7 +84,7 @@ const codec = createUrlStateCodec<ImportOpeningUrlState>([
         },
         build: (value) => (value === "VALIDATION" ? undefined : String(value)),
     },
-    { key: "status", type: "string" },
+    // 批次状态筛选已移除，旧链接不再施加该条件。
     { key: "objectType", type: "enum", values: OBJECT_CODE_VALUES },
     { key: "q", type: "string" },
     { key: "batchId", type: "string", aliases: ["id"] },

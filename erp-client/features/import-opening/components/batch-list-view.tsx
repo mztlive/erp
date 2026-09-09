@@ -55,7 +55,6 @@ export function BatchListView({
     const filters = useBatchListFilters({ urlState, patchUrl })
     const listQuery = useImportBatchListQuery({
         environment: urlState.environment,
-        status: filters.appliedStatus,
         objectType: filters.appliedObjectType ?? "all",
         q: urlState.q,
         page: urlState.page,
@@ -162,16 +161,9 @@ export function BatchListView({
                         clearAllFilters={filters.clearAllBatchFilters}
                         appliedChips={filters.appliedChips}
                         removeFilter={filters.removeBatchFilter}
-                        batchFilterPanelOpen={filters.batchFilterPanelOpen}
-                        setBatchFilterPanelOpen={
-                            filters.setBatchFilterPanelOpen
-                        }
                         applyBatchFilters={filters.applyBatchFilters}
-                        resetMoreFilters={filters.resetMoreBatchFilters}
                         objectTypeDraft={filters.objectTypeDraft}
                         setObjectTypeDraft={filters.setObjectTypeDraft}
-                        statusDraft={filters.statusDraft}
-                        setStatusDraft={filters.setStatusDraft}
                         hasPendingChanges={filters.hasPendingChanges}
                         resultCount={data?.totalCount}
                         loading={listQuery.isPending || listQuery.isFetching}

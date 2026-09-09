@@ -91,7 +91,10 @@ export function useCustomerReceivablesUrlState(
 
     const view = parseView(searchParams.get("view"))
     const qParam = searchParams.get("q") ?? ""
-    const counterpartyPartyId = searchParams.get("counterpartyId") ?? undefined
+    const counterpartyPartyId =
+        view === "receivable"
+            ? (searchParams.get("counterpartyId") ?? undefined)
+            : undefined
     const customerId = searchParams.get("customerId") ?? undefined
     const due = parseDue(searchParams.get("due"))
     const statusDraftFromUrl = parseReceivableStatus(searchParams.get("status"))
@@ -225,7 +228,10 @@ export function useCustomerReceivablesUrlState(
         patchUrl(
             {
                 q: searchDraft.trim() || null,
-                counterpartyId: counterpartyPartyIdDraft || null,
+                counterpartyId:
+                    view === "receivable"
+                        ? counterpartyPartyIdDraft || null
+                        : null,
                 due: dueDraft === "all" ? null : dueDraft,
                 status: statusDraft === "all" ? null : statusDraft,
                 page: null,
@@ -240,6 +246,7 @@ export function useCustomerReceivablesUrlState(
         patchUrl,
         searchDraft,
         statusDraft,
+        view,
     ])
 
     /** 移除单个已生效条件；来源锁定参数（customerId/salesOrderId…）同样可单独移除。 */
@@ -263,7 +270,8 @@ export function useCustomerReceivablesUrlState(
 
     const hasPendingChanges =
         searchDraft.trim() !== qParam.trim() ||
-        counterpartyPartyIdDraft !== (counterpartyPartyId ?? null) ||
+        (view === "receivable" &&
+            counterpartyPartyIdDraft !== (counterpartyPartyId ?? null)) ||
         dueDraft !== (due ?? "all") ||
         statusDraft !== statusDraftFromUrl
 
@@ -380,7 +388,7 @@ export function useCustomerReceivablesUrlState(
         setDueDraft,
         statusDraft,
         setStatusDraft,
-        panelOpen,
+        panelOpen: view === "receivable" && panelOpen,
         setPanelOpen,
         hasActiveFilters,
         hasStructuredFilters,

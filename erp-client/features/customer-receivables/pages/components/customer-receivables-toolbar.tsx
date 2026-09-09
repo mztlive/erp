@@ -121,7 +121,9 @@ export function CustomerReceivablesToolbar({
             }
             moreCount={moreCount}
             moreOpen={panelOpen}
-            onToggleMore={() => setPanelOpen((open) => !open)}
+            onToggleMore={
+                receivableView ? () => setPanelOpen((open) => !open) : undefined
+            }
             morePanelId={panelId}
             morePanelAriaLabel="客户往来更多筛选条件"
             onResetMore={resetMoreFilters}
@@ -138,35 +140,33 @@ export function CustomerReceivablesToolbar({
                 ) : null
             }
             morePanel={
-                <div className="grid min-w-0 gap-5">
-                    <ListWorkspaceFilterField
-                        htmlFor={`${prefix}-counterparty`}
-                        label="往来主体"
-                    >
-                        <ReceivableCounterpartySearchCombobox
-                            id={`${prefix}-counterparty`}
-                            className="w-full sm:w-60"
-                            value={counterpartyPartyIdDraft ?? undefined}
-                            onValueChange={(id) =>
-                                setCounterpartyPartyIdDraft(id ?? null)
-                            }
-                            purpose="filter"
-                            aria-label="筛选往来主体"
-                            placeholder="全部主体"
-                        />
-                    </ListWorkspaceFilterField>
-                    {receivableView ? (
-                        <>
-                            <FixedOptionRadioFilter
-                                idPrefix={`${prefix}-status-filter`}
-                                label="状态"
-                                value={statusDraft}
-                                onValueChange={setStatusDraft}
-                                options={STATUS_RADIO_OPTIONS}
+                receivableView ? (
+                    <div className="grid min-w-0 gap-5">
+                        <ListWorkspaceFilterField
+                            htmlFor={`${prefix}-counterparty`}
+                            label="往来主体"
+                        >
+                            <ReceivableCounterpartySearchCombobox
+                                id={`${prefix}-counterparty`}
+                                className="w-full sm:w-60"
+                                value={counterpartyPartyIdDraft ?? undefined}
+                                onValueChange={(id) =>
+                                    setCounterpartyPartyIdDraft(id ?? null)
+                                }
+                                purpose="filter"
+                                aria-label="筛选往来主体"
+                                placeholder="全部主体"
                             />
-                        </>
-                    ) : null}
-                </div>
+                        </ListWorkspaceFilterField>
+                        <FixedOptionRadioFilter
+                            idPrefix={`${prefix}-status-filter`}
+                            label="状态"
+                            value={statusDraft}
+                            onValueChange={setStatusDraft}
+                            options={STATUS_RADIO_OPTIONS}
+                        />
+                    </div>
+                ) : undefined
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

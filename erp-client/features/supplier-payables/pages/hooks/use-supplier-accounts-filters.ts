@@ -45,7 +45,10 @@ export function useSupplierAccountsFilters() {
 
     const view = parseView(searchParams.get("view"))
     const qParam = searchParams.get("q") ?? ""
-    const supplierId = searchParams.get("supplierId") ?? undefined
+    const supplierId =
+        view === "payable"
+            ? (searchParams.get("supplierId") ?? undefined)
+            : undefined
     const sourceTypeParam = searchParams.get("sourceType")
     const statusParam = searchParams.get("status")
     const dueParam = searchParams.get("due")
@@ -197,7 +200,7 @@ export function useSupplierAccountsFilters() {
         patchUrl(
             {
                 q: searchInput.trim() || null,
-                supplierId: supplierDraft || null,
+                supplierId: view === "payable" ? supplierDraft || null : null,
                 sourceType: sourceTypeDraft === "all" ? null : sourceTypeDraft,
                 status: statusDraft === "all" ? null : statusDraft,
                 due: dueDraft === "all" ? null : dueDraft,
@@ -218,6 +221,7 @@ export function useSupplierAccountsFilters() {
         statusDraft,
         supplierDraft,
         trackDraft,
+        view,
     ])
     const resetMoreFilters = React.useCallback(() => {
         setSupplierDraft(null)
@@ -227,7 +231,7 @@ export function useSupplierAccountsFilters() {
 
     const hasPendingChanges =
         searchInput.trim() !== qParam.trim() ||
-        supplierDraft !== (supplierId ?? null) ||
+        (view === "payable" && supplierDraft !== (supplierId ?? null)) ||
         sourceTypeDraft !== (sourceType ?? "all") ||
         statusDraft !== (status ?? "all") ||
         dueDraft !== (due ?? "all") ||
@@ -407,7 +411,7 @@ export function useSupplierAccountsFilters() {
         searchInput,
         setSearchInput,
         searchInputRef,
-        panelOpen,
+        panelOpen: view === "payable" && panelOpen,
         setPanelOpen,
         hasStructuredFilters,
         appliedChips,

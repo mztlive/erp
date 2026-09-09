@@ -4,7 +4,6 @@ import { OptionCombobox } from "@/components/business"
 import {
     ListSearchField,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
     ListWorkspaceInlineFilter,
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
@@ -14,14 +13,13 @@ import { Switch } from "@/components/ui/switch"
 import type { IntegrationUrlState } from "../../lib/url-state"
 import {
     ENV_LABEL,
-    ERROR_CLASS_LABEL,
     MODE_LABEL,
     OWNER_LABEL,
     VIEW_LABEL,
     type IntegrationView,
 } from "../../types"
 
-type IntegrationFilterKey = "q" | "mode" | "environment" | "errorClass"
+type IntegrationFilterKey = "q" | "mode" | "environment"
 
 type IntegrationAppliedChip = Readonly<{
     key: IntegrationFilterKey
@@ -55,45 +53,28 @@ export function IntegrationQueueToolbar({
     const [environmentDraft, setEnvironmentDraft] = React.useState(
         urlState.environment,
     )
-    const [errorClassDraft, setErrorClassDraft] = React.useState(
-        urlState.errorClass ?? "all",
-    )
-    const [panelOpen, setPanelOpen] = React.useState(
-        Boolean(urlState.errorClass),
-    )
-
     React.useEffect(() => {
         setModeDraft(urlState.mode)
     }, [urlState.mode])
     React.useEffect(() => {
         setEnvironmentDraft(urlState.environment)
     }, [urlState.environment])
-    React.useEffect(() => {
-        setErrorClassDraft(urlState.errorClass ?? "all")
-    }, [urlState.errorClass])
-
     const applyFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || null,
             mode: modeDraft,
             environment: environmentDraft,
-            errorClass: errorClassDraft === "all" ? null : errorClassDraft,
+            errorClass: null,
             taskId: null,
             differenceId: null,
         })
-        setPanelOpen(false)
-    }, [environmentDraft, errorClassDraft, modeDraft, patchUrl, searchDraft])
-
-    const resetMoreFilters = React.useCallback(() => {
-        setErrorClassDraft("all")
-    }, [])
+    }, [environmentDraft, modeDraft, patchUrl, searchDraft])
 
     const removeFilter = React.useCallback(
         (key: IntegrationFilterKey) => {
             if (key === "q") onSearchDraftChange("")
             if (key === "mode") setModeDraft("all")
             if (key === "environment") setEnvironmentDraft("production")
-            if (key === "errorClass") setErrorClassDraft("all")
             patchUrl({
                 [key === "environment" ? "environment" : key]:
                     key === "mode"
@@ -125,20 +106,13 @@ export function IntegrationQueueToolbar({
                 label: `环境：${ENV_LABEL[urlState.environment]}`,
             })
         }
-        if (urlState.errorClass) {
-            chips.push({
-                key: "errorClass",
-                label: `错误类别：${ERROR_CLASS_LABEL[urlState.errorClass] ?? urlState.errorClass}`,
-            })
-        }
         return chips
-    }, [urlState.environment, urlState.errorClass, urlState.mode, urlState.q])
+    }, [urlState.environment, urlState.mode, urlState.q])
 
     const hasPendingChanges =
         searchDraft.trim() !== (urlState.q ?? "") ||
         modeDraft !== urlState.mode ||
-        environmentDraft !== urlState.environment ||
-        errorClassDraft !== (urlState.errorClass ?? "all")
+        environmentDraft !== urlState.environment
 
     return (
         <div className="sticky top-0 z-10 space-y-3 bg-card py-2">
@@ -206,16 +180,10 @@ export function IntegrationQueueToolbar({
                         searchInputRef={searchInputRef}
                         value={searchDraft}
                         onChange={onSearchDraftChange}
-                        placeholder="任务号 / 业务单号 / 事件摘要"
+                        placeholder="任务号 / 业务单号 / 事件摘要 / 错误类别"
                         aria-label="搜索"
                     />
                 }
-                moreCount={urlState.errorClass ? 1 : 0}
-                moreOpen={panelOpen}
-                onToggleMore={() => setPanelOpen((open) => !open)}
-                morePanelId="integration-queue-toolbar-more-panel"
-                morePanelAriaLabel="接口错误更多筛选条件"
-                onResetMore={resetMoreFilters}
                 commonFilters={
                     <>
                         <ListWorkspaceInlineFilter
@@ -270,33 +238,6 @@ export function IntegrationQueueToolbar({
                             />
                         </ListWorkspaceInlineFilter>
                     </>
-                }
-                morePanel={
-                    <ListWorkspaceFilterField
-                        htmlFor="integration-queue-toolbar-error-class"
-                        label="错误类别"
-                    >
-                        <OptionCombobox
-                            id="integration-queue-toolbar-error-class"
-                            value={errorClassDraft}
-                            onValueChange={(v) =>
-                                setErrorClassDraft(v ?? "all")
-                            }
-                            options={[
-                                { value: "all", label: "全部类别" },
-                                ...Object.entries(ERROR_CLASS_LABEL).map(
-                                    ([k, label]) => ({
-                                        value: k,
-                                        label,
-                                    }),
-                                ),
-                            ]}
-                            className="w-full sm:w-60"
-                            aria-label="错误类别"
-                            placeholder="错误类别"
-                            allowClear={false}
-                        />
-                    </ListWorkspaceFilterField>
                 }
                 resultStatus={listWorkspaceFilterStatusText({
                     loading,

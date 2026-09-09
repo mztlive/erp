@@ -22,6 +22,7 @@ describe("patchForViewChange", () => {
         expect(patchForViewChange("payment")).toEqual({
             view: "payment",
             page: null,
+            supplierId: null,
             sourceType: null,
             status: null,
             due: null,
@@ -34,6 +35,7 @@ describe("patchForViewChange", () => {
         expect(patchForViewChange("purchase_invoice")).toEqual({
             view: "purchase_invoice",
             page: null,
+            supplierId: null,
             sourceType: null,
             status: null,
             due: null,
@@ -54,6 +56,7 @@ describe("patchForViewChange", () => {
         expect(patchForViewChange("unallocated")).toEqual({
             view: "unallocated",
             page: null,
+            supplierId: null,
             sourceType: null,
             status: null,
             due: null,

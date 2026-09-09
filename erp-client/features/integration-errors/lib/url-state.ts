@@ -54,7 +54,7 @@ const codec = createUrlStateCodec<IntegrationUrlState>([
         values: ENV_VALUES,
         defaultValue: "production",
     },
-    { key: "errorClass", type: "string" },
+    // 错误类别统一使用 q 搜索，旧链接不再叠加独立类别条件。
     { key: "owner", type: "enum", values: OWNER_VALUES, defaultValue: "me" },
     { key: "q", type: "string" },
     {
@@ -96,7 +96,6 @@ export function toResolutionQuery(
         view: state.view,
         mode: state.mode,
         environment: state.environment,
-        errorClass: state.errorClass,
         owner: state.owner,
         q: state.q,
         queueContextId: state.queueContextId,
