@@ -102,7 +102,7 @@ function SettlementCenter({
 
     return (
         <PageScaffold
-            density={embedded ? "compact" : "default"}
+            density="compact"
             className={
                 embedded ? workspaceEmbeddedScaffoldClassName : undefined
             }

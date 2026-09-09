@@ -8,15 +8,11 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     PageHeader,
+    DetailPageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
-import {
-    ListWorkspaceHeader,
-    listWorkspaceStyles,
-} from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { cn } from "@/lib/utils"
@@ -244,41 +240,46 @@ export function ApprovalProcessDetailPage({
         !(urlState.view === "draft" && !draft)
 
     return (
-        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
-            <ListWorkspaceHeader
-                eyebrow="系统 / 审批流程配置"
+        <PageScaffold density="compact">
+            <DetailPageHeader
+                back={{
+                    id: "governance-approval-processes-detail-back",
+                    label: "审批流程目录",
+                    href: "/system/approval-processes",
+                }}
                 title={typeTitle}
-                description={
-                    <span className="flex flex-wrap items-center gap-2">
-                        {detailQuery.data ? (
-                            <StatusBadge
-                                tone={definitionStatusTone(
-                                    detailQuery.data.status,
-                                )}
-                                label={definitionStatusLabel(
-                                    detailQuery.data.status,
-                                )}
-                            />
-                        ) : catalogItem ? (
-                            <StatusBadge
-                                tone={configurationStatusTone(
+                primaryStatus={
+                    detailQuery.data
+                        ? {
+                              tone: definitionStatusTone(
+                                  detailQuery.data.status,
+                              ),
+                              label: definitionStatusLabel(
+                                  detailQuery.data.status,
+                              ),
+                          }
+                        : catalogItem
+                          ? {
+                                tone: configurationStatusTone(
                                     catalogItem.configuration_status,
                                     catalogItem.approval_requirement,
-                                )}
-                                label={configurationStatusLabel(
+                                ),
+                                label: configurationStatusLabel(
                                     catalogItem.configuration_status,
                                     catalogItem.approval_requirement,
-                                )}
-                            />
-                        ) : null}
+                                ),
+                            }
+                          : undefined
+                }
+                meta={
+                    <>
                         {detailQuery.data ? (
-                            <span className="text-xs text-muted-foreground">
+                            <span>
                                 {versionLabel(
                                     detailQuery.data.definition_version,
                                 )}
                             </span>
                         ) : null}
-
                         <span>
                             {catalogItem
                                 ? approvalRequirementLabel(
@@ -286,51 +287,45 @@ export function ApprovalProcessDetailPage({
                                   )
                                 : "审批流程"}
                         </span>
-                    </span>
+                    </>
                 }
-            >
-                <Button
-                    id="governance-approval-processes-detail-back"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    render={<Link href="/system/approval-processes" />}
-                >
-                    返回目录
-                </Button>
-                {canCreate ? (
-                    <Button
-                        id="governance-approval-processes-detail-create-draft"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCreateOpen(true)}
-                    >
-                        新建草稿
-                    </Button>
-                ) : null}
-                {canPublish && draft && urlState.view === "draft" ? (
-                    <Button
-                        id="governance-approval-processes-detail-publish"
-                        type="button"
-                        size="sm"
-                        onClick={() => setPublishOpen(true)}
-                    >
-                        发布
-                    </Button>
-                ) : null}
-                {canRetire && published ? (
-                    <Button
-                        id="governance-approval-processes-detail-retire"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setRetireOpen(true)}
-                    >
-                        退役
-                    </Button>
-                ) : null}
-            </ListWorkspaceHeader>
+                primaryAction={
+                    <>
+                        {canCreate ? (
+                            <Button
+                                id="governance-approval-processes-detail-create-draft"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCreateOpen(true)}
+                            >
+                                新建草稿
+                            </Button>
+                        ) : null}
+                        {canPublish && draft && urlState.view === "draft" ? (
+                            <Button
+                                id="governance-approval-processes-detail-publish"
+                                type="button"
+                                size="sm"
+                                onClick={() => setPublishOpen(true)}
+                            >
+                                发布
+                            </Button>
+                        ) : null}
+                        {canRetire && published ? (
+                            <Button
+                                id="governance-approval-processes-detail-retire"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setRetireOpen(true)}
+                            >
+                                退役
+                            </Button>
+                        ) : null}
+                    </>
+                }
+            />
 
             <div className={cn(surfacePanelClassName, "min-w-0")}>
                 <Tabs

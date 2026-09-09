@@ -3,7 +3,8 @@
 import * as React from "react"
 
 import {
-    DocumentHeader,
+    DetailPageHeader,
+    type DetailPageHeaderProps,
     MetricItem,
     MetricStrip,
     MoneyValue,
@@ -15,20 +16,24 @@ import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import { remainingReceivableAmount } from "@/features/sales-orders/lib/sales-order-receivable"
 
 export function SalesOrderIdentityHeader({
+    back,
+    navigationMeta,
     order,
     identityOnly = false,
     primaryAction,
     secondaryActions,
 }: {
+    back?: DetailPageHeaderProps["back"]
+    navigationMeta?: React.ReactNode
     order: SalesOrderDetailView
     identityOnly?: boolean
     primaryAction?: React.ReactNode
     secondaryActions?: React.ReactNode
 }) {
     return (
-        <DocumentHeader
-            density="compact"
-            className="border-0 pb-0 [&>div:first-child]:flex-col sm:[&>div:first-child]:flex-row [&_h1]:wrap-anywhere [&_h1]:text-3xl [&_[data-slot=document-header-summary]]:mt-4 [&_[data-slot=document-header-summary]]:border-0 [&_[data-slot=document-header-summary]]:pt-0"
+        <DetailPageHeader
+            back={back}
+            navigationMeta={navigationMeta}
             title={order.customerName}
             titleExtra={
                 <Badge variant="secondary" className="font-normal">

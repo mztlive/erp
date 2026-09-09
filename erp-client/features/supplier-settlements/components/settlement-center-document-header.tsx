@@ -1,11 +1,10 @@
 "use client"
 
-import { ArrowLeftIcon, RefreshCwIcon, SendIcon } from "lucide-react"
+import { RefreshCwIcon, SendIcon } from "lucide-react"
 
 import {
-    DocumentHeader,
+    DetailPageHeader,
     GuardedBusinessAction,
-    PageHeader,
     WorkspaceTaskFooter,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -36,25 +35,16 @@ function SettlementCenterDocumentHeader({
     const st = statement
     return (
         <>
-            {embedded ? null : (
-                <PageHeader
-                    variant="object-chrome"
-                    actions={
-                        <Button
-                            id="supplier-settlements-center-back"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onBack}
-                        >
-                            <ArrowLeftIcon className="size-4" />
-                            返回列表
-                        </Button>
-                    }
-                />
-            )}
-            <DocumentHeader
-                density="compact"
+            <DetailPageHeader
+                back={
+                    embedded
+                        ? undefined
+                        : {
+                              id: "supplier-settlements-center-back",
+                              label: "对账单列表",
+                              onClick: onBack,
+                          }
+                }
                 title={`${st.supplierName} · ${st.periodLabel}`}
                 documentNumber={st.statementNo}
                 primaryStatus={{ label: st.statusLabel, tone: st.statusTone }}

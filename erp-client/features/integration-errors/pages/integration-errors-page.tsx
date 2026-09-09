@@ -225,16 +225,30 @@ export function IntegrationErrorsPage({
 
     return (
         <PageScaffold
-            density={embedded ? "compact" : "default"}
+            density={embedded || focusMode ? "compact" : "default"}
             className={
-                embedded ? workspaceEmbeddedScaffoldClassName : styles.page
+                embedded
+                    ? workspaceEmbeddedScaffoldClassName
+                    : focusMode
+                      ? undefined
+                      : styles.page
             }
         >
-            {!embedded ? (
+            {!embedded && !focusMode ? (
                 <IntegrationPageHeader
                     focusMode={focusMode}
                     itemNumber={item?.identity.number}
                     updatedAt={view?.context.updatedAt}
+                />
+            ) : null}
+
+            {focusMode && !embedded ? (
+                <IntegrationDetailNav
+                    itemNumber={item?.identity.number}
+                    updatedAt={view?.context.updatedAt}
+                    view={urlState.view}
+                    queueContextId={urlState.queueContextId}
+                    onRefresh={actions.refresh}
                 />
             ) : null}
 
@@ -252,12 +266,6 @@ export function IntegrationErrorsPage({
                     resultCount={queueItems.length}
                     loading={queueQuery.isFetching && !queueQuery.isPending}
                     failed={queueQuery.isError}
-                />
-            ) : !embedded ? (
-                <IntegrationDetailNav
-                    view={urlState.view}
-                    queueContextId={urlState.queueContextId}
-                    onRefresh={actions.refresh}
                 />
             ) : null}
 

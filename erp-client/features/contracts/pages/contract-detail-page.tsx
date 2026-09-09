@@ -8,7 +8,6 @@ import {
     BusinessFailureState,
     ObjectSectionTabs,
     ObjectSectionTabsPanel,
-    PageActions,
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
@@ -104,24 +103,7 @@ export function ContractDetailPage({
     }
 
     return (
-        <PageScaffold>
-            <PageHeader
-                title="合同详情"
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "back",
-                                id: "card-contracts-detail-header-back",
-                                label: "返回列表",
-                                variant: "outline",
-                                render: <Link href="/sales/contracts" />,
-                            },
-                        ]}
-                    />
-                }
-            />
-
+        <PageScaffold density="compact">
             <ContractDetailHeader
                 contract={contract}
                 onPaperOpen={() => setPaperOpen(true)}

@@ -160,7 +160,7 @@ export function ConnectionCenter({
     const disableBlocker = actionBlocker("DISABLE")
 
     return (
-        <PageScaffold>
+        <PageScaffold density="compact">
             <CenterHeader
                 conn={conn}
                 onBack={onBack}

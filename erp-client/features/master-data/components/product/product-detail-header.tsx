@@ -1,9 +1,9 @@
 "use client"
 
 import Image from "next/image"
+import { DetailPageHeader } from "@/components/business/detail-page-header"
 
 import {
-    ArrowLeftIcon,
     BanIcon,
     ImagePlusIcon,
     MoreHorizontalIcon,
@@ -56,20 +56,15 @@ export function ProductDetailHeader({
         fields.carouselPreviewUrls[fields.carouselImages[0]] ||
         fields.skus.find((sku) => sku.mainImagePreviewUrl)?.mainImagePreviewUrl
     return (
-        <header className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-                <Button
-                    id="master-data-product-detail-back-list"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="-ml-2 text-muted-foreground"
-                    onClick={onBack}
-                >
-                    <ArrowLeftIcon aria-hidden />
-                    商品列表
-                </Button>
-                {!isCreate && data ? (
+        <DetailPageHeader
+            title={title}
+            back={{
+                id: "master-data-product-detail-back-list",
+                label: "商品列表",
+                onClick: onBack,
+            }}
+            secondaryActions={
+                !isCreate && data ? (
                     <DropdownMenu>
                         <DropdownMenuTrigger
                             id="master-data-product-detail-more"
@@ -97,9 +92,9 @@ export function ProductDetailHeader({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                ) : null}
-            </div>
-            <div className="flex flex-wrap items-center gap-4 pb-2">
+                ) : null
+            }
+            media={
                 <button
                     id="master-data-product-detail-media-shortcut"
                     type="button"
@@ -123,35 +118,32 @@ export function ProductDetailHeader({
                         </>
                     )}
                 </button>
-                <div className="min-w-0 flex-1 basis-56 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="break-words text-xl font-semibold tracking-tight md:text-2xl">
-                            {title}
-                        </h1>
-                        <Badge
-                            variant={
-                                data?.lifecycleStatus === "ENABLED"
-                                    ? "success"
-                                    : "secondary"
-                            }
-                        >
-                            {isCreate ? "待创建" : data?.lifecycleStatusLabel}
-                        </Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        <span>商品编号：{fields.productNo || "待填写"}</span>
-                        {fields.brand ? <span>{fields.brand}</span> : null}
-                        {fields.category ? (
-                            <span>{fields.category}</span>
-                        ) : null}
-                        {fields.productKind ? (
-                            <span>{productKindLabel(fields.productKind)}</span>
-                        ) : null}
-                        {fields.baseUnit ? (
-                            <span>单位：{fields.baseUnit}</span>
-                        ) : null}
-                    </div>
-                </div>
+            }
+            titleExtra={
+                <Badge
+                    variant={
+                        data?.lifecycleStatus === "ENABLED"
+                            ? "success"
+                            : "secondary"
+                    }
+                >
+                    {isCreate ? "待创建" : data?.lifecycleStatusLabel}
+                </Badge>
+            }
+            meta={
+                <>
+                    <span>商品编号：{fields.productNo || "待填写"}</span>
+                    {fields.brand ? <span>{fields.brand}</span> : null}
+                    {fields.category ? <span>{fields.category}</span> : null}
+                    {fields.productKind ? (
+                        <span>{productKindLabel(fields.productKind)}</span>
+                    ) : null}
+                    {fields.baseUnit ? (
+                        <span>单位：{fields.baseUnit}</span>
+                    ) : null}
+                </>
+            }
+            primaryAction={
                 <Button
                     id="master-data-product-detail-header-submit"
                     type="button"
@@ -161,7 +153,7 @@ export function ProductDetailHeader({
                     <SaveIcon aria-hidden />
                     {pending ? "提交中…" : isCreate ? "创建商品" : "保存更新"}
                 </Button>
-            </div>
-        </header>
+            }
+        />
     )
 }

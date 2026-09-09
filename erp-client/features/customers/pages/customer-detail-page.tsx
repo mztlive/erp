@@ -7,7 +7,7 @@ import { FilePlus2Icon, ShoppingCartIcon } from "lucide-react"
 import {
     BusinessFailureState,
     DiscardConfirmDialog,
-    DocumentHeader,
+    DetailPageHeader,
     GuardedBusinessAction,
     PageHeader,
     PageScaffold,
@@ -114,10 +114,14 @@ export function CustomerDetailPage({
     const salesBlocked = !can(customer, "CREATE_SALES_ORDER")
 
     return (
-        <PageScaffold>
-            {/* First screen: identity + owner + metrics + primary actions */}
-            <DocumentHeader
-                density="compact"
+        <PageScaffold density="compact">
+            <DetailPageHeader
+                back={{
+                    id: "customers-detail-back",
+                    label: "客户列表",
+                    onClick: state.handleBack,
+                }}
+                numberLabel="客户编号"
                 title={customer.currentRevision.legalName}
                 documentNumber={customer.customerNo}
                 version={`v${customer.currentRevision.revisionNo}`}
@@ -291,8 +295,16 @@ export function CustomerDetailPage({
                     if (!open) state.dismissPendingSection()
                 }}
                 title="放弃未保存的修改？"
-                description="编辑内容尚未保存，切换分区后将丢失。可先保存修订再切换。"
-                confirmLabel="放弃并切换"
+                description={
+                    state.pendingSection === "back"
+                        ? "编辑内容尚未保存，返回列表后将丢失。"
+                        : "编辑内容尚未保存，切换分区后将丢失。可先保存修订再切换。"
+                }
+                confirmLabel={
+                    state.pendingSection === "back"
+                        ? "放弃并返回"
+                        : "放弃并切换"
+                }
                 cancelLabel="继续编辑"
                 onConfirm={state.discardPendingAndSwitch}
             />

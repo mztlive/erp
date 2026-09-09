@@ -144,7 +144,7 @@ export function SupplierOrderCenterPage({
     if (query.isPending) {
         return (
             <PageScaffold
-                density={embedded ? "compact" : "default"}
+                density="compact"
                 className={
                     embedded ? workspaceEmbeddedScaffoldClassName : undefined
                 }
@@ -159,7 +159,7 @@ export function SupplierOrderCenterPage({
     if (query.isError) {
         return (
             <PageScaffold
-                density={embedded ? "compact" : "default"}
+                density="compact"
                 className={
                     embedded ? workspaceEmbeddedScaffoldClassName : undefined
                 }
@@ -184,7 +184,7 @@ export function SupplierOrderCenterPage({
     if (!detail) {
         return (
             <PageScaffold
-                density={embedded ? "compact" : "default"}
+                density="compact"
                 className={
                     embedded ? workspaceEmbeddedScaffoldClassName : undefined
                 }
@@ -212,7 +212,7 @@ export function SupplierOrderCenterPage({
 
     return (
         <PageScaffold
-            density={embedded ? "compact" : "default"}
+            density="compact"
             className={
                 embedded ? workspaceEmbeddedScaffoldClassName : undefined
             }

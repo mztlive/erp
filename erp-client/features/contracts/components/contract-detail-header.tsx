@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { PrinterIcon } from "lucide-react"
 
-import { DocumentHeader } from "@/components/business"
+import { DetailPageHeader } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { contractOwnerLabel } from "@/features/contracts/types"
@@ -16,7 +16,7 @@ type ContractDetailHeaderProps = {
 }
 
 /**
- * 合同身份卡：独立浮起，与下方 Tabs 主工作面分离，避免套卡过密。
+ * 合同详情页头：返回列表、对象身份与业务操作。
  */
 export function ContractDetailHeader({
     contract,
@@ -36,7 +36,13 @@ export function ContractDetailHeader({
     const rev = contract.currentRevision
 
     return (
-        <DocumentHeader
+        <DetailPageHeader
+            back={{
+                id: "card-contracts-detail-header-back",
+                label: "合同列表",
+                href: "/sales/contracts",
+            }}
+            numberLabel="合同编号"
             title={contract.contractNo}
             documentNumber={contract.contractNo}
             version={`v${rev.revisionNo}`}
@@ -126,6 +132,6 @@ export function ContractDetailHeader({
                     新建销售单不可用：{soBlocker.message}
                 </p>
             ) : null}
-        </DocumentHeader>
+        </DetailPageHeader>
     )
 }

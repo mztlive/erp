@@ -2,13 +2,11 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
     BusinessFailureState,
     FormalActionResult,
-    PageActions,
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
@@ -236,37 +234,31 @@ export function SalesOrderDetailPage({
 
     return (
         <PageScaffold density="compact">
-            <PageHeader
-                variant="object-chrome"
-                metadata={
-                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="text-sm font-medium text-muted-foreground">
-                            销售单
-                        </span>
-                        {fromQueue ? (
-                            <span>
-                                {fromWorkspace === "W01" ||
-                                fromWorkspace === "W09"
-                                    ? "从履约处理打开 · 处理完可点返回，回到列表原位"
-                                    : fromWorkspace === "W08"
-                                      ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                                      : "从工作台打开 · 处理完可点返回，回到列表原位"}
-                            </span>
-                        ) : null}
-                    </span>
+            <SalesOrderIdentityHeader
+                back={{
+                    id: "sales-orders-detail-back",
+                    label: backLabel,
+                    href: backHref,
+                }}
+                navigationMeta={
+                    fromQueue
+                        ? fromWorkspace === "W01" || fromWorkspace === "W09"
+                            ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                            : fromWorkspace === "W08"
+                              ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                              : "从工作台打开 · 处理完可点返回，回到列表原位"
+                        : undefined
                 }
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "back",
-                                id: "sales-orders-detail-back",
-                                label: backLabel,
-                                icon: ArrowLeftIcon,
-                                variant: "outline",
-                                render: <Link href={backHref} />,
-                            },
-                        ]}
+                order={order}
+                identityOnly
+                secondaryActions={
+                    <SalesOrderDetailSecondaryActions
+                        order={order}
+                        canStartChange={derived.canStartChange}
+                        changeBlocker={derived.changeBlocker}
+                        changePending={startChangeCommand.isPending}
+                        onOpenChangeConfirm={() => setChangeConfirmOpen(true)}
+                        onApprovalResult={handleActionResult}
                     />
                 }
             />
@@ -323,21 +315,6 @@ export function SalesOrderDetailPage({
                     onResult={handleActionResult}
                 />
             ) : null}
-
-            <SalesOrderIdentityHeader
-                order={order}
-                identityOnly
-                secondaryActions={
-                    <SalesOrderDetailSecondaryActions
-                        order={order}
-                        canStartChange={derived.canStartChange}
-                        changeBlocker={derived.changeBlocker}
-                        changePending={startChangeCommand.isPending}
-                        onOpenChangeConfirm={() => setChangeConfirmOpen(true)}
-                        onApprovalResult={handleActionResult}
-                    />
-                }
-            />
 
             <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
                 <div className="min-w-0">

@@ -2,13 +2,17 @@
 
 import { BanIcon, SaveIcon } from "lucide-react"
 
-import { DocumentHeader } from "@/components/business"
+import {
+    DetailPageHeader,
+    type DetailPageHeaderProps,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { SupplierEditorFormValues } from "@/features/master-data/lib/supplier-editor-model"
 import type { MasterDataCenterView } from "@/features/master-data/types"
 
 export function SupplierEditorDocumentHeader({
+    back,
     title,
     isCreate,
     data,
@@ -19,6 +23,7 @@ export function SupplierEditorDocumentHeader({
     disableBlocker,
     onDisable,
 }: {
+    back: DetailPageHeaderProps["back"]
     title: string
     isCreate: boolean
     data: MasterDataCenterView | null | undefined
@@ -30,8 +35,9 @@ export function SupplierEditorDocumentHeader({
     onDisable: () => void
 }) {
     return (
-        <DocumentHeader
-            density="compact"
+        <DetailPageHeader
+            back={back}
+            numberLabel="供应商编号"
             title={title}
             documentNumber={isCreate ? "待生成" : data?.stableNo || "—"}
             primaryStatus={

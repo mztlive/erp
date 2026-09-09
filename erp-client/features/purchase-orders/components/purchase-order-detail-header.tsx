@@ -2,18 +2,12 @@
 
 import type * as React from "react"
 import { useRouter } from "next/navigation"
-import {
-    ArrowLeftIcon,
-    FilePenLineIcon,
-    SendIcon,
-    Trash2Icon,
-} from "lucide-react"
+import { FilePenLineIcon, SendIcon, Trash2Icon } from "lucide-react"
 
 import {
-    DocumentHeader,
+    DetailPageHeader,
     FormalActionResult,
     PageActions,
-    PageHeader,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -67,65 +61,20 @@ export function PurchaseOrderDetailHeader({
 }) {
     return (
         <>
-            <PageHeader
-                variant="object-chrome"
-                metadata={
-                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span
-                            ref={titleRef}
-                            tabIndex={-1}
-                            id="procurement-orders-detail-heading"
-                            className="text-sm font-medium text-muted-foreground outline-none"
-                        >
-                            采购单
-                        </span>
-                        {mode === "edit" ? <span>{modeLabel}</span> : null}
-                    </span>
-                }
-                actions={
-                    <PageActions
-                        id="procurement-orders-detail-navigation"
-                        actions={[
-                            {
-                                actionKey: "back",
-                                label: "返回列表",
-                                icon: ArrowLeftIcon,
-                                variant: "outline",
-                                onClick: () =>
-                                    requestLeave(() =>
-                                        router.push("/procurement/orders"),
-                                    ),
-                                id: "procurement-orders-detail-back",
-                            },
-                        ]}
-                    />
-                }
-            />
-
-            {result ? (
-                <FormalActionResult
-                    status={result.status}
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={result.facts}
-                    actions={
-                        <Button
-                            id="procurement-orders-detail-result-close"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onDismissResult}
-                        >
-                            关闭
-                        </Button>
-                    }
-                />
-            ) : null}
-
-            <DocumentHeader
-                density="compact"
-                className="border-0 pb-0 [&>div:first-child]:flex-col sm:[&>div:first-child]:flex-row [&_h1]:wrap-anywhere [&_h1]:text-3xl"
+            <DetailPageHeader
+                back={{
+                    id: "procurement-orders-detail-back",
+                    label: "采购单列表",
+                    onClick: () =>
+                        requestLeave(() => router.push("/procurement/orders")),
+                }}
+                navigationMeta={mode === "edit" ? modeLabel : undefined}
+                headingProps={{
+                    id: "procurement-orders-detail-heading",
+                    ref: titleRef,
+                    tabIndex: -1,
+                    className: "outline-none",
+                }}
                 title={order.header.supplierSnapshot || "采购单"}
                 documentNumber={displayNo}
                 primaryStatus={{
@@ -137,7 +86,7 @@ export function PurchaseOrderDetailHeader({
                         {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
                     </Badge>
                 }
-                secondaryActions={
+                primaryAction={
                     <div className="flex flex-wrap items-center gap-2">
                         <PageActions
                             id="procurement-orders-detail-actions"
@@ -200,6 +149,26 @@ export function PurchaseOrderDetailHeader({
                     </div>
                 }
             />
+            {result ? (
+                <FormalActionResult
+                    status={result.status}
+                    title={result.title}
+                    description={result.description}
+                    reference={result.reference}
+                    facts={result.facts}
+                    actions={
+                        <Button
+                            id="procurement-orders-detail-result-close"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={onDismissResult}
+                        >
+                            关闭
+                        </Button>
+                    }
+                />
+            ) : null}
         </>
     )
 }

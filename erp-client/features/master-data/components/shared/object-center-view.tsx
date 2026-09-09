@@ -2,12 +2,11 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon, BanIcon, HistoryIcon } from "lucide-react"
+import { BanIcon, HistoryIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DocumentHeader,
-    PageActions,
+    DetailPageHeader,
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
@@ -81,27 +80,14 @@ export function ObjectCenterView({
     }, [activeSection, data])
 
     return (
-        <PageScaffold>
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                id: `${prefix}-back`,
-                                actionKey: "back",
-                                label: masterDataCopy.actionBackList,
-                                icon: ArrowLeftIcon,
-                                variant: "ghost",
-                                onClick: onBack,
-                            },
-                        ]}
-                    />
-                }
-            />
-
-            <DocumentHeader
-                density="compact"
+        <PageScaffold density="compact">
+            <DetailPageHeader
+                back={{
+                    id: `${prefix}-back`,
+                    label: masterDataCopy.actionBackList,
+                    onClick: onBack,
+                }}
+                numberLabel="编号"
                 title={data.name}
                 documentNumber={data.stableNo}
                 version={data.currentRevision.revisionNo}

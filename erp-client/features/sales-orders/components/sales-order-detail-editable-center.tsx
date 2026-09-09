@@ -1,12 +1,7 @@
 "use client"
 
-import Link from "next/link"
-import { ArrowLeftIcon } from "lucide-react"
-
 import {
     BusinessFailureState,
-    PageActions,
-    PageHeader,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
@@ -36,43 +31,24 @@ export function SalesOrderEditableCenter({
     const resumeQuery = useSalesOrderDraftResumeQuery(order.id)
 
     return (
-        <PageScaffold className="pb-8">
-            <PageHeader
-                variant="object-chrome"
-                metadata={
-                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="text-xl font-semibold tracking-tight text-foreground">
-                            销售单
-                        </span>
-                        {fromQueue ? (
-                            <span>
-                                {fromWorkspace === "W01" ||
-                                fromWorkspace === "W09"
-                                    ? "从履约处理打开 · 处理完可点返回，回到列表原位"
-                                    : fromWorkspace === "W08"
-                                      ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                                      : "从工作台打开 · 处理完可点返回，回到列表原位"}
-                            </span>
-                        ) : null}
-                    </span>
-                }
-                actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "back",
-                                id: "sales-orders-detail-editable-back",
-                                label: backLabel,
-                                icon: ArrowLeftIcon,
-                                variant: "outline",
-                                render: <Link href={backHref} />,
-                            },
-                        ]}
-                    />
+        <PageScaffold density="compact" className="pb-8">
+            <SalesOrderIdentityHeader
+                order={order}
+                back={{
+                    id: "sales-orders-detail-editable-back",
+                    label: backLabel,
+                    href: backHref,
+                }}
+                navigationMeta={
+                    fromQueue
+                        ? fromWorkspace === "W01" || fromWorkspace === "W09"
+                            ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                            : fromWorkspace === "W08"
+                              ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                              : "从工作台打开 · 处理完可点返回，回到列表原位"
+                        : undefined
                 }
             />
-
-            <SalesOrderIdentityHeader order={order} />
 
             {resumeQuery.isPending ? (
                 <div

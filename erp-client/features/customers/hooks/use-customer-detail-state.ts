@@ -18,8 +18,9 @@ export function useCustomerDetailState(customerId: string, section?: string) {
     const activeSection = resolveSection(section)
     const [editing, setEditing] = React.useState(false)
     const [formDirty, setFormDirty] = React.useState(false)
-    const [pendingSection, setPendingSection] =
-        React.useState<CustomerSectionId | null>(null)
+    const [pendingSection, setPendingSection] = React.useState<
+        CustomerSectionId | "back" | null
+    >(null)
     const customer = query.data
 
     const selectSection = React.useCallback(
@@ -46,6 +47,14 @@ export function useCustomerDetailState(customerId: string, section?: string) {
         },
         [activeSection, editing, formDirty, selectSection],
     )
+
+    const handleBack = React.useCallback(() => {
+        if (editing && formDirty) {
+            setPendingSection("back")
+            return
+        }
+        router.push("/sales/customers")
+    }, [editing, formDirty, router])
 
     const startEditing = React.useCallback(() => setEditing(true), [])
     const cancelEditing = React.useCallback(() => {
@@ -76,15 +85,13 @@ export function useCustomerDetailState(customerId: string, section?: string) {
     )
 
     const discardPendingAndSwitch = React.useCallback(() => {
-        setPendingSection((next) => {
-            if (next) {
-                setEditing(false)
-                setFormDirty(false)
-                selectSection(next)
-            }
-            return null
-        })
-    }, [selectSection])
+        if (!pendingSection) return
+        setPendingSection(null)
+        setEditing(false)
+        setFormDirty(false)
+        if (pendingSection === "back") router.push("/sales/customers")
+        else selectSection(pendingSection)
+    }, [pendingSection, router, selectSection])
 
     return {
         query,
@@ -97,6 +104,7 @@ export function useCustomerDetailState(customerId: string, section?: string) {
         formDirty,
         setFormDirty,
         handleSectionChange,
+        handleBack,
         pendingSection,
         dismissPendingSection,
         discardPendingAndSwitch,

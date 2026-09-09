@@ -1,13 +1,6 @@
 "use client"
 
-import { ArrowLeftIcon } from "lucide-react"
-
-import {
-    PageHeader,
-    PageScaffold,
-    surfacePanelClassName,
-} from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { PageScaffold, surfacePanelClassName } from "@/components/business"
 import { SupplierEditorBasicSection } from "@/features/master-data/components/supplier/supplier-editor-basic-section"
 import { SupplierEditorCommercialSection } from "@/features/master-data/components/supplier/supplier-editor-commercial-section"
 import { SupplierEditorContractSection } from "@/features/master-data/components/supplier/supplier-editor-contract-section"
@@ -90,24 +83,13 @@ export function SupplierEditorForm({
 
     return (
         <PageScaffold density="compact">
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <Button
-                        id={`${prefix}-back-list`}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigateAway(listHref)}
-                    >
-                        <ArrowLeftIcon data-icon="inline-start" aria-hidden />
-                        返回列表
-                    </Button>
-                }
-            />
-
             <form id={formId} className="space-y-4" onSubmit={requestSave}>
                 <SupplierEditorDocumentHeader
+                    back={{
+                        id: `${prefix}-back-list`,
+                        label: "供应商列表",
+                        onClick: () => navigateAway(listHref),
+                    }}
                     title={title}
                     isCreate={isCreate}
                     data={data}

@@ -1,8 +1,8 @@
 "use client"
 
-import { ArrowLeftIcon, RefreshCwIcon } from "lucide-react"
+import { RefreshCwIcon } from "lucide-react"
 
-import { DocumentHeader, PageHeader } from "@/components/business"
+import { DetailPageHeader } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -42,24 +42,12 @@ export function CenterHeader({
     const isProd = conn.environment === "PRODUCTION"
     return (
         <>
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <Button
-                        id="supplier-api-connections-center-back"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={onBack}
-                    >
-                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                        返回列表
-                    </Button>
-                }
-            />
-
-            <DocumentHeader
-                density="compact"
+            <DetailPageHeader
+                back={{
+                    id: "supplier-api-connections-center-back",
+                    label: "连接列表",
+                    onClick: onBack,
+                }}
                 title={`${conn.connectionCode} · ${conn.supplier.name}`}
                 documentNumber={conn.connectionCode}
                 primaryStatus={{

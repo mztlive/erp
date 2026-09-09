@@ -1,13 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeftIcon, ExternalLinkIcon, Loader2Icon } from "lucide-react"
+import { ExternalLinkIcon, Loader2Icon } from "lucide-react"
 
-import {
-    DocumentHeader,
-    GuardedBusinessAction,
-    PageHeader,
-} from "@/components/business"
+import { DetailPageHeader, GuardedBusinessAction } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 
@@ -36,24 +32,12 @@ export function SupplierOrderCenterHeader({
 }) {
     return (
         <>
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <Button
-                        id="supplier-order-center-header-back-list"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        render={<Link href="/supplier-api/orders" />}
-                    >
-                        <ArrowLeftIcon className="size-3.5" />
-                        返回列表
-                    </Button>
-                }
-            />
-
-            <DocumentHeader
-                density="compact"
+            <DetailPageHeader
+                back={{
+                    id: "supplier-order-center-header-back-list",
+                    label: "供应商订单列表",
+                    href: "/supplier-api/orders",
+                }}
                 title={order.supplierName}
                 documentNumber={order.orderNo}
                 primaryStatus={{
