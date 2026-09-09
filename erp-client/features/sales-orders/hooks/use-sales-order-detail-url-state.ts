@@ -43,15 +43,12 @@ export function useSalesOrderDetailUrlState({
         (
             next: NavSectionId | WorkSectionId | "versions",
             isCustomerAcceptanceTask = false,
-            extras?: { mode?: "register" },
+            _extras?: { mode?: "register" },
         ) => {
             const params = new URLSearchParams()
             params.set("section", next)
             if (returnTo) params.set("returnTo", returnTo)
             if (fromWorkspace) params.set("from", fromWorkspace)
-            if (next === "acceptance" && extras?.mode === "register") {
-                params.set("mode", "register")
-            }
             if (next === "change-review" && focusedChangeOrderId) {
                 params.set("changeOrderId", focusedChangeOrderId)
             }
@@ -101,7 +98,7 @@ export function useSalesOrderDetailUrlState({
             : fromWorkspace === "W08"
               ? "返回采购单列表"
               : fromWorkspace === "W01" || fromWorkspace === "W09"
-                ? "返回履约处理"
+                ? "返回工作台"
                 : "返回列表"
 
     return {

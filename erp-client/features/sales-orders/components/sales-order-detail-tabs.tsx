@@ -8,7 +8,6 @@ import {
     ObjectSectionTabsPanel,
 } from "@/components/business"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import type { WorkItemProjection } from "@/features/work-items/types"
 import { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
 import {
     AcceptancePanel,
@@ -29,19 +28,17 @@ import {
 
 export function SalesOrderDetailTabs({
     order,
-    selfReturn,
+
     section,
     navSection,
     visibleNav,
     canAccept,
-    focusedWorkItem,
     onSelectSection,
     onApprovalResult,
-    onDataChanged,
     sidebar,
 }: {
     order: SalesOrderDetailView
-    selfReturn: string
+
     section?: string
     navSection: NavSectionId
     visibleNav: Array<{
@@ -51,13 +48,11 @@ export function SalesOrderDetailTabs({
         show: boolean
     }>
     canAccept: boolean
-    focusedWorkItem?: WorkItemProjection
     onSelectSection: (
         next: NavSectionId | WorkSectionId | "versions",
         extras?: { mode?: "register" },
     ) => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
-    onDataChanged: () => void
     sidebar?: ReactNode
 }) {
     const items = visibleNav.map((item) => {
@@ -128,7 +123,7 @@ export function SalesOrderDetailTabs({
                                 </h2>
                                 <RelatedLanes
                                     order={order}
-                                    selfReturn={selfReturn}
+
                                     lanes={["purchase"]}
                                 />
                             </section>
@@ -138,29 +133,19 @@ export function SalesOrderDetailTabs({
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="approval">
-                <ApprovalPanel
-                    order={order}
-                    workItemId={focusedWorkItem?.workItemId}
-                    expectedTaskVersion={focusedWorkItem?.taskVersion}
-                    workItemAllowedActions={focusedWorkItem?.allowedActions}
-                    onApprovalResult={onApprovalResult}
-                />
+                <ApprovalPanel order={order} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="fulfillment">
-                <PurchasePanel order={order} selfReturn={selfReturn} />
+                <PurchasePanel order={order} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="acceptance">
-                <AcceptancePanel order={order} workItem={focusedWorkItem} />
+                <AcceptancePanel order={order} />
             </ObjectSectionTabsPanel>
 
-            <ObjectSectionTabsPanel value="receivable" keepMounted>
-                <ReceivablePanel
-                    order={order}
-                    selfReturn={selfReturn}
-                    onDataChanged={onDataChanged}
-                />
+            <ObjectSectionTabsPanel value="receivable">
+                <ReceivablePanel key={order.id} order={order} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="collaboration">
@@ -169,6 +154,7 @@ export function SalesOrderDetailTabs({
 
             <ObjectSectionTabsPanel value="versions">
                 <VersionsPanel
+                    showActiveChange={section !== "change-review"}
                     order={order}
                     onApprovalResult={onApprovalResult}
                 />

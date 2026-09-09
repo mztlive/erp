@@ -61,6 +61,10 @@ export type BackendCustomerReceipt = {
     created_at: number
     allocated_total: string
     unallocated_amount: string
+    pending_allocations?: {
+        receivable_entry_id: string
+        allocated_amount: string
+    }[]
     allocations: BackendReceiptAllocation[]
     approval?: DocumentApprovalViewDto | null
 }

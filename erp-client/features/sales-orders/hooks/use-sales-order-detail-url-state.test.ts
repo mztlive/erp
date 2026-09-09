@@ -50,3 +50,13 @@ it("变更审核保留精确变更身份，离开分区清除变更上下文", (
     expect(overview.searchParams.has("changeOrderId")).toBe(false)
     expect(overview.searchParams.has("workItemId")).toBe(false)
 })
+
+it("旧验收登记调用只跳转只读分区，不再生成办理模式", () => {
+    const { result } = renderHook(() =>
+        useSalesOrderDetailUrlState({ salesOrderId: "sales-1" }),
+    )
+    result.current.selectSection("acceptance", true, { mode: "register" })
+    const url = new URL(router.replace.mock.lastCall![0], "http://erp.test")
+    expect(url.searchParams.get("section")).toBe("acceptance")
+    expect(url.searchParams.has("mode")).toBe(false)
+})

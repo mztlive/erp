@@ -28,7 +28,6 @@ import {
     useSalesChangeOrderDetailQuery,
 } from "@/features/sales-orders/hooks/queries"
 import { useSalesOrderDetailStartChange } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
-import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { useSalesOrderDetailUrlState } from "@/features/sales-orders/hooks/use-sales-order-detail-url-state"
 import { deriveSalesOrderDetailState } from "@/features/sales-orders/lib/sales-order-detail-derived"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
@@ -49,7 +48,7 @@ export function SalesOrderDetailPage({
     salesOrderId: string
     section?: string
 }) {
-    const query = useSalesOrderDetailQuery(salesOrderId)
+    const query = useSalesOrderDetailQuery(salesOrderId, true)
     const eligibilityQuery = useSalesOrderAcceptanceEligibilityQuery(
         salesOrderId,
         Boolean(
@@ -69,7 +68,6 @@ export function SalesOrderDetailPage({
         selectSection: selectUrlSection,
     } = useSalesOrderDetailUrlState({ salesOrderId })
     const startChangeCommand = useSalesOrderDetailStartChange()
-    const detailPermissions = useSalesOrderDetailPermissions()
     const focusedWorkItemQuery = useWorkItemDetailQuery(focusedWorkItemId)
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
@@ -201,37 +199,6 @@ export function SalesOrderDetailPage({
         )
     }
 
-    const acceptanceFocusGate = detailPermissions.registerAcceptance(
-        derived.canAccept,
-        "当前不能验收，请先完成交付或确认业务条件。",
-    )
-    const primaryTaskAction = derived.actionableFocusTask ? (
-        <Button
-            id={`sales-orders-detail-primary-${derived.actionableFocusTask.id}`}
-            type="button"
-            size="sm"
-            disabled={
-                derived.actionableFocusTask.id === "acceptance" &&
-                !acceptanceFocusGate.enabled
-            }
-            title={
-                derived.actionableFocusTask.id === "acceptance"
-                    ? acceptanceFocusGate.reason
-                    : undefined
-            }
-            onClick={() =>
-                selectSection(
-                    derived.actionableFocusTask!.id,
-                    derived.actionableFocusTask!.id === "acceptance"
-                        ? { mode: "register" }
-                        : undefined,
-                )
-            }
-        >
-            {derived.actionableFocusTask.actionLabel}
-        </Button>
-    ) : null
-
     return (
         <PageScaffold density="compact">
             <SalesOrderIdentityHeader
@@ -243,10 +210,10 @@ export function SalesOrderDetailPage({
                 navigationMeta={
                     fromQueue
                         ? fromWorkspace === "W01" || fromWorkspace === "W09"
-                            ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                            ? "从履约处理打开 · 查阅后可点返回，回到列表原位"
                             : fromWorkspace === "W08"
-                              ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                              : "从工作台打开 · 处理完可点返回，回到列表原位"
+                              ? "从采购单打开 · 查阅后可点返回，回到列表原位"
+                              : "从工作台打开 · 查阅后可点返回，回到列表原位"
                         : undefined
                 }
                 order={order}
@@ -302,6 +269,7 @@ export function SalesOrderDetailPage({
                 />
             ) : section === "change-review" ? (
                 <SalesChangeOrderApprovalSection
+                    readonlyApproval
                     salesOrderId={order.id}
                     nature={order.nature}
                     changeOrder={
@@ -318,24 +286,20 @@ export function SalesOrderDetailPage({
 
             <SalesOrderDetailTabs
                 order={order}
-                selfReturn={`/sales/orders/${encodeURIComponent(salesOrderId)}`}
+
                 section={section}
                 navSection={derived.navSection}
                 visibleNav={derived.visibleNav}
                 canAccept={derived.canAccept}
-                focusedWorkItem={
-                    section === "change-review" ? undefined : focusedWorkItem
-                }
                 onSelectSection={selectSection}
                 onApprovalResult={handleActionResult}
-                onDataChanged={refreshOrderDetail}
                 sidebar={
                     <SalesOrderDetailSidebar
+                        hideFinanceSummary={derived.navSection === "receivable"}
                         order={order}
                         focusTask={derived.focusTask}
                         action={
-                            primaryTaskAction ??
-                            (derived.focusTask ? (
+                            derived.focusTask ? (
                                 <Button
                                     id={`sales-orders-detail-banner-${derived.focusTask.id}`}
                                     type="button"
@@ -350,7 +314,7 @@ export function SalesOrderDetailPage({
                                           ? "查看验收"
                                           : "查看版本"}
                                 </Button>
-                            ) : null)
+                            ) : null
                         }
                     />
                 }

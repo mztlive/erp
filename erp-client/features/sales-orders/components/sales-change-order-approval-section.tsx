@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -10,6 +12,7 @@ import { SalesChangeOrderSubmitConfirmDialog } from "@/features/sales-orders/com
 import { useSubmitSalesChangeOrderMutation } from "@/features/sales-orders/hooks/queries"
 import {
     mergeSalesChangeOrderAllowedActions,
+    SALES_CHANGE_ORDER_DOCUMENT_TYPE,
     salesChangeOrderApprovalPhase,
 } from "@/features/sales-orders/lib/sales-change-order-approval"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
@@ -26,7 +29,7 @@ import {
 /**
  * 销售变更单在详情页上的审批区入口。
  *
- * 未提交且服务端允许时展示提交确认；决定、升级和撤回只读 `allowed_actions`。
+ * 详情查阅只保留销售方提交与撤回；工作台调用方继续按服务端动作办理审批。
  */
 export function SalesChangeOrderApprovalSection({
     salesOrderId,
@@ -36,7 +39,9 @@ export function SalesChangeOrderApprovalSection({
     expectedTaskVersion,
     workItemAllowedActions,
     onResult,
+    readonlyApproval = false,
 }: {
+    readonlyApproval?: boolean
     salesOrderId: string
     nature: SalesOrderNature
     changeOrder: SalesChangeOrderSummary | null
@@ -137,25 +142,54 @@ export function SalesChangeOrderApprovalSection({
 
     return (
         <div className="space-y-3">
-            <SalesChangeOrderApprovalArea
-                phase={phase}
-                approval={changeOrder.approval}
-                documentId={changeOrder.id}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={(view: ApprovalCommandView) =>
-                    onResult?.({
-                        status: "succeeded",
-                        title: "审批决定已提交",
-                        description: view.latestRejectionReason
-                            ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                            : "已按当前任务提交决定。",
-                        reference: changeOrder.id,
-                        nextResponsible: view.currentAssigneeName,
-                    })
-                }
-            />
+            {readonlyApproval ? (
+                <ApprovalReadonly
+                    id={`sales-change-${changeOrder.id}`}
+                    approval={changeOrder.approval}
+                />
+            ) : (
+                <SalesChangeOrderApprovalArea
+                    phase={phase}
+                    approval={changeOrder.approval}
+                    documentId={changeOrder.id}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={(view: ApprovalCommandView) =>
+                        onResult?.({
+                            status: "succeeded",
+                            title: "审批决定已提交",
+                            description: view.latestRejectionReason
+                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                : "已按当前任务提交决定。",
+                            reference: changeOrder.id,
+                            nextResponsible: view.currentAssigneeName,
+                        })
+                    }
+                />
+            )}
+            {readonlyApproval ? (
+                <ApprovalActionBar
+                    id="sales-orders-change-owner-actions"
+                    allowedActions={(
+                        changeOrder.approval?.allowedActions ?? []
+                    ).filter(
+                        (action) =>
+                            action === "CANCEL" || action === "CANCEL_APPROVAL",
+                    )}
+                    instance={changeOrder.approval?.instance}
+                    documentType={SALES_CHANGE_ORDER_DOCUMENT_TYPE}
+                    documentId={changeOrder.id}
+                    onDecisionApplied={() =>
+                        onResult?.({
+                            status: "succeeded",
+                            title: "改单审批已撤回",
+                            description: "请查阅更新后的改单状态。",
+                            reference: changeOrder.id,
+                        })
+                    }
+                />
+            ) : null}
             {canSubmit ? (
                 <Button
                     id="sales-orders-change-submit"

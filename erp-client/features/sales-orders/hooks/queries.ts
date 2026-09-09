@@ -51,9 +51,13 @@ export function useSalesOrdersQuery(
     })
 }
 
-export function useSalesOrderDetailQuery(salesOrderId: string) {
+export function useSalesOrderDetailQuery(
+    salesOrderId: string,
+    refreshOnMount = false,
+) {
     return useQuery({
         queryKey: salesOrderKeys.detail(salesOrderId),
+        refetchOnMount: refreshOnMount ? "always" : true,
         queryFn: () => fetchSalesOrderDetail(salesOrderId),
         enabled: Boolean(salesOrderId),
     })

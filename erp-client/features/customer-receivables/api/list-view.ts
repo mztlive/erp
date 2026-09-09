@@ -227,8 +227,15 @@ export async function fetchCustomerAccountsDetail(
                 receivable: projectReceivable(seed),
                 queriedAt: new Date().toISOString(),
             }
-        } catch {
-            return null
+        } catch (error) {
+            if (
+                typeof error === "object" &&
+                error !== null &&
+                "status" in error &&
+                error.status === 404
+            )
+                return null
+            throw error
         }
     }
     if (kind === "receipt") {
@@ -241,8 +248,15 @@ export async function fetchCustomerAccountsDetail(
                 receipt: projectReceipt(seed),
                 queriedAt: new Date().toISOString(),
             }
-        } catch {
-            return null
+        } catch (error) {
+            if (
+                typeof error === "object" &&
+                error !== null &&
+                "status" in error &&
+                error.status === 404
+            )
+                return null
+            throw error
         }
     }
     if (kind === "refund") {
@@ -255,8 +269,15 @@ export async function fetchCustomerAccountsDetail(
                 refund: projectCustomerRefund(seed),
                 queriedAt: new Date().toISOString(),
             }
-        } catch {
-            return null
+        } catch (error) {
+            if (
+                typeof error === "object" &&
+                error !== null &&
+                "status" in error &&
+                error.status === 404
+            )
+                return null
+            throw error
         }
     }
     if (kind === "reversal") {
@@ -269,8 +290,15 @@ export async function fetchCustomerAccountsDetail(
                 reversal: projectReceiptReversal(seed),
                 queriedAt: new Date().toISOString(),
             }
-        } catch {
-            return null
+        } catch (error) {
+            if (
+                typeof error === "object" &&
+                error !== null &&
+                "status" in error &&
+                error.status === 404
+            )
+                return null
+            throw error
         }
     }
     try {
@@ -282,7 +310,14 @@ export async function fetchCustomerAccountsDetail(
             invoice: projectInvoice(seed),
             queriedAt: new Date().toISOString(),
         }
-    } catch {
-        return null
+    } catch (error) {
+        if (
+            typeof error === "object" &&
+            error !== null &&
+            "status" in error &&
+            error.status === 404
+        )
+            return null
+        throw error
     }
 }

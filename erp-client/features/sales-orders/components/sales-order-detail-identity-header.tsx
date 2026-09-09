@@ -48,7 +48,10 @@ export function SalesOrderIdentityHeader({
                       ? "尚未生效"
                       : `v${order.currentRevisionNo}`
             }
-            primaryStatus={order.primaryStatus}
+            primaryStatus={{
+                label: order.primaryStatus.label,
+                tone: order.primaryStatus.tone,
+            }}
             meta={
                 identityOnly ? undefined : (
                     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">

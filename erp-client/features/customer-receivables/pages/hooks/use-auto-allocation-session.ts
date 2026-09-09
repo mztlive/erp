@@ -6,7 +6,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
 import type { CustomerReceivablesPatchUrl } from "./use-customer-receivables-url-state"
 
-/** W05 销售单或 W01 开票任务链入时自动打开受控核销会话。 */
+/** 仅显式登记链接可自动进入核销；普通来源导航保留筛选和返回上下文。 */
 export function useAutoAllocationSession(args: {
     data: CustomerAccountsListView | undefined
     from: string | undefined
@@ -53,7 +53,8 @@ export function useAutoAllocationSession(args: {
 
     React.useEffect(() => {
         if (autoSessionRef.current || sessionId || !data) return
-        const fromSalesOrder = from === "W05" && Boolean(returnTo)
+        const fromSalesOrder =
+            from === "W05" && Boolean(returnTo) && Boolean(registerMode)
         const fromInvoiceTask =
             from === "W01" &&
             registerMode === "invoice" &&

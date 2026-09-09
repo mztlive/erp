@@ -100,6 +100,7 @@ impl ReceivableReadService {
                 allocated_total,
                 unallocated_amount: row.amount.checked_sub(allocated_total),
                 allocations,
+                pending_allocations: row.pending_allocations,
                 approval: document_approval_view(approval_binding, None, row.status),
             });
         }
@@ -168,6 +169,7 @@ impl ReceivableReadService {
             unallocated_amount: receipt.amount.checked_sub(allocated_total),
             allocated_total,
             allocations: views,
+            pending_allocations: receipt.pending_allocations,
             approval: document_approval_view(binding.as_ref(), None, receipt.status),
         })
     }

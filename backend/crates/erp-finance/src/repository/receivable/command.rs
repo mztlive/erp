@@ -185,13 +185,16 @@ impl<'a> ReceivableRepository<'a> {
         query: &ScopedCustomerReceiptQuery,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<CustomerReceiptRow>> {
-        let receipt_ids = if query.scope.is_empty() {
-            None
-        } else {
-            Some(self.receipt_ids_for_scope(&query.scope, executor).await?)
-        };
+        let mut receipt_ids = None;
+        let mut pending_entry_ids = Vec::new();
+        if !query.scope.is_empty() {
+            let (posted, entries) = self.receipt_ids_for_scope(&query.scope, executor).await?;
+            receipt_ids = Some(posted);
+            pending_entry_ids = entries;
+        }
         let filter = CustomerReceiptFilter {
             receipt_ids,
+            pending_entry_ids,
             receipt_no: query.receipt_no.clone(),
             counterparty_party_id: query.counterparty_party_id.clone(),
             status: query.status,
@@ -249,11 +252,38 @@ impl<'a> ReceivableRepository<'a> {
             .await
     }
 
-    /// 解析作用域内出现过核销分配的回款单主键（仓储内中间事实，不外泄）。
+    /// 解析已核销回款主键及本单分录，供分页查询并集匹配待审批分配。
     ///
-    /// 三段批量关联，任一段为空直接返回空集合，不再发起后续 `$in` 查询；
-    /// 结果排序去重，保持确定性。
+    /// 应收范围或分录为空时返回空集合，不发起后续核销查询；
+    /// 无已过账核销时仍保留分录身份以匹配待审批分配。结果排序去重。
     async fn receipt_ids_for_scope(
+        &self,
+        scope: &ReceivableListScope,
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<String>, Vec<String>)> {
+        let entry_ids = self.scoped_entry_ids(scope, executor).await?;
+        if entry_ids.is_empty() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let allocations: Vec<ReceiptAllocation> = ReceiptAllocationRepository::new(
+            self.db,
+            <mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS,
+        )
+        .find_many(doc! { "receivable_entry_id": { "$in": &entry_ids } }, executor)
+        .await?;
+        let mut receipt_ids = allocations
+            .into_iter()
+            .map(|allocation| allocation.customer_receipt_id.to_string())
+            .collect::<Vec<_>>();
+        receipt_ids.sort();
+        receipt_ids.dedup();
+        Ok((receipt_ids, entry_ids))
+    }
+
+    /// 读取作用域内的应收分录身份；空账户范围直接返回，不扩大查询。
+    ///
+    /// 返回去重后的分录主键；账户或分录读取失败时透传仓储错误。
+    async fn scoped_entry_ids(
         &self,
         scope: &ReceivableListScope,
         executor: &mut dyn Executor,
@@ -269,23 +299,13 @@ impl<'a> ReceivableRepository<'a> {
         if entries.is_empty() {
             return Ok(Vec::new());
         }
-        let entry_ids = entries
+        let mut entry_ids = entries
             .iter()
             .map(|entry| entry.base.id.clone())
             .collect::<Vec<_>>();
-        let allocations: Vec<ReceiptAllocation> = ReceiptAllocationRepository::new(
-            self.db,
-            <mongodb::Database as ReceivableExt>::RECEIPT_ALLOCATIONS,
-        )
-        .find_many(doc! { "receivable_entry_id": { "$in": entry_ids } }, executor)
-        .await?;
-        let mut receipt_ids = allocations
-            .into_iter()
-            .map(|allocation| allocation.customer_receipt_id.to_string())
-            .collect::<Vec<_>>();
-        receipt_ids.sort();
-        receipt_ids.dedup();
-        Ok(receipt_ids)
+        entry_ids.sort();
+        entry_ids.dedup();
+        Ok(entry_ids)
     }
 
     /// 解析作用域内出现过分配的销项发票主键（仓储内中间事实，不外泄）。

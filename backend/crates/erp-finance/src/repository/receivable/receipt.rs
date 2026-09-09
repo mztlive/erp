@@ -1,4 +1,6 @@
-use crate::entity::receivable::{CustomerReceipt, CustomerReceiptStatus, ReceiptAllocation};
+use crate::entity::receivable::{
+    CustomerReceipt, CustomerReceiptStatus, PendingReceiptAllocation, ReceiptAllocation,
+};
 use crate::repository::owned::{CustomerReceiptRepository, ReceiptAllocationRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::common::time::Instant;
@@ -37,6 +39,9 @@ pub struct CustomerReceiptRow {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 审批提交时冻结的拟核销分配，旧记录缺省为空。
+    #[serde(default)]
+    pub pending_allocations: Vec<PendingReceiptAllocation>,
 }
 
 /// 客户回款单列表筛选条件。
@@ -44,6 +49,8 @@ pub struct CustomerReceiptRow {
 pub struct CustomerReceiptFilter {
     /// 服务端关联投影解析出的回款单主键集合；`None` 表示不筛选。
     pub receipt_ids: Option<Vec<String>>,
+    /// 与已核销回款取并集的本单应收分录；仅供账户范围查询。
+    pub pending_entry_ids: Vec<String>,
     /// 回款单号模糊匹配；`None` 表示不筛选。
     pub receipt_no: Option<String>,
     /// 实际付款往来主体；`None` 表示不筛选。
@@ -68,7 +75,14 @@ impl QueryFilter for CustomerReceiptFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(receipt_ids) = &self.receipt_ids {
-            filter.insert("id", doc! { "$in": receipt_ids });
+            if self.pending_entry_ids.is_empty() {
+                filter.insert("id", doc! { "$in": receipt_ids });
+            } else {
+                filter.insert("$or", vec![
+                    doc! { "id": { "$in": receipt_ids } },
+                    doc! { "pending_allocations.receivable_entry_id": { "$in": &self.pending_entry_ids } },
+                ]);
+            }
         }
         insert_literal_regex_filter(&mut filter, "receipt_no", self.receipt_no.as_deref());
         if let Some(counterparty_party_id) = &self.counterparty_party_id {
@@ -241,6 +255,7 @@ fn customer_receipt_projection() -> Document {
         "bank_reference": 1,
         "version": 1,
         "created_at": 1,
+        "pending_allocations": 1,
     }
 }
 
@@ -253,6 +268,7 @@ mod tests {
     fn receipt_filter_escapes_regex_literals() {
         let filter = CustomerReceiptFilter {
             receipt_ids: None,
+            pending_entry_ids: Vec::new(),
             receipt_no: Some("RC-1.2".to_string()),
             counterparty_party_id: None,
             status: None,
@@ -272,6 +288,7 @@ mod tests {
     fn scope_filters_with_empty_ids_match_nothing() {
         let receipt_filter = CustomerReceiptFilter {
             receipt_ids: Some(Vec::new()),
+            pending_entry_ids: Vec::new(),
             receipt_no: None,
             counterparty_party_id: None,
             status: None,
@@ -290,5 +307,33 @@ mod tests {
                 .len(),
             0
         );
+    }
+    #[test]
+    fn scope_includes_pending_allocations_and_keeps_structural_filters() {
+        let filter = CustomerReceiptFilter {
+            receipt_ids: Some(vec!["posted-1".into()]),
+            pending_entry_ids: vec!["entry-1".into()],
+            receipt_no: None,
+            counterparty_party_id: Some(erp_core::ids::PartyId::new("party-1")),
+            status: Some(crate::entity::receivable::CustomerReceiptStatus::InApproval),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        let document = filter.to_doc();
+        let alternatives = document.get_array("$or").unwrap();
+        assert_eq!(alternatives.len(), 2);
+        assert_eq!(
+            alternatives[0].as_document().unwrap(),
+            &mongodb::bson::doc! { "id": { "$in": ["posted-1"] } }
+        );
+        assert_eq!(
+            alternatives[1].as_document().unwrap(),
+            &mongodb::bson::doc! { "pending_allocations.receivable_entry_id": { "$in": ["entry-1"] } }
+        );
+        assert_eq!(document.get_str("counterparty_party_id").unwrap(), "party-1");
+        assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");
+        assert!(document.contains_key("deleted_at"));
     }
 }

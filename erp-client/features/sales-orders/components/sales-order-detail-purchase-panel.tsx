@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 
 import {
     BusinessFailureState,
@@ -21,10 +20,6 @@ import type {
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SectionLead } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
-import {
-    canCreatePurchaseFromSalesOrder,
-    purchaseOrdersWorkspaceHref,
-} from "@/features/sales-orders/lib/sales-order-detail-model"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
@@ -72,20 +67,10 @@ function PreviewButton({
  * 无列表权限时只展示销售单详情里的采购单笔数，不暴露单号与内容。
  * 列表展示单据生命周期与履约/付款进度，供销售判断采购是否卡住。
  */
-export function PurchasePanel({
-    order,
-    selfReturn,
-}: {
-    order: SalesOrderDetailView
-    selfReturn: string
-}) {
+export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     const permissions = useSalesOrderDetailPermissions()
     const canList = permissions.openPurchase.enabled
     const canPreview = permissions.previewPurchase.enabled
-    const createPurchase = canCreatePurchaseFromSalesOrder(order)
-    const createGate = createPurchase
-        ? permissions.createPurchase(true, "当前不能从本单分配供给")
-        : { enabled: false, reason: undefined }
     const purchaseCount = order.related.purchaseOrders
     const progress = order.related.procurementProgress
 
@@ -131,39 +116,6 @@ export function PurchasePanel({
                             {statusSummary ? ` · ${progress.label}` : null}
                         </p>
                     </div>
-                    {createPurchase ? (
-                        createGate.enabled ? (
-                            <Button
-                                id="sales-orders-detail-purchase-create"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                data-testid="sales-order-purchase-create"
-                                render={
-                                    <Link
-                                        href={purchaseOrdersWorkspaceHref(
-                                            order,
-                                            selfReturn,
-                                        )}
-                                    />
-                                }
-                            >
-                                继续分配供给
-                            </Button>
-                        ) : (
-                            <Button
-                                id="sales-orders-detail-purchase-create"
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                data-testid="sales-order-purchase-create"
-                                disabled
-                                title={createGate.reason}
-                            >
-                                继续分配供给
-                            </Button>
-                        )
-                    ) : null}
                 </div>
             </div>
 

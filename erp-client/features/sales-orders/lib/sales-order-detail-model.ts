@@ -5,7 +5,6 @@ import {
     isPendingReviewStage,
     stageOwnerDisplay,
 } from "@/features/sales-orders/lib/labels"
-import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 
 /** 详情页动作（作废/低毛利/发起改单等）的统一结果状态。 */
 export type SalesOrderDetailActionResult = {
@@ -296,43 +295,6 @@ export function buildSelfHref(
         : `/sales/orders/${salesOrderId}`
 }
 
-export function receivableWorkspaceHref(
-    order: SalesOrderListItem,
-    selfReturn: string,
-    mode: "receipt" | "invoice" = "receipt",
-) {
-    const params = new URLSearchParams({
-        view: "receivable",
-        salesOrderId: order.id,
-        q: order.documentNumber,
-        from: "W05",
-        returnTo: selfReturn,
-        register: mode,
-    })
-    return `/finance/customer-accounts?${params.toString()}`
-}
-
-/** 打开客户往来并锁定本单，不自动进入登记会话。 */
-export function customerAccountsForOrderHref(
-    order: Pick<SalesOrderListItem, "id">,
-    selfReturn: string,
-) {
-    const params = new URLSearchParams({
-        view: "receivable",
-        salesOrderId: order.id,
-        from: "W05",
-        returnTo: selfReturn,
-    })
-    return `/finance/customer-accounts?${params.toString()}`
-}
-
-export function fulfillmentWorkspaceHref(
-    _order: SalesOrderListItem,
-    _selfReturn: string,
-) {
-    return fulfillmentTasksHref()
-}
-
 export function canCreatePurchaseFromSalesOrder(
     order: SalesOrderListItem,
 ): boolean {
@@ -340,19 +302,6 @@ export function canCreatePurchaseFromSalesOrder(
         return order.related.purchaseCreationAccess.allowed
     }
     return false
-}
-
-export function purchaseOrdersWorkspaceHref(
-    order: SalesOrderListItem,
-    selfReturn: string,
-) {
-    const params = new URLSearchParams({ salesOrderId: order.id })
-    if (canCreatePurchaseFromSalesOrder(order)) {
-        params.set("mode", "create")
-    }
-    params.set("from", "W05")
-    params.set("returnTo", selfReturn)
-    return `/procurement/orders?${params.toString()}`
 }
 
 export function navItemsFor(order: SalesOrderDetailView): Array<{

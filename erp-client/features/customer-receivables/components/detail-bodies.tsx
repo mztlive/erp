@@ -9,6 +9,7 @@ import {
     PreviewNote,
 } from "@/components/business/financial-preview"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
 import { CustomerRefundApprovalArea } from "@/features/customer-receivables/components/customer-refund-approval-area"
 import { ReceiptReversalApprovalArea } from "@/features/customer-receivables/components/receipt-reversal-approval-area"
@@ -118,12 +119,14 @@ export function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
  */
 export function ReceiptDetailBody({
     row,
+    readOnly = false,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
 }: {
     row: ReceiptRow
+    readOnly?: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -173,20 +176,27 @@ export function ReceiptDetailBody({
                 }}
             />
             <PreviewSection title="审批记录">
-                <CustomerReceiptApprovalArea
-                    phase={customerReceiptApprovalPhase(
-                        row.approval,
-                        row.status === "in_approval"
-                            ? "IN_APPROVAL"
-                            : row.status,
-                    )}
-                    approval={row.approval}
-                    documentId={row.receiptId}
-                    workItemId={workItemId}
-                    expectedTaskVersion={expectedTaskVersion}
-                    workItemAllowedActions={workItemAllowedActions}
-                    onDecisionApplied={onDecisionApplied}
-                />
+                {readOnly ? (
+                    <ApprovalReadonly
+                        id={`receipt-${row.receiptId}`}
+                        approval={row.approval}
+                    />
+                ) : (
+                    <CustomerReceiptApprovalArea
+                        phase={customerReceiptApprovalPhase(
+                            row.approval,
+                            row.status === "in_approval"
+                                ? "IN_APPROVAL"
+                                : row.status,
+                        )}
+                        approval={row.approval}
+                        documentId={row.receiptId}
+                        workItemId={workItemId}
+                        expectedTaskVersion={expectedTaskVersion}
+                        workItemAllowedActions={workItemAllowedActions}
+                        onDecisionApplied={onDecisionApplied}
+                    />
+                )}
             </PreviewSection>
             {posted ? (
                 <PreviewNote>

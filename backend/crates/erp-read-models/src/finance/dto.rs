@@ -5,7 +5,9 @@ use erp_core::money::Amount;
 use erp_finance::dto::receivable::{
     ReceiptAllocationView, ReceivableEntryView, ReceivableInvoiceFactView, ReceivableReceiptFactView,
 };
-use erp_finance::entity::receivable::{CustomerReceiptStatus, ReceivableAccountStatus};
+use erp_finance::entity::receivable::{
+    CustomerReceiptStatus, PendingReceiptAllocation, ReceivableAccountStatus,
+};
 use serde::Serialize;
 
 /// 应收往来子账响应视图（W11 应收台账行 + 详情）。
@@ -92,6 +94,8 @@ pub struct CustomerReceiptView {
     pub unallocated_amount: Amount,
     /// 核销分配行。
     pub allocations: Vec<ReceiptAllocationView>,
+    /// 审批提交时冻结的拟核销分配，独立于已过账金额。
+    pub pending_allocations: Vec<PendingReceiptAllocation>,
     /// 统一只读审批结构。客户端不得据此选择定义或审批人。
     pub approval: DocumentApprovalView,
 }

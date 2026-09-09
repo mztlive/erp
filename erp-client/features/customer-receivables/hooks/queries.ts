@@ -46,9 +46,11 @@ export function useCustomerAccountsListQuery(query: CustomerAccountsQuery) {
 export function useCustomerAccountsDetailQuery(
     kind: CustomerAccountsDetailKind | null,
     id: string | null,
+    refreshOnMount = false,
 ) {
     return useQuery({
         queryKey: customerReceivableKeys.detail(kind ?? "", id ?? ""),
+        staleTime: refreshOnMount ? 0 : undefined,
         queryFn: () => fetchCustomerAccountsDetail(kind!, id!),
         enabled: Boolean(kind && id),
     })

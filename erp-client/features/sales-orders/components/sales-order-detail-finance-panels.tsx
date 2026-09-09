@@ -11,18 +11,21 @@ export { ReceivablePanel } from "@/features/sales-orders/components/sales-order-
 export function VersionsPanel({
     order,
     onApprovalResult,
+    showActiveChange = true,
 }: {
     order: SalesOrderDetailView
+    showActiveChange?: boolean
     onApprovalResult?: (result: SalesOrderDetailActionResult) => void
 }) {
     return (
         <div className="space-y-6">
-            {order.activeChangeOrder ? (
+            {order.activeChangeOrder && showActiveChange ? (
                 <div className="space-y-2">
                     <SectionLead>
                         改单生效前，客户仍按当前版本执行。下面是进行中的改单，再往下是已经生效的历史版本。
                     </SectionLead>
                     <SalesChangeOrderApprovalSection
+                        readonlyApproval
                         salesOrderId={order.id}
                         nature={order.nature}
                         changeOrder={order.activeChangeOrder}
@@ -44,7 +47,7 @@ export function VersionsPanel({
 }
 
 export function CollaborationPanel({ order }: { order: SalesOrderDetailView }) {
-    void order;
+    void order
     // TODO(商城重做): 执行投影恢复后替换此占位面板。
     return (
         <p className="text-sm text-muted-foreground">

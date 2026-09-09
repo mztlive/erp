@@ -126,6 +126,10 @@ fn customer_receipt_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_receipts_no", doc! { "receipt_no": 1 }),
         named_index(
+            "idx_customer_receipts_pending_entry",
+            doc! { "pending_allocations.receivable_entry_id": 1, "deleted_at": 1 },
+        ),
+        named_index(
             "idx_customer_receipts_party_status",
             doc! { "counterparty_party_id": 1, "status": 1 },
         ),
@@ -273,6 +277,11 @@ mod tests {
 
     #[test]
     fn receipt_and_offset_indexes_cover_unique_and_reverse_lookups() {
+        assert!(customer_receipt_indexes().iter().any(|index| {
+            name(index) == Some("idx_customer_receipts_pending_entry")
+                && index.keys == doc! { "pending_allocations.receivable_entry_id": 1, "deleted_at": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) != Some(true)
+        }));
         assert!(receipt_allocation_indexes()
             .iter()
             .any(|index| name(index) == Some("uk_receipt_allocations_receipt_seq")));

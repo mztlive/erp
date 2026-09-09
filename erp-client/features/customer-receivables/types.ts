@@ -102,7 +102,7 @@ export type ReceivableAccountRow = Readonly<{
     customerName: string
     salesOrderId: string
     salesOrderNo: string
-    businessType: "card" | "physical_service"
+    businessType: "card" | "physical_service" | "unknown"
     businessTypeLabel: string
     grossTotal: string
     settledTotal: string
@@ -110,7 +110,7 @@ export type ReceivableAccountRow = Readonly<{
     invoicedTotal: string
     openInvoiceableTotal: string
     dueDate: string
-    dueState: "not_due" | "due_today" | "overdue"
+    dueState: "not_due" | "due_today" | "overdue" | "unknown"
     dueStateLabel: string
     status: "open" | "partial" | "settled"
     statusLabel: string
@@ -137,6 +137,10 @@ export type ReceiptRow = Readonly<{
     statusLabel: string
     statusTone: StatusTone
     baselineVersion: number
+    pendingAllocations?: readonly Pick<
+        AllocationLine,
+        "targetId" | "amountGross"
+    >[]
     allocations: readonly AllocationLine[]
     allowedActions: readonly AllowedAction[]
     actionBlockers: readonly ActionBlocker[]

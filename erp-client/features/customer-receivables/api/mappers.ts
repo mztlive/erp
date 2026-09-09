@@ -166,7 +166,7 @@ export function projectReceivable(
         "REGISTER_RECEIPT",
         "REGISTER_INVOICE",
     ]
-    // dueState 后端未返回：登记缺口，展示默认未到期（不以前端时钟推算逾期）
+    // 后端未返回业务性质与到期判定时保持未知，禁止伪造业务状态。
     return {
         accountId: a.id,
         accountSeq: a.account_seq,
@@ -188,16 +188,16 @@ export function projectReceivable(
             a.sales_order_id,
             MISSING_SALES_ORDER_NO,
         ),
-        businessType: "physical_service",
-        businessTypeLabel: "实物服务",
+        businessType: "unknown",
+        businessTypeLabel: "待确认",
         grossTotal: a.gross_total,
         settledTotal: a.settled_total,
         openTotal: a.open_total,
         invoicedTotal: a.invoiced_total,
         openInvoiceableTotal: a.open_invoiceable_total,
         dueDate: a.entries[0]?.due_date ?? "",
-        dueState: "not_due",
-        dueStateLabel: "未到期",
+        dueState: "unknown",
+        dueStateLabel: "到期状态待确认",
         status,
         ...meta,
         baselineVersion: a.version,
@@ -261,6 +261,10 @@ export function projectReceipt(
         statusTone: customerReceiptStatusTone(r.status),
         baselineVersion: r.version,
         allocations: (r.allocations ?? []).map(projectReceiptAllocation),
+        pendingAllocations: r.pending_allocations?.map((line) => ({
+            amountGross: line.allocated_amount,
+            targetId: line.receivable_entry_id,
+        })),
         allowedActions: allowed,
         actionBlockers: [],
         isPosted,

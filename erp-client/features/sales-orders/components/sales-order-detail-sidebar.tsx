@@ -18,9 +18,11 @@ export function SalesOrderDetailSidebar({
     order,
     focusTask,
     action,
+    hideFinanceSummary = false,
 }: {
     order: SalesOrderDetailView
     focusTask?: FocusTask | null
+    hideFinanceSummary?: boolean
     action?: ReactNode
 }) {
     const due = stageDueDisplay(order)
@@ -55,36 +57,40 @@ export function SalesOrderDetailSidebar({
                     value={order.amountGross}
                     className="mt-1 block wrap-anywhere text-[44px] leading-tight font-semibold tracking-tight"
                 />
-                <dl className="mt-5 grid grid-cols-3 gap-3">
-                    {amounts.map((item) => (
-                        <div key={item.label} className="min-w-0">
-                            <dt className="text-xs text-muted-foreground">
-                                {item.label}
-                            </dt>
-                            <dd className="mt-1.5 wrap-anywhere text-lg font-semibold">
-                                <MoneyValue value={item.value} />
-                            </dd>
+                {!hideFinanceSummary ? (
+                    <>
+                        <dl className="mt-5 grid grid-cols-3 gap-3">
+                            {amounts.map((item) => (
+                                <div key={item.label} className="min-w-0">
+                                    <dt className="text-xs text-muted-foreground">
+                                        {item.label}
+                                    </dt>
+                                    <dd className="mt-1.5 wrap-anywhere text-lg font-semibold">
+                                        <MoneyValue value={item.value} />
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                                回款{" "}
+                                <StatusBadge
+                                    tone={order.collection.tone}
+                                    label={order.collection.label}
+                                    className="border-0 bg-transparent shadow-none"
+                                />
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                                开票{" "}
+                                <StatusBadge
+                                    tone={order.invoicing.tone}
+                                    label={order.invoicing.label}
+                                    className="border-0 bg-transparent shadow-none"
+                                />
+                            </span>
                         </div>
-                    ))}
-                </dl>
-                <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                        回款{" "}
-                        <StatusBadge
-                            tone={order.collection.tone}
-                            label={order.collection.label}
-                            className="border-0 bg-transparent shadow-none"
-                        />
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                        开票{" "}
-                        <StatusBadge
-                            tone={order.invoicing.tone}
-                            label={order.invoicing.label}
-                            className="border-0 bg-transparent shadow-none"
-                        />
-                    </span>
-                </div>
+                    </>
+                ) : null}
             </section>
             <section
                 aria-labelledby="sales-order-progress-heading"
