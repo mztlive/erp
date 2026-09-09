@@ -316,49 +316,45 @@ export function SalesOrderDetailPage({
                 />
             ) : null}
 
-            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-                <div className="min-w-0">
-                    <SalesOrderDetailTabs
+            <SalesOrderDetailTabs
+                order={order}
+                selfReturn={`/sales/orders/${encodeURIComponent(salesOrderId)}`}
+                section={section}
+                navSection={derived.navSection}
+                visibleNav={derived.visibleNav}
+                canAccept={derived.canAccept}
+                focusedWorkItem={
+                    section === "change-review" ? undefined : focusedWorkItem
+                }
+                onSelectSection={selectSection}
+                onApprovalResult={handleActionResult}
+                onDataChanged={refreshOrderDetail}
+                sidebar={
+                    <SalesOrderDetailSidebar
                         order={order}
-                        selfReturn={`/sales/orders/${encodeURIComponent(salesOrderId)}`}
-                        section={section}
-                        navSection={derived.navSection}
-                        visibleNav={derived.visibleNav}
-                        canAccept={derived.canAccept}
-                        focusedWorkItem={
-                            section === "change-review"
-                                ? undefined
-                                : focusedWorkItem
+                        focusTask={derived.focusTask}
+                        action={
+                            primaryTaskAction ??
+                            (derived.focusTask ? (
+                                <Button
+                                    id={`sales-orders-detail-banner-${derived.focusTask.id}`}
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                        selectSection(derived.focusTask!.id)
+                                    }
+                                >
+                                    {derived.focusTask.id === "approval"
+                                        ? "查看审批"
+                                        : derived.focusTask.id === "acceptance"
+                                          ? "查看验收"
+                                          : "查看版本"}
+                                </Button>
+                            ) : null)
                         }
-                        onSelectSection={selectSection}
-                        onApprovalResult={handleActionResult}
-                        onDataChanged={refreshOrderDetail}
                     />
-                </div>
-                <SalesOrderDetailSidebar
-                    order={order}
-                    focusTask={derived.focusTask}
-                    action={
-                        primaryTaskAction ??
-                        (derived.focusTask ? (
-                            <Button
-                                id={`sales-orders-detail-banner-${derived.focusTask.id}`}
-                                type="button"
-                                variant="outline"
-                                onClick={() =>
-                                    selectSection(derived.focusTask!.id)
-                                }
-                            >
-                                {derived.focusTask.id === "approval"
-                                    ? "查看审批"
-                                    : derived.focusTask.id === "acceptance"
-                                      ? "查看验收"
-                                      : "查看版本"}
-                            </Button>
-                        ) : null)
-                    }
-                />
-            </div>
+                }
+            />
 
             <SalesOrderDetailCommandDialogs
                 order={order}

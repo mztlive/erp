@@ -1,5 +1,7 @@
 "use client"
 
+import type { ReactNode } from "react"
+
 import { Badge } from "@/components/ui/badge"
 import {
     ObjectSectionTabs,
@@ -36,6 +38,7 @@ export function SalesOrderDetailTabs({
     onSelectSection,
     onApprovalResult,
     onDataChanged,
+    sidebar,
 }: {
     order: SalesOrderDetailView
     selfReturn: string
@@ -55,6 +58,7 @@ export function SalesOrderDetailTabs({
     ) => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
     onDataChanged: () => void
+    sidebar?: ReactNode
 }) {
     const items = visibleNav.map((item) => {
         const todoOnAcceptance = item.id === "acceptance" && Boolean(canAccept)
@@ -105,6 +109,7 @@ export function SalesOrderDetailTabs({
             items={items}
             listLabel="销售单分区"
             listClassName="border-border/70"
+            sidebar={sidebar}
         >
             <ObjectSectionTabsPanel value="overview" className="py-5">
                 <OverviewPanel

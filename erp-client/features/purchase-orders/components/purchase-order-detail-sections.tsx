@@ -51,6 +51,7 @@ export function PurchaseOrderDetailSections({
     changeWorkItemAllowedActions,
     onChangeApprovalResult,
     approvalPanel,
+    sidebar,
 }: {
     order: PurchaseOrderCenterView
     activeSection: PurchaseOrderDetailSectionId
@@ -69,6 +70,7 @@ export function PurchaseOrderDetailSections({
     changeWorkItemAllowedActions?: readonly string[]
     onChangeApprovalResult?: (result: PurchaseOrderDetailResult) => void
     approvalPanel: React.ReactNode
+    sidebar?: React.ReactNode
 }) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -109,6 +111,7 @@ export function PurchaseOrderDetailSections({
                 onValueChange={handleSectionChange}
                 items={items}
                 listLabel="采购单分区"
+                sidebar={sidebar}
             >
                 <ObjectSectionTabsPanel value="overview">
                     {editor ?? (

@@ -292,96 +292,87 @@ export function PurchaseOrderDetailPage({
                 />
             ) : null}
 
-            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-                <PurchaseOrderDetailSections
-                    order={order}
-                    activeSection={activeSection}
-                    editor={
-                        mode === "edit" && permissions.canEdit ? (
-                            <EditSurface
-                                order={order}
-                                lineEdits={editActions.lineEdits}
-                                setLineEdits={editActions.setLineEdits}
-                                draftEditToken={editActions.draftEditToken}
-                                canSubmit={permissions.canSubmit}
-                                savePending={editActions.savePending}
-                                onSave={() => void editActions.handleSave()}
-                                onSubmitOpen={() =>
-                                    editActions.setSubmitConfirmOpen(true)
-                                }
-                            />
-                        ) : undefined
-                    }
-
-                    costMasked={costMasked}
-                    gate={gate}
-                    canPay={permissions.canPay}
-                    canFulfill={permissions.canFulfill}
-                    fulfillBlocker={permissions.fulfillBlocker}
-                    canChange={permissions.canChange}
-                    changeBlocker={permissions.changeBlocker}
-                    payableHref={payableHref}
-                    onRequestChange={() =>
-                        editActions.setChangeConfirmOpen(true)
-                    }
-                    changeWorkItemId={
-                        isChangeOrderTask
-                            ? focusedWorkItem?.workItemId
-                            : undefined
-                    }
-                    changeExpectedTaskVersion={
-                        isChangeOrderTask
-                            ? focusedWorkItem?.taskVersion
-                            : undefined
-                    }
-                    changeWorkItemAllowedActions={
-                        isChangeOrderTask
-                            ? focusedWorkItem?.allowedActions
-                            : undefined
-                    }
-                    onChangeApprovalResult={handleResult}
-                    approvalPanel={
-                        <PurchaseOrderApprovalArea
-                            phase={purchaseOrderApprovalPhase(
-                                order.approval,
-                                order.identity.status,
-                            )}
-                            approval={order.approval}
-                            documentId={order.identity.purchaseOrderId}
-                            workItemId={focusedWorkItem?.workItemId}
-                            expectedTaskVersion={focusedWorkItem?.taskVersion}
-                            workItemAllowedActions={
-                                focusedWorkItem?.allowedActions
-                            }
-                            onDecisionApplied={(view: ApprovalCommandView) =>
-                                handleResult({
-                                    status: "succeeded",
-                                    title: "审批决定已提交",
-                                    description: view.latestRejectionReason
-                                        ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                                        : "已按当前任务提交决定。",
-                                    reference:
-                                        order.identity.purchaseNo ??
-                                        order.identity.draftLabel,
-                                    facts: view.currentAssigneeName
-                                        ? [
-                                              {
-                                                  label: "当前审批人",
-                                                  value: view.currentAssigneeName,
-                                              },
-                                          ]
-                                        : undefined,
-                                })
+            <PurchaseOrderDetailSections
+                order={order}
+                activeSection={activeSection}
+                editor={
+                    mode === "edit" && permissions.canEdit ? (
+                        <EditSurface
+                            order={order}
+                            lineEdits={editActions.lineEdits}
+                            setLineEdits={editActions.setLineEdits}
+                            draftEditToken={editActions.draftEditToken}
+                            canSubmit={permissions.canSubmit}
+                            savePending={editActions.savePending}
+                            onSave={() => void editActions.handleSave()}
+                            onSubmitOpen={() =>
+                                editActions.setSubmitConfirmOpen(true)
                             }
                         />
-                    }
-                />
+                    ) : undefined
+                }
 
-                <PurchaseOrderDetailSidebar
-                    order={order}
-                    costMasked={costMasked}
-                />
-            </div>
+                costMasked={costMasked}
+                gate={gate}
+                canPay={permissions.canPay}
+                canFulfill={permissions.canFulfill}
+                fulfillBlocker={permissions.fulfillBlocker}
+                canChange={permissions.canChange}
+                changeBlocker={permissions.changeBlocker}
+                payableHref={payableHref}
+                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
+                changeWorkItemId={
+                    isChangeOrderTask ? focusedWorkItem?.workItemId : undefined
+                }
+                changeExpectedTaskVersion={
+                    isChangeOrderTask ? focusedWorkItem?.taskVersion : undefined
+                }
+                changeWorkItemAllowedActions={
+                    isChangeOrderTask
+                        ? focusedWorkItem?.allowedActions
+                        : undefined
+                }
+                onChangeApprovalResult={handleResult}
+                approvalPanel={
+                    <PurchaseOrderApprovalArea
+                        phase={purchaseOrderApprovalPhase(
+                            order.approval,
+                            order.identity.status,
+                        )}
+                        approval={order.approval}
+                        documentId={order.identity.purchaseOrderId}
+                        workItemId={focusedWorkItem?.workItemId}
+                        expectedTaskVersion={focusedWorkItem?.taskVersion}
+                        workItemAllowedActions={focusedWorkItem?.allowedActions}
+                        onDecisionApplied={(view: ApprovalCommandView) =>
+                            handleResult({
+                                status: "succeeded",
+                                title: "审批决定已提交",
+                                description: view.latestRejectionReason
+                                    ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                    : "已按当前任务提交决定。",
+                                reference:
+                                    order.identity.purchaseNo ??
+                                    order.identity.draftLabel,
+                                facts: view.currentAssigneeName
+                                    ? [
+                                          {
+                                              label: "当前审批人",
+                                              value: view.currentAssigneeName,
+                                          },
+                                      ]
+                                    : undefined,
+                            })
+                        }
+                    />
+                }
+                sidebar={
+                    <PurchaseOrderDetailSidebar
+                        order={order}
+                        costMasked={costMasked}
+                    />
+                }
+            />
 
             <PurchaseOrderDetailDialogs
                 order={order}

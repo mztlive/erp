@@ -23,6 +23,8 @@ export type ObjectSectionTabsProps = Omit<
     onValueChange: (value: string) => void
     items: readonly ObjectSectionTabItem[]
     children: React.ReactNode
+    /** 分区正文右侧的摘要；与正文共用起点，在窄屏下移至正文之后。 */
+    sidebar?: React.ReactNode
     /** 分区导航列表额外 class；默认已含吸顶与底边。 */
     listClassName?: string
     /** 传给 TabsList 的无障碍标签。 */
@@ -40,6 +42,7 @@ function ObjectSectionTabs({
     onValueChange,
     items,
     children,
+    sidebar,
     className,
     listClassName,
     listLabel = "对象分区",
@@ -86,7 +89,16 @@ function ObjectSectionTabs({
                     </TabsTrigger>
                 ))}
             </TabsList>
-            {children}
+            {sidebar != null ? (
+                <div className="grid min-w-0 items-start gap-6 py-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+                    <div className="min-w-0 [&>[data-slot=object-section-tabs-panel]]:py-0">
+                        {children}
+                    </div>
+                    {sidebar}
+                </div>
+            ) : (
+                children
+            )}
         </Tabs>
     )
 }
