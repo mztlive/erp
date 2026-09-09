@@ -34,7 +34,7 @@ pub(super) fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -
 /// 返回排序条件文档。
 pub(super) fn sort_doc(field: &str, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 #[cfg(test)]
@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn sort_doc_applies_direction() {
-        assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc("sku_no", true), doc! { "sku_no": 1 });
+        assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1, "id": -1 });
+        assert_eq!(sort_doc("sku_no", true), doc! { "sku_no": 1, "id": 1 });
     }
 }

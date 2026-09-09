@@ -4,7 +4,6 @@ use erp_core::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderId};
 use erp_core::money::Amount;
 use erp_finance::entity::receivable::{EntryDirection, ReceivableEntry};
 use erp_finance::repository::ReceivableExt;
-use erp_party::PartyExt;
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
@@ -41,25 +40,17 @@ impl ReceivableReadService {
     ) -> Result<PageView<ReceivableAccountSummaryView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let (keyword_sales_order_ids, keyword_party_ids) = if let Some(keyword) = query.q.as_deref() {
-            let sales_ids = self
-                .db
-                .sales_orders()
-                .matching_ids_by_number(keyword, &mut NoTransaction)
-                .await?;
-            let party_ids = self
-                .db
-                .party()
-                .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
-                .await?;
-            (sales_ids, party_ids)
-        } else {
-            (Vec::new(), Vec::new())
-        };
+        let keyword_ids = crate::finance::search::keyword_ids(
+            &self.db,
+            query.q.as_deref(),
+            erp_finance::repository::keyword::FinanceSearchTarget::Receivable,
+        )
+        .await?;
         let filter = ReceivableAccountFilter {
-            keyword: query.q,
-            keyword_sales_order_ids,
-            keyword_party_ids,
+            keyword_ids,
+            keyword: None,
+            keyword_sales_order_ids: Vec::new(),
+            keyword_party_ids: Vec::new(),
             account_id: query.account_id,
             customer_id: query.customer_id,
             counterparty_party_id: query.counterparty_party_id,

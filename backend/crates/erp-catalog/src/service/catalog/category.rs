@@ -39,6 +39,7 @@ impl CatalogService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = ProductCategoryFilter {
+            q: query.q,
             category_code: query.category_code,
             name: query.name,
             parent_category_id: query.parent_category_id,

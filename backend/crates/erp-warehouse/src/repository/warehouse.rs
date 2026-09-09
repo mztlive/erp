@@ -61,6 +61,12 @@ pub struct WarehouseRow {
 /// 仓库列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct WarehouseFilter {
+    /// 指定仓库身份，与关键词取交集。
+    pub warehouse_id: Option<String>,
+    /// 必须具有非空入库经办人。
+    pub require_inbound_handler: bool,
+    /// 代码或当前修订名称关键词，在分页前执行。
+    pub q: Option<String>,
     /// 仓库代码精确匹配；`None` 表示不筛选。
     pub warehouse_code: Option<String>,
     /// 启停状态；`None` 表示不筛选。
@@ -87,6 +93,15 @@ impl QueryFilter for WarehouseFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(id) = &self.warehouse_id {
+            filter.insert("id", id);
+        }
+        if self.require_inbound_handler {
+            filter.insert(
+                "inbound_handler_user_id",
+                doc! { "$type": "string", "$regex": r"\S" },
+            );
         }
         filter
     }
@@ -122,6 +137,7 @@ impl<'a> WarehouseRepository<'a> {
         filter: &WarehouseFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<WarehouseRow>> {
+        let query = self.keyword_filter(filter, executor).await?;
         let options = FindOptions::builder()
             .sort(warehouse_sort_doc(
                 filter.sort_by.as_deref(),
@@ -132,8 +148,8 @@ impl<'a> WarehouseRepository<'a> {
             .projection(warehouse_projection())
             .build();
         let collection = self.collection().clone_with_type::<WarehouseRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
 
         Ok(PageResult {
             items,
@@ -584,7 +600,7 @@ where
 /// 返回排序条件文档。
 fn sort_doc(field: &str, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 构建仓库排序文档（白名单：`created_at`/`warehouse_code`）。
@@ -657,6 +673,34 @@ fn warehouse_sku_policy_projection() -> Document {
     }
 }
 
+impl WarehouseRepository<'_> {
+    /// 代码 OR 当前修订名称；历史修订命中不能使仓库进入结果。
+    ///
+    /// 名称关联仅读取修订 ID，读取失败向调用方传播。
+    async fn keyword_filter(
+        &self,
+        filter: &WarehouseFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Document> {
+        let mut query = filter.to_doc();
+        let Some(q) = filter.q.as_deref() else {
+            return Ok(query);
+        };
+        let mut name = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut name, "name", Some(q));
+        let collection = self.database().collection::<Document>(WAREHOUSE_REVISIONS);
+        let mut revisions = collection.distinct("id", name);
+        if let Some(session) = executor.session() {
+            revisions = revisions.session(session);
+        }
+        let ids = revisions.await?;
+        let mut code = Document::new();
+        insert_literal_regex_filter(&mut code, "warehouse_code", Some(q));
+        query.insert("$or", vec![code, doc! { "current_revision_id": { "$in": ids } }]);
+        Ok(query)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{sort_doc, WarehouseFilter, WarehouseRevisionFilter};
@@ -667,6 +711,9 @@ mod tests {
     #[test]
     fn warehouse_filter_applies_optional_fields_and_deleted_filter() {
         let filter = WarehouseFilter {
+            warehouse_id: None,
+            require_inbound_handler: false,
+            q: None,
             warehouse_code: Some("WH-BJ-001".to_string()),
             status: Some(EnableStatus::Active),
             page: 1,
@@ -699,7 +746,10 @@ mod tests {
 
     #[test]
     fn sort_doc_applies_direction() {
-        assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc("warehouse_code", true), doc! { "warehouse_code": 1 });
+        assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1, "id": -1 });
+        assert_eq!(
+            sort_doc("warehouse_code", true),
+            doc! { "warehouse_code": 1, "id": 1 }
+        );
     }
 }

@@ -358,6 +358,39 @@ fn purchase_order_projection() -> Document {
     }
 }
 
+impl PurchaseOrderRepository<'_> {
+    /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
+    ///
+    /// 只投影 ID、排除软删除；数据库错误向上返回。
+    pub async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let clauses = ["purchase_no"]
+            .into_iter()
+            .map(|field| {
+                let mut clause = Document::new();
+                insert_literal_regex_filter(&mut clause, field, Some(keyword));
+                clause
+            })
+            .collect::<Vec<_>>();
+        let collection = self.collection();
+        let mut query = collection.distinct(
+            "id",
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{active_purchase_order_filter, PurchaseOrderFilter};

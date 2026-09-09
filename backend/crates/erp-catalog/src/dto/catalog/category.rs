@@ -110,6 +110,9 @@ impl From<ProductCategory> for ProductCategoryView {
 /// 商品分类列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductCategoryListParams {
+    /// 多业务字段字面量关键词，空白不筛选。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 分类代码精确筛选。
     pub category_code: Option<String>,
     /// 名称字面量筛选（忽略大小写）。
@@ -133,6 +136,8 @@ pub struct ProductCategoryListParams {
 /// 归一化后的商品分类列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProductCategoryListQuery {
+    /// 多业务字段字面量关键词，空白不筛选。
+    pub q: Option<String>,
     /// 分类代码精确筛选。
     pub category_code: Option<String>,
     /// 名称筛选。
@@ -169,6 +174,7 @@ impl ProductCategoryListParams {
             None => None,
         };
         Ok(ProductCategoryListQuery {
+            q: normalized_text(self.q.as_deref()),
             category_code: normalized_text(self.category_code.as_deref()),
             name: normalized_text(self.name.as_deref()),
             parent_category_id,

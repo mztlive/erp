@@ -141,12 +141,14 @@ impl SalesOrderService {
     pub async fn list_rows(
         &self,
         params: &crate::dto::sales_order::SalesOrderListParams,
+        search: crate::repository::sales_order::SalesOrderSearch,
     ) -> crate::Result<application_core::PageView<crate::repository::sales_order::SalesOrderRow>> {
         use validator::Validate;
         type SalesOrderFilter = <mongodb::Database as crate::repository::SalesOrderExt>::SalesOrderFilter;
         params.validate()?;
         let query = params.normalized()?;
         let filter = SalesOrderFilter {
+            search,
             order_no: query.order_no,
             customer_id: query.customer_id,
             contract_id: query.contract_id,

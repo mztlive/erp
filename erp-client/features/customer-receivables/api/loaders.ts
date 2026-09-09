@@ -38,7 +38,7 @@ export async function loadReceipts(
         page: query.page,
         page_size: query.pageSize,
         counterparty_party_id: query.counterpartyPartyId,
-        receipt_no: query.q?.trim() || undefined,
+        q: query.q?.trim() || undefined,
         sales_order_id: query.salesOrderId,
         receivable_account_id: query.receivableAccountId,
         status: mapBackendStatusFilter(
@@ -57,7 +57,7 @@ export async function loadSalesInvoices(
         page_size: query.pageSize,
         invoice_direction: "sales",
         party_id: query.counterpartyPartyId,
-        invoice_no: query.q?.trim() || undefined,
+        q: query.q?.trim() || undefined,
         sales_order_id: query.salesOrderId,
         receivable_account_id: query.receivableAccountId,
         sort_by: "invoice_date",

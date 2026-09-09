@@ -147,6 +147,9 @@ pub struct ReplaceCapabilitiesRequest {
 /// 连接列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierApiConnectionListParams {
+    /// 编号或供应商当前名称字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// API 供应商筛选。
     pub supplier_id: Option<String>,
     /// 连接代码子串筛选（忽略大小写）。
@@ -170,6 +173,8 @@ pub struct SupplierApiConnectionListParams {
 /// 归一化后的连接列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SupplierApiConnectionListQuery {
+    /// 编号或供应商当前名称字面量关键词。
+    pub q: Option<String>,
     /// API 供应商筛选。
     pub supplier_id: Option<String>,
     /// 连接代码子串筛选。
@@ -196,6 +201,7 @@ impl SupplierApiConnectionListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_API_CONNECTION_SORT_FIELDS)?;
         Ok(SupplierApiConnectionListQuery {
+            q: normalized_text(self.q.as_deref()),
             supplier_id: normalized_text(self.supplier_id.as_deref()),
             connection_code: normalized_text(self.connection_code.as_deref()),
             environment: self.environment,
@@ -652,6 +658,7 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = SupplierApiConnectionListParams {
+            q: None,
             supplier_id: Some(" sup-1 ".to_string()),
             connection_code: Some(" CN-1 ".to_string()),
             environment: Some(ConnectionEnvironment::Production),
@@ -674,6 +681,7 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = SupplierApiConnectionListParams {
+            q: None,
             supplier_id: None,
             connection_code: None,
             environment: None,

@@ -41,6 +41,8 @@ impl ReceivableListScope {
 /// 作用域解析与分页搜索合并在仓储内完成；禁止向 Service 返回无界中间 ID。
 #[derive(Debug, Clone)]
 pub struct ScopedCustomerReceiptQuery {
+    /// 关键词命中身份，与账户范围取交集。
+    pub keyword_ids: Option<Vec<String>>,
     /// 回款单号模糊匹配；`None` 表示不筛选。
     pub receipt_no: Option<String>,
     /// 实际付款往来主体；`None` 表示不筛选。
@@ -64,6 +66,8 @@ pub struct ScopedCustomerReceiptQuery {
 /// 作用域解析与分页搜索合并在仓储内完成；禁止向 Service 返回无界中间 ID。
 #[derive(Debug, Clone)]
 pub struct ScopedInvoiceQuery {
+    /// 关键词命中身份，与账户范围取交集。
+    pub keyword_ids: Option<Vec<String>>,
     /// 发票方向；`None` 表示不筛选。
     pub invoice_direction: Option<InvoiceDirection>,
     /// 蓝红类型；`None` 表示不筛选。
@@ -193,6 +197,7 @@ impl<'a> ReceivableRepository<'a> {
             pending_entry_ids = entries;
         }
         let filter = CustomerReceiptFilter {
+            keyword_ids: query.keyword_ids.clone(),
             receipt_ids,
             pending_entry_ids,
             receipt_no: query.receipt_no.clone(),
@@ -236,6 +241,7 @@ impl<'a> ReceivableRepository<'a> {
             Some(self.invoice_ids_for_scope(&query.scope, executor).await?)
         };
         let filter = InvoiceFilter {
+            keyword_ids: query.keyword_ids.clone(),
             invoice_ids,
             invoice_direction: query.invoice_direction,
             invoice_kind: query.invoice_kind,

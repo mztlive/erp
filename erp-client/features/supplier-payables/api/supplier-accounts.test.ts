@@ -22,7 +22,7 @@ it("供应商筛选对进项发票使用往来单位 ID，付款保留供应商�
     })
     expect(apiGet).toHaveBeenCalledWith(
         "/admin/invoices",
-        expect.objectContaining({ party_id: "party-2", invoice_no: "INV-1" }),
+        expect.objectContaining({ party_id: "party-2", q: "INV-1" }),
     )
     expect(apiGet).toHaveBeenCalledWith(
         "/admin/supplier-payments",

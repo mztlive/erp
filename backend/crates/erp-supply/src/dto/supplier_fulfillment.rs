@@ -65,6 +65,9 @@ pub use application_core::PageView;
 /// 供应商履约订单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierFulfillmentOrderListParams {
+    /// 多业务字段字面量关键词，空白不筛选。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 固定供应商筛选。
     pub supplier_id: Option<SupplierAccountId>,
     /// 履约主线状态筛选。
@@ -90,6 +93,8 @@ pub struct SupplierFulfillmentOrderListParams {
 /// 归一化后的供应商履约订单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FulfillmentOrderListQuery {
+    /// 多业务字段字面量关键词，空白不筛选。
+    pub q: Option<String>,
     /// 固定供应商筛选。
     pub supplier_id: Option<SupplierAccountId>,
     /// 履约主线状态筛选。
@@ -118,6 +123,7 @@ impl SupplierFulfillmentOrderListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, FULFILLMENT_ORDER_SORT_FIELDS)?;
         Ok(FulfillmentOrderListQuery {
+            q: normalized_text(self.q.as_deref()),
             supplier_id: self.supplier_id.clone(),
             fulfillment_status: self.fulfillment_status,
             cancel_status: self.cancel_status,
@@ -807,6 +813,7 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = SupplierFulfillmentOrderListParams {
+            q: None,
             supplier_id: None,
             fulfillment_status: Some(FulfillmentStatus::Accepted),
             cancel_status: Some(CancelStatus::None),
@@ -829,6 +836,7 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = SupplierFulfillmentOrderListParams {
+            q: None,
             supplier_id: None,
             fulfillment_status: None,
             cancel_status: None,

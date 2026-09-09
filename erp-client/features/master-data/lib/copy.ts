@@ -88,6 +88,12 @@ export const masterDataCopy = {
     searchAria: "搜索基础资料",
     sellableItemsHint:
         "仅展示已上架、资料有效且存在有效供给的 SKU。销售价来自公司商品资料，采购成本不展示。",
+    sellableLayoutAria: "商品展示方式",
+    sellableLayoutTable: "表格",
+    sellableLayoutGallery: "选品",
+    sellableExportSelected: "导出已选",
+    sellableSelectAll: "全选当前结果",
+    sellableClearSelection: "清空已选",
     filterLifecycleAria: "启用状态",
     filterVersionAria: "版本状态",
     filterProductKindAria: "商品类型",

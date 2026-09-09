@@ -109,6 +109,8 @@ pub struct SupplierFulfillmentOrderRow {
 /// 供应商履约订单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierFulfillmentOrderFilter {
+    /// 关键词与既有精确条件取交集。
+    pub q: Option<String>,
     /// 固定供应商；`None` 表示不筛选。
     pub supplier_id: Option<SupplierAccountId>,
     /// 履约主线状态；`None` 表示不筛选。
@@ -143,6 +145,17 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
             "external_order_no",
             self.external_order_no.as_deref(),
         );
+        if let Some(q) = &self.q {
+            let clauses = ["fulfillment_order_no", "external_order_no"]
+                .into_iter()
+                .map(|field| {
+                    let mut clause = Document::new();
+                    insert_literal_regex_filter(&mut clause, field, Some(q));
+                    clause
+                })
+                .collect::<Vec<_>>();
+            filter.insert("$or", clauses);
+        }
         filter
     }
 }
@@ -883,7 +896,7 @@ fn order_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let field = sort_by
         .filter(|field| ORDER_SORT_FIELDS.contains(field))
         .unwrap_or("created_at");
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 按执行器语义执行聚合管道并收集全部结果行。
@@ -1087,6 +1100,7 @@ mod tests {
     #[test]
     fn order_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SupplierFulfillmentOrderFilter {
+            q: None,
             supplier_id: Some(SupplierAccountId::new("supplier-1")),
             fulfillment_status: Some(FulfillmentStatus::Accepted),
             external_order_no: Some("SUP-1".to_string()),
@@ -1112,19 +1126,19 @@ mod tests {
 
     #[test]
     fn order_sort_doc_rejects_fields_outside_whitelist() {
-        assert_eq!(order_sort_doc(None, false), doc! { "created_at": -1 });
+        assert_eq!(order_sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
         assert_eq!(
             order_sort_doc(Some("fulfillment_status"), false),
-            doc! { "created_at": -1 },
+            doc! { "created_at": -1, "id": -1 },
             "白名单外的排序字段必须回退 created_at"
         );
         assert_eq!(
             order_sort_doc(Some("submitted_at"), true),
-            doc! { "submitted_at": 1 }
+            doc! { "submitted_at": 1, "id": 1 }
         );
         assert_eq!(
             order_sort_doc(Some("completed_at"), false),
-            doc! { "completed_at": -1 }
+            doc! { "completed_at": -1, "id": -1 }
         );
     }
 }
@@ -1328,5 +1342,34 @@ mod snapshot_tests {
             first_total_or_zero(vec![row]),
             Amount::from_str("88.80").expect("合法金额")
         );
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = SupplierFulfillmentOrderFilter {
+            q: None,
+            supplier_id: None,
+            fulfillment_status: None,
+            external_order_no: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.q = Some("ERP.[1]".into());
+        filter.external_order_no = Some("external".into());
+        let query = filter.to_doc();
+        assert!(query.contains_key("external_order_no"));
+        let alternatives = query.get_array("$or").unwrap();
+        assert_eq!(alternatives.len(), 2);
+        assert!(alternatives[0]
+            .as_document()
+            .unwrap()
+            .contains_key("fulfillment_order_no"));
     }
 }

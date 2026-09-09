@@ -336,7 +336,11 @@ fn runtime_text_match(query: &str) -> Document {
             {
                 "$and": [
                     { "_runtime_snapshot_exact": true },
-                    { "_runtime_snapshot.payload.document_no": regex },
+                    { "$or": [
+                        { "_runtime_snapshot.payload.document_no": regex.clone() },
+                        { "_runtime_snapshot.display.counterparty_label": regex.clone() },
+                        { "_runtime_snapshot.display.source.customer": regex },
+                    ] },
                 ]
             },
         ]

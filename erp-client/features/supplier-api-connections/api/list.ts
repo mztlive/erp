@@ -35,7 +35,7 @@ export async function fetchConnectionList(
         sort_dir: "desc",
     }
     if (input.supplierId) query.supplier_id = input.supplierId
-    if (input.q?.trim()) query.connection_code = input.q.trim()
+    if (input.q?.trim()) query.q = input.q.trim()
     if (environment !== "ALL")
         query.environment =
             environment === "PRODUCTION" ? "production" : "testing"

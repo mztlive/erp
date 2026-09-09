@@ -105,6 +105,9 @@ impl WarehouseService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = WarehouseFilter {
+            warehouse_id: query.warehouse_id,
+            require_inbound_handler: query.require_inbound_handler,
+            q: query.q,
             warehouse_code: query.warehouse_code,
             status: query.status,
             page: query.paging.page,

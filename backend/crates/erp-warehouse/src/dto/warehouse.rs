@@ -204,6 +204,14 @@ impl From<Warehouse> for WarehouseView {
 /// 仓库列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct WarehouseListParams {
+    /// 按稳定身份回填选择项。
+    pub warehouse_id: Option<String>,
+    /// 采购入库用途只返回已配置经办人的仓库。
+    #[serde(default)]
+    pub require_inbound_handler: bool,
+    /// 仓库代码或当前名称的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 仓库代码精确筛选。
     pub warehouse_code: Option<String>,
     /// 启停状态筛选。
@@ -223,6 +231,12 @@ pub struct WarehouseListParams {
 /// 归一化后的仓库列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WarehouseListQuery {
+    /// 按稳定身份回填选择项。
+    pub warehouse_id: Option<String>,
+    /// 采购入库用途只返回已配置经办人的仓库。
+    pub require_inbound_handler: bool,
+    /// 仓库代码或当前名称的字面量关键词。
+    pub q: Option<String>,
     /// 仓库代码精确筛选。
     pub warehouse_code: Option<String>,
     /// 启停状态筛选。
@@ -244,6 +258,9 @@ impl WarehouseListParams {
     pub(crate) fn normalized(&self) -> Result<WarehouseListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, WAREHOUSE_SORT_FIELDS)?;
         Ok(WarehouseListQuery {
+            warehouse_id: normalized_text(self.warehouse_id.as_deref()),
+            require_inbound_handler: self.require_inbound_handler,
+            q: normalized_text(self.q.as_deref()),
             warehouse_code: normalized_text(self.warehouse_code.as_deref()),
             status: self.status,
             paging: PageParams {

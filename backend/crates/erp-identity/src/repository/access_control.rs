@@ -321,7 +321,7 @@ impl<'a> DataScopeRepository<'a> {
                 "subject_type": subject_type.as_str(),
                 "subject_id": subject_id,
             },
-            doc! { "created_at": 1 },
+            doc! { "created_at": 1, "id": 1 },
             executor,
         )
         .await
@@ -415,6 +415,19 @@ pub struct AuditEventRow {
 /// 审计事件列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct AuditEventFilter {
+    /// 操作者、动作、对象或追踪号字面量关键词。
+    pub q: Option<String>,
+    /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
+    pub keyword_actions: Option<String>,
+    /// 审计事件稳定身份。
+    pub event_id: Option<String>,
+    /// 链路追踪号或请求号精确筛选。
+    pub trace_id: Option<String>,
+    /// 创建时间下界（含，Unix 秒）。
+    pub created_from: Option<u64>,
+    /// 创建时间上界（不含，Unix 秒）。
+    pub created_before: Option<u64>,
+
     /// 操作者 ID（忽略大小写字面量模糊匹配）；`None` 表示不筛选。
     pub actor_id: Option<String>,
     /// 动作代码（忽略大小写字面量模糊匹配）；`None` 表示不筛选。
@@ -452,6 +465,45 @@ impl QueryFilter for AuditEventFilter {
         }
         if let Some(result) = self.result {
             filter.insert("result", result.as_str());
+        }
+        if let Some(id) = &self.event_id {
+            filter.insert("id", id);
+        }
+        if let Some(id) = &self.trace_id {
+            filter.insert("$or", vec![doc! { "trace_id": id }, doc! { "request_id": id }]);
+        }
+        let mut time = Document::new();
+        if let Some(from) = self.created_from {
+            time.insert("$gte", i64::try_from(from).unwrap_or(i64::MAX));
+        }
+        if let Some(before) = self.created_before {
+            time.insert("$lt", i64::try_from(before).unwrap_or(i64::MAX));
+        }
+        if !time.is_empty() {
+            filter.insert("created_at", time);
+        }
+        if let Some(q) = &self.q {
+            let mut clauses = [
+                "actor_id",
+                "actor_label",
+                "action_type",
+                "object_type",
+                "object_id",
+                "object_label",
+                "trace_id",
+                "request_id",
+            ]
+            .into_iter()
+            .map(|field| {
+                let mut clause = Document::new();
+                insert_literal_regex_filter(&mut clause, field, Some(q));
+                clause
+            })
+            .collect::<Vec<_>>();
+            if let Some(actions) = &self.keyword_actions {
+                clauses.push(doc! { "action_type": { "$in": actions.split(',').filter(|s| !s.is_empty()).collect::<Vec<_>>() } });
+            }
+            filter.insert("$and", vec![doc! { "$or": clauses }]);
         }
         filter
     }
@@ -717,6 +769,12 @@ mod tests {
     #[test]
     fn audit_event_filter_applies_regex_and_object_fields() {
         let filter = AuditEventFilter {
+            q: None,
+            keyword_actions: None,
+            event_id: None,
+            trace_id: None,
+            created_from: None,
+            created_before: None,
             actor_id: Some("user-1".to_string()),
             action_type: Some("sales_order.approve".to_string()),
             object_type: Some("sales_order".to_string()),
@@ -750,5 +808,48 @@ mod tests {
             doc! { "created_at": -1, "id": -1 },
             "白名单外字段回落默认排序"
         );
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = AuditEventFilter {
+            q: None,
+            keyword_actions: None,
+            event_id: None,
+            trace_id: None,
+            created_from: None,
+            created_before: None,
+            actor_id: None,
+            action_type: None,
+            object_type: None,
+            object_id: None,
+            result: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.q = Some("张.[1]".into());
+        filter.trace_id = Some("trace".into());
+        filter.event_id = Some("event".into());
+        filter.keyword_actions = Some("customer.create".into());
+        filter.created_from = Some(10);
+        filter.created_before = Some(20);
+        let query = filter.to_doc();
+        assert_eq!(query.get_str("id").unwrap(), "event");
+        assert_eq!(
+            query.get_document("created_at").unwrap().get_i64("$lt").unwrap(),
+            20
+        );
+        assert!(query.contains_key("$or"));
+        assert!(query.contains_key("$and"));
+        let text = format!("{query:?}");
+        assert!(text.contains("actor_label"));
+        assert!(text.contains("customer.create"));
     }
 }

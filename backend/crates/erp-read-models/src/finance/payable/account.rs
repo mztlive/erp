@@ -43,7 +43,15 @@ impl PayableReadService {
     ) -> Result<PageView<PayableAccountSummaryView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let keyword_ids = crate::finance::search::keyword_ids(
+            &self.db,
+            query.q.as_deref(),
+            erp_finance::repository::keyword::FinanceSearchTarget::Payable,
+        )
+        .await?;
         let filter = PayableAccountFilter {
+            source_document_id: query.source_document_id,
+            keyword_ids,
             supplier_id: query.supplier_id,
             source_type: query.source_type,
             status: query.status,

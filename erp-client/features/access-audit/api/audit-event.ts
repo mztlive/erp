@@ -10,8 +10,9 @@ export async function fetchAuditEvent(
     eventId: string,
 ): Promise<AuditEventRow | null> {
     const page = await apiGet<Page<BackendAuditEvent>>("/admin/audit-events", {
+        event_id: eventId,
         page: 1,
-        page_size: 100,
+        page_size: 1,
     })
     const hit = page.items.find((e) => e.id === eventId)
     return hit ? toAuditRow(hit) : null

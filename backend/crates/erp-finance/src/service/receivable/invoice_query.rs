@@ -19,15 +19,22 @@ impl ReceivableService {
     /// # 参数
     /// * `params` - 查询参数
     ///
+    /// * `keyword_ids` - 读取模型提供的完整关键词命中身份；None 只适用于无关键词
+    ///
     /// # 返回
     /// 返回契约形状的分页视图。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    pub async fn invoice_list(&self, params: &InvoiceListParams) -> Result<PageView<InvoiceView>> {
+    pub async fn invoice_list(
+        &self,
+        params: &InvoiceListParams,
+        keyword_ids: Option<Vec<String>>,
+    ) -> Result<PageView<InvoiceView>> {
         params.validate()?;
         let query = params.normalized()?;
         let scope_query = crate::repository::ScopedInvoiceQuery {
+            keyword_ids,
             invoice_direction: query.invoice_direction,
             invoice_kind: query.invoice_kind,
             party_id: query.party_id,

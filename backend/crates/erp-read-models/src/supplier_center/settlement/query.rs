@@ -210,3 +210,21 @@ impl SupplierSettlementReadService {
         ))
     }
 }
+
+impl SupplierSettlementReadService {
+    /// 结算列表在分页前解析供应商名称，保留本域日期/状态与统计口径。
+    ///
+    /// 参数或任一关联查询失败时返回错误。
+    pub async fn supplier_settlement_statement_list(
+        &self,
+        params: &dto::SupplierSettlementStatementListParams,
+    ) -> Result<dto::SupplierSettlementStatementListView> {
+        validator::Validate::validate(params)?;
+        let suppliers = crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref()).await?;
+        Ok(
+            erp_supply::service::supplier_settlement::SupplierSettlementService::new(self.db.clone())
+                .supplier_settlement_statement_list(params, suppliers)
+                .await?,
+        )
+    }
+}

@@ -85,6 +85,9 @@ impl From<ProductBrand> for ProductBrandView {
 /// 商品品牌列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductBrandListParams {
+    /// 多业务字段字面量关键词，空白不筛选。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 品牌代码精确筛选。
     pub brand_code: Option<String>,
     /// 名称字面量筛选（忽略大小写）。
@@ -106,6 +109,8 @@ pub struct ProductBrandListParams {
 /// 归一化后的商品品牌列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProductBrandListQuery {
+    /// 多业务字段字面量关键词，空白不筛选。
+    pub q: Option<String>,
     /// 品牌代码精确筛选。
     pub brand_code: Option<String>,
     /// 名称筛选。
@@ -129,6 +134,7 @@ impl ProductBrandListParams {
     pub(crate) fn normalized(&self) -> Result<ProductBrandListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_BRAND_SORT_FIELDS)?;
         Ok(ProductBrandListQuery {
+            q: normalized_text(self.q.as_deref()),
             brand_code: normalized_text(self.brand_code.as_deref()),
             name: normalized_text(self.name.as_deref()),
             status: self.status,

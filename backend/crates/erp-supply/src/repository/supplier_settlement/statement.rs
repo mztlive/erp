@@ -98,6 +98,10 @@ struct SupplierSettlementNoRow {
 /// 供应商结算单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierSettlementStatementFilter {
+    /// 多字段关键词。
+    pub q: Option<String>,
+    /// 当前供应商名称命中身份。
+    pub keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
     /// 结算单号（按字面量部分匹配，忽略大小写）；`None` 表示不筛选。
     pub statement_no: Option<String>,
     /// 结算供应商；`None` 表示不筛选。
@@ -147,6 +151,18 @@ impl QueryFilter for SupplierSettlementStatementFilter {
             filter.insert("period_end", doc! { "$lte": period_to.to_string() });
         }
         insert_literal_regex_filter(&mut filter, "statement_no", self.statement_no.as_deref());
+        if let Some(q) = &self.q {
+            let mut clauses = ["statement_no", "external_bill_no"]
+                .into_iter()
+                .map(|field| {
+                    let mut clause = Document::new();
+                    insert_literal_regex_filter(&mut clause, field, Some(q));
+                    clause
+                })
+                .collect::<Vec<_>>();
+            clauses.push(doc! { "supplier_id": { "$in": self.keyword_supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } });
+            filter.insert("$and", vec![doc! { "$or": clauses }]);
+        }
         filter
     }
 }
@@ -471,5 +487,67 @@ impl<'a> SupplierSettlementSourceEvidenceRepository<'a> {
             executor,
         )
         .await
+    }
+}
+
+impl SupplierSettlementStatementRepository<'_> {
+    /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
+    ///
+    /// 只投影 ID、排除软删除；数据库错误向上返回。
+    pub async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let clauses = ["statement_no", "external_bill_no"]
+            .into_iter()
+            .map(|field| {
+                let mut clause = Document::new();
+                insert_literal_regex_filter(&mut clause, field, Some(keyword));
+                clause
+            })
+            .collect::<Vec<_>>();
+        let collection = self.collection();
+        let mut query = collection.distinct(
+            "id",
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": clauses },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect())
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = SupplierSettlementStatementFilter {
+            q: None,
+            keyword_supplier_ids: Vec::new(),
+            statement_no: None,
+            supplier_id: None,
+            status: None,
+            period_from: None,
+            period_to: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.q = Some("BILL.[1]".into());
+        filter.supplier_id = Some(erp_core::ids::SupplierAccountId::new("selected"));
+        let query = filter.to_doc();
+        assert_eq!(query.get_str("supplier_id").unwrap(), "selected");
+        let text = format!("{query:?}");
+        assert!(text.contains("external_bill_no"));
+        assert!(text.contains("statement_no"));
     }
 }

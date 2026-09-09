@@ -3,6 +3,7 @@
  * 会话共享状态见 api/shared；DTO 映射见 api/mappers。
  */
 
+import { fetchCompleteList } from "@/lib/collect-pages"
 import { apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api"
 import {
@@ -63,16 +64,20 @@ export async function fetchSupplierAccounts(
         ? await fetchSupplierPartyId(query.supplierId)
         : undefined
     const [payPage, paymentPage, invPage] = await Promise.all([
-        apiGet<Page<BackendPayableAccount>>("/admin/payable-accounts", {
+        fetchCompleteList<BackendPayableAccount>("/admin/payable-accounts", {
+            q: query.q?.trim() || undefined,
             supplier_id: query.supplierId,
-            source_type: mapBackendSourceType(query.sourceType),
+            source_type: query.purchaseOrderId
+                ? "purchase_order"
+                : mapBackendSourceType(query.sourceType),
+            source_document_id: query.purchaseOrderId,
             status: mapBackendPayableStatus(query.status),
             page: 1,
             page_size: LIST_PAGE_SIZE,
             sort_by: "created_at",
             sort_dir: "desc",
         }),
-        apiGet<Page<BackendSupplierPayment>>("/admin/supplier-payments", {
+        fetchCompleteList<BackendSupplierPayment>("/admin/supplier-payments", {
             supplier_id: query.supplierId,
             q: query.q?.trim() || undefined,
             page: 1,
@@ -80,10 +85,10 @@ export async function fetchSupplierAccounts(
             sort_by: "paid_at",
             sort_dir: "desc",
         }),
-        apiGet<Page<BackendInvoice>>("/admin/invoices", {
+        fetchCompleteList<BackendInvoice>("/admin/invoices", {
             invoice_direction: "purchase",
             party_id: invoicePartyId,
-            invoice_no: query.q?.trim() || undefined,
+            q: query.q?.trim() || undefined,
             page: 1,
             page_size: LIST_PAGE_SIZE,
             sort_by: "invoice_date",
@@ -91,7 +96,7 @@ export async function fetchSupplierAccounts(
         }),
     ])
 
-    let payables = (payPage.items ?? []).map(projectPayable)
+    const payables = (payPage.items ?? []).map(projectPayable)
     let payments = (paymentPage.items ?? []).map(projectPayment)
     let invoices = (invPage.items ?? [])
         .filter(
@@ -101,14 +106,6 @@ export async function fetchSupplierAccounts(
     payments = await hydratePaymentSupplierNames(payments)
     invoices = await hydrateInvoicePartyNames(invoices)
     invoices = attachPayableSourceToInvoices(invoices, payables)
-
-    if (query.purchaseOrderId) {
-        payables = payables.filter(
-            (p) =>
-                p.sourceDocumentId === query.purchaseOrderId ||
-                p.sourceDocumentNo === query.purchaseOrderId,
-        )
-    }
 
     const unallocated: UnallocatedRow[] = [
         ...payments

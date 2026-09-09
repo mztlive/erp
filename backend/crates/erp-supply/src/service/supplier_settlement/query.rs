@@ -24,6 +24,8 @@ impl SupplierSettlementService {
     /// # 参数
     /// * `params` - 查询参数（`statement_no`/`supplier_id`/`status` 扁平筛选）
     ///
+    /// * `keyword_supplier_ids` - 读取模型按关键词解析的完整供应商身份
+    ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
@@ -33,10 +35,12 @@ impl SupplierSettlementService {
     pub async fn supplier_settlement_statement_list(
         &self,
         params: &SupplierSettlementStatementListParams,
+        keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
     ) -> Result<SupplierSettlementStatementListView> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = statement_filter(&query);
+        let mut filter = statement_filter(&query);
+        filter.keyword_supplier_ids = keyword_supplier_ids;
         let page = self
             .db
             .supplier_settlement_statements()
@@ -118,6 +122,8 @@ impl SupplierSettlementService {
 /// 返回仓储筛选条件。
 fn statement_filter(query: &StatementListQuery) -> StatementFilter {
     StatementFilter {
+        q: query.q.clone(),
+        keyword_supplier_ids: Vec::new(),
         statement_no: query.statement_no.clone(),
         supplier_id: query.supplier_id.clone(),
         status: query.status,

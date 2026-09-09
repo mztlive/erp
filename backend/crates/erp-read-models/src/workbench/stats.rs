@@ -9,7 +9,7 @@ use application_core::AuditActor;
 
 use super::access::{authorized_fields, ActorAccess, ViewAccess};
 use super::dto;
-use super::query::{next_candidate_offset, AUTHORIZED_SCAN_BATCH_SIZE};
+use super::query::{matches_keyword, next_candidate_offset, AUTHORIZED_SCAN_BATCH_SIZE};
 use super::{
     ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
     WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService,
@@ -141,15 +141,21 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<Vec<dto::WorkItemFields>> {
         let mut fields = Vec::new();
         let mut candidate_offset = 0_u64;
+        let mut candidates = filter.clone();
+        candidates.query = None;
         loop {
-            let rows = self.candidate_batch(&filter, candidate_offset).await?;
+            let rows = self.candidate_batch(&candidates, candidate_offset).await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
             }
             let facts = self.object_facts_for_rows(&rows).await?;
             let authorized = authorized_fields(rows, access, &facts);
-            fields.extend(authorized);
+            fields.extend(
+                authorized
+                    .into_iter()
+                    .filter(|item| matches_keyword(item, filter.query.as_deref())),
+            );
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;

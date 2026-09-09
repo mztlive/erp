@@ -51,7 +51,7 @@ export async function fetchSalesOrders(
         {
             page: query.page,
             page_size: query.pageSize,
-            order_no: query.search?.trim() || undefined,
+            q: query.search?.trim() || undefined,
             customer_id: query.customerId,
             contract_id: query.contractId,
             business_type: businessType,

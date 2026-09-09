@@ -565,6 +565,20 @@ impl From<AuditEvent> for AuditEventView {
 /// 审计事件列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct AuditEventListParams {
+    /// 操作者、动作、对象或追踪号字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
+    /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
+    pub keyword_actions: Option<String>,
+    /// 审计事件稳定身份。
+    pub event_id: Option<String>,
+    /// 链路追踪号或请求号精确筛选。
+    pub trace_id: Option<String>,
+    /// 创建时间下界（含，Unix 秒）。
+    pub created_from: Option<u64>,
+    /// 创建时间上界（不含，Unix 秒）。
+    pub created_before: Option<u64>,
+
     /// 操作者 ID 模糊筛选（忽略大小写）。
     pub actor_id: Option<String>,
     /// 动作代码模糊筛选（忽略大小写）。
@@ -590,6 +604,19 @@ pub struct AuditEventListParams {
 /// 归一化后的审计事件列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AuditEventListQuery {
+    /// 操作者、动作、对象或追踪号字面量关键词。
+    pub q: Option<String>,
+    /// 界面动作标签匹配的动作代码（逗号分隔），只作为关键词 OR 条件。
+    pub keyword_actions: Option<String>,
+    /// 审计事件稳定身份。
+    pub event_id: Option<String>,
+    /// 链路追踪号或请求号精确筛选。
+    pub trace_id: Option<String>,
+    /// 创建时间下界（含，Unix 秒）。
+    pub created_from: Option<u64>,
+    /// 创建时间上界（不含，Unix 秒）。
+    pub created_before: Option<u64>,
+
     /// 操作者 ID 模糊筛选。
     pub actor_id: Option<String>,
     /// 动作代码模糊筛选。
@@ -617,6 +644,12 @@ impl AuditEventListParams {
     pub(crate) fn normalized(&self) -> Result<AuditEventListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, AUDIT_EVENT_SORT_FIELDS)?;
         Ok(AuditEventListQuery {
+            q: normalized_text(self.q.as_deref()),
+            keyword_actions: normalized_text(self.keyword_actions.as_deref()),
+            event_id: normalized_text(self.event_id.as_deref()),
+            trace_id: normalized_text(self.trace_id.as_deref()),
+            created_from: self.created_from,
+            created_before: self.created_before,
             actor_id: normalized_text(self.actor_id.as_deref()),
             action_type: normalized_text(self.action_type.as_deref()),
             object_type: normalized_text(self.object_type.as_deref()),
@@ -781,6 +814,12 @@ mod tests {
     #[test]
     fn audit_event_list_params_normalize() {
         let params = AuditEventListParams {
+            q: None,
+            keyword_actions: None,
+            event_id: None,
+            trace_id: None,
+            created_from: None,
+            created_before: None,
             actor_id: Some(" user-1 ".to_string()),
             action_type: Some("permission.create".to_string()),
             object_type: None,

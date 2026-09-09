@@ -664,8 +664,8 @@ impl<'a> CatalogRepository<'a> {
     /// 分页查询 SKU 并批量装配当前修订名称。
     ///
     /// # 参数
-    /// * `keyword` - SKU 编号或当前修订名称关键字；`None` 表示不筛选
-    /// * `filter` - SKU 编号、归属、状态、分页与排序条件；调用方不得预填 `ids`
+    /// * `keyword` - SKU 编号、当前名称、规格、商品编号或当前商品名称关键字；`None` 表示不筛选
+    /// * `filter` - SKU 编号、归属、状态、分页与排序条件；`ids` 与关键词匹配身份取交集
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -680,16 +680,16 @@ impl<'a> CatalogRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SkuRow>> {
         let mut filter = filter.clone();
-        filter.ids = match keyword {
-            Some(keyword) => Some(
-                self.resolve_sku_ids_by_keyword(keyword, executor)
-                    .await?
+        if let Some(keyword) = keyword {
+            let matched = self.list_keyword_sku_ids(keyword, executor).await?;
+            filter.ids = Some(
+                matched
                     .into_iter()
                     .map(|id| id.to_string())
+                    .filter(|id| filter.ids.as_ref().is_none_or(|ids| ids.contains(id)))
                     .collect(),
-            ),
-            None => None,
-        };
+            );
+        }
         let mut result = self.db.skus().search_skus(&filter, executor).await?;
         self.attach_current_sku_names(&mut result.items, executor).await?;
         Ok(result)
@@ -1059,6 +1059,67 @@ fn sku_revision_projection() -> Document {
     }
 }
 
+/// SKU 当前修订的名称匹配；仅库存搜索包含规格，保留既有调用方语义。
+fn sku_revision_keyword_filter(keyword: &str, include_specification: bool) -> Document {
+    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+    let mut name = Document::new();
+    insert_literal_regex_filter(&mut name, "name", Some(keyword));
+    if !include_specification {
+        filter.extend(name);
+        return filter;
+    }
+    let mut specification = Document::new();
+    insert_literal_regex_filter(&mut specification, "specification", Some(keyword));
+    filter.insert("$or", vec![name, specification]);
+    filter
+}
+
+impl CatalogRepository<'_> {
+    /// 公司 SKU 列表匹配 SKU 编号、当前名称/规格及商品编号/当前名称。
+    ///
+    /// 保持库存专用搜索口径不变；只接受商品当前修订，数据库错误整次返回。
+    async fn list_keyword_sku_ids(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
+        let mut ids = self.keyword_sku_ids(keyword, true, executor).await?;
+        let mut name_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut name_filter, "name", Some(keyword));
+        let revisions = self
+            .db
+            .collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCT_REVISIONS);
+        let mut query = revisions.distinct("id", name_filter);
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        let revision_ids = query.await?;
+        let mut number = Document::new();
+        insert_literal_regex_filter(&mut number, "product_no", Some(keyword));
+        let products = self
+            .db
+            .collection::<Document>(<mongodb::Database as CatalogExt>::PRODUCTS);
+        let mut query = products.distinct("id", doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$or": [number, doc! { "current_revision_id": { "$in": revision_ids } }] });
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        let product_ids = query.await?;
+        let skus = self.db.collection::<Document>(SKUS);
+        let mut query = skus.distinct(
+            "id",
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "product_id": { "$in": product_ids } },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        ids.extend(
+            query
+                .await?
+                .into_iter()
+                .filter_map(|id| id.as_str().map(|value| SkuId::new(value.to_owned()))),
+        );
+        ids.sort_by_key(ToString::to_string);
+        ids.dedup();
+        Ok(ids)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1162,21 +1223,6 @@ mod tests {
         let back: SkuRevision = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, revision);
     }
-}
-
-/// SKU 当前修订的名称匹配；仅库存搜索包含规格，保留既有调用方语义。
-fn sku_revision_keyword_filter(keyword: &str, include_specification: bool) -> Document {
-    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-    let mut name = Document::new();
-    insert_literal_regex_filter(&mut name, "name", Some(keyword));
-    if !include_specification {
-        filter.extend(name);
-        return filter;
-    }
-    let mut specification = Document::new();
-    insert_literal_regex_filter(&mut specification, "specification", Some(keyword));
-    filter.insert("$or", vec![name, specification]);
-    filter
 }
 
 #[cfg(test)]

@@ -35,7 +35,7 @@ pub trait PartyFactPort: Send + Sync {
     /// Missing Parties are omitted; callers treat gaps as silent degradation.
     async fn identities_by_ids(&self, party_ids: &[PartyId]) -> Result<Vec<PartyIdentityFact>>;
 
-    /// Return Party ids whose current legal name or short name matches `keyword`.
+    /// Return Party ids whose current legal name, short name or unified credit code matches `keyword`.
     async fn matching_ids_by_name(&self, keyword: &str) -> Result<Vec<String>>;
 }
 

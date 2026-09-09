@@ -37,6 +37,8 @@ pub struct ProductCategoryRow {
 /// 商品分类列表筛选条件（树形字典：支持按父节点与名称筛选）。
 #[derive(Debug, Clone)]
 pub struct ProductCategoryFilter {
+    /// 关键词与既有精确条件取交集。
+    pub q: Option<String>,
     /// 分类代码精确匹配；`None` 表示不筛选。
     pub category_code: Option<String>,
     /// 名称字面量正则（忽略大小写）；`None` 表示不筛选。
@@ -78,6 +80,17 @@ impl QueryFilter for ProductCategoryFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(q) = &self.q {
+            let clauses = ["category_code", "name"]
+                .into_iter()
+                .map(|field| {
+                    let mut clause = Document::new();
+                    insert_literal_regex_filter(&mut clause, field, Some(q));
+                    clause
+                })
+                .collect::<Vec<_>>();
+            filter.insert("$or", clauses);
         }
         filter
     }
@@ -329,5 +342,30 @@ fn product_category_projection() -> Document {
         "status": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = ProductCategoryFilter {
+            q: None,
+            category_code: None,
+            name: None,
+            parent_category_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.q = Some("分类.[1]".into());
+        filter.parent_category_id = Some(Some("parent".into()));
+        let query = filter.to_doc();
+        assert_eq!(query.get_str("parent_category_id").unwrap(), "parent");
+        assert_eq!(query.get_array("$or").unwrap().len(), 2);
     }
 }

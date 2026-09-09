@@ -41,6 +41,8 @@ pub struct ProductBrandRow {
 /// 商品品牌列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ProductBrandFilter {
+    /// 关键词与既有精确条件取交集。
+    pub q: Option<String>,
     /// 品牌代码精确匹配；`None` 表示不筛选。
     pub brand_code: Option<String>,
     /// 名称字面量正则（忽略大小写）；`None` 表示不筛选。
@@ -70,6 +72,17 @@ impl QueryFilter for ProductBrandFilter {
         insert_literal_regex_filter(&mut filter, "name", self.name.as_deref());
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(q) = &self.q {
+            let clauses = ["brand_code", "name"]
+                .into_iter()
+                .map(|field| {
+                    let mut clause = Document::new();
+                    insert_literal_regex_filter(&mut clause, field, Some(q));
+                    clause
+                })
+                .collect::<Vec<_>>();
+            filter.insert("$or", clauses);
         }
         filter
     }
@@ -404,5 +417,40 @@ fn unit_of_measure_projection() -> Document {
         "status": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = ProductBrandFilter {
+            q: None,
+            brand_code: None,
+            name: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.q = Some("B.[1]".into());
+        filter.brand_code = Some("EXACT".into());
+        let query = filter.to_doc();
+        assert_eq!(query.get_str("brand_code").unwrap(), "EXACT");
+        let fields = query.get_array("$or").unwrap();
+        assert_eq!(fields.len(), 2);
+        assert_eq!(
+            fields[0]
+                .as_document()
+                .unwrap()
+                .get_document("brand_code")
+                .unwrap()
+                .get_str("$regex")
+                .unwrap(),
+            r"B\.\[1\]"
+        );
     }
 }

@@ -262,6 +262,11 @@ pub struct PaymentRecipientRevealView {
 /// 应付往来子账列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PayableAccountListParams {
+    /// 应付来源单据稳定身份。
+    pub source_document_id: Option<String>,
+    /// 主体名称与关联单据号字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 往来供应商筛选。
     pub supplier_id: Option<SupplierAccountId>,
     /// 来源类型筛选。
@@ -283,6 +288,10 @@ pub struct PayableAccountListParams {
 /// 归一化后的应付往来子账列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayableAccountListQuery {
+    /// 应付来源单据稳定身份。
+    pub source_document_id: Option<String>,
+    /// 主体名称与关联单据号字面量关键词。
+    pub q: Option<String>,
     /// 往来供应商筛选。
     pub supplier_id: Option<SupplierAccountId>,
     /// 来源类型筛选。
@@ -304,6 +313,8 @@ impl PayableAccountListParams {
     pub fn normalized(&self) -> Result<PayableAccountListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PAYABLE_ACCOUNT_SORT_FIELDS)?;
         Ok(PayableAccountListQuery {
+            source_document_id: normalized_text(self.source_document_id.as_deref()),
+            q: normalized_text(self.q.as_deref()),
             supplier_id: self.supplier_id.clone(),
             source_type: self.source_type,
             status: self.status,
@@ -525,6 +536,7 @@ pub struct SupplierPaymentBankReceiptView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierPaymentListParams {
     /// 付款单号或供应商名称关键词。
+    #[validate(length(max = 200))]
     pub q: Option<String>,
     /// 付款单号模糊筛选。
     pub payment_no: Option<String>,
@@ -767,6 +779,8 @@ mod tests {
     #[test]
     fn payable_account_list_params_normalize_filters_and_paging() {
         let params = PayableAccountListParams {
+            source_document_id: None,
+            q: None,
             supplier_id: None,
             source_type: Some(PayableSourceType::PurchaseOrder),
             status: Some(PayableAccountStatus::Open),
@@ -905,6 +919,8 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = PayableAccountListParams {
+            source_document_id: None,
+            q: None,
             supplier_id: None,
             source_type: None,
             status: None,

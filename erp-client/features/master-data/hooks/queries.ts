@@ -18,6 +18,7 @@ import {
     fetchSkuSupplierCounts,
     updateProductListingStatus,
 } from "@/features/master-data/api"
+import { fetchFileAsset } from "@/features/master-data/api/media-assets"
 import {
     fetchWarehouseFulfillmentHandlerOptions,
     updateWarehouseFulfillmentHandlers,
@@ -210,6 +211,18 @@ export function useDisableMasterDataMutation() {
                 await invalidateMasterDataCaches(queryClient)
             }
         },
+    })
+}
+
+const FILE_ASSET_STALE_TIME = 5 * 60 * 1000
+
+/** 商品主图等文件资产详情（含公开地址）；按资产 ID 缓存。 */
+export function useFileAssetQuery(assetId: string | undefined) {
+    return useQuery({
+        queryKey: [...masterDataKeys.all, "file-asset", assetId ?? ""],
+        queryFn: () => fetchFileAsset(assetId ?? ""),
+        enabled: Boolean(assetId?.trim()),
+        staleTime: FILE_ASSET_STALE_TIME,
     })
 }
 

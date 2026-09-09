@@ -127,7 +127,7 @@ impl PartyFactPort for MongoCustomerPartyFacts {
         Ok(self
             .db
             .party()
-            .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
+            .matching_current_party_ids(keyword, &mut NoTransaction)
             .await
             .map_err(erp_customer::Error::from)?
             .into_iter()

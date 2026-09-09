@@ -122,6 +122,7 @@ mod tests {
     #[test]
     fn receipt_and_invoice_list_params_normalize() {
         let receipt = CustomerReceiptListParams {
+            q: None,
             receipt_no: Some(" RC-1 ".to_string()),
             counterparty_party_id: None,
             status: Some(CustomerReceiptStatus::Posted),
@@ -137,6 +138,7 @@ mod tests {
         assert_eq!(query.status, Some(CustomerReceiptStatus::Posted));
 
         let invoice = InvoiceListParams {
+            q: None,
             invoice_direction: Some(InvoiceDirection::Sales),
             invoice_kind: None,
             party_id: None,

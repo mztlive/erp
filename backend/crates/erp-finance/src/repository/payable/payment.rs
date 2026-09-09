@@ -39,6 +39,8 @@ pub struct SupplierPaymentRow {
 /// 供应商付款单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierPaymentFilter {
+    /// 关键词的完整命中集合；空集合匹配零行，None 不筛选。
+    pub keyword_ids: Option<Vec<String>>,
     /// 付款单号或供应商名称关键词。
     pub keyword: Option<String>,
     /// 查询层按当前名称解析的供应商主键。
@@ -86,6 +88,10 @@ impl QueryFilter for SupplierPaymentFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(ids) = &self.keyword_ids {
+            let condition = doc! { "id": { "$in": ids } };
+            return doc! { "$and": [filter, condition] };
         }
         filter
     }
@@ -210,6 +216,7 @@ mod tests {
     #[test]
     fn payment_filter_escapes_regex_literals() {
         let filter = SupplierPaymentFilter {
+            keyword_ids: None,
             keyword: Some("狮峰.茶".into()),
             keyword_supplier_ids: vec![erp_core::ids::SupplierAccountId::new("supplier-1")],
             payment_no: Some("PAY-9.9".to_string()),
@@ -248,5 +255,38 @@ mod tests {
         assert!(document.contains_key("deleted_at"));
         let regex = document.get_document("payment_no").unwrap();
         assert_eq!(regex.get_str("$regex").unwrap(), r"PAY\-9\.9");
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = SupplierPaymentFilter {
+            keyword_ids: None,
+            keyword: None,
+            keyword_supplier_ids: Vec::new(),
+            payment_no: None,
+            supplier_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.keyword_ids = Some(Vec::new());
+        let query = filter.to_doc();
+        let clauses = query.get_array("$and").unwrap();
+        let ids = clauses[1]
+            .as_document()
+            .unwrap()
+            .get_document("id")
+            .unwrap()
+            .get_array("$in")
+            .unwrap();
+        assert!(ids.is_empty(), "空关键词命中必须保持零结果");
+        assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }
 }

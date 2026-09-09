@@ -54,7 +54,7 @@ pub async fn supplier_settlement_statement_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierSettlementStatementListParams>,
 ) -> Result<SupplierSettlementStatementListView> {
-    let page = SupplierSettlementService::new(state.db())
+    let page = erp_read_models::supplier_center::settlement::SupplierSettlementReadService::new(state.db())
         .supplier_settlement_statement_list(&params)
         .await?;
 
