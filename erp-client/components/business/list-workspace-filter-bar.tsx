@@ -116,6 +116,7 @@ export function ListWorkspaceFilterBar({
     hasPendingChanges = false,
     pendingHint = "条件已修改，待查询",
     idleHint,
+    statusActions,
     extraPrimary,
     onResetMore,
     moreHint = "可组合多个条件，点击「查询」后统一生效。",
@@ -147,6 +148,8 @@ export function ListWorkspaceFilterBar({
     hasPendingChanges?: boolean
     pendingHint?: string
     idleHint?: string
+    /** 跟在结果说明右侧，例如展示方式切换、导出。 */
+    statusActions?: React.ReactNode
     extraPrimary?: React.ReactNode
     onResetMore?: () => void
     moreHint?: string
@@ -308,18 +311,24 @@ export function ListWorkspaceFilterBar({
                                     ) : null}
                                 </>
                             ) : null}
-                            {idleHint || hasPendingChanges ? (
-                                <span
-                                    role="status"
-                                    className={cn(
-                                        "sm:ml-auto",
-                                        hasPendingChanges
-                                            ? "font-medium text-warning-soft-foreground"
-                                            : "text-muted-foreground",
-                                    )}
-                                >
-                                    {hasPendingChanges ? pendingHint : idleHint}
-                                </span>
+                            {idleHint || hasPendingChanges || statusActions ? (
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
+                                    {idleHint || hasPendingChanges ? (
+                                        <span
+                                            role="status"
+                                            className={
+                                                hasPendingChanges
+                                                    ? "font-medium text-warning-soft-foreground"
+                                                    : "text-muted-foreground"
+                                            }
+                                        >
+                                            {hasPendingChanges
+                                                ? pendingHint
+                                                : idleHint}
+                                        </span>
+                                    ) : null}
+                                    {statusActions}
+                                </div>
                             ) : null}
                         </div>
                     </div>

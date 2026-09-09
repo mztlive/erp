@@ -69,6 +69,10 @@ pub struct PayableAccountRow {
 /// 应付往来子账列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct PayableAccountFilter {
+    /// 来源单据身份，与来源类型及关键词取交集。
+    pub source_document_id: Option<String>,
+    /// 关键词的完整命中集合；空集合匹配零行，None 不筛选。
+    pub keyword_ids: Option<Vec<String>>,
     /// 往来供应商；`None` 表示不筛选。
     pub supplier_id: Option<SupplierAccountId>,
     /// 来源类型；`None` 表示不筛选。
@@ -92,6 +96,9 @@ impl QueryFilter for PayableAccountFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(id) = &self.source_document_id {
+            filter.insert("source_document_id", id);
+        }
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
         }
@@ -100,6 +107,10 @@ impl QueryFilter for PayableAccountFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(ids) = &self.keyword_ids {
+            let condition = doc! { "id": { "$in": ids } };
+            return doc! { "$and": [filter, condition] };
         }
         filter
     }
@@ -112,5 +123,37 @@ impl Pagination for PayableAccountFilter {
     /// 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = PayableAccountFilter {
+            source_document_id: None,
+            keyword_ids: None,
+            supplier_id: None,
+            source_type: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.keyword_ids = Some(Vec::new());
+        let query = filter.to_doc();
+        let clauses = query.get_array("$and").unwrap();
+        let ids = clauses[1]
+            .as_document()
+            .unwrap()
+            .get_document("id")
+            .unwrap()
+            .get_array("$in")
+            .unwrap();
+        assert!(ids.is_empty(), "空关键词命中必须保持零结果");
+        assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }
 }

@@ -65,5 +65,5 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
     let field = sort_by
         .filter(|name| allowed.contains(name))
         .unwrap_or("created_at");
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }

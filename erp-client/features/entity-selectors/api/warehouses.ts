@@ -14,7 +14,7 @@ type WarehouseDto = Readonly<{
 }>
 
 type WarehouseRevisionDto = Readonly<{
-    warehouse_name: string
+    name: string
 }>
 
 async function warehouseItem(
@@ -32,8 +32,7 @@ async function warehouseItem(
                 sort_dir: "desc",
             },
         )
-        warehouseName =
-            revisions.items[0]?.warehouse_name?.trim() || row.warehouse_code
+        warehouseName = revisions.items[0]?.name?.trim() || row.warehouse_code
     } catch {
         // 仓库代码是稳定且可展示的回退值。
     }
@@ -51,18 +50,16 @@ export async function searchWarehouses(
     input: EntitySearch,
 ): Promise<readonly WarehouseComboboxItem[]> {
     const page = await apiGet<Page<WarehouseDto>>("/admin/warehouses", {
-        warehouse_code: input.query.trim() || undefined,
+        q: input.query.trim() || undefined,
+        require_inbound_handler:
+            input.purpose === "purchase-receipt" || undefined,
         status: "active",
         page: 1,
         page_size: OPTION_PAGE_SIZE,
         sort_by: "warehouse_code",
         sort_dir: "asc",
     })
-    const selectable =
-        input.purpose === "purchase-receipt"
-            ? page.items.filter((row) => row.inbound_handler_user_id?.trim())
-            : page.items
-    return Promise.all(selectable.map(warehouseItem))
+    return Promise.all(page.items.map(warehouseItem))
 }
 
 export async function fetchWarehouseOption(
@@ -71,9 +68,11 @@ export async function fetchWarehouseOption(
 ): Promise<WarehouseComboboxItem | null> {
     if (!warehouseId) return null
     const page = await apiGet<Page<WarehouseDto>>("/admin/warehouses", {
+        warehouse_id: warehouseId,
+        require_inbound_handler: purpose === "purchase-receipt" || undefined,
         status: "active",
         page: 1,
-        page_size: 100,
+        page_size: 1,
     })
     const row = page.items.find((item) => item.id === warehouseId)
     if (

@@ -1,6 +1,8 @@
 // 聚合列表读路径：roles + admins + data-scopes + audit-events + permissions。
 // field policies 后端无资源：返回空列表并登记 gap，不造业务数据。
 
+import { fetchCompleteList } from "@/lib/collect-pages"
+import { auditKeywordActions } from "@/features/access-audit/lib/audit-labels"
 import { apiGet } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
 import type {
@@ -48,9 +50,17 @@ export async function fetchAccessList(
                           : undefined,
                 subject_id: query.subjectId,
             }),
-            apiGet<Page<BackendAuditEvent>>("/admin/audit-events", {
+            (query.view === "audit"
+                ? fetchCompleteList<BackendAuditEvent>
+                : apiGet<Page<BackendAuditEvent>>)("/admin/audit-events", {
+                q: query.q?.trim() || undefined,
+                keyword_actions: auditKeywordActions(query.q),
+                event_id: query.eventId,
+                trace_id: query.traceId,
+                created_from: auditDate(query.from),
+                created_before: auditDate(query.to, true),
                 page: 1,
-                page_size: 50,
+                page_size: 1,
                 actor_id: query.actorId,
                 action_type: query.action,
                 object_id: query.objectId,
@@ -119,7 +129,7 @@ export async function fetchAccessList(
     )
     // field policies：后端无 field_policy 资源
     const fieldPolicies: FieldPolicyRow[] = []
-    let auditEvents = auditPage.items.map(toAuditRow)
+    const auditEvents = auditPage.items.map(toAuditRow)
 
     if (query.q) {
         roleRows = roleRows.filter((r) =>
@@ -133,33 +143,6 @@ export async function fetchAccessList(
                 `${u.displayName} ${u.accountName} ${u.activeRoles}`,
                 query.q,
             ),
-        )
-        auditEvents = auditEvents.filter((e) =>
-            matchText(
-                `${e.actorLabel} ${e.actionLabel} ${e.objectLabel} ${e.traceId}`,
-                query.q,
-            ),
-        )
-    }
-    if (query.traceId) {
-        auditEvents = auditEvents.filter(
-            (e) => e.traceId === query.traceId || e.requestId === query.traceId,
-        )
-    }
-    if (query.eventId) {
-        auditEvents = auditEvents.filter(
-            (e) => e.auditEventId === query.eventId,
-        )
-    }
-    // from / to 为 YYYY-MM-DD：按日期整天比较，「至」当天包含在内
-    if (query.from) {
-        auditEvents = auditEvents.filter(
-            (e) => e.recordedAt.slice(0, 10) >= query.from!.slice(0, 10),
-        )
-    }
-    if (query.to) {
-        auditEvents = auditEvents.filter(
-            (e) => e.recordedAt.slice(0, 10) <= query.to!.slice(0, 10),
         )
     }
 
@@ -245,4 +228,16 @@ export async function fetchAccessList(
         actionBlockers,
         workItemSupport: "DISABLED",
     }
+}
+
+/** 以上海业务日构建包含开始、不包含次日零点的日期边界。 */
+function auditDate(
+    date: string | undefined,
+    nextDay = false,
+): number | undefined {
+    if (!date) return undefined
+    const time = Date.parse(`${date.slice(0, 10)}T00:00:00+08:00`)
+    return Number.isFinite(time)
+        ? Math.floor(time / 1000) + (nextDay ? 86400 : 0)
+        : undefined
 }

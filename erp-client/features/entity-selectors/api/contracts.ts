@@ -66,7 +66,7 @@ export async function searchContracts(
     input: ContractSearch,
 ): Promise<readonly ContractComboboxItem[]> {
     const page = await apiGet<Page<ContractDto>>("/admin/contracts", {
-        contract_no: input.query.trim() || undefined,
+        q: input.query.trim() || undefined,
         customer_id: input.customerId || undefined,
         scope: input.scope,
         status: input.selectableOnly ? "EFFECTIVE" : undefined,

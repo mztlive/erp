@@ -44,22 +44,16 @@ impl PayableReadService {
     ) -> Result<PageView<SupplierPaymentView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let keyword_supplier_ids = if let Some(keyword) = query.q.as_deref() {
-            let party_ids = self
-                .db
-                .party()
-                .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
-                .await?;
-            self.db
-                .supplier_accounts()
-                .matching_ids_by_parties(&party_ids, &mut NoTransaction)
-                .await?
-        } else {
-            Vec::new()
-        };
+        let keyword_ids = crate::finance::search::keyword_ids(
+            &self.db,
+            query.q.as_deref(),
+            erp_finance::repository::keyword::FinanceSearchTarget::Payment,
+        )
+        .await?;
         let filter = SupplierPaymentFilter {
-            keyword: query.q,
-            keyword_supplier_ids,
+            keyword_ids,
+            keyword: None,
+            keyword_supplier_ids: Vec::new(),
             payment_no: query.payment_no,
             supplier_id: query.supplier_id,
             status: query.status,

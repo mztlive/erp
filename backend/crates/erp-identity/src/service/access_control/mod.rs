@@ -546,6 +546,12 @@ impl AccessControlService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = AuditEventFilter {
+            q: query.q,
+            keyword_actions: query.keyword_actions,
+            event_id: query.event_id,
+            trace_id: query.trace_id,
+            created_from: query.created_from,
+            created_before: query.created_before,
             actor_id: query.actor_id,
             action_type: query.action_type,
             object_type: query.object_type,

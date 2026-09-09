@@ -30,7 +30,7 @@ export async function listCategories(
         "/admin/product-categories",
         {
             status,
-            name: query.q || undefined,
+            q: query.q || undefined,
         },
     )
     // Resolve parent names for keyFacts
@@ -71,7 +71,7 @@ export async function listBrands(
         "/admin/product-brands",
         {
             status,
-            name: query.q || undefined,
+            q: query.q || undefined,
         },
     )
     return items.map(mapBrandRow)

@@ -73,7 +73,9 @@ impl SalesOrderReadService {
         fields(layer = "service", domain = "sales_order", operation = "list")
     )]
     pub async fn sales_order_list(&self, params: &SalesOrderListParams) -> Result<PageView<SalesOrderView>> {
-        let page = self.sales().list_rows(params).await?;
+        validator::Validate::validate(params)?;
+        let search = self.keyword_search(params.q.as_deref()).await?;
+        let page = self.sales().list_rows(params, search).await?;
 
         let owners = self
             .resolve_stage_owners_batch(
@@ -704,6 +706,46 @@ fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView
         allowed: false,
         task_count: 0,
         blocker: Some(message.to_string()),
+    }
+}
+
+impl SalesOrderReadService {
+    /// 在分页前经拥有领域解析客户名称、合同号；空关键词不读取关联表。
+    ///
+    /// 返回销售域中性的搜索条件，关联读取失败时整次查询失败。
+    async fn keyword_search(
+        &self,
+        q: Option<&str>,
+    ) -> Result<erp_sales::repository::sales_order::SalesOrderSearch> {
+        use erp_contract::ContractExt;
+        use erp_customer::CustomerExt;
+        use erp_party::PartyExt;
+        let Some(q) = application_core::normalized_text(q) else {
+            return Ok(Default::default());
+        };
+        let party_ids = self
+            .db
+            .party()
+            .matching_current_party_ids_by_name(&q, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>();
+        let customer_ids = self
+            .db
+            .customer_accounts()
+            .matching_ids_by_parties(&party_ids, &mut NoTransaction)
+            .await?;
+        let contract_ids = self
+            .db
+            .contracts()
+            .matching_ids_by_number(&q, &mut NoTransaction)
+            .await?;
+        Ok(erp_sales::repository::sales_order::SalesOrderSearch {
+            q: Some(q),
+            customer_ids,
+            contract_ids,
+        })
     }
 }
 

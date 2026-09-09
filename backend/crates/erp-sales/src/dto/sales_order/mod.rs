@@ -243,6 +243,9 @@ pub struct CancelSalesOrderApprovalRequest {
 /// 销售单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SalesOrderListParams {
+    /// 销售单号、客户当前名称或合同号的字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 销售单号（字面量模糊筛选）。
     pub order_no: Option<String>,
     /// 客户筛选。
@@ -611,6 +614,7 @@ pub struct RevisionView {
     /// 当时公共行，按行号升序。
     pub lines: Vec<RevisionLineView>,
 }
+
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, SortDir};

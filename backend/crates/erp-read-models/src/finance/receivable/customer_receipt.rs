@@ -34,7 +34,14 @@ impl ReceivableReadService {
     ) -> Result<PageView<CustomerReceiptView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let keyword_ids = crate::finance::search::keyword_ids(
+            &self.db,
+            query.q.as_deref(),
+            erp_finance::repository::keyword::FinanceSearchTarget::Receipt,
+        )
+        .await?;
         let scope_query = erp_finance::repository::ScopedCustomerReceiptQuery {
+            keyword_ids,
             receipt_no: query.receipt_no,
             counterparty_party_id: query.counterparty_party_id,
             status: query.status,

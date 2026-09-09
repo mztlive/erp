@@ -5,7 +5,10 @@
  * 界面不展示这种编码：对象名取自权限目录，动作名走下表。
  */
 
-import { resourceLabel } from "@/features/admin/lib/permission-catalog"
+import {
+    PERMISSION_BY_CODE,
+    resourceLabel,
+} from "@/features/admin/lib/permission-catalog"
 
 /** 审计动作动词中文名。 */
 const AUDIT_VERB_LABEL: Record<string, string> = {
@@ -60,4 +63,29 @@ export function auditActionLabel(actionType: string): string {
 export function isRiskyAuditAction(actionType: string): boolean {
     const parts = splitActionType(actionType)
     return parts ? RISKY_VERBS.has(parts.verb) : false
+}
+
+/** 中文动作检索复用显示标签，转换为服务端关键词 OR 匹配的动作代码。 */
+export function auditKeywordActions(q: string | undefined): string | undefined {
+    const needle = q?.trim().toLowerCase()
+    if (!needle) return undefined
+    const resources = new Set(
+        [...PERMISSION_BY_CODE.values()].map((item) => item.resource),
+    )
+    const actions = new Set(
+        [...PERMISSION_BY_CODE.values()].map(
+            (item) => `${item.resource}.${item.action}`,
+        ),
+    )
+    for (const resource of resources) {
+        for (const verb of Object.keys(AUDIT_VERB_LABEL))
+            actions.add(`${resource}.${verb}`)
+    }
+    return (
+        [...actions]
+            .filter((action) =>
+                auditActionLabel(action).toLowerCase().includes(needle),
+            )
+            .join(",") || undefined
+    )
 }

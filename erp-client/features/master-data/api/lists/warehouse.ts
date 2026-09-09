@@ -24,7 +24,7 @@ export async function listWarehouses(
               : undefined
     const warehouses = await fetchAllPages<WarehouseDto>("/admin/warehouses", {
         status,
-        warehouse_code: query.q || undefined,
+        q: query.q || undefined,
     })
     const rows: MasterDataListItem[] = []
     for (const wh of warehouses) {

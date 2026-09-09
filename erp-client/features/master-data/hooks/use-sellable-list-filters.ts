@@ -7,6 +7,10 @@ import { useAppForm } from "@/components/form"
 import { useListUrl } from "@/features/master-data/hooks/use-list-url"
 import { productSalesPriceRangeError } from "@/features/master-data/lib/list-filters"
 import {
+    parseSellableListLayout,
+    type SellableListLayout,
+} from "@/features/master-data/lib/sellable-list-layout"
+import {
     PRODUCT_KIND_VALUES,
     type ProductKind,
     type SellableSupplyPreset,
@@ -39,6 +43,7 @@ export function useSellableListFilters(
         changePagination,
     } = useListUrl()
 
+    const layout = parseSellableListLayout(searchParams.get("layout"))
     const productKind = PRODUCT_KIND_VALUES.find(
         (value) => value === searchParams.get("productKind"),
     )
@@ -171,6 +176,13 @@ export function useSellableListFilters(
     const applySellableFilters = React.useCallback(() => {
         void form.handleSubmit()
     }, [form])
+
+    const setLayout = React.useCallback(
+        (next: SellableListLayout) => {
+            patchUrl({ layout: next === "table" ? null : next })
+        },
+        [patchUrl],
+    )
 
     /** 快捷视图直接应用；它不改动关键词或「更多筛选」草稿。 */
     const applySupplyPreset = React.useCallback(
@@ -324,6 +336,8 @@ export function useSellableListFilters(
 
     return {
         q,
+        layout,
+        setLayout,
         supplyPreset,
         productKind,
         productCategoryId,

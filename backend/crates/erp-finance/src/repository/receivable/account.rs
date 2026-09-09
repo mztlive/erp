@@ -69,6 +69,8 @@ pub struct SettlementBatchResult {
 /// 应收往来子账列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ReceivableAccountFilter {
+    /// 关键词的完整命中集合；空集合匹配零行，None 不筛选。
+    pub keyword_ids: Option<Vec<String>>,
     /// 主键、销售单、客户或往来主体关键字；`None` 表示不筛选。
     pub keyword: Option<String>,
     /// 关键词命中的来源销售单身份；由组合查询解析。
@@ -133,6 +135,10 @@ impl QueryFilter for ReceivableAccountFilter {
         }
         if let Some(sales_order_id) = &self.sales_order_id {
             filter.insert("sales_order_id", sales_order_id.to_string());
+        }
+        if let Some(ids) = &self.keyword_ids {
+            let condition = doc! { "id": { "$in": ids } };
+            return doc! { "$and": [filter, condition] };
         }
         filter
     }
@@ -813,6 +819,7 @@ mod tests {
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {
         let mut filter = ReceivableAccountFilter {
+            keyword_ids: None,
             keyword: None,
             keyword_sales_order_ids: Vec::new(),
             keyword_party_ids: Vec::new(),
@@ -856,13 +863,13 @@ mod tests {
     fn sort_doc_maps_whitelisted_fields_and_falls_back() {
         assert_eq!(
             sort_doc(Some("amount"), true, &["amount", "received_at"]),
-            doc! { "amount": 1 }
+            doc! { "amount": 1, "id": 1 }
         );
         assert_eq!(
             sort_doc(Some("$where"), false, &["amount"]),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
-        assert_eq!(sort_doc(None, true, &[]), doc! { "created_at": 1 });
+        assert_eq!(sort_doc(None, true, &[]), doc! { "created_at": 1, "id": 1 });
     }
 
     #[test]
@@ -947,5 +954,41 @@ mod tests {
             .expect("空输入批量红冲必须成功");
         assert!(result.applied.is_empty());
         assert!(result.rejected.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = ReceivableAccountFilter {
+            keyword_ids: None,
+            keyword: None,
+            keyword_sales_order_ids: Vec::new(),
+            keyword_party_ids: Vec::new(),
+            account_id: None,
+            customer_id: None,
+            counterparty_party_id: None,
+            status: None,
+            sales_order_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.keyword_ids = Some(Vec::new());
+        let query = filter.to_doc();
+        let clauses = query.get_array("$and").unwrap();
+        let ids = clauses[1]
+            .as_document()
+            .unwrap()
+            .get_document("id")
+            .unwrap()
+            .get_array("$in")
+            .unwrap();
+        assert!(ids.is_empty(), "空关键词命中必须保持零结果");
+        assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }
 }

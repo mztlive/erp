@@ -81,6 +81,7 @@ mod tests {
     #[test]
     fn statement_list_params_normalize_paging_filters_and_sort_defaults() {
         let params = SupplierSettlementStatementListParams {
+            q: None,
             statement_no: Some(" ST-2026 ".to_string()),
             supplier_id: None,
             status: Some(SettlementStatus::PendingReview),

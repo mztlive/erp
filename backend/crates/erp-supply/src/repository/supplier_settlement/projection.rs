@@ -52,7 +52,7 @@ pub(super) fn sort_doc(whitelist: &[&str], sort_by: Option<&str>, sort_ascending
     let field = sort_by
         .filter(|field| whitelist.contains(field))
         .unwrap_or("created_at");
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 供应商结算单列表投影字段。

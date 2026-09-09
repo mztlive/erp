@@ -108,7 +108,7 @@ export function BatchListToolbar({
                     searchInputRef={searchInputRef}
                     value={searchDraft}
                     onChange={setSearchDraft}
-                    placeholder="批次号（精确/前缀匹配）"
+                    placeholder="搜索批次号"
                     aria-label="搜索批次"
                 />
             }

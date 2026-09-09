@@ -236,7 +236,7 @@ export function useSalesOrderSelectorQuery(
                 {
                     page: 1,
                     page_size: 30,
-                    order_no: input.query.trim() || undefined,
+                    q: input.query.trim() || undefined,
                     sort_by: "created_at",
                     sort_dir: "desc",
                 },

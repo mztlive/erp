@@ -1,4 +1,5 @@
 export const sellableItemsListStyles = {
+    gallery: "min-h-0 flex-1 pt-1",
     table: [
         "[&_[data-column-id=name]]:min-w-[14.5rem] [&_[data-column-id=name]]:pl-3.5 min-[1200px]:[&_[data-column-id=name]]:min-w-60",
         "[&_[data-column-id=price]]:w-[8.25rem] [&_[data-column-id=price]]:min-w-30",

@@ -11,6 +11,8 @@ use persistence_core::QueryFilter;
 #[test]
 fn statement_filter_applies_optional_fields_and_deleted_filter() {
     let filter = SupplierSettlementStatementFilter {
+        q: None,
+        keyword_supplier_ids: Vec::new(),
         statement_no: Some("ST-2026".to_string()),
         supplier_id: None,
         status: Some(SettlementStatus::Confirmed),
@@ -57,19 +59,22 @@ fn difference_filter_applies_statement_item_and_status() {
 #[test]
 fn settlement_sort_doc_rejects_fields_outside_whitelist() {
     let whitelist = ["created_at", "period_start", "confirmed_at"];
-    assert_eq!(sort_doc(&whitelist, None, false), doc! { "created_at": -1 });
+    assert_eq!(
+        sort_doc(&whitelist, None, false),
+        doc! { "created_at": -1, "id": -1 }
+    );
     assert_eq!(
         sort_doc(&whitelist, Some("status"), false),
-        doc! { "created_at": -1 },
+        doc! { "created_at": -1, "id": -1 },
         "白名单外的排序字段必须回退 created_at"
     );
     assert_eq!(
         sort_doc(&whitelist, Some("period_start"), true),
-        doc! { "period_start": 1 }
+        doc! { "period_start": 1, "id": 1 }
     );
     assert_eq!(
         sort_doc(&whitelist, Some("confirmed_at"), false),
-        doc! { "confirmed_at": -1 }
+        doc! { "confirmed_at": -1, "id": -1 }
     );
 }
 

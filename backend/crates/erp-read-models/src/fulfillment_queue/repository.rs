@@ -305,6 +305,18 @@ fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Result<Vec<Doc
             }
         },
     ];
+    if filter.query.is_some() {
+        pipeline.push(counterparty_lookup(
+            <Database as erp_customer::CustomerExt>::CUSTOMER_ACCOUNTS,
+            "$_sales_order.customer_id",
+            "_customer_names",
+        ));
+        pipeline.push(counterparty_lookup(
+            <Database as erp_supplier::SupplierExt>::SUPPLIER_ACCOUNTS,
+            "$_purchase_order.supplier_id",
+            "_supplier_names",
+        ));
+    }
     append_optional_filters(&mut pipeline, filter);
     pipeline.push(doc! {
         "$facet": {
@@ -596,7 +608,7 @@ fn purchase_order_lookup() -> Document {
                         "$expr": { "$eq": ["$id", "$$purchase_order_id"] },
                     }
                 },
-                { "$project": { "_id": 0, "id": 1, "purchase_no": 1, "sales_order_id": 1, "current_revision_id": 1 } },
+                { "$project": { "_id": 0, "id": 1, "purchase_no": 1, "supplier_id": 1, "sales_order_id": 1, "current_revision_id": 1 } },
             ],
             "as": "_purchase_orders",
         }
@@ -620,6 +632,7 @@ fn sales_order_lookup() -> Document {
                         "_id": 0,
                         "id": 1,
                         "order_no": 1,
+                        "customer_id": 1,
                         "settlement_party_id": 1,
                     }
                 },
@@ -687,6 +700,10 @@ fn append_optional_filters(pipeline: &mut Vec<Document>, filter: &FulfillmentQue
                     { "operation.operation_id": { "$regex": &literal, "$options": "i" } },
                     { "_purchase_order.purchase_no": { "$regex": &literal, "$options": "i" } },
                     { "_sales_order.order_no": { "$regex": &literal, "$options": "i" } },
+                    { "_customer_names.legal_name": { "$regex": &literal, "$options": "i" } },
+                    { "_customer_names.short_name": { "$regex": &literal, "$options": "i" } },
+                    { "_supplier_names.legal_name": { "$regex": &literal, "$options": "i" } },
+                    { "_supplier_names.short_name": { "$regex": &literal, "$options": "i" } },
                 ]
             }
         });
@@ -727,6 +744,23 @@ fn item_projection() -> Document {
         "gate_required_amount": { "$toString": prepayment::required_amount() },
         "gate_effective_paid_amount": { "$toString": "$_gate_paid" },
     }
+}
+
+/// 读取来源单据的当前往来方名称；缺失或删除主数据不制造名称命中。
+fn counterparty_lookup(accounts: &str, account_id: &str, output: &str) -> Document {
+    doc! { "$lookup": {
+        "from": accounts, "let": { "account_id": account_id }, "as": output,
+        "pipeline": [
+            { "$match": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$eq": ["$id", "$$account_id"] } } },
+            { "$lookup": { "from": <Database as erp_party::PartyExt>::PARTIES, "localField": "party_id", "foreignField": "id", "as": "party" } },
+            { "$unwind": "$party" },
+            { "$match": { "party.deleted_at": NOT_DELETED_TIMESTAMP_BSON } },
+            { "$lookup": { "from": <Database as erp_party::PartyExt>::PARTY_REVISIONS, "localField": "party.current_revision_id", "foreignField": "id", "as": "revision" } },
+            { "$unwind": "$revision" },
+            { "$match": { "revision.deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$eq": ["$revision.party_id", "$party.id"] } } },
+            { "$project": { "_id": 0, "legal_name": "$revision.legal_name", "short_name": "$revision.short_name" } },
+        ]
+    } }
 }
 
 #[cfg(test)]
@@ -770,6 +804,22 @@ mod tests {
         assert!(rendered.contains("metrics"));
         assert!(rendered.contains("warehouses"));
         assert!(rendered.contains("SO\\\\.1"), "检索词必须按字面量转义");
+        let customer_lookup = pipeline
+            .iter()
+            .position(|stage| {
+                stage
+                    .get_document("$lookup")
+                    .ok()
+                    .is_some_and(|lookup| lookup.get_str("as").ok() == Some("_customer_names"))
+            })
+            .unwrap();
+        let facet = pipeline
+            .iter()
+            .position(|stage| stage.contains_key("$facet"))
+            .unwrap();
+        assert!(customer_lookup < facet, "名称过滤必须先于分页和计数");
+        assert!(rendered.contains("party.current_revision_id"));
+        assert!(rendered.contains("revision.party_id"));
     }
 
     #[test]

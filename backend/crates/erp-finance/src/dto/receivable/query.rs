@@ -116,6 +116,7 @@ pub struct ReceivableAccountSummaryView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReceivableAccountListParams {
     /// 子账、销售单、客户或往来主体关键字。
+    #[validate(length(max = 200))]
     pub q: Option<String>,
     /// 子账主键筛选。
     pub account_id: Option<ReceivableAccountId>,
@@ -210,6 +211,9 @@ pub struct ReceiptAllocationView {
 /// 客户回款单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CustomerReceiptListParams {
+    /// 主体名称与关联单据号字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 回款单号模糊筛选。
     pub receipt_no: Option<String>,
     /// 实际付款往来主体筛选。
@@ -235,6 +239,8 @@ pub struct CustomerReceiptListParams {
 /// 归一化后的客户回款单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomerReceiptListQuery {
+    /// 主体名称与关联单据号字面量关键词。
+    pub q: Option<String>,
     /// 回款单号模糊筛选。
     pub receipt_no: Option<String>,
     /// 实际付款往来主体筛选。
@@ -261,6 +267,7 @@ impl CustomerReceiptListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_RECEIPT_SORT_FIELDS)?;
         Ok(CustomerReceiptListQuery {
+            q: normalized_text(self.q.as_deref()),
             receipt_no: normalized_text(self.receipt_no.as_deref()),
             counterparty_party_id: self.counterparty_party_id.clone(),
             status: self.status,
@@ -345,6 +352,9 @@ pub struct InvoiceView {
 /// 发票列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct InvoiceListParams {
+    /// 主体名称与关联单据号字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 发票方向筛选（销项/进项；D19 进项列表复用）。
     pub invoice_direction: Option<InvoiceDirection>,
     /// 蓝红类型筛选。
@@ -374,6 +384,8 @@ pub struct InvoiceListParams {
 /// 归一化后的发票列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvoiceListQuery {
+    /// 主体名称与关联单据号字面量关键词。
+    pub q: Option<String>,
     /// 发票方向筛选。
     pub invoice_direction: Option<InvoiceDirection>,
     /// 蓝红类型筛选。
@@ -403,6 +415,7 @@ impl InvoiceListParams {
     pub fn normalized(&self) -> Result<InvoiceListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, INVOICE_SORT_FIELDS)?;
         Ok(InvoiceListQuery {
+            q: normalized_text(self.q.as_deref()),
             invoice_direction: self.invoice_direction,
             invoice_kind: self.invoice_kind,
             party_id: self.party_id.clone(),

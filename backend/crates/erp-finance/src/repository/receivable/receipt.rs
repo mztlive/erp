@@ -47,6 +47,8 @@ pub struct CustomerReceiptRow {
 /// 客户回款单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct CustomerReceiptFilter {
+    /// 关键词的完整命中集合；空集合匹配零行，None 不筛选。
+    pub keyword_ids: Option<Vec<String>>,
     /// 服务端关联投影解析出的回款单主键集合；`None` 表示不筛选。
     pub receipt_ids: Option<Vec<String>>,
     /// 与已核销回款取并集的本单应收分录；仅供账户范围查询。
@@ -90,6 +92,10 @@ impl QueryFilter for CustomerReceiptFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(ids) = &self.keyword_ids {
+            let condition = doc! { "id": { "$in": ids } };
+            return doc! { "$and": [filter, condition] };
         }
         filter
     }
@@ -267,6 +273,7 @@ mod tests {
     #[test]
     fn receipt_filter_escapes_regex_literals() {
         let filter = CustomerReceiptFilter {
+            keyword_ids: None,
             receipt_ids: None,
             pending_entry_ids: Vec::new(),
             receipt_no: Some("RC-1.2".to_string()),
@@ -287,6 +294,7 @@ mod tests {
     #[test]
     fn scope_filters_with_empty_ids_match_nothing() {
         let receipt_filter = CustomerReceiptFilter {
+            keyword_ids: None,
             receipt_ids: Some(Vec::new()),
             pending_entry_ids: Vec::new(),
             receipt_no: None,
@@ -311,6 +319,7 @@ mod tests {
     #[test]
     fn scope_includes_pending_allocations_and_keeps_structural_filters() {
         let filter = CustomerReceiptFilter {
+            keyword_ids: None,
             receipt_ids: Some(vec!["posted-1".into()]),
             pending_entry_ids: vec!["entry-1".into()],
             receipt_no: None,
@@ -335,5 +344,38 @@ mod tests {
         assert_eq!(document.get_str("counterparty_party_id").unwrap(), "party-1");
         assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");
         assert!(document.contains_key("deleted_at"));
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = CustomerReceiptFilter {
+            keyword_ids: None,
+            receipt_ids: None,
+            pending_entry_ids: Vec::new(),
+            receipt_no: None,
+            counterparty_party_id: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.keyword_ids = Some(Vec::new());
+        let query = filter.to_doc();
+        let clauses = query.get_array("$and").unwrap();
+        let ids = clauses[1]
+            .as_document()
+            .unwrap()
+            .get_document("id")
+            .unwrap()
+            .get_array("$in")
+            .unwrap();
+        assert!(ids.is_empty(), "空关键词命中必须保持零结果");
+        assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }
 }

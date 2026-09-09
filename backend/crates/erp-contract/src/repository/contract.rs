@@ -422,6 +422,30 @@ fn contract_revision_no_from_rows(rows: Vec<ContractRevisionNoRow>) -> Option<u3
     rows.into_iter().next().map(|row| row.revision_no)
 }
 
+impl ContractRepository<'_> {
+    /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
+    ///
+    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
+    pub async fn matching_ids_by_number(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut filter, "contract_no", Some(keyword));
+        let collection = self.collection();
+        let mut query = collection.distinct("id", filter);
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().map(str::to_owned))
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

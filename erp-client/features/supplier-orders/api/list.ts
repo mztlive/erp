@@ -29,7 +29,7 @@ export async function fetchSupplierOrders(
             fulfillment_status: query.fulfillmentStatuses?.[0],
             cancel_status: query.cancelStatuses?.[0],
             refund_status: query.refundStatuses?.[0],
-            external_order_no: query.q?.trim() || undefined,
+            q: query.q?.trim() || undefined,
             sort_by:
                 query.sortBy === "lastBusinessAt" ? "created_at" : "created_at",
             sort_dir: query.sortDir ?? "desc",

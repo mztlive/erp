@@ -39,6 +39,7 @@ impl CatalogService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = ProductBrandFilter {
+            q: query.q,
             brand_code: query.brand_code,
             name: query.name,
             status: query.status,

@@ -49,7 +49,7 @@ export async function fetchSettlementList(
             status: statusFilter?.trim() || undefined,
             period_from: input.periodFrom,
             period_to: input.periodTo,
-            statement_no: input.q?.trim() || undefined,
+            q: input.q?.trim() || undefined,
             sort_by: "period_end",
             sort_dir: "asc",
         },

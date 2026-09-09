@@ -25,6 +25,9 @@ const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at", "difference_amount", "re
 /// 供应商结算单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierSettlementStatementListParams {
+    /// 编号或供应商当前名称字面量关键词。
+    #[validate(length(max = 200))]
+    pub q: Option<String>,
     /// 结算单号模糊筛选（字面量、忽略大小写）。
     pub statement_no: Option<String>,
     /// 结算供应商筛选。
@@ -50,6 +53,8 @@ pub struct SupplierSettlementStatementListParams {
 /// 归一化后的结算单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StatementListQuery {
+    /// 编号或供应商当前名称字面量关键词。
+    pub q: Option<String>,
     /// 结算单号模糊筛选。
     pub statement_no: Option<String>,
     /// 结算供应商筛选。
@@ -84,6 +89,7 @@ impl SupplierSettlementStatementListParams {
             ));
         }
         Ok(StatementListQuery {
+            q: normalized_text(self.q.as_deref()),
             statement_no: normalized_text(self.statement_no.as_deref()),
             supplier_id: self.supplier_id.clone(),
             status: self.status,

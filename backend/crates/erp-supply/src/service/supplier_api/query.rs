@@ -15,6 +15,8 @@ impl SupplierApiService {
     /// # 参数
     /// * `params` - 查询参数
     ///
+    /// * `keyword_supplier_ids` - 读取模型按关键词解析的完整供应商身份，与精确条件取交集
+    ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
@@ -24,10 +26,13 @@ impl SupplierApiService {
     pub async fn connection_list(
         &self,
         params: &SupplierApiConnectionListParams,
+        keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
     ) -> Result<PageView<SupplierApiConnectionView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = SupplierApiConnectionFilter {
+            q: query.q,
+            keyword_supplier_ids,
             supplier_id: query.supplier_id,
             connection_code: query.connection_code,
             environment: query.environment,

@@ -38,7 +38,9 @@ impl SupplierApiReadService {
         params: &SupplierApiConnectionListParams,
         _actor: &AuditActor,
     ) -> Result<PageView<SupplierApiConnectionListItemView>> {
-        let page = self.domain().connection_list(params).await?;
+        validator::Validate::validate(params)?;
+        let suppliers = crate::supplier_center::keyword_supplier_ids(&self.db, params.q.as_deref()).await?;
+        let page = self.domain().connection_list(params, suppliers).await?;
         let connection_ids = page
             .items
             .iter()

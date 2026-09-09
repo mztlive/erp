@@ -337,7 +337,9 @@ pub async fn invoice_list(
     State(state): State<AppState>,
     Query(params): Query<InvoiceListParams>,
 ) -> Result<PageView<InvoiceView>> {
-    let page = ReceivableService::new(state.db()).invoice_list(&params).await?;
+    let page = ReceivableReadService::new(state.db())
+        .invoice_list(&params)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

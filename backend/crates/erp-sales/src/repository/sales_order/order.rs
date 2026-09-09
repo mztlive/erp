@@ -60,6 +60,8 @@ pub struct SalesOrderRow {
 /// 销售单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SalesOrderFilter {
+    /// 跨域解析的关键词条件，与全部结构化条件取交集。
+    pub search: SalesOrderSearch,
     /// 销售单号（字面量正则，忽略大小写）；`None` 表示不筛选。
     pub order_no: Option<String>,
     /// 客户；`None` 表示不筛选。
@@ -173,6 +175,18 @@ impl QueryFilter for SalesOrderFilter {
         }
         if self.exception_only {
             filter.insert("review_status", ReviewStatus::Rejected.as_str());
+        }
+        if let Some(q) = &self.search.q {
+            let mut number = Document::new();
+            insert_literal_regex_filter(&mut number, "order_no", Some(q));
+            filter.insert(
+                "$and",
+                vec![doc! { "$or": [
+                    number,
+                    doc! { "customer_id": { "$in": &self.search.customer_ids } },
+                    doc! { "contract_id": { "$in": &self.search.contract_ids } },
+                ] }],
+            );
         }
         filter
     }
@@ -491,6 +505,17 @@ impl SalesOrderRepository<'_> {
     }
 }
 
+/// 由读取模型解析的销售单关键词，不承载结构化筛选或权限。
+#[derive(Debug, Clone, Default)]
+pub struct SalesOrderSearch {
+    /// 已去空白的关键词。
+    pub q: Option<String>,
+    /// 当前客户名称命中的客户 ID。
+    pub customer_ids: Vec<String>,
+    /// 合同号命中的合同 ID。
+    pub contract_ids: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -498,6 +523,7 @@ mod tests {
     #[test]
     fn sales_order_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SalesOrderFilter {
+            search: Default::default(),
             order_no: Some("SO-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
             contract_id: Some("contract-1".to_string()),
@@ -559,6 +585,7 @@ mod tests {
     #[test]
     fn sales_order_filter_escapes_regex_metacharacters() {
         let filter = SalesOrderFilter {
+            search: Default::default(),
             order_no: Some("SO-2026.[x]".to_string()),
             customer_id: None,
             contract_id: None,
@@ -609,5 +636,62 @@ mod tests {
     #[test]
     fn dedupe_sales_order_ids_empty_input_returns_empty() {
         assert!(dedupe_sales_order_ids(&[]).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = SalesOrderFilter {
+            search: Default::default(),
+            order_no: None,
+            customer_id: None,
+            contract_id: None,
+            origin_system: None,
+            commercial_status: None,
+            review_status: None,
+            business_type: None,
+            fulfillment_progress: None,
+            collection_progress: None,
+            invoice_progress: None,
+            close_status: None,
+            created_from: None,
+            created_to: None,
+            created_by: None,
+            my_todo: false,
+            exception_only: false,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.search = SalesOrderSearch {
+            q: Some("Acme.[1]".into()),
+            customer_ids: vec!["customer-hit".into()],
+            contract_ids: vec!["contract-hit".into()],
+        };
+        filter.customer_id = Some("selected-customer".into());
+        filter.my_todo = true;
+        let query = filter.to_doc();
+        assert_eq!(query.get_str("customer_id").unwrap(), "selected-customer");
+        assert!(query.contains_key("$or"), "待我处理 OR 必须保留");
+        let text = &query.get_array("$and").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .get_array("$or")
+            .unwrap()[0];
+        assert_eq!(
+            text.as_document()
+                .unwrap()
+                .get_document("order_no")
+                .unwrap()
+                .get_str("$regex")
+                .unwrap(),
+            r"Acme\.\[1\]"
+        );
+        assert!(format!("{query:?}").contains("contract-hit"));
     }
 }

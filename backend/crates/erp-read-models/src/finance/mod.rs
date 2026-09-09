@@ -4,3 +4,5 @@ pub mod dto;
 pub mod payable;
 
 pub mod receivable;
+
+mod search;

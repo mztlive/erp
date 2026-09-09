@@ -85,6 +85,10 @@ pub struct SupplierApiConnectionRow {
 /// 连接列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct SupplierApiConnectionFilter {
+    /// 多字段关键词。
+    pub q: Option<String>,
+    /// 当前供应商名称命中身份。
+    pub keyword_supplier_ids: Vec<erp_core::ids::SupplierAccountId>,
     /// API 供应商；`None` 表示不筛选。
     pub supplier_id: Option<String>,
     /// 连接代码（字面量、忽略大小写的子串匹配）；`None` 表示不筛选。
@@ -119,6 +123,18 @@ impl QueryFilter for SupplierApiConnectionFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(q) = &self.q {
+            let mut clauses = ["connection_code"]
+                .into_iter()
+                .map(|field| {
+                    let mut clause = Document::new();
+                    insert_literal_regex_filter(&mut clause, field, Some(q));
+                    clause
+                })
+                .collect::<Vec<_>>();
+            clauses.push(doc! { "supplier_id": { "$in": self.keyword_supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } });
+            filter.insert("$and", vec![doc! { "$or": clauses }]);
         }
         filter
     }
@@ -834,9 +850,9 @@ impl<'a> SupplierApiRepository<'a> {
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     match sort_by {
-        Some("connection_code") => doc! { "connection_code": direction },
-        Some("updated_at") => doc! { "updated_at": direction },
-        _ => doc! { "created_at": direction },
+        Some("connection_code") => doc! { "connection_code": direction, "id": direction },
+        Some("updated_at") => doc! { "updated_at": direction, "id": direction },
+        _ => doc! { "created_at": direction, "id": direction },
     }
 }
 
@@ -890,6 +906,8 @@ mod tests {
     #[test]
     fn connection_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SupplierApiConnectionFilter {
+            q: None,
+            keyword_supplier_ids: Vec::new(),
             supplier_id: Some("sup-1".to_string()),
             connection_code: Some("CN-1".to_string()),
             environment: Some(ConnectionEnvironment::Production),
@@ -931,15 +949,43 @@ mod tests {
 
     #[test]
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
-        assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
+        assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
         assert_eq!(
             sort_doc(Some("connection_code"), true),
-            doc! { "connection_code": 1 }
+            doc! { "connection_code": 1, "id": 1 }
         );
         assert_eq!(
             sort_doc(Some("任意字段"), false),
-            doc! { "created_at": -1 },
+            doc! { "created_at": -1, "id": -1 },
             "白名单外字段一律回退默认排序"
         );
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = SupplierApiConnectionFilter {
+            q: None,
+            keyword_supplier_ids: Vec::new(),
+            supplier_id: None,
+            connection_code: None,
+            environment: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.q = Some("供应商".into());
+        filter.keyword_supplier_ids = vec![erp_core::ids::SupplierAccountId::new("hit")];
+        filter.connection_code = Some("EXACT".into());
+        let query = filter.to_doc();
+        assert!(query.contains_key("connection_code"));
+        assert!(format!("{query:?}").contains("hit"));
+        assert!(query.contains_key("$and"));
     }
 }

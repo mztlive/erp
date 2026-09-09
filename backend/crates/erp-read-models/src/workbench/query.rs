@@ -128,16 +128,21 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             fields.insert(0, current);
             return Ok(fields);
         }
+        let mut candidates = filter.clone();
+        candidates.query = None;
         let current = self
             .db
             .work_items()
-            .find_visible_by_id(current_id, filter, &mut NoTransaction)
+            .find_visible_by_id(current_id, &candidates, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
         let current = self
             .authorized_fields_for_items(vec![current], context.access)
             .await?;
-        let Some(current) = current.into_iter().next() else {
+        let Some(current) = current
+            .into_iter()
+            .find(|fields| matches_keyword(fields, filter.query.as_deref()))
+        else {
             return Err(Error::NotFound("当前焦点任务不在授权队列中".to_string()));
         };
         fields.insert(0, current);
@@ -153,17 +158,23 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         page_size: u32,
         access: &ActorAccess,
     ) -> Result<AuthorizedPage<dto::WorkItemFields>> {
+        let mut candidates = filter.clone();
+        candidates.query = None;
         let mut collector = AuthorizedPageCollector::new(page, page_size)?;
         let mut candidate_offset = 0_u64;
         loop {
-            let rows = self.candidate_batch(filter, candidate_offset).await?;
+            let rows = self.candidate_batch(&candidates, candidate_offset).await?;
             let candidate_count = rows.len();
             if candidate_count == 0 {
                 break;
             }
             let facts = self.object_facts_for_rows(&rows).await?;
             let fields = authorized_fields(rows, access, &facts);
-            collector.extend(fields);
+            collector.extend(
+                fields
+                    .into_iter()
+                    .filter(|fields| matches_keyword(fields, filter.query.as_deref())),
+            );
             candidate_offset = next_candidate_offset(candidate_offset, candidate_count)?;
             if candidate_count < AUTHORIZED_SCAN_BATCH_SIZE.get() as usize {
                 break;
@@ -505,6 +516,25 @@ pub(super) fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u6
         .ok_or_else(|| Error::Internal("责任队列候选偏移溢出".to_string()))
 }
 
+/// 对已授权并装配业务显示事实的任务执行字面量 OR 搜索；必须先于总数和分页。
+pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> bool {
+    let Some(q) = application_core::normalized_text(q) else {
+        return true;
+    };
+    let needle = q.to_lowercase();
+    [
+        Some(fields.business_object_label.as_str()),
+        fields.counterparty_label.as_deref(),
+        Some(fields.business_object_id.as_str()),
+        Some(fields.business_object_type.as_str()),
+        fields.reason_code.as_deref(),
+        fields.impact_summary.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|text| text.to_lowercase().contains(&needle))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -512,6 +542,50 @@ mod tests {
         AuthorizedPageCollector,
     };
     use super::{WorkItemAllowedAction, AUTHORIZED_SCAN_BATCH_SIZE};
+
+    #[test]
+    fn keyword_filters_display_facts_before_paging_and_counting() {
+        use erp_core::ids::WorkItemId;
+        use erp_workflow::entity::work_item::{
+            AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType,
+        };
+        let mut fields: super::dto::WorkItemFields = WorkItem::new(
+            WorkItemId::new("task"),
+            WorkItemData {
+                work_item_type: WorkItemType::CardFundsReview,
+                business_object_type: "receivable_account".into(),
+                business_object_id: "object".into(),
+                subject_version: "submission".into(),
+                owner_role: "finance".into(),
+                owner_organization_id: "company".into(),
+                owner_user_id: "actor".into(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: None,
+                impact_summary: None,
+            },
+        )
+        .unwrap()
+        .into();
+        fields.business_object_label = "销售单 SO.[1]".into();
+        fields.counterparty_label = Some("Acme 客户".into());
+        assert!(super::matches_keyword(&fields, Some(" acME ")));
+        assert!(super::matches_keyword(&fields, Some("SO.[1]")));
+        assert!(!super::matches_keyword(&fields, Some(".*")));
+        assert!(super::matches_keyword(&fields, Some("  ")));
+        let mut other = fields.clone();
+        other.counterparty_label = None;
+        let mut collector = AuthorizedPageCollector::new(1, 1).unwrap();
+        collector.extend(
+            [other, fields.clone(), fields]
+                .into_iter()
+                .filter(|item| super::matches_keyword(item, Some("acme"))),
+        );
+        let page = collector.finish();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.total, 2);
+    }
 
     #[test]
     fn authorized_pagination_slices_after_authorization() {

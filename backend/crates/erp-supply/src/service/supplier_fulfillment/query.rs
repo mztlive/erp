@@ -33,6 +33,7 @@ impl SupplierFulfillmentService {
         params.validate()?;
         let query = params.normalized()?;
         let filter = FulfillmentOrderFilter {
+            q: query.q,
             supplier_id: query.supplier_id,
             fulfillment_status: query.fulfillment_status,
             external_order_no: query.external_order_no,

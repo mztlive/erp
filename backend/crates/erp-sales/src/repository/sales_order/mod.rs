@@ -20,7 +20,7 @@ mod working_copy;
 
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
-pub use order::{SalesOrderFilter, SalesOrderRow};
+pub use order::{SalesOrderFilter, SalesOrderRow, SalesOrderSearch};
 pub use submission::SubmissionFilter;
 pub use working_copy::WorkingCopyFilter;
 
@@ -79,5 +79,5 @@ impl<'a> SalesOrderDomainRepository<'a> {
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
-    doc! { sort_by.unwrap_or("created_at"): direction }
+    doc! { sort_by.unwrap_or("created_at"): direction, "id": direction }
 }

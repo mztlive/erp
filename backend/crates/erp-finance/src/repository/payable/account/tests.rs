@@ -16,6 +16,8 @@ use std::str::FromStr;
 #[test]
 fn account_filter_applies_optional_fields_and_deleted_filter() {
     let filter = PayableAccountFilter {
+        source_document_id: None,
+        keyword_ids: None,
         supplier_id: Some(SupplierAccountId::new("sup-1")),
         source_type: Some(PayableSourceType::PurchaseOrder),
         status: Some(PayableAccountStatus::Open),
@@ -36,11 +38,11 @@ fn account_filter_applies_optional_fields_and_deleted_filter() {
 fn sort_doc_maps_whitelisted_fields_and_falls_back() {
     assert_eq!(
         sort_doc(Some("open_total"), true, &["open_total", "gross_total"]),
-        doc! { "open_total": 1 }
+        doc! { "open_total": 1, "id": 1 }
     );
     assert_eq!(
         sort_doc(Some("status"), false, &["gross_total"]),
-        doc! { "created_at": -1 }
+        doc! { "created_at": -1, "id": -1 }
     );
 }
 

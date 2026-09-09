@@ -30,3 +30,5 @@ mod test_fixture;
 mod serialization_contract;
 
 mod fulfillment_facts;
+
+pub mod keyword;

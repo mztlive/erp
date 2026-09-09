@@ -60,6 +60,8 @@ pub struct InvoiceRow {
 /// 发票列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct InvoiceFilter {
+    /// 关键词的完整命中集合；空集合匹配零行，None 不筛选。
+    pub keyword_ids: Option<Vec<String>>,
     /// 服务端关联投影解析出的发票主键集合；`None` 表示不筛选。
     pub invoice_ids: Option<Vec<String>>,
     /// 发票方向；`None` 表示不筛选。
@@ -104,6 +106,10 @@ impl QueryFilter for InvoiceFilter {
         insert_literal_regex_filter(&mut filter, "invoice_no", self.invoice_no.as_deref());
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(ids) = &self.keyword_ids {
+            let condition = doc! { "id": { "$in": ids } };
+            return doc! { "$and": [filter, condition] };
         }
         filter
     }
@@ -303,6 +309,7 @@ mod tests {
     #[test]
     fn scope_filters_with_empty_ids_match_nothing() {
         let invoice_filter = InvoiceFilter {
+            keyword_ids: None,
             invoice_ids: Some(Vec::new()),
             invoice_direction: None,
             invoice_kind: None,
@@ -324,5 +331,39 @@ mod tests {
                 .len(),
             0
         );
+    }
+}
+
+#[cfg(test)]
+mod keyword_regression_tests {
+    use super::*;
+    #[test]
+    fn keyword_preserves_structural_scope() {
+        let mut filter = InvoiceFilter {
+            keyword_ids: None,
+            invoice_ids: None,
+            invoice_direction: None,
+            invoice_kind: None,
+            party_id: None,
+            invoice_no: None,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        filter.keyword_ids = Some(Vec::new());
+        let query = filter.to_doc();
+        let clauses = query.get_array("$and").unwrap();
+        let ids = clauses[1]
+            .as_document()
+            .unwrap()
+            .get_document("id")
+            .unwrap()
+            .get_array("$in")
+            .unwrap();
+        assert!(ids.is_empty(), "空关键词命中必须保持零结果");
+        assert!(clauses[0].as_document().unwrap().contains_key("deleted_at"));
     }
 }
