@@ -9,9 +9,7 @@ import {
     toSellableExcelRow,
 } from "./sellable-excel-rows"
 
-function row(
-    overrides: Partial<MasterDataListItem> = {},
-): MasterDataListItem {
+function row(overrides: Partial<MasterDataListItem> = {}): MasterDataListItem {
     return {
         objectType: "sellable-items",
         stableId: "sku-1",
@@ -102,7 +100,10 @@ describe("selectSellableRows", () => {
         const second = row({ stableId: "sku-2", name: "茶杯" })
         const third = row({ stableId: "sku-3", name: "茶盘" })
         expect(
-            selectSellableRows([first, second, third], new Set(["sku-3", "sku-1"])),
+            selectSellableRows(
+                [first, second, third],
+                new Set(["sku-3", "sku-1"]),
+            ),
         ).toEqual([first, third])
     })
 })

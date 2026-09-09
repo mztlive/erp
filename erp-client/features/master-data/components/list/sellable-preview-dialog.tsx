@@ -88,7 +88,7 @@ export function SellablePreviewDialog({
                                     previewRow.sellableItem.mainImageAssetId
                                 }
                                 label={previewRow.name}
-                                className="max-h-64 w-full rounded-xl"
+                                className="aspect-[16/9] max-h-48 w-full rounded-xl"
                             />
                             <SellableItemPreviewPanel row={previewRow} />
                         </div>

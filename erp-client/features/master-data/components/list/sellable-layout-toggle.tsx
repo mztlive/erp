@@ -1,10 +1,24 @@
 "use client"
 
-import { LayoutGridIcon, TableIcon } from "lucide-react"
+import { DownloadIcon, LayoutGridIcon, TableIcon } from "lucide-react"
 
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
+import { cn } from "@/lib/utils"
+
+const statusActionClassName =
+    "h-auto rounded-none px-1 text-xs shadow-none hover:bg-transparent"
+
+function StatusDivider() {
+    return (
+        <span
+            className="mx-0.5 h-3 w-px shrink-0 bg-border"
+            aria-hidden="true"
+        />
+    )
+}
 
 export function SellableLayoutToggle({
     layout,
@@ -14,34 +28,97 @@ export function SellableLayoutToggle({
     onLayoutChange: (layout: SellableListLayout) => void
 }) {
     return (
-        <ToggleGroup
-            value={[layout]}
-            onValueChange={(values) => {
-                const next = values[0]
-                if (next === "table" || next === "gallery") onLayoutChange(next)
-            }}
-            variant="outline"
-            spacing={0}
-            size="sm"
-            className="shrink-0"
+        <div
+            role="group"
             aria-label={masterDataCopy.sellableLayoutAria}
+            className="flex items-center"
         >
-            <ToggleGroupItem
+            <Button
                 id="master-data-sellable-items-layout-table"
-                value="table"
-                aria-label={masterDataCopy.sellableLayoutTable}
+                type="button"
+                variant="ghost"
+                size="xs"
+                aria-pressed={layout === "table"}
+                className={cn(
+                    statusActionClassName,
+                    layout === "table"
+                        ? "font-medium text-foreground"
+                        : "font-normal text-muted-foreground",
+                )}
+                onClick={() => onLayoutChange("table")}
             >
                 <TableIcon data-icon="inline-start" aria-hidden="true" />
                 {masterDataCopy.sellableLayoutTable}
-            </ToggleGroupItem>
-            <ToggleGroupItem
+            </Button>
+            <span className="text-border" aria-hidden="true">
+                /
+            </span>
+            <Button
                 id="master-data-sellable-items-layout-gallery"
-                value="gallery"
-                aria-label={masterDataCopy.sellableLayoutGallery}
+                type="button"
+                variant="ghost"
+                size="xs"
+                aria-pressed={layout === "gallery"}
+                className={cn(
+                    statusActionClassName,
+                    layout === "gallery"
+                        ? "font-medium text-foreground"
+                        : "font-normal text-muted-foreground",
+                )}
+                onClick={() => onLayoutChange("gallery")}
             >
                 <LayoutGridIcon data-icon="inline-start" aria-hidden="true" />
                 {masterDataCopy.sellableLayoutGallery}
-            </ToggleGroupItem>
-        </ToggleGroup>
+            </Button>
+        </div>
+    )
+}
+
+export function SellableListStatusActions({
+    layout,
+    onLayoutChange,
+    exportPending,
+    exportDisabled,
+    exportLabel,
+    onExport,
+}: {
+    layout: SellableListLayout
+    onLayoutChange: (layout: SellableListLayout) => void
+    exportPending: boolean
+    exportDisabled: boolean
+    exportLabel: string
+    onExport: () => void
+}) {
+    return (
+        <div className="flex items-center text-xs text-muted-foreground">
+            <StatusDivider />
+            <SellableLayoutToggle
+                layout={layout}
+                onLayoutChange={onLayoutChange}
+            />
+            <StatusDivider />
+            <Button
+                id="master-data-sellable-items-list-export"
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={exportDisabled}
+                className={cn(
+                    statusActionClassName,
+                    "font-normal",
+                    exportDisabled
+                        ? "text-muted-foreground"
+                        : "text-foreground",
+                )}
+                onClick={onExport}
+            >
+                {exportPending ? (
+                    <Spinner data-icon="inline-start" />
+                ) : (
+                    <DownloadIcon data-icon="inline-start" aria-hidden="true" />
+                )}
+                {exportLabel}
+            </Button>
+        </div>
     )
 }

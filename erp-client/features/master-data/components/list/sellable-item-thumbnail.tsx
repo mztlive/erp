@@ -20,7 +20,7 @@ export function SellableItemThumbnail({
     return (
         <div
             className={cn(
-                "flex aspect-square items-center justify-center overflow-hidden bg-muted",
+                "flex aspect-square w-full items-center justify-center overflow-hidden bg-muted",
                 className,
             )}
         >

@@ -16,9 +16,7 @@ export function useSellableGallerySelection(
     React.useEffect(() => {
         const allowed = new Set(rowIdKey.split("\0").filter(Boolean))
         setSelectedIds((current) => {
-            const next = new Set(
-                [...current].filter((id) => allowed.has(id)),
-            )
+            const next = new Set([...current].filter((id) => allowed.has(id)))
             return next.size === current.size ? current : next
         })
     }, [rowIdKey])

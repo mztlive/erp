@@ -24,7 +24,7 @@ export function useSellableExcelExport() {
             filterSnapshotLabel: string
             fileLabel: string
         }) => {
-            if (input.selectedIds.size === 0) return
+            if (input.selectedIds.size === 0) return false
             setPending(true)
             try {
                 let source = input.fallbackRows
@@ -44,11 +44,10 @@ export function useSellableExcelExport() {
                             "勾选的商品已不在当前结果中，请重新勾选后再导出。",
                         type: "warning",
                     })
-                    return
+                    return false
                 }
-                const { buildSellableItemsExcelFile } = await import(
-                    "@/features/master-data/lib/export-sellable-excel"
-                )
+                const { buildSellableItemsExcelFile } =
+                    await import("@/features/master-data/lib/export-sellable-excel")
                 await buildSellableItemsExcelFile({
                     rows,
                     filterSnapshotLabel: input.filterSnapshotLabel,
@@ -63,6 +62,7 @@ export function useSellableExcelExport() {
                     rowCount: rows.length,
                     filterSnapshotLabel: input.filterSnapshotLabel,
                 })
+                return true
             } catch (error) {
                 const presentation = getErrorPresentation(
                     error,
@@ -73,6 +73,7 @@ export function useSellableExcelExport() {
                     description: presentation.description,
                     type: "error",
                 })
+                return false
             } finally {
                 setPending(false)
             }

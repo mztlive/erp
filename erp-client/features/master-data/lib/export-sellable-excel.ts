@@ -156,8 +156,9 @@ export async function buildSellableItemsExcelFile(input: {
     })
 
     const buffer = await workbook.xlsx.writeBuffer()
+    const bytes = new Uint8Array(buffer as ArrayBuffer)
     downloadBlob(
-        new Blob([buffer], {
+        new Blob([bytes], {
             type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
         `基础资料-${input.fileLabel}.xlsx`,

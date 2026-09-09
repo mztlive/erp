@@ -245,6 +245,7 @@ export function useSellableListState(
         supplyPresetCounts,
         previewRow,
         appliedChips,
+        filterSnapshotLabel,
         sellableTableDescription,
         onExport,
     }

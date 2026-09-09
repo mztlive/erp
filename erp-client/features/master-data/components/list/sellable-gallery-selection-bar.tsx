@@ -30,9 +30,8 @@ export function SellableGallerySelectionBar({
             >
                 <Checkbox
                     id="master-data-sellable-items-gallery-select-all"
-                    checked={
-                        allSelected ? true : someSelected ? "mixed" : false
-                    }
+                    checked={allSelected}
+                    indeterminate={someSelected}
                     onCheckedChange={(checked) => {
                         if (checked === true) onSelectAll()
                         else onClear()

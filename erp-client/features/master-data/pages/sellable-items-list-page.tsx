@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CircleHelpIcon, DownloadIcon } from "lucide-react"
+import { CircleHelpIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 import type { SortingState } from "@tanstack/react-table"
 
@@ -26,12 +26,21 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { sellableItemsListStyles as productStyles } from "./sellable-items-list-styles"
+import { SellableExportConfirmDialog } from "@/features/master-data/components/list/sellable-export-confirm-dialog"
+import { SellableGallerySelectionBar } from "@/features/master-data/components/list/sellable-gallery-selection-bar"
 import { SellableItemsFilterBar } from "@/features/master-data/components/list/sellable-items-filter-bar"
+import { SellableItemsGallery } from "@/features/master-data/components/list/sellable-gallery"
+import { SellableListStatusActions } from "@/features/master-data/components/list/sellable-layout-toggle"
+import { SellablePreviewDialog } from "@/features/master-data/components/list/sellable-preview-dialog"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
+import { useSellableExcelExport } from "@/features/master-data/hooks/use-sellable-excel-export"
+import { useSellableGallerySelection } from "@/features/master-data/hooks/use-sellable-gallery-selection"
 import { useSellableListColumns } from "@/features/master-data/hooks/use-sellable-list-columns"
 import { useSellableListState } from "@/features/master-data/hooks/use-sellable-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { resourceLabel } from "@/features/master-data/lib/data"
+import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
 
 const supplyViews = [
     { value: "all", label: "全部商品" },
@@ -43,7 +52,9 @@ export function SellableItemsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSellableListState(searchInputRef)
-    const exportPending =
+    const selection = useSellableGallerySelection(state.rows)
+    const excelExport = useSellableExcelExport()
+    const csvExportPending =
         useIsMutating({
             predicate: (mutation) => {
                 const variables = mutation.state.variables
@@ -57,6 +68,8 @@ export function SellableItemsListPage() {
             },
         }) > 0
     const { filters } = state
+    const layout = filters.layout
+    const isGallery = layout === "gallery"
     const columns = useSellableListColumns()
     // 排序是视图状态而非筛选：全量结果已在客户端，本地排序不重新请求，也不参与「清除筛选」
     const [sorting, setSorting] = React.useState<SortingState>([])
@@ -65,6 +78,52 @@ export function SellableItemsListPage() {
         filters.hasStructuredSellableFilters ||
         filters.supplyPreset != null
     const listLoadFailed = state.listQuery.isError
+    const exportPending = isGallery ? excelExport.pending : csvExportPending
+    const exportMeta = isGallery ? excelExport.exportMeta : state.exportMeta
+    const exportDisabled = isGallery
+        ? exportPending || selection.selectedCount === 0
+        : exportPending || state.rows.length === 0
+
+    const [exportConfirmOpen, setExportConfirmOpen] = React.useState(false)
+
+    const changeLayout = React.useCallback(
+        (next: SellableListLayout) => {
+            state.setPreviewId(null)
+            setExportConfirmOpen(false)
+            filters.setLayout(next)
+        },
+        [filters, state],
+    )
+
+    const onGalleryExport = React.useCallback(() => {
+        if (selection.selectedCount === 0) return
+        setExportConfirmOpen(true)
+    }, [selection.selectedCount])
+
+    const onConfirmGalleryExport = React.useCallback(() => {
+        void excelExport
+            .handleExcelExport({
+                query: {
+                    resource: "sellable-items",
+                    q: filters.q.trim() || undefined,
+                    productKind: filters.productKind,
+                    productCategoryId: filters.productCategoryId,
+                    productBrandId: filters.productBrandId,
+                    productSupplierId: filters.productSupplierId,
+                    supplyRegion: filters.supplyRegion,
+                    productSalesPriceMin: filters.productSalesPriceMin,
+                    productSalesPriceMax: filters.productSalesPriceMax,
+                    sellableSupplyPreset: filters.supplyPreset,
+                },
+                selectedIds: selection.selectedIds,
+                fallbackRows: state.rows,
+                filterSnapshotLabel: state.filterSnapshotLabel,
+                fileLabel: resourceLabel("sellable-items"),
+            })
+            .then((ok) => {
+                if (ok) setExportConfirmOpen(false)
+            })
+    }, [excelExport, filters, selection.selectedIds, state])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -93,40 +152,35 @@ export function SellableItemsListPage() {
                             {masterDataCopy.sellableItemsHint}
                         </p>
                         <p className="text-sm leading-6 text-muted-foreground">
-                            此页面用于查询。点击商品可查看资料，导出范围与当前筛选结果一致。
+                            表格模式点击行查看资料，导出范围与当前筛选一致。选品模式可勾选商品，导出带主图的表格文件。
                         </p>
                     </PopoverContent>
                 </Popover>
-                <Button
-                    id="master-data-sellable-items-list-export"
-                    type="button"
-                    variant="outline"
-                    className={styles.exportButton}
-                    disabled={exportPending || state.rows.length === 0}
-                    onClick={state.onExport}
-                >
-                    <DownloadIcon data-icon="inline-start" aria-hidden="true" />
-                    {exportPending ? "导出中…" : "导出当前结果"}
-                </Button>
             </ListWorkspaceHeader>
 
-            {state.exportMeta ? (
+            {exportMeta ? (
                 <BackgroundJobProgress
                     mode="all-or-nothing"
                     status="succeeded"
-                    total={state.exportMeta.rowCount}
-                    completed={state.exportMeta.rowCount}
-                    succeeded={state.exportMeta.rowCount}
+                    total={exportMeta.rowCount}
+                    completed={exportMeta.rowCount}
+                    succeeded={exportMeta.rowCount}
                     label={masterDataCopy.exportDone}
                     description={
-                        <>
-                            按当前筛选导出 {state.exportMeta.rowCount}{" "}
-                            条。任务号{" "}
-                            <span className="num">
-                                {state.exportMeta.jobId}
-                            </span>
-                            。不含无权限查看的敏感信息。
-                        </>
+                        isGallery ? (
+                            <>
+                                已按勾选导出 {exportMeta.rowCount}{" "}
+                                条，单元格含商品主图。任务号{" "}
+                                <span className="num">{exportMeta.jobId}</span>
+                                。不含无权限查看的敏感信息。
+                            </>
+                        ) : (
+                            <>
+                                按当前筛选导出 {exportMeta.rowCount} 条。任务号{" "}
+                                <span className="num">{exportMeta.jobId}</span>
+                                。不含无权限查看的敏感信息。
+                            </>
+                        )
                     }
                 />
             ) : null}
@@ -145,7 +199,11 @@ export function SellableItemsListPage() {
                 views={
                     <ListWorkspaceViews
                         ariaLabel="供应快捷筛选"
-                        hint="选择商品查看详情"
+                        hint={
+                            isGallery
+                                ? "勾选后可导出带主图的表格"
+                                : "选择商品查看详情"
+                        }
                         items={supplyViews.map(({ value, label }) => ({
                             id: `master-data-sellable-preset-${value}`,
                             label,
@@ -168,106 +226,184 @@ export function SellableItemsListPage() {
                         }
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
+                        idleHint={
+                            isGallery
+                                ? "导出范围为当前勾选商品"
+                                : "导出与当前查询结果一致"
+                        }
+                        statusActions={
+                            <SellableListStatusActions
+                                layout={layout}
+                                onLayoutChange={changeLayout}
+                                exportPending={exportPending}
+                                exportDisabled={exportDisabled}
+                                exportLabel={
+                                    exportPending
+                                        ? "导出中…"
+                                        : isGallery
+                                          ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
+                                          : "导出当前结果"
+                                }
+                                onExport={
+                                    isGallery ? onGalleryExport : state.onExport
+                                }
+                            />
+                        }
                     />
                 }
-                tableClassName={productStyles.table}
+                selectionBar={
+                    isGallery ? (
+                        <SellableGallerySelectionBar
+                            resultCount={state.rows.length}
+                            selectedCount={selection.selectedCount}
+                            allSelected={selection.allSelected}
+                            someSelected={selection.someSelected}
+                            onSelectAll={selection.selectAllResults}
+                            onClear={selection.clear}
+                        />
+                    ) : null
+                }
+                tableClassName={
+                    isGallery ? productStyles.gallery : productStyles.table
+                }
                 table={
-                    <DataTable
-                        id="master-data-sellable-items-list-table"
-                        data={state.rows}
-                        columns={columns}
-                        getRowId={(row) => row.stableId}
-                        rowLabel={(row) =>
-                            row.sellableItem
-                                ? `${row.name} · ${row.sellableItem.specificationLabel}`
-                                : row.name
-                        }
-                        rowCount={state.rows.length}
-                        pagination={filters.pagination}
-                        onPaginationChange={filters.changePagination}
-                        sorting={sorting}
-                        onSortingChange={setSorting}
-                        manualSorting={false}
-                        manualPagination={false}
-                        loading={state.listQuery.isFetching}
-                        highlightedRowId={state.previewId ?? undefined}
-                        layout="flush"
-                        caption="可售商品、销售价格与供应保障"
-                        defaultColumnVisibility={{ productNo: false }}
-                        defaultColumnPinning={{
-                            left: ["name"],
-                            right: [],
-                        }}
-                        errorState={
-                            listLoadFailed ? (
-                                <BusinessFailureState
-                                    error={state.listQuery.error}
-                                    action={
-                                        <Button
-                                            id="master-data-sellable-items-list-retry"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                void state.listQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        emptyState={
-                            !listLoadFailed && state.rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        hasActiveFilters ? "filter" : "no-data"
-                                    }
-                                    className={listWorkspaceEmptyStateClassName}
-                                    title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有可销售的 SKU"
-                                    }
-                                    description={
-                                        hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "商品需要已上架、资料有效且存在有效供给，才会出现在这里。"
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
+                    isGallery ? (
+                        <SellableItemsGallery
+                            rows={state.rows}
+                            loading={state.listQuery.isFetching}
+                            failed={listLoadFailed}
+                            error={state.listQuery.error}
+                            hasActiveFilters={hasActiveFilters}
+                            selectedIds={selection.selectedIds}
+                            highlightedId={state.previewId ?? undefined}
+                            lastFocusedRowId={lastFocusedRowId}
+                            onRetry={() => void state.listQuery.refetch()}
+                            onClearFilters={filters.clearAllFilters}
+                            onToggle={selection.toggle}
+                            onPreview={(row) =>
+                                state.setPreviewId(row.stableId)
+                            }
+                        />
+                    ) : (
+                        <DataTable
+                            id="master-data-sellable-items-list-table"
+                            data={state.rows}
+                            columns={columns}
+                            getRowId={(row) => row.stableId}
+                            rowLabel={(row) =>
+                                row.sellableItem
+                                    ? `${row.name} · ${row.sellableItem.specificationLabel}`
+                                    : row.name
+                            }
+                            rowCount={state.rows.length}
+                            pagination={filters.pagination}
+                            onPaginationChange={filters.changePagination}
+                            sorting={sorting}
+                            onSortingChange={setSorting}
+                            manualSorting={false}
+                            manualPagination={false}
+                            loading={state.listQuery.isFetching}
+                            highlightedRowId={state.previewId ?? undefined}
+                            layout="flush"
+                            caption="可售商品、销售价格与供应保障"
+                            defaultColumnVisibility={{ productNo: false }}
+                            defaultColumnPinning={{
+                                left: ["name"],
+                                right: [],
+                            }}
+                            errorState={
+                                listLoadFailed ? (
+                                    <BusinessFailureState
+                                        error={state.listQuery.error}
+                                        action={
                                             <Button
-                                                id="master-data-sellable-items-list-empty-clear-filters"
+                                                id="master-data-sellable-items-list-retry"
                                                 type="button"
-                                                variant="secondary"
+                                                variant="outline"
                                                 size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={
-                                                    filters.clearAllFilters
+                                                onClick={() =>
+                                                    void state.listQuery.refetch()
                                                 }
                                             >
-                                                清除筛选
+                                                重试
                                             </Button>
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        onRowPreview={(row) => {
-                            lastFocusedRowId.current = row.stableId
-                            state.setPreviewId(row.stableId)
-                        }}
-                    />
+                                        }
+                                    />
+                                ) : undefined
+                            }
+                            emptyState={
+                                !listLoadFailed && state.rows.length === 0 ? (
+                                    <BusinessEmptyState
+                                        kind={
+                                            hasActiveFilters
+                                                ? "filter"
+                                                : "no-data"
+                                        }
+                                        className={
+                                            listWorkspaceEmptyStateClassName
+                                        }
+                                        title={
+                                            hasActiveFilters
+                                                ? "当前筛选无结果"
+                                                : "还没有可销售的 SKU"
+                                        }
+                                        description={
+                                            hasActiveFilters
+                                                ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                                : "商品需要已上架、资料有效且存在有效供给，才会出现在这里。"
+                                        }
+                                        action={
+                                            hasActiveFilters ? (
+                                                <Button
+                                                    id="master-data-sellable-items-list-empty-clear-filters"
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="rounded-lg shadow-none"
+                                                    onClick={
+                                                        filters.clearAllFilters
+                                                    }
+                                                >
+                                                    清除筛选
+                                                </Button>
+                                            ) : undefined
+                                        }
+                                    />
+                                ) : undefined
+                            }
+                            onRowPreview={(row) => {
+                                lastFocusedRowId.current = row.stableId
+                                state.setPreviewId(row.stableId)
+                            }}
+                        />
+                    )
                 }
             />
 
-            <SellablePreviewSheet
-                idPrefix="master-data-sellable-items-preview"
-                previewRow={state.previewRow}
-                lastFocusedRowId={lastFocusedRowId}
-                onClose={() => state.setPreviewId(null)}
+            <SellableExportConfirmDialog
+                open={exportConfirmOpen}
+                rows={selection.selectedRows}
+                pending={excelExport.pending}
+                onOpenChange={setExportConfirmOpen}
+                onRemove={(id) => selection.toggle(id, false)}
+                onConfirm={onConfirmGalleryExport}
             />
+
+            {isGallery ? (
+                <SellablePreviewDialog
+                    idPrefix="master-data-sellable-items-preview"
+                    previewRow={state.previewRow}
+                    lastFocusedRowId={lastFocusedRowId}
+                    onClose={() => state.setPreviewId(null)}
+                />
+            ) : (
+                <SellablePreviewSheet
+                    idPrefix="master-data-sellable-items-preview"
+                    previewRow={state.previewRow}
+                    lastFocusedRowId={lastFocusedRowId}
+                    onClose={() => state.setPreviewId(null)}
+                />
+            )}
         </PageScaffold>
     )
 }

@@ -53,12 +53,12 @@ export function SellableGalleryCard({
             id={prefix}
             data-row-id={row.stableId}
             tabIndex={-1}
-            className="mb-3 break-inside-avoid outline-none"
+            className="min-w-0 outline-none"
         >
             <Card
                 size="sm"
                 className={cn(
-                    "gap-0 py-0",
+                    "h-full gap-0 py-0",
                     selected
                         ? "ring-2 ring-primary"
                         : highlighted
@@ -67,14 +67,11 @@ export function SellableGalleryCard({
                 )}
             >
                 <div className="relative">
-                    <div
-                        className="absolute top-2 left-2 z-10 rounded-md bg-background/90 p-1"
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => event.stopPropagation()}
-                    >
+                    <div className="absolute top-2 left-2 z-10 rounded-md bg-background/90 p-1">
                         <Checkbox
                             id={`${prefix}-select`}
                             checked={selected}
+                            onClick={(event) => event.stopPropagation()}
                             onCheckedChange={(checked) =>
                                 onToggle(checked === true)
                             }
@@ -138,10 +135,11 @@ export function SellableGalleryCard({
                         </p>
                     ) : null}
                     <p>
-                        <span className="num">{row.stableNo}</span>
+                        SKU <span className="num">{row.stableNo}</span>
                         {item?.productNo ? (
                             <>
                                 <span aria-hidden="true"> · </span>
+                                SPU{" "}
                                 <span className="num">{item.productNo}</span>
                             </>
                         ) : null}
@@ -150,9 +148,7 @@ export function SellableGalleryCard({
                     <p
                         className={cn(
                             "inline-flex items-center gap-1",
-                            atRisk
-                                ? "text-warning-soft-foreground"
-                                : undefined,
+                            atRisk ? "text-warning-soft-foreground" : undefined,
                         )}
                     >
                         {atRisk ? (

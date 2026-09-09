@@ -2,10 +2,7 @@
 
 import * as React from "react"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-} from "@/components/business"
+import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { listWorkspaceEmptyStateClassName } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -13,13 +10,16 @@ import { SellableGalleryCard } from "@/features/master-data/components/list/sell
 import { SELLABLE_GALLERY_BATCH_SIZE } from "@/features/master-data/lib/sellable-list-layout"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
+const galleryGridClassName =
+    "grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 min-[90rem]:grid-cols-5"
+
 function GallerySkeletons() {
     return (
-        <div className="columns-2 gap-3 sm:columns-3 xl:columns-4 min-[90rem]:columns-5">
+        <div className={galleryGridClassName}>
             {Array.from({ length: 8 }, (_, index) => (
                 <Skeleton
                     key={index}
-                    className="mb-3 aspect-[3/4] w-full break-inside-avoid rounded-xl"
+                    className="aspect-[3/4] w-full rounded-xl"
                 />
             ))}
         </div>
@@ -109,9 +109,7 @@ export function SellableItemsGallery({
                 kind={hasActiveFilters ? "filter" : "no-data"}
                 className={listWorkspaceEmptyStateClassName}
                 title={
-                    hasActiveFilters
-                        ? "当前筛选无结果"
-                        : "还没有可销售的 SKU"
+                    hasActiveFilters ? "当前筛选无结果" : "还没有可销售的 SKU"
                 }
                 description={
                     hasActiveFilters
@@ -144,7 +142,7 @@ export function SellableItemsGallery({
         <div className="flex flex-col gap-4">
             <div
                 id="master-data-sellable-items-gallery"
-                className="columns-2 gap-3 sm:columns-3 xl:columns-4 min-[90rem]:columns-5"
+                className={galleryGridClassName}
             >
                 {visibleRows.map((row) => (
                     <SellableGalleryCard
@@ -152,7 +150,9 @@ export function SellableItemsGallery({
                         row={row}
                         selected={selectedIds.has(row.stableId)}
                         highlighted={highlightedId === row.stableId}
-                        onToggle={(selected) => onToggle(row.stableId, selected)}
+                        onToggle={(selected) =>
+                            onToggle(row.stableId, selected)
+                        }
                         onPreview={() => {
                             lastFocusedRowId.current = row.stableId
                             onPreview(row)
@@ -161,10 +161,7 @@ export function SellableItemsGallery({
                 ))}
             </div>
             {hasMore ? (
-                <div
-                    ref={sentinelRef}
-                    className="flex justify-center pb-4"
-                >
+                <div ref={sentinelRef} className="flex justify-center pb-4">
                     <Button
                         id="master-data-sellable-items-gallery-load-more"
                         type="button"

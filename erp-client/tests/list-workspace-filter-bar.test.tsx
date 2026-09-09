@@ -124,3 +124,27 @@ test("主行提供查询和更多筛选，常用条件常驻，更多面板与�
     expect(onClearChip).toHaveBeenCalledWith("brand")
     expect(screen.getByText("结果与当前查询条件一致")).toBeTruthy()
 })
+
+test("结果说明右侧可挂状态操作，不提交查询", () => {
+    const onSubmit = vi.fn()
+    const onExport = vi.fn()
+    render(
+        <ListWorkspaceFilterBar
+            idPrefix="filter-bar-actions"
+            formAriaLabel="列表查询"
+            onSubmit={onSubmit}
+            search={<input aria-label="商品" />}
+            resultStatus="共 8 条"
+            idleHint="导出与当前查询结果一致"
+            statusActions={
+                <button type="button" onClick={onExport}>
+                    导出当前结果
+                </button>
+            }
+        />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "导出当前结果" }))
+    expect(onExport).toHaveBeenCalledTimes(1)
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText("导出与当前查询结果一致")).toBeTruthy()
+})
