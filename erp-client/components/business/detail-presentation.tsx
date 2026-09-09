@@ -132,6 +132,6 @@ export function DetailRecordSection({
     )
 }
 
-/** 销售单审批摘要沿用分组浅底，仅覆盖当前摘要，不影响工作台审批组件。 */
-export const salesApprovalSummaryClassName =
+/** 单据审批摘要沿用分组浅底，仅覆盖当前摘要，不影响工作台审批组件。 */
+export const detailApprovalSummaryClassName =
     "space-y-6 [&_h2]:font-semibold [&>[data-slot=card]:first-child]:rounded-xl [&>[data-slot=card]:first-child]:border [&>[data-slot=card]:first-child]:border-border/70 [&>[data-slot=card]:first-child]:bg-muted/35 [&>[data-slot=card]:first-child>[data-slot=card-header]]:px-5 [&>[data-slot=card]:first-child>[data-slot=card-content]]:px-5"

@@ -1,97 +1,62 @@
 "use client"
 
-import Link from "next/link"
-
-import { DocumentSection, MoneyValue } from "@/components/business"
+import { MoneyValue } from "@/components/business"
 import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import { Button } from "@/components/ui/button"
-
+    DetailHint,
+    DetailRecordSection,
+    DetailSummary,
+    DetailSummaryItem,
+} from "@/components/business/detail-presentation"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
+/** 票款只展示本单已确认的应付、付款核销和收票金额。 */
 export function PurchaseOrderDetailPayableSection({
     order,
     costMasked,
-    canPay,
-    payableHref,
 }: {
     order: PurchaseOrderCenterView
     costMasked: boolean
-    canPay: boolean
-    payableHref: string
 }) {
+    const summary = order.payableSummary
+    if (!summary) {
+        return (
+            <DetailRecordSection title="本单应付" compact>
+                <p className="text-sm text-muted-foreground">尚未形成应付</p>
+            </DetailRecordSection>
+        )
+    }
+    const amount = (value: string) =>
+        costMasked ? "•••" : <MoneyValue value={value} />
     return (
-        <DocumentSection title="应付与票款">
-            {order.payableSummary ? (
-                <DescriptionList columns="three">
-                    <DescriptionItem>
-                        <DescriptionTerm>应付未结</DescriptionTerm>
-                        <DescriptionDetails>
-                            {costMasked ? (
-                                "•••"
-                            ) : (
-                                <MoneyValue
-                                    value={
-                                        order.payableSummary.payableOpenAmount
-                                    }
-                                />
-                            )}
-                        </DescriptionDetails>
-                    </DescriptionItem>
-                    <DescriptionItem>
-                        <DescriptionTerm>已付并核销</DescriptionTerm>
-                        <DescriptionDetails>
-                            {costMasked ? (
-                                "•••"
-                            ) : (
-                                <MoneyValue
-                                    value={
-                                        order.payableSummary.paidAllocatedAmount
-                                    }
-                                />
-                            )}
-                        </DescriptionDetails>
-                    </DescriptionItem>
-                    <DescriptionItem>
-                        <DescriptionTerm>已收票并核销</DescriptionTerm>
-                        <DescriptionDetails>
-                            {costMasked ? (
-                                "•••"
-                            ) : (
-                                <MoneyValue
-                                    value={
-                                        order.payableSummary
-                                            .purchaseInvoiceAllocatedAmount
-                                    }
-                                />
-                            )}
-                        </DescriptionDetails>
-                    </DescriptionItem>
-                </DescriptionList>
-            ) : (
-                <p className="text-sm text-muted-foreground">
-                    尚未形成应付（需审批通过）。
-                </p>
-            )}
-            <div className="mt-4">
-                <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!canPay}
-                    render={
-                        <Link
-                            id={`procurement-orders-detail-payable-go-${order.identity.purchaseOrderId}`}
-                            href={payableHref}
-                        />
-                    }
-                >
-                    查看应付记录
-                </Button>
-            </div>
-        </DocumentSection>
+        <DetailSummary label="采购票款摘要">
+            <DetailSummaryItem
+                title="付款"
+                label="待付金额"
+                value={amount(summary.payableOpenAmount)}
+                detail={<>已付并核销 {amount(summary.paidAllocatedAmount)}</>}
+                hint={
+                    <DetailHint
+                        id="purchase-order-payment-hint"
+                        label="付款核销"
+                    >
+                        仅统计已核销到本单的付款金额，审批中的付款不计入。
+                    </DetailHint>
+                }
+            />
+            <DetailSummaryItem
+                title="收票"
+                label="已收票并核销"
+                value={amount(summary.purchaseInvoiceAllocatedAmount)}
+                detail={order.progress.invoice}
+                hint={
+                    <DetailHint
+                        id="purchase-order-invoice-hint"
+                        label="收票核销"
+                    >
+                        仅统计已核销到本单的采购发票金额。
+                    </DetailHint>
+                }
+            />
+        </DetailSummary>
     )
 }

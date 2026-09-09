@@ -44,3 +44,28 @@ test("尚未形成应付时显示缺省提示，摘要不提供跨模块操作",
         expect(screen.queryByText(label)).toBeNull()
     }
 })
+
+test("侧栏优先展示实际审批实例结果，与审批页签保持一致", () => {
+    const base = makePurchaseOrderCenter()
+    render(
+        <PurchaseOrderDetailSidebar
+            costMasked={false}
+            order={makePurchaseOrderCenter({
+                identity: { ...base.identity, reviewLabel: "审批中" },
+                approval: {
+                    requirement: "REQUIRED",
+                    instance: {
+                        id: "approval-1",
+                        status: "APPROVED",
+                        currentRoundNo: 1,
+                    },
+                    recentHistory: [],
+                    historyHasMore: false,
+                    allowedActions: [],
+                },
+            })}
+        />,
+    )
+    expect(screen.getByText("已通过")).toBeTruthy()
+    expect(screen.queryByText("审批中")).toBeNull()
+})

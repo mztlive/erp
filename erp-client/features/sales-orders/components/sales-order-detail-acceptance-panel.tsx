@@ -9,7 +9,7 @@ import {
     DetailRecordSection,
     DetailSummary,
     DetailSummaryItem,
-} from "./sales-order-detail-presentation"
+} from "@/components/business/detail-presentation"
 import { qtyWithUnit } from "@/features/sales-orders/lib/acceptance-model"
 import { buildOrderProgress } from "@/features/sales-orders/lib/acceptance-model"
 import { AcceptanceProgressTable } from "./acceptance-progress-table"

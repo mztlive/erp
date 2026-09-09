@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { salesApprovalSummaryClassName } from "./sales-order-detail-presentation"
+import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 
@@ -145,7 +145,7 @@ export function SalesChangeOrderApprovalSection({
         <div className="space-y-3">
             {readonlyApproval ? (
                 <ApprovalReadonly
-                    className={salesApprovalSummaryClassName}
+                    className={detailApprovalSummaryClassName}
                     id={`sales-change-${changeOrder.id}`}
                     approval={changeOrder.approval}
                 />

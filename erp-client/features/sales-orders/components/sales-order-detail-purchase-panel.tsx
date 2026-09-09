@@ -20,7 +20,7 @@ import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-ord
 import {
     DetailSummary,
     DetailSummaryItem,
-} from "./sales-order-detail-presentation"
+} from "@/components/business/detail-presentation"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 

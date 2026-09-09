@@ -5,7 +5,7 @@ import { RevisionHistoryCard } from "@/features/sales-orders/components/revision
 import {
     DetailSummary,
     DetailSummaryItem,
-} from "./sales-order-detail-presentation"
+} from "@/components/business/detail-presentation"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 

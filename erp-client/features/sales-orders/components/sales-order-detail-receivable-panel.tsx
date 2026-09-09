@@ -6,7 +6,7 @@ import {
     DetailRecordSection,
     DetailSummary,
     DetailSummaryItem,
-} from "./sales-order-detail-presentation"
+} from "@/components/business/detail-presentation"
 import {
     BusinessFailureState,
     MoneyValue,

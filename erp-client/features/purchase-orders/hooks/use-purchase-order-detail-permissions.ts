@@ -9,12 +9,6 @@ export type PurchaseOrderDetailPermissions = {
     canSubmit: boolean
     canVoid: boolean
     canChange: boolean
-    canFulfill: boolean
-    canPay: boolean
-    fulfillBlocker:
-        | PurchaseOrderCenterView["actionBlockers"][number]
-        | undefined
-    changeBlocker: PurchaseOrderCenterView["actionBlockers"][number] | undefined
 }
 
 /**
@@ -29,14 +23,6 @@ export function usePurchaseOrderDetailPermissions(
             canSubmit: order?.allowedActions.includes("SUBMIT") ?? false,
             canVoid: order?.allowedActions.includes("VOID") ?? false,
             canChange: order?.allowedActions.includes("START_CHANGE") ?? false,
-            canFulfill: order?.allowedActions.includes("FULFILL") ?? false,
-            canPay: order?.allowedActions.includes("PAY") ?? false,
-            fulfillBlocker: order?.actionBlockers.find(
-                (b) => b.action === "FULFILL",
-            ),
-            changeBlocker: order?.actionBlockers.find(
-                (b) => b.action === "START_CHANGE",
-            ),
         }
     }, [order])
 }

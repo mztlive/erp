@@ -1,10 +1,8 @@
 "use client"
 
-import Link from "next/link"
-
+import { displayInstanceStatus } from "@/features/approval-workflow/display"
 import { MoneyValue } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
@@ -32,7 +30,12 @@ export function PurchaseOrderDetailSidebar({
         },
     ]
     const tracks = [
-        { label: "审批", value: order.identity.reviewLabel },
+        {
+            label: "审批",
+            value: order.approval?.instance
+                ? displayInstanceStatus(order.approval.instance.status)
+                : order.identity.reviewLabel,
+        },
         { label: "付款", value: order.progress.payment },
         { label: "履约", value: order.progress.fulfillment },
         { label: "进项票", value: order.progress.invoice },
@@ -165,19 +168,6 @@ export function PurchaseOrderDetailSidebar({
                         </p>
                     </div>
                 ) : null}
-                {order.actionBlockers.length ? (
-                    <ul className="mt-3 space-y-1 text-xs leading-5 text-muted-foreground">
-                        {[
-                            ...new Set(
-                                order.actionBlockers.map(
-                                    (item) => item.message,
-                                ),
-                            ),
-                        ].map((message) => (
-                            <li key={message}>{message}</li>
-                        ))}
-                    </ul>
-                ) : null}
             </section>
             <section
                 aria-labelledby="purchase-order-owner-heading"
@@ -217,13 +207,9 @@ export function PurchaseOrderDetailSidebar({
                         {order.header.expectedDate ?? "—"}
                     </span>
                 </p>
-                <Link
-                    id={`procurement-orders-detail-sidebar-source-${toAutomationIdSegment(order.identity.purchaseOrderId)}`}
-                    href={`/sales/orders/${order.header.salesOrderId}`}
-                    className="mt-3 inline-block max-w-full break-all text-xs text-primary underline-offset-2 hover:underline"
-                >
+                <p className="mt-3 break-all text-xs text-muted-foreground">
                     来源销售单 {order.header.salesOrderNo}
-                </Link>
+                </p>
             </section>
         </aside>
     )

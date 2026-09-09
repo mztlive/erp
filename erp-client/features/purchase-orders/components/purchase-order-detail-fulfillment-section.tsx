@@ -1,156 +1,111 @@
 "use client"
 
-import Link from "next/link"
-
+import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import {
-    BusinessStatusBadge,
-    DocumentSection,
-    PrepaymentGate,
-} from "@/components/business"
+    DetailRecordSection,
+    DetailSummary,
+    DetailSummaryItem,
+} from "@/components/business/detail-presentation"
 import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import { Button } from "@/components/ui/button"
-import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
+    FULFILLMENT_RESPONSIBILITY_LABEL,
+    type PurchaseOrderCenterView,
+} from "@/features/purchase-orders/types"
 
-import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
-
-type GateView = PurchaseOrderCenterView["progress"]["prepaymentGate"]
-
+/** 履约按业务进度展示，交付与付款在各自工作页面办理。 */
 export function PurchaseOrderDetailFulfillmentSection({
     order,
     costMasked,
     gate,
-    canFulfill,
-    fulfillBlocker,
-    payableHref,
 }: {
     order: PurchaseOrderCenterView
     costMasked: boolean
-    gate: GateView
-    canFulfill: boolean
-    fulfillBlocker:
-        | PurchaseOrderCenterView["actionBlockers"][number]
-        | undefined
-    payableHref: string
+    gate: PurchaseOrderCenterView["progress"]["prepaymentGate"]
 }) {
+    const summary = order.fulfillmentSummary
+    const quantities = [
+        { label: "已入库数量", value: summary.inboundQty },
+        { label: "已发货数量", value: summary.shippedQty },
+        { label: "剩余数量", value: summary.remainingQty },
+    ].filter((item) => item.value !== "—" && item.value !== "")
+    const amount = (value: string) =>
+        costMasked ? "•••" : <MoneyValue value={value} />
     return (
-        <DocumentSection title="履约">
-            <DescriptionList columns="three">
-                <DescriptionItem>
-                    <DescriptionTerm>进度</DescriptionTerm>
-                    <DescriptionDetails>
+        <div className="space-y-6">
+            <DetailSummary label="采购履约摘要">
+                <DetailSummaryItem
+                    label="履约进度"
+                    value={summary.progressLabel}
+                    detail={
+                        FULFILLMENT_RESPONSIBILITY_LABEL[
+                            order.header.fulfillmentResponsibility
+                        ]
+                    }
+                />
+                <DetailSummaryItem
+                    label="预计交期"
+                    value={order.header.expectedDate ?? "—"}
+                    detail={order.header.supplierSnapshot}
+                />
+            </DetailSummary>
+            <div className="divide-y divide-border/70">
+                {quantities.length > 0 ? (
+                    <DetailRecordSection title="履约数量">
+                        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            {quantities.map((item) => (
+                                <div key={item.label}>
+                                    <dt className="text-xs text-muted-foreground">
+                                        {item.label}
+                                    </dt>
+                                    <dd className="num mt-1 text-lg font-medium">
+                                        {item.value}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </DetailRecordSection>
+                ) : null}
+                {summary.note ? (
+                    <DetailRecordSection title="履约说明">
+                        <p className="text-sm text-muted-foreground">
+                            {summary.note}
+                        </p>
+                    </DetailRecordSection>
+                ) : null}
+                {gate.state !== "NOT_APPLICABLE" ? (
+                    <DetailRecordSection title="先款条件">
                         <BusinessStatusBadge
                             context="detail"
-                            label={order.fulfillmentSummary.progressLabel}
-                            tone={order.fulfillmentSummary.progressTone}
+                            label={
+                                gate.state === "SATISFIED" ? "已满足" : "未满足"
+                            }
+                            tone={
+                                gate.state === "SATISFIED"
+                                    ? "success"
+                                    : "warning"
+                            }
                         />
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>入库</DescriptionTerm>
-                    <DescriptionDetails className="num">
-                        {order.fulfillmentSummary.inboundQty}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>发货</DescriptionTerm>
-                    <DescriptionDetails className="num">
-                        {order.fulfillmentSummary.shippedQty}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>剩余</DescriptionTerm>
-                    <DescriptionDetails className="num">
-                        {order.fulfillmentSummary.remainingQty}
-                    </DescriptionDetails>
-                </DescriptionItem>
-            </DescriptionList>
-            {order.fulfillmentSummary.note ? (
-                <p className="mt-2 text-sm text-muted-foreground">
-                    {order.fulfillmentSummary.note}
-                </p>
-            ) : null}
-            <div className="mt-4 flex flex-wrap gap-2">
-                {canFulfill ? (
-                    <Button
-                        type="button"
-                        render={
-                            <Link
-                                id={`procurement-orders-detail-fulfillment-go-${order.identity.purchaseOrderId}`}
-                                href={fulfillmentTasksHref(
-                                    order.identity.purchaseOrderId,
-                                )}
-                            />
-                        }
-                    >
-                        去交付与代发
-                    </Button>
-                ) : (
-                    <div className="space-y-1">
-                        <Button
-                            id={`procurement-orders-detail-fulfillment-disabled-${order.identity.purchaseOrderId}`}
-                            type="button"
-                            disabled
-                        >
-                            履约入口未开放
-                        </Button>
-                        <p className="text-xs text-muted-foreground">
-                            {fulfillBlocker?.message ??
-                                "当前状态下不能进入交付，可先完成前置条件。"}
+                        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            {[
+                                { label: "需先款", value: gate.required },
+                                { label: "已核销", value: gate.allocated },
+                                { label: "还差", value: gate.gap },
+                            ].map((item) => (
+                                <div key={item.label}>
+                                    <dt className="text-xs text-muted-foreground">
+                                        {item.label}
+                                    </dt>
+                                    <dd className="mt-1 text-lg font-medium">
+                                        {amount(item.value)}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                            {gate.message}
                         </p>
-                    </div>
-                )}
-                {fulfillBlocker?.code === "PREPAYMENT_GATE" ? (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        render={
-                            <Link
-                                id={`procurement-orders-detail-fulfillment-pay-${order.identity.purchaseOrderId}`}
-                                href={payableHref}
-                            />
-                        }
-                    >
-                        查看应付记录
-                    </Button>
+                    </DetailRecordSection>
                 ) : null}
             </div>
-            {gate.state === "BLOCKED" ? (
-                <div className="mt-4">
-                    <PrepaymentGate
-                        condition={{
-                            kind: "amount",
-                            required: costMasked ? "•••" : gate.required,
-                            description: gate.message,
-                        }}
-                        allocated={costMasked ? "•••" : gate.allocated}
-                        gap={costMasked ? "•••" : gate.gap}
-                        updatedAt={{
-                            dateTime: gate.updatedAt,
-                            label: gate.updatedAt,
-                        }}
-                        allowed={false}
-                        paymentAction={
-                            <Button
-                                type="button"
-                                size="sm"
-                                render={
-                                    <Link
-                                        id={`procurement-orders-detail-gate-pay-${order.identity.purchaseOrderId}`}
-                                        href={payableHref}
-                                    />
-                                }
-                            >
-                                查看应付记录
-                            </Button>
-                        }
-                    />
-                </div>
-            ) : null}
-        </DocumentSection>
+        </div>
     )
 }

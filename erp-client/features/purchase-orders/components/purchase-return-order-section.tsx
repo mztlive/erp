@@ -5,6 +5,7 @@ import {
     BusinessStatusBadge,
     surfaceInsetClassName,
 } from "@/components/business"
+import { DetailRecordSection } from "@/components/business/detail-presentation"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { usePurchaseReturnOrdersQuery } from "@/features/purchase-orders/hooks/use-purchase-return-orders-query"
@@ -65,8 +66,11 @@ export function PurchaseReturnOrderRelatedSection({
     const query = usePurchaseReturnOrdersQuery(purchaseOrderId)
 
     return (
-        <div className="mt-4 space-y-2">
-            <h3 className="text-sm font-medium">采购退货</h3>
+        <DetailRecordSection
+            title="采购退货"
+            count={query.data?.length}
+            compact={query.isSuccess && query.data.length === 0}
+        >
             {query.isPending ? (
                 <p className="text-sm text-muted-foreground">
                     正在加载采购退货…
@@ -92,6 +96,6 @@ export function PurchaseReturnOrderRelatedSection({
             {query.isSuccess ? (
                 <PurchaseReturnOrderSection returns={query.data} />
             ) : null}
-        </div>
+        </DetailRecordSection>
     )
 }

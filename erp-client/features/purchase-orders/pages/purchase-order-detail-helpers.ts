@@ -15,9 +15,9 @@ export const PURCHASE_ORDER_DETAIL_NAV: readonly {
     { id: "overview", label: "概览" },
     { id: "approval", label: "审批" },
     { id: "fulfillment", label: "履约" },
-    { id: "payable", label: "应付与票款" },
-    { id: "changes", label: "变更与异常" },
-    { id: "audit", label: "审计" },
+    { id: "payable", label: "票款" },
+    { id: "changes", label: "变更" },
+    { id: "audit", label: "记录" },
 ]
 
 export function resolvePurchaseOrderDetailSection(

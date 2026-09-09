@@ -13,9 +13,9 @@ import {
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
+import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
 import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/components/purchase-change-order-approval-section"
-import { PurchaseOrderApprovalArea } from "@/features/purchase-orders/components/purchase-order-approval-area"
 import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
@@ -33,7 +33,6 @@ import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/ho
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
 import { isPurchaseChangeOrderWorkItem } from "@/features/purchase-orders/lib/purchase-change-order-approval"
-import { purchaseOrderApprovalPhase } from "@/features/purchase-orders/lib/purchase-order-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
@@ -43,7 +42,7 @@ import {
 import { purchaseOrderDraftFormSchema } from "@/features/purchase-orders/lib/purchase-order-validation"
 
 /**
- * 采购单详情。创建结果、编辑与运行中都嵌入通用审批区；
+ * 采购单详情保留采购方操作，审批与跨岗位进度只读展示；
  * 采购变更单走独立 DocumentType，不复制状态推导。
  */
 export function PurchaseOrderDetailPage({
@@ -243,7 +242,6 @@ export function PurchaseOrderDetailPage({
     }
 
     const baseHref = `/procurement/orders/${order.identity.purchaseOrderId}`
-    const payableHref = `/finance/supplier-accounts?view=payable&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&supplierId=${encodeURIComponent(order.header.supplierId)}&returnTo=${encodeURIComponent(baseHref)}`
     const displayNo =
         order.identity.purchaseNo ??
         order.identity.draftLabel ??
@@ -283,6 +281,7 @@ export function PurchaseOrderDetailPage({
 
             {isChangeOrderTask && activeSection !== "changes" ? (
                 <PurchaseChangeOrderApprovalSection
+                    readonlyApproval
                     purchaseOrderId={order.identity.purchaseOrderId}
                     changeOrder={order.activeChangeOrder ?? null}
                     workItemId={focusedWorkItem?.workItemId}
@@ -314,13 +313,6 @@ export function PurchaseOrderDetailPage({
 
                 costMasked={costMasked}
                 gate={gate}
-                canPay={permissions.canPay}
-                canFulfill={permissions.canFulfill}
-                fulfillBlocker={permissions.fulfillBlocker}
-                canChange={permissions.canChange}
-                changeBlocker={permissions.changeBlocker}
-                payableHref={payableHref}
-                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
                 changeWorkItemId={
                     isChangeOrderTask ? focusedWorkItem?.workItemId : undefined
                 }
@@ -334,36 +326,10 @@ export function PurchaseOrderDetailPage({
                 }
                 onChangeApprovalResult={handleResult}
                 approvalPanel={
-                    <PurchaseOrderApprovalArea
-                        phase={purchaseOrderApprovalPhase(
-                            order.approval,
-                            order.identity.status,
-                        )}
+                    <ApprovalReadonly
+                        id="purchase-order-approval"
                         approval={order.approval}
-                        documentId={order.identity.purchaseOrderId}
-                        workItemId={focusedWorkItem?.workItemId}
-                        expectedTaskVersion={focusedWorkItem?.taskVersion}
-                        workItemAllowedActions={focusedWorkItem?.allowedActions}
-                        onDecisionApplied={(view: ApprovalCommandView) =>
-                            handleResult({
-                                status: "succeeded",
-                                title: "审批决定已提交",
-                                description: view.latestRejectionReason
-                                    ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                                    : "已按当前任务提交决定。",
-                                reference:
-                                    order.identity.purchaseNo ??
-                                    order.identity.draftLabel,
-                                facts: view.currentAssigneeName
-                                    ? [
-                                          {
-                                              label: "当前审批人",
-                                              value: view.currentAssigneeName,
-                                          },
-                                      ]
-                                    : undefined,
-                            })
-                        }
+                        className={detailApprovalSummaryClassName}
                     />
                 }
                 sidebar={

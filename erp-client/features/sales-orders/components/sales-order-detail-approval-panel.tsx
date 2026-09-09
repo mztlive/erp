@@ -1,6 +1,6 @@
 "use client"
 
-import { salesApprovalSummaryClassName } from "./sales-order-detail-presentation"
+import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 
@@ -10,7 +10,7 @@ export function ApprovalPanel({ order }: { order: SalesOrderDetailView }) {
         <ApprovalReadonly
             id="sales-order-approval"
             approval={order.approval}
-            className={salesApprovalSummaryClassName}
+            className={detailApprovalSummaryClassName}
         />
     )
 }

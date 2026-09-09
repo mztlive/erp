@@ -25,10 +25,6 @@ import {
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
 type GateView = PurchaseOrderCenterView["progress"]["prepaymentGate"]
-type ActionBlocker =
-    | PurchaseOrderCenterView["actionBlockers"][number]
-    | undefined
-
 /**
  * 采购单详情子区。变更页签承接 PurchaseChangeOrder 通用审批区。
  * PurchaseReturnOrder 为 NO_APPROVAL，关联采购退货不接入审批区。
@@ -39,13 +35,6 @@ export function PurchaseOrderDetailSections({
     editor,
     costMasked,
     gate,
-    canPay,
-    canFulfill,
-    fulfillBlocker,
-    canChange,
-    changeBlocker,
-    payableHref,
-    onRequestChange,
     changeWorkItemId,
     changeExpectedTaskVersion,
     changeWorkItemAllowedActions,
@@ -58,13 +47,6 @@ export function PurchaseOrderDetailSections({
     editor?: React.ReactNode
     costMasked: boolean
     gate: GateView
-    canPay: boolean
-    canFulfill: boolean
-    fulfillBlocker: ActionBlocker
-    canChange: boolean
-    changeBlocker: ActionBlocker
-    payableHref: string
-    onRequestChange: () => void
     changeWorkItemId?: string
     changeExpectedTaskVersion?: string
     changeWorkItemAllowedActions?: readonly string[]
@@ -131,9 +113,6 @@ export function PurchaseOrderDetailSections({
                         order={order}
                         costMasked={costMasked}
                         gate={gate}
-                        canFulfill={canFulfill}
-                        fulfillBlocker={fulfillBlocker}
-                        payableHref={payableHref}
                     />
                 </ObjectSectionTabsPanel>
 
@@ -141,17 +120,12 @@ export function PurchaseOrderDetailSections({
                     <PurchaseOrderDetailPayableSection
                         order={order}
                         costMasked={costMasked}
-                        canPay={canPay}
-                        payableHref={payableHref}
                     />
                 </ObjectSectionTabsPanel>
 
                 <ObjectSectionTabsPanel value="changes">
                     <PurchaseOrderDetailChangesSection
                         order={order}
-                        canChange={canChange}
-                        changeBlocker={changeBlocker}
-                        onRequestChange={onRequestChange}
                         workItemId={changeWorkItemId}
                         expectedTaskVersion={changeExpectedTaskVersion}
                         workItemAllowedActions={changeWorkItemAllowedActions}

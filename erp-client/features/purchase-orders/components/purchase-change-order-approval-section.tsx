@@ -1,6 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { detailApprovalSummaryClassName } from "@/components/business/detail-presentation"
+import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
+import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -11,6 +14,7 @@ import { useSubmitPurchaseChangeMutation } from "@/features/purchase-orders/hook
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import {
     mergePurchaseChangeOrderAllowedActions,
+    PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE,
     purchaseChangeOrderApprovalPhase,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import type { PurchaseChangeOrderSummary } from "@/features/purchase-orders/types"
@@ -19,7 +23,7 @@ import { FormalCommandKeyLedger } from "@/lib/formal-command"
 /**
  * 采购变更单在详情页上的审批区入口。
  *
- * 未提交且服务端允许时展示提交确认；决定、升级和撤回只读 `allowed_actions`。
+ * 详情查阅仅保留采购方提交与撤回；工作台调用方继续按服务端动作办理审批。
  */
 export function PurchaseChangeOrderApprovalSection({
     purchaseOrderId,
@@ -28,7 +32,9 @@ export function PurchaseChangeOrderApprovalSection({
     expectedTaskVersion,
     workItemAllowedActions,
     onResult,
+    readonlyApproval = false,
 }: {
+    readonlyApproval?: boolean
     purchaseOrderId: string
     changeOrder: PurchaseChangeOrderSummary | null
     workItemId?: string
@@ -130,32 +136,62 @@ export function PurchaseChangeOrderApprovalSection({
 
     return (
         <div className="space-y-3">
-            <PurchaseChangeOrderApprovalArea
-                phase={phase}
-                approval={changeOrder.approval}
-                documentId={changeOrder.id}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={(view: ApprovalCommandView) =>
-                    onResult?.({
-                        status: "succeeded",
-                        title: "审批决定已提交",
-                        description: view.latestRejectionReason
-                            ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                            : "已按当前任务提交决定。",
-                        reference: changeOrder.id,
-                        facts: view.currentAssigneeName
-                            ? [
-                                  {
-                                      label: "当前审批人",
-                                      value: view.currentAssigneeName,
-                                  },
-                              ]
-                            : undefined,
-                    })
-                }
-            />
+            {readonlyApproval ? (
+                <ApprovalReadonly
+                    className={detailApprovalSummaryClassName}
+                    id={`purchase-change-${changeOrder.id}`}
+                    approval={changeOrder.approval}
+                />
+            ) : (
+                <PurchaseChangeOrderApprovalArea
+                    phase={phase}
+                    approval={changeOrder.approval}
+                    documentId={changeOrder.id}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={(view: ApprovalCommandView) =>
+                        onResult?.({
+                            status: "succeeded",
+                            title: "审批决定已提交",
+                            description: view.latestRejectionReason
+                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                : "已按当前任务提交决定。",
+                            reference: changeOrder.id,
+                            facts: view.currentAssigneeName
+                                ? [
+                                      {
+                                          label: "当前审批人",
+                                          value: view.currentAssigneeName,
+                                      },
+                                  ]
+                                : undefined,
+                        })
+                    }
+                />
+            )}
+            {readonlyApproval ? (
+                <ApprovalActionBar
+                    id="purchase-orders-change-owner-actions"
+                    allowedActions={(
+                        changeOrder.approval?.allowedActions ?? []
+                    ).filter(
+                        (action) =>
+                            action === "CANCEL" || action === "CANCEL_APPROVAL",
+                    )}
+                    instance={changeOrder.approval?.instance}
+                    documentType={PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE}
+                    documentId={changeOrder.id}
+                    onDecisionApplied={() =>
+                        onResult?.({
+                            status: "succeeded",
+                            title: "改单审批已撤回",
+                            description: "请查阅更新后的改单状态。",
+                            reference: changeOrder.id,
+                        })
+                    }
+                />
+            ) : null}
             {canSubmit ? (
                 <Button
                     id={`procurement-orders-change-submit-${changeOrder.id}`}
