@@ -3,7 +3,7 @@
  * 正式幂等只由服务端命令收据保证；普通付款不启动独立审批。
  */
 
-import { apiGetBlob, apiPostForm } from "@/lib/api"
+import { apiGet, apiGetBlob, apiPostForm } from "@/lib/api"
 import type { BackendSupplierPayment } from "@/features/supplier-payables/api/mappers"
 import {
     errorMessage,
@@ -14,9 +14,81 @@ import { commitPaymentReversal } from "@/features/supplier-payables/api/reversal
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
 import type {
     FormalSubmitResult,
+    PaymentMergeCandidatesView,
+    PaymentRecipient,
     PostPaymentInput,
     ReversePaymentInput,
 } from "@/features/supplier-payables/types"
+
+type BackendPaymentMergeCandidate = {
+    work_item_id: string
+    task_version: string
+    payable_account_id: string
+    subject_version: string
+    source_document_id: string
+    source_document_no?: string | null
+    open_total: string
+    due_date?: string | null
+    is_anchor: boolean
+}
+
+type BackendPaymentMergeCandidates = {
+    anchor_work_item_id: string
+    supplier_id: string
+    supplier_name?: string | null
+    payment_recipient?: {
+        bank_account_id: string
+        version: number
+        account_name: string
+        bank_name: string
+        bank_branch_name?: string | null
+        account_number_masked: string
+    } | null
+    open_total: string
+    items: BackendPaymentMergeCandidate[]
+}
+
+function mapMergeRecipient(
+    recipient?: BackendPaymentMergeCandidates["payment_recipient"],
+): PaymentRecipient | undefined {
+    if (!recipient) return undefined
+    return {
+        bankAccountId: recipient.bank_account_id,
+        version: recipient.version,
+        accountName: recipient.account_name,
+        bankName: recipient.bank_name,
+        bankBranchName: recipient.bank_branch_name ?? undefined,
+        accountNumberMasked: recipient.account_number_masked,
+    }
+}
+
+/** 读取当前付款任务可合并的同供应商开放任务。 */
+export async function fetchPaymentMergeCandidates(
+    workItemId: string,
+): Promise<PaymentMergeCandidatesView> {
+    const payload = await apiGet<BackendPaymentMergeCandidates>(
+        "/admin/supplier-payments/merge-candidates",
+        { work_item_id: workItemId },
+    )
+    return {
+        anchorWorkItemId: payload.anchor_work_item_id,
+        supplierId: payload.supplier_id,
+        supplierName: payload.supplier_name ?? undefined,
+        paymentRecipient: mapMergeRecipient(payload.payment_recipient),
+        openTotal: payload.open_total,
+        items: payload.items.map((item) => ({
+            workItemId: item.work_item_id,
+            taskVersion: item.task_version,
+            payableAccountId: item.payable_account_id,
+            subjectVersion: item.subject_version,
+            sourceDocumentId: item.source_document_id,
+            sourceDocumentNo: item.source_document_no ?? undefined,
+            openTotal: item.open_total,
+            dueDate: item.due_date ?? undefined,
+            isAnchor: item.is_anchor,
+        })),
+    }
+}
 
 function failedPayment(code: string, message: string): FormalSubmitResult {
     return {
@@ -71,6 +143,12 @@ export async function submitPayment(
         const command = {
             work_item_id: commandInput.workItemId,
             expected_task_version: commandInput.expectedTaskVersion,
+            additional_work_items: (commandInput.additionalWorkItems ?? []).map(
+                (item) => ({
+                    work_item_id: item.workItemId,
+                    expected_task_version: item.expectedTaskVersion,
+                }),
+            ),
             expected_payee_bank_account_id:
                 commandInput.expectedPayeeBankAccountId,
             expected_payee_bank_account_version:
@@ -113,6 +191,10 @@ export async function submitPayment(
             existingDocumentId: submitted.id,
             unallocatedAmount: submitted.unallocated_amount,
             allocatedTotal: submitted.allocated_total,
+            targetAllocations: targets.map((target) => ({
+                payableAccountId: target.payableAccountId,
+                amount: target.amount,
+            })),
             subjectStatus: submitted.status,
         }
         return result

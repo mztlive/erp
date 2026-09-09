@@ -8,6 +8,7 @@ import {
     commitSupplierRefund,
     fetchAllocationSession,
     fetchPayableDetail,
+    fetchPaymentMergeCandidates,
     fetchPaymentReversal,
     fetchSupplierAccounts,
     fetchSupplierPayment,
@@ -50,6 +51,8 @@ export const supplierPayablesKeys = {
         [...supplierPayablesKeys.all, "refund", refundId] as const,
     reversal: (reversalId: string) =>
         [...supplierPayablesKeys.all, "reversal", reversalId] as const,
+    mergeCandidates: (workItemId: string) =>
+        [...supplierPayablesKeys.all, "merge-candidates", workItemId] as const,
     session: (params: {
         track: AllocationTrack
         supplierId: string
@@ -66,6 +69,14 @@ export function useSupplierAccountsQuery(query: SupplierAccountsQuery) {
     return useQuery({
         queryKey: supplierPayablesKeys.list(query),
         queryFn: () => fetchSupplierAccounts(query),
+    })
+}
+
+export function usePaymentMergeCandidatesQuery(workItemId: string | null) {
+    return useQuery({
+        queryKey: supplierPayablesKeys.mergeCandidates(workItemId ?? ""),
+        queryFn: () => fetchPaymentMergeCandidates(workItemId!),
+        enabled: Boolean(workItemId),
     })
 }
 

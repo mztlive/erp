@@ -7,7 +7,7 @@ use erp_audit::AuditExt;
 use erp_finance::entity::payable::{SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
 
-use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId, SupplierPaymentId};
+use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId, SupplierPaymentId, WorkItemId};
 
 use erp_party::PartyExt;
 use erp_supplier::SupplierExt;
@@ -122,6 +122,7 @@ impl PayableService {
         let expected_task_version =
             erp_workflow::service::work_item::expected_task_version(&req.expected_task_version)?;
         let work_item_id = req.work_item_id.clone();
+        let additional_tasks = lock_additional_payment_tasks(&req.additional_work_items)?;
         let expected_payee_bank_account_id =
             PartyBankAccountId::new(req.expected_payee_bank_account_id.trim());
         let expected_payee_bank_account_version = req.expected_payee_bank_account_version;
@@ -213,10 +214,13 @@ impl PayableService {
                     .await?;
                     payment_task::record_payment_execution(
                         &db,
-                        &work_item_id,
-                        expected_task_version,
-                        &payment.supplier_id,
-                        &allocations,
+                        payment_task::PaymentExecutionCommand {
+                            work_item_id: &work_item_id,
+                            expected_task_version,
+                            additional_tasks: &additional_tasks,
+                            supplier_id: &payment.supplier_id,
+                            allocations: &allocations,
+                        },
                         &actor_owned,
                         session,
                     )
@@ -270,6 +274,29 @@ impl PayableService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
     }
+}
+
+/// 把附加付款任务的字符串版本解析为乐观锁。
+///
+/// # 参数
+/// * `items` - 提交命令中的附加任务身份
+///
+/// # 返回
+/// 返回与输入顺序一致的任务 ID 与正整数版本。
+///
+/// # 错误
+/// 任一版本不是正整数字符串时返回校验错误。
+fn lock_additional_payment_tasks(
+    items: &[super::dto::PaymentExecutionTaskRef],
+) -> Result<Vec<(WorkItemId, u64)>> {
+    let mut locks = Vec::with_capacity(items.len());
+    for item in items {
+        locks.push((
+            item.work_item_id.clone(),
+            erp_workflow::service::work_item::expected_task_version(&item.expected_task_version)?,
+        ));
+    }
+    Ok(locks)
 }
 
 /// 在付款事务内校验并占用页面所见收款账户版本。

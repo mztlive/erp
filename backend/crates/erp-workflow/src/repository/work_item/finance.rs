@@ -1,5 +1,5 @@
 use crate::entity::work_item::{
-    FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem, WorkItemType,
+    FinanceResponsibilityOperation, FinanceResponsibilityRule, WorkItem, WorkItemStatus, WorkItemType,
 };
 use crate::repository::owned::{FinanceResponsibilityRuleRepository, WorkItemRepository};
 use mongodb::bson::doc;
@@ -31,6 +31,43 @@ impl<'a> WorkItemRepository<'a> {
                 "work_item_type": WorkItemType::SupplierPaymentExecution.as_str(),
             },
             doc! { "updated_at": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 按应付子账集合与责任人读取开放付款执行任务。
+    ///
+    /// # 参数
+    /// * `payable_account_ids` - 候选应付子账 ID；空集合不访问数据库
+    /// * `owner_user_id` - 当前付款责任人
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配的开放付款执行任务，不保证顺序。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回数据事实，不判断供应商是否相同或任务是否可合并。
+    pub async fn list_open_payment_execution_by_payables_and_owner(
+        &self,
+        payable_account_ids: &[String],
+        owner_user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        if payable_account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! {
+                "status": WorkItemStatus::Open.as_str(),
+                "work_item_type": WorkItemType::SupplierPaymentExecution.as_str(),
+                "business_object_type": "payable_account",
+                "business_object_id": { "$in": payable_account_ids },
+                "owner_user_id": owner_user_id,
+            },
             executor,
         )
         .await

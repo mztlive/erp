@@ -14,6 +14,7 @@ export {
 } from "@/features/supplier-payables/api/supplier-accounts"
 
 export {
+    fetchPaymentMergeCandidates,
     fetchSupplierPaymentBankReceiptBlob,
     reversePayment,
     submitPayment,

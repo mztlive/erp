@@ -15,7 +15,8 @@ use erp_supplier::SupplierExt;
 use erp_workflow::entity::work_item::{
     is_purchase_payable, matches_supplier_payment_identity, new_supplier_payment_task, payment_due_at,
     supplier_payment_impact_summary, FinanceResponsibilityOperation, PayablePurchaseAdmissionFact,
-    SupplierPaymentTaskReason, SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
+    PaymentExecutionMergeMember, PaymentExecutionMergeSet, SupplierPaymentTaskReason,
+    SupplierPaymentTaskSpec, WorkItem, WorkItemStatus,
 };
 use erp_workflow::WorkItemExt;
 use id_generator::next_id;
@@ -146,45 +147,194 @@ pub(crate) async fn sync_purchase_payment_task(
     create_reopened_task(db, &account, &tasks, executor).await
 }
 
+/// 一次付款执行要校验的任务集合与核销范围。
+pub(crate) struct PaymentExecutionCommand<'a> {
+    /// 当前工作台打开的付款执行任务。
+    pub work_item_id: &'a WorkItemId,
+    /// 页面读取的当前任务版本。
+    pub expected_task_version: u64,
+    /// 合并打款勾选的其它任务及其版本；单任务付款为空。
+    pub additional_tasks: &'a [(WorkItemId, u64)],
+    /// 本次付款单上的供应商。
+    pub supplier_id: &'a SupplierAccountId,
+    /// 待过账核销行。
+    pub allocations: &'a [PendingPaymentAllocation],
+}
+
 /// 在付款正式提交事务内校验并记录当前付款执行任务活动。
 ///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `command` - 当前任务、附加任务、供应商与核销范围
+/// * `actor` - 当前出纳
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 全部已勾选任务授权通过且核销范围合法时返回成功。
+///
 /// # 错误
-/// 任务版本、当前责任人、应付子账、供应商或任一核销分录不属于同一任务时失败关闭。
+/// 任务版本、当前责任人、应付子账、供应商或核销分录不属于已勾选任务时失败关闭。
+///
+/// # 关键业务约束
+/// 一次打款必须覆盖每条已勾选任务，且不得核销未勾选应付。
 pub(crate) async fn record_payment_execution(
     db: &mongodb::Database,
-    work_item_id: &WorkItemId,
-    expected_task_version: u64,
-    supplier_id: &SupplierAccountId,
-    allocations: &[PendingPaymentAllocation],
+    command: PaymentExecutionCommand<'_>,
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let (mut task, account) =
-        authorize_payment_execution(db, work_item_id, expected_task_version, None, actor, executor).await?;
-    if &account.supplier_id != supplier_id {
+    let merge = load_authorized_merge_set(
+        db,
+        command.work_item_id,
+        command.expected_task_version,
+        command.additional_tasks,
+        actor,
+        executor,
+    )
+    .await?;
+    if merge.supplier_id() != command.supplier_id.as_ref() {
         return Err(Error::BusinessLogicError(
             "付款供应商与当前任务的应付子账不一致".to_string(),
         ));
     }
-    let account_entries = db
-        .payable_entries()
-        .find_entries_by_account(&PayableAccountId::new(account.base.id.as_str()), executor)
-        .await?;
-    let entry_ids: std::collections::HashSet<&str> = account_entries
-        .iter()
-        .map(|entry| entry.base.id.as_str())
-        .collect();
-    if allocations
-        .iter()
-        .any(|line| !entry_ids.contains(line.payable_entry_id.as_ref()))
-    {
-        return Err(Error::BusinessLogicError(
-            "一次付款只能核销当前任务绑定应付子账中的分录".to_string(),
-        ));
+    ensure_allocations_match_merge_set(db, &merge, command.allocations, executor).await?;
+    record_merge_set_activity(db, &merge, actor, executor).await
+}
+
+/// 授权当前任务与附加任务并构造合并集合。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `work_item_id` - 当前付款执行任务
+/// * `expected_task_version` - 当前任务版本
+/// * `additional_tasks` - 附加任务身份与版本
+/// * `actor` - 当前出纳
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回已通过身份校验的合并集合。
+///
+/// # 错误
+/// 任一任务未授权、版本冲突或成员集合不合法时失败关闭。
+async fn load_authorized_merge_set(
+    db: &mongodb::Database,
+    work_item_id: &WorkItemId,
+    expected_task_version: u64,
+    additional_tasks: &[(WorkItemId, u64)],
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<PaymentExecutionMergeSet> {
+    let mut members = Vec::with_capacity(additional_tasks.len() + 1);
+    let (_, account) =
+        authorize_payment_execution(db, work_item_id, expected_task_version, None, actor, executor).await?;
+    members.push(merge_member(work_item_id, &account));
+    for (task_id, task_version) in additional_tasks {
+        let (_, account) =
+            authorize_payment_execution(db, task_id, *task_version, None, actor, executor).await?;
+        members.push(merge_member(task_id, &account));
     }
-    task.record_activity(actor.id(), Instant::now())
-        .map_err(Error::Logic)?;
-    db.work_items().update(&mut task, executor).await?;
+    PaymentExecutionMergeSet::try_new(members).map_err(|error| Error::BusinessLogicError(error.to_string()))
+}
+
+/// 由已授权应付构造合并成员事实。
+///
+/// # 参数
+/// * `work_item_id` - 付款执行任务
+/// * `account` - 任务绑定的应付子账
+///
+/// # 返回
+/// 返回供应商与应付身份已冻结的成员。
+///
+/// # 错误
+/// 无。
+fn merge_member(work_item_id: &WorkItemId, account: &PayableAccount) -> PaymentExecutionMergeMember {
+    PaymentExecutionMergeMember {
+        work_item_id: work_item_id.clone(),
+        payable_account_id: account.base.id.clone(),
+        supplier_id: account.supplier_id.to_string(),
+    }
+}
+
+/// 校验核销分录全部属于已勾选任务，且每条任务都有分配。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `merge` - 已授权合并集合
+/// * `allocations` - 待过账核销行
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 核销范围合法时返回成功。
+///
+/// # 错误
+/// 分录不存在或不属于已勾选应付时失败关闭。
+async fn ensure_allocations_match_merge_set(
+    db: &mongodb::Database,
+    merge: &PaymentExecutionMergeSet,
+    allocations: &[PendingPaymentAllocation],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let account_ids: Vec<PayableAccountId> = merge
+        .payable_account_ids()
+        .into_iter()
+        .map(PayableAccountId::new)
+        .collect();
+    let entries = db
+        .payable_entries()
+        .find_entries_by_accounts(&account_ids, executor)
+        .await?;
+    let account_by_entry: std::collections::HashMap<&str, &str> = entries
+        .iter()
+        .map(|entry| (entry.base.id.as_str(), entry.payable_account_id.as_ref()))
+        .collect();
+    let mut allocation_accounts = Vec::with_capacity(allocations.len());
+    for line in allocations {
+        let account_id = account_by_entry
+            .get(line.payable_entry_id.as_ref())
+            .ok_or_else(|| {
+                Error::BusinessLogicError(if merge.is_merged() {
+                    "一次付款只能核销已勾选付款任务对应应付中的分录".to_string()
+                } else {
+                    "一次付款只能核销当前任务绑定应付子账中的分录".to_string()
+                })
+            })?;
+        allocation_accounts.push((*account_id).to_string());
+    }
+    merge
+        .ensure_allocations_in_scope(&allocation_accounts)
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))
+}
+
+/// 为合并集合内全部开放任务记录本次付款活动。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `merge` - 已授权合并集合
+/// * `actor` - 当前出纳
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 全部任务活动写入成功时返回成功。
+///
+/// # 错误
+/// 任务读取、活动规则或仓储更新失败时返回错误。
+async fn record_merge_set_activity(
+    db: &mongodb::Database,
+    merge: &PaymentExecutionMergeSet,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let occurred_at = Instant::now();
+    for member in merge.members() {
+        let mut task = db
+            .work_items()
+            .find_by_id(&member.work_item_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
+        task.record_activity(actor.id(), occurred_at)
+            .map_err(Error::Logic)?;
+        db.work_items().update(&mut task, executor).await?;
+    }
     Ok(())
 }
 
@@ -433,6 +583,7 @@ mod tests {
             "matches_supplier_payment_identity",
             "supplier_payment_impact_summary",
             "is_purchase_payable",
+            "PaymentExecutionMergeSet::try_new",
         ] {
             assert!(production.contains(rule), "缺少领域规则 {rule}");
         }

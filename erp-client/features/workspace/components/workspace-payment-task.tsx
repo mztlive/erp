@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { usePathname, useSearchParams } from "next/navigation"
-import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
+import { ArrowUpRightIcon, CombineIcon, FileTextIcon } from "lucide-react"
 
 import {
     MoneyValue,
@@ -20,10 +20,12 @@ import {
 } from "@/components/ui/tooltip"
 import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { cents } from "@/features/supplier-payables/lib/allocation-model"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
 import {
     supplierPayablesKeys,
     usePayableDetailQuery,
+    usePaymentMergeCandidatesQuery,
 } from "@/features/supplier-payables/hooks/queries"
 import { useAllocationSession } from "@/features/supplier-payables/hooks/use-allocation-session"
 import type {
@@ -45,9 +47,14 @@ import {
     workspacePaymentMatchesPayable,
 } from "../lib/workspace-payment"
 import {
+    additionalPaymentWorkItems,
+    type PaymentMergeSelectionItem,
+} from "../lib/workspace-payment-merge"
+import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
 } from "./workspace-document-paper-dialog"
+import { WorkspacePaymentMergeDialog } from "./workspace-payment-merge-dialog"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspacePaymentTaskProps = Readonly<{
@@ -75,28 +82,58 @@ export function WorkspacePaymentTask({
     const searchParams = useSearchParams()
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
     const [paper, setPaper] = React.useState<WorkspacePaperTarget | null>(null)
+    const [mergeOpen, setMergeOpen] = React.useState(false)
+    const [mergeSelection, setMergeSelection] = React.useState<
+        readonly PaymentMergeSelectionItem[]
+    >([])
+    React.useEffect(() => {
+        setMergeSelection([])
+        setMergeOpen(false)
+    }, [item.workItemId])
+    const mergeQuery = usePaymentMergeCandidatesQuery(
+        executionAuthorized ? item.workItemId : null,
+    )
+    const mergeItems = mergeQuery.data?.items ?? []
+    const canMerge = executionAuthorized && mergeItems.length >= 2
     const purchaseOrderId = descriptor?.purchaseOrderId
     const purchaseOrderHref = purchaseOrderId
         ? purchaseOrderOpenHref(purchaseOrderId, returnTo)
         : undefined
     const purchaseOrderNo = payable?.sourceDocumentNo
     const readPurchaseLabel = workspaceReadActionLabel("purchase_order")
+    const headerOpenTotal =
+        payable && mergeSelection.length > 0
+            ? sumFixed(
+                  [
+                      payable.openTotal,
+                      ...mergeSelection.map((task) => task.openTotal),
+                  ],
+                  { maxScale: 2, outputScale: 2 },
+              )
+            : payable?.openTotal
 
     return (
         <WorkspaceTaskPane
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
-                    title={`向${payable?.supplierName ?? item.counterpartyName ?? "供应商"}付款`}
+                    title={
+                        mergeSelection.length > 0
+                            ? `向${payable?.supplierName ?? item.counterpartyName ?? "供应商"}合并付款`
+                            : `向${payable?.supplierName ?? item.counterpartyName ?? "供应商"}付款`
+                    }
                     subtitle={
                         payable ? (
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                                 <span>
                                     待付{" "}
                                     <MoneyValue
-                                        value={payable.openTotal}
+                                        value={headerOpenTotal}
                                         taxBasis="gross"
                                     />
+                                    {mergeSelection.length > 0
+                                        ? ` · ${mergeSelection.length + 1} 笔`
+                                        : null}
                                 </span>
                                 <span className="inline-flex min-w-0 items-center gap-1">
                                     <span>采购单</span>
@@ -139,7 +176,23 @@ export function WorkspacePaymentTask({
                             </div>
                         ) : undefined
                     }
-                />
+                >
+                    {canMerge ? (
+                        <Button
+                            id={`workspace-payment-merge-${toAutomationIdSegment(item.workItemId)}`}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            data-testid={`work-item-merge-payment-${item.workItemId}`}
+                            onClick={() => setMergeOpen(true)}
+                        >
+                            <CombineIcon aria-hidden="true" />
+                            {mergeSelection.length > 0
+                                ? `调整合并（${mergeSelection.length + 1} 笔）`
+                                : "一键合并付款"}
+                        </Button>
+                    ) : null}
+                </WorkspaceTaskIdentityHeader>
             }
             aria-label="当前付款任务"
         >
@@ -206,16 +259,35 @@ export function WorkspacePaymentTask({
                 </Alert>
             ) : (
                 <WorkspacePaymentSession
-                    key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}`}
+                    key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}:${mergeSelection.map((task) => task.payableAccountId).join(",")}`}
                     item={item}
                     supplierId={payable.supplierId}
                     purchaseOrderId={descriptor.purchaseOrderId}
                     payableAccountId={payable.payableAccountId}
                     openTotal={payable.openTotal}
                     paymentRecipient={payable.paymentRecipient}
+                    additionalPaymentTasks={mergeSelection}
                     onTaskCompleted={onTaskCompleted}
                 />
             )}
+            <WorkspacePaymentMergeDialog
+                open={mergeOpen}
+                items={mergeItems}
+                supplierName={
+                    payable?.supplierName ?? item.counterpartyName ?? undefined
+                }
+                onOpenChange={setMergeOpen}
+                onConfirm={(selectedPayableIds) => {
+                    setMergeSelection(
+                        additionalPaymentWorkItems(
+                            selectedPayableIds,
+                            item.businessObjectId,
+                            mergeItems,
+                        ),
+                    )
+                    setMergeOpen(false)
+                }}
+            />
             <WorkspaceDocumentPaperDialog
                 target={paper}
                 open={Boolean(paper)}
@@ -235,6 +307,7 @@ function WorkspacePaymentSession({
     payableAccountId,
     openTotal,
     paymentRecipient,
+    additionalPaymentTasks,
     onTaskCompleted,
 }: {
     item: WorkspaceWorkItem
@@ -243,6 +316,7 @@ function WorkspacePaymentSession({
     payableAccountId: string
     openTotal: string
     paymentRecipient: PaymentRecipient
+    additionalPaymentTasks: readonly PaymentMergeSelectionItem[]
     onTaskCompleted?: (workItemId: string) => void
 }) {
     const queryClient = useQueryClient()
@@ -260,6 +334,11 @@ function WorkspacePaymentSession({
             paymentWorkItemId: item.workItemId,
             expectedPaymentTaskVersion: item.taskVersion,
             paymentPayableAccountId: item.businessObjectId,
+            additionalPaymentTasks: additionalPaymentTasks.map((task) => ({
+                workItemId: task.workItemId,
+                expectedTaskVersion: task.taskVersion,
+                payableAccountId: task.payableAccountId,
+            })),
             paymentRecipientBankAccountId: paymentRecipient.bankAccountId,
             paymentRecipientBankAccountVersion: paymentRecipient.version,
         },
@@ -268,9 +347,17 @@ function WorkspacePaymentSession({
             onDraftSessionIdChange: setDraftSessionId,
             onCompleted: (result) => {
                 announcePaymentSucceeded(result)
+                const currentPaid =
+                    result.targetAllocations?.find(
+                        (line) =>
+                            line.payableAccountId === item.businessObjectId,
+                    )?.amount ??
+                    (additionalPaymentTasks.length === 0
+                        ? result.allocatedTotal
+                        : "0")
                 if (
                     onTaskCompleted &&
-                    cents(result.allocatedTotal ?? "0") >= cents(openTotal)
+                    cents(currentPaid ?? "0") >= cents(openTotal)
                 ) {
                     onTaskCompleted(item.workItemId)
                     return

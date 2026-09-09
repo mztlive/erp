@@ -381,6 +381,18 @@ impl PaymentAllocationLineRequest {
     }
 }
 
+/// 合并付款中除当前任务外的一条付款执行任务身份。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PaymentExecutionTaskRef {
+    /// 开放付款执行任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
+}
+
 /// 供应商付款原子登记并过账请求。
 ///
 /// 服务端在一个事务内完成任务责任校验、收款账户冻结、付款、核销与审计。
@@ -393,6 +405,11 @@ pub struct CommitSupplierPaymentRequest {
     #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
     #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
     pub expected_task_version: String,
+    /// 与当前任务一并核销的其它开放付款执行任务；缺省表示只付当前任务。
+    #[serde(default)]
+    #[validate(length(max = 49, message = "一次合并付款最多包含 50 条任务"))]
+    #[validate(nested)]
+    pub additional_work_items: Vec<PaymentExecutionTaskRef>,
     /// 页面展示的当前默认收款账户；提交时不一致必须刷新重试。
     #[validate(custom(function = "non_blank", message = "收款账户不能为空"))]
     #[validate(length(max = 64, message = "收款账户标识不能超过 64 个字符"))]
@@ -914,6 +931,32 @@ mod tests {
             "idempotency_key": "k1"
         });
         assert!(serde_json::from_value::<CommitSupplierPaymentRequest>(missing_version).is_err());
+    }
+
+    /// 附加付款任务缺省为空，旧客户端不传字段时仍按单任务付款。
+    #[test]
+    fn payment_commit_defaults_additional_work_items_to_empty() {
+        use super::CommitSupplierPaymentRequest;
+
+        let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "3",
+            "expected_payee_bank_account_id": "bank-1",
+            "expected_payee_bank_account_version": 1,
+            "payment": {
+                "payment_no": "FK-1",
+                "supplier_id": "supplier-1",
+                "paid_at": 1,
+                "amount": "10.00",
+                "bank_reference": null,
+                "bank_receipt_asset_id": "asset-1"
+            },
+            "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10.00"}],
+            "idempotency_key": "k1"
+        }))
+        .expect("旧付款命令必须可反序列化");
+        assert!(request.additional_work_items.is_empty());
+        assert!(request.validate().is_ok());
     }
 
     #[test]

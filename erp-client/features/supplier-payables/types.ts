@@ -59,6 +59,29 @@ export type PaymentRecipient = Readonly<{
     accountNumberMasked: string
 }>
 
+/** 同一供应商下可纳入一次打款的付款执行任务。 */
+export type PaymentMergeCandidate = Readonly<{
+    workItemId: string
+    taskVersion: string
+    payableAccountId: string
+    subjectVersion: string
+    sourceDocumentId: string
+    sourceDocumentNo?: string
+    openTotal: string
+    dueDate?: string
+    isAnchor: boolean
+}>
+
+/** 当前付款任务的合并候选。 */
+export type PaymentMergeCandidatesView = Readonly<{
+    anchorWorkItemId: string
+    supplierId: string
+    supplierName?: string
+    paymentRecipient?: PaymentRecipient
+    openTotal: string
+    items: readonly PaymentMergeCandidate[]
+}>
+
 export type PayableRow = Readonly<{
     payableAccountId: string
     supplierId: string
@@ -362,6 +385,10 @@ type AllocationTargetInput = {
 export type PostPaymentInput = {
     workItemId: string
     expectedTaskVersion: string
+    additionalWorkItems?: readonly {
+        workItemId: string
+        expectedTaskVersion: string
+    }[]
     expectedPayeeBankAccountId: string
     expectedPayeeBankAccountVersion: number
     draftSessionId: string
@@ -423,6 +450,10 @@ export type FormalSubmitResult = {
     documentNo?: string
     unallocatedAmount?: string
     allocatedTotal?: string
+    targetAllocations?: readonly {
+        payableAccountId: string
+        amount: string
+    }[]
     paymentGateRefreshHint?: string
     returnTo?: string
     existingDocumentId?: string

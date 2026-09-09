@@ -28,6 +28,7 @@ use erp_finance::dto::payable::RegisterPurchaseInvoiceRequest;
 use erp_finance::dto::payable::RevealPaymentRecipientRequest;
 use erp_finance::dto::payable::SupplierPaymentListParams;
 use erp_finance::dto::payable::SupplierPaymentView;
+use erp_finance::dto::payment_merge::{PaymentMergeCandidatesParams, PaymentMergeCandidatesView};
 use erp_finance::service::payable::PayableService as PayableQueryService;
 use erp_processes::finance_posting::payable::PayableService;
 use erp_read_models::finance::payable::PayableReadService;
@@ -208,6 +209,34 @@ pub async fn supplier_payment_detail(
         .supplier_payment_detail(&id)
         .await?;
 
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商往来",
+    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
+    desc = "查询可合并的同供应商付款任务",
+    resource = "payable_account",
+    action = "detail"
+)]
+/// 查询当前付款任务可合并的同供应商开放任务。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `params` - 当前工作台打开的付款执行任务
+///
+/// # 返回
+/// 返回当前任务及同一供应商下可勾选的其它开放付款任务。
+pub async fn supplier_payment_merge_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<PaymentMergeCandidatesParams>,
+) -> Result<PaymentMergeCandidatesView> {
+    let view = PayableService::new(state.db())
+        .with_object_read(state.approval_object_read())
+        .payment_merge_candidates(params, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -429,6 +458,7 @@ mod tests {
         assert!(production.contains("commit_supplier_payment_with_assets"));
         assert!(production.contains("reveal_payment_recipient"));
         assert!(production.contains("supplier_payment_detail"));
+        assert!(production.contains("payment_merge_candidates"));
         assert!(!production.contains("submit_supplier_payment"));
         assert!(!production.contains("cancel_supplier_payment_approval"));
         assert!(!production.contains("reject_client_post"));

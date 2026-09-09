@@ -8,6 +8,7 @@ mod entity;
 mod finance_responsibility;
 mod finance_task;
 mod fulfillment_responsibility;
+mod payment_execution_merge;
 mod queue_context;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
@@ -31,4 +32,7 @@ pub use finance_task::{
     FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, RECEIVABLE_OBJECT_TYPE,
 };
 pub use fulfillment_responsibility::FulfillmentResponsibilityKey;
+pub use payment_execution_merge::{
+    PaymentExecutionMergeMember, PaymentExecutionMergeSet, MAX_PAYMENT_EXECUTION_MERGE,
+};
 pub use queue_context::{QueueContextField, QueueContextIdentity};

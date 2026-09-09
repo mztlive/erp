@@ -65,6 +65,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-payments/merge-candidates",
+            with_permission(
+                get(payable::supplier_payment_merge_candidates),
+                rbac,
+                payable::supplier_payment_merge_candidates_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-payments/{id}",
             with_permission(
                 get(payable::supplier_payment_detail),
@@ -119,6 +127,7 @@ mod tests {
             .next()
             .expect("生产路由必须存在");
         assert!(production.contains("/supplier-payments/commit"));
+        assert!(production.contains("/supplier-payments/merge-candidates"));
         assert!(production.contains("/payment-recipient/reveal"));
         assert!(production.contains("/supplier-payments/{id}/bank-receipt"));
         assert!(production.contains("multipart_route"));

@@ -45,6 +45,11 @@ export type AllocationSessionParams = {
     paymentWorkItemId?: string
     expectedPaymentTaskVersion?: string
     paymentPayableAccountId?: string
+    additionalPaymentTasks?: readonly {
+        workItemId: string
+        expectedTaskVersion: string
+        payableAccountId: string
+    }[]
     paymentRecipientBankAccountId?: string
     paymentRecipientBankAccountVersion?: number
 }
@@ -76,6 +81,7 @@ export function useAllocationSession(
         paymentWorkItemId,
         expectedPaymentTaskVersion,
         paymentPayableAccountId,
+        additionalPaymentTasks,
         paymentRecipientBankAccountId,
         paymentRecipientBankAccountVersion,
     }: AllocationSessionParams,
@@ -101,15 +107,24 @@ export function useAllocationSession(
 
     const session = sessionQuery.data
     const policy = session?.payablePriorityPolicy
+    const lockedPaymentAccountIds = React.useMemo(() => {
+        if (track !== "payment" || !paymentPayableAccountId) return null
+        return new Set([
+            paymentPayableAccountId,
+            ...(additionalPaymentTasks ?? []).map(
+                (task) => task.payableAccountId,
+            ),
+        ])
+    }, [additionalPaymentTasks, paymentPayableAccountId, track])
+    const mergedPayment = (additionalPaymentTasks?.length ?? 0) > 0
     const pool = React.useMemo(
         () =>
-            track === "payment" && paymentPayableAccountId
-                ? (session?.pool.filter(
-                      (item) =>
-                          item.payableAccountId === paymentPayableAccountId,
+            lockedPaymentAccountIds
+                ? (session?.pool.filter((item) =>
+                      lockedPaymentAccountIds.has(item.payableAccountId),
                   ) ?? [])
                 : (session?.pool ?? []),
-        [paymentPayableAccountId, session?.pool, track],
+        [lockedPaymentAccountIds, session?.pool],
     )
 
     const [amounts, setAmounts] = React.useState<Record<string, string>>({})
@@ -155,6 +170,7 @@ export function useAllocationSession(
     const preselectKey = [
         ...(session?.preselectedPayableAccountIds ?? []),
         paymentPayableAccountId ?? "",
+        ...(additionalPaymentTasks ?? []).map((task) => task.payableAccountId),
     ].join("|")
 
     // 订阅表单 store：记录金额/校验问题/提交按钮随输入实时更新
@@ -244,7 +260,7 @@ export function useAllocationSession(
         track === "payment" ? paymentValues.amount : invoiceValues.grossAmount
 
     const effectiveAmounts = React.useMemo(() => {
-        if (track !== "payment" || !paymentPayableAccountId) {
+        if (track !== "payment" || !paymentPayableAccountId || mergedPayment) {
             return amounts
         }
         return withLockedPaymentAmount(
@@ -252,7 +268,13 @@ export function useAllocationSession(
             paymentPayableAccountId,
             paymentValues.amount,
         )
-    }, [amounts, paymentPayableAccountId, paymentValues.amount, track])
+    }, [
+        amounts,
+        mergedPayment,
+        paymentPayableAccountId,
+        paymentValues.amount,
+        track,
+    ])
 
     const allocatedHint = React.useMemo(() => {
         let c = BigInt(0)
@@ -319,7 +341,16 @@ export function useAllocationSession(
     ) {
         if (
             track === "payment" &&
+            !mergedPayment &&
             payableAccountId !== paymentPayableAccountId
+        ) {
+            return
+        }
+        if (
+            track === "payment" &&
+            mergedPayment &&
+            payableAccountId === paymentPayableAccountId &&
+            !checked
         ) {
             return
         }
@@ -340,6 +371,24 @@ export function useAllocationSession(
 
     function toggleSelectAll() {
         const ids = pool.map((p) => p.payableAccountId)
+        if (track === "payment" && mergedPayment && paymentPayableAccountId) {
+            const others = ids.filter((id) => id !== paymentPayableAccountId)
+            const allOthersSelected =
+                others.length > 0 && others.every((id) => selected.has(id))
+            setSelected(
+                new Set(allOthersSelected ? [paymentPayableAccountId] : ids),
+            )
+            if (!allOthersSelected && session) {
+                setAmounts((m) => {
+                    const next = { ...m }
+                    for (const p of pool) {
+                        next[p.payableAccountId] = p.openTotal
+                    }
+                    return next
+                })
+            }
+            return
+        }
         const allSelected =
             ids.length > 0 && ids.every((id) => selected.has(id))
         setSelected(new Set(allSelected ? [] : ids))
@@ -439,6 +488,12 @@ export function useAllocationSession(
             const input: PostPaymentInput = {
                 workItemId: paymentWorkItemId!,
                 expectedTaskVersion: expectedPaymentTaskVersion!,
+                additionalWorkItems: (additionalPaymentTasks ?? [])
+                    .filter((task) => selected.has(task.payableAccountId))
+                    .map((task) => ({
+                        workItemId: task.workItemId,
+                        expectedTaskVersion: task.expectedTaskVersion,
+                    })),
                 expectedPayeeBankAccountId: paymentRecipientBankAccountId!,
                 expectedPayeeBankAccountVersion:
                     paymentRecipientBankAccountVersion!,

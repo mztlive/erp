@@ -2904,6 +2904,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/supplier-payments/merge-candidates",
+                description: "查询可合并的同供应商付款任务",
+                permission: {
+                    resource: "payable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/supplier-payments/{id}",
                 description: "查询供应商付款单详情",
                 permission: {

@@ -1,6 +1,6 @@
-use crate::entity::payable::{PayableAccount, PayableSourceType};
+use crate::entity::payable::{PayableAccount, PayableAccountStatus, PayableSourceType};
 use crate::repository::owned::PayableAccountRepository;
-use erp_core::ids::{PayableAccountId, PurchaseOrderId};
+use erp_core::ids::{PayableAccountId, PurchaseOrderId, SupplierAccountId};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
@@ -102,6 +102,41 @@ impl<'a> PayableAccountRepository<'a> {
             doc! {
                 "source_document_id": purchase_order_id.to_string(),
                 "source_type": PayableSourceType::PurchaseOrder.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 读取指定供应商尚未结清的采购应付子账。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 往来供应商
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回 `open` 或 `partially_settled` 且来源为采购单的子账；没有匹配时返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 约束
+    /// 只返回存储事实，不判断这些子账是否存在开放付款任务。
+    pub async fn find_unsettled_purchase_accounts_by_supplier(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>> {
+        self.find_many(
+            doc! {
+                "supplier_id": supplier_id.to_string(),
+                "source_type": PayableSourceType::PurchaseOrder.as_str(),
+                "status": {
+                    "$in": [
+                        PayableAccountStatus::Open.as_str(),
+                        PayableAccountStatus::PartiallySettled.as_str(),
+                    ]
+                },
             },
             executor,
         )
