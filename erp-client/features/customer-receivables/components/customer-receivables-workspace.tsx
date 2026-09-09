@@ -94,7 +94,7 @@ export function CustomerReceivablesWorkspace({
         React.useState<AllocationMode>("receipt")
     const [selectedPartyId, setSelectedPartyId] = React.useState("")
 
-    const { preview, openPreview, closePreview } =
+    const { preview, openPreview, closePreview, restoreRowFocus } =
         useCustomerReceivablesPreview({
             view: urlState.view,
             previewKind: urlState.previewKind,
@@ -275,7 +275,11 @@ export function CustomerReceivablesWorkspace({
                 from: urlState.from,
             })
             setPartyPickerOpen(false)
+            openPreview(null)
             urlState.patchUrl({
+                previewKind: null,
+                previewId: null,
+                focusId: null,
                 sessionId: session.draftSessionId,
                 counterpartyId: embedded ? null : partyId,
             })
@@ -316,61 +320,9 @@ export function CustomerReceivablesWorkspace({
         setPartyPickerOpen(true)
     }
 
-    const receivableColumns = React.useMemo(
-        () =>
-            createReceivableColumns({
-                onPreview: openPreview,
-                onStartSession: startSession,
-                canStartSession: canStartAssignedSession,
-                startSessionPending,
-                permissionReason: permissions.reason,
-            }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [
-            startSessionPending,
-            invoiceExecutionTask?.workItemId,
-            permissions.canRegisterInvoice,
-            permissions.canRegisterReceipt,
-            permissions.reason,
-        ],
-    )
-
-    const receiptColumns = React.useMemo(
-        () =>
-            createReceiptColumns({
-                onPreview: openPreview,
-                onStartSession: startSession,
-                canStartSession: canStartAssignedSession,
-                startSessionPending,
-                permissionReason: permissions.reason,
-            }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [
-            startSessionPending,
-            invoiceExecutionTask?.workItemId,
-            permissions.canRegisterInvoice,
-            permissions.canRegisterReceipt,
-            permissions.reason,
-        ],
-    )
-
-    const invoiceColumns = React.useMemo(
-        () =>
-            createInvoiceColumns({
-                onPreview: openPreview,
-                onStartSession: startSession,
-                canStartSession: canStartAssignedSession,
-                startSessionPending,
-                permissionReason: permissions.reason,
-            }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [
-            startSessionPending,
-            invoiceExecutionTask?.workItemId,
-            permissions.canRegisterInvoice,
-            permissions.reason,
-        ],
-    )
+    const receivableColumns = React.useMemo(createReceivableColumns, [])
+    const receiptColumns = React.useMemo(createReceiptColumns, [])
+    const invoiceColumns = React.useMemo(createInvoiceColumns, [])
 
     // 核销会话全屏
     if (urlState.sessionId) {
@@ -474,6 +426,8 @@ export function CustomerReceivablesWorkspace({
                 receivableColumns={receivableColumns}
                 receiptColumns={receiptColumns}
                 invoiceColumns={invoiceColumns}
+                preview={preview}
+                onPreview={openPreview}
             />
 
             <CustomerAccountDetailPreview
@@ -489,8 +443,10 @@ export function CustomerReceivablesWorkspace({
                 error={detailQuery.error}
                 onRetry={() => void detailQuery.refetch()}
                 onClose={closePreview}
+                onClosed={restoreRowFocus}
                 onStartSession={startSession}
-                canStartSession={permissions.canStartSession}
+                canStartSession={canStartAssignedSession}
+                invoiceSessionBlockedReason={invoiceTaskBlockedReason}
                 startSessionPending={startSessionPending}
                 canRequestReverse={permissions.canReverse}
                 canSubmitRefund={permissions.canSubmitRefund}

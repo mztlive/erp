@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
 import { QuickPreviewSheet } from "@/components/business"
 import { AuditEventBody } from "@/features/access-audit/components/audit-event-body"
 import { EffectiveAccessBody } from "@/features/access-audit/components/effective-access-body"
@@ -39,10 +40,20 @@ function AccessPreviewSheets({
                 onOpenChangeComplete={(open) => {
                     if (!open) restoreRowFocus()
                 }}
+                idPrefix="access-preview-effective-access"
+                footer={
+                    <Button
+                        id="access-preview-effective-access-dismiss"
+                        variant="outline"
+                        onClick={closeExplain}
+                    >
+                        关闭
+                    </Button>
+                }
                 title="有效权限解释"
                 description="此处展示的权限结果为系统统一计算，可能与页面其它位置显示略有差异。"
             >
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
                     <EffectiveAccessBody query={effectiveQuery} />
                 </div>
             </QuickPreviewSheet>
@@ -57,10 +68,20 @@ function AccessPreviewSheets({
                 onOpenChangeComplete={(open) => {
                     if (!open) restoreRowFocus()
                 }}
+                idPrefix="access-preview-audit-event"
+                footer={
+                    <Button
+                        id="access-preview-audit-event-dismiss"
+                        variant="outline"
+                        onClick={closeEvent}
+                    >
+                        关闭
+                    </Button>
+                }
                 title="审计事件详情"
                 description="追加式事件只读；不展示敏感旧值/新值或密钥。"
             >
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
                     <AuditEventBody query={eventQuery} />
                 </div>
             </QuickPreviewSheet>

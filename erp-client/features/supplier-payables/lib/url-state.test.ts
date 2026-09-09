@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { parseView, patchForViewChange } from "./url-state"
+import { parsePreviewKind, parseView, patchForViewChange } from "./url-state"
 
 describe("parseView", () => {
     test("识别四个工作视图", () => {
@@ -60,4 +60,10 @@ describe("patchForViewChange", () => {
             paymentGate: null,
         })
     })
+})
+
+test("预览 URL 识别进项发票与待核销记录", () => {
+    expect(parsePreviewKind("invoice")).toBe("invoice")
+    expect(parsePreviewKind("unallocated")).toBe("unallocated")
+    expect(parsePreviewKind("unknown")).toBe("payable")
 })

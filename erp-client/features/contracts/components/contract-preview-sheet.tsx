@@ -45,6 +45,7 @@ export function ContractPreviewSheet({
             open={row != null}
             onOpenChange={onOpenChange}
             size="detail"
+            contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
             title={row?.customer.displayName ?? "合同预览"}
             identity={
                 row ? (
@@ -74,7 +75,7 @@ export function ContractPreviewSheet({
                 row ? (
                     <>
                         <Button
-                            id="card-contracts-preview-sheet-close"
+                            id="card-contracts-preview-sheet-dismiss"
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}

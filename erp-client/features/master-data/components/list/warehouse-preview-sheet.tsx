@@ -38,6 +38,7 @@ export function WarehousePreviewSheet({
         : "preview"
     return (
         <QuickPreviewSheet
+            idPrefix="master-data-warehouse-preview-sheet"
             open={previewRow != null}
             onOpenChange={(open) => {
                 if (!open) {
@@ -51,6 +52,7 @@ export function WarehousePreviewSheet({
                 }
             }}
             size="detail"
+            contentClassName="data-[side=right]:sm:w-preview data-[side=right]:sm:max-w-preview"
             title={previewRow?.name ?? "基础资料预览"}
             identity={
                 previewRow ? (

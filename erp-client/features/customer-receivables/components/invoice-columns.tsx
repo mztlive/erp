@@ -1,4 +1,3 @@
-import { LoaderCircleIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
@@ -7,24 +6,10 @@ import {
     taxAmountToneClass,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { ColumnActions } from "./column-types"
 
-/**
- * 销项发票列表列。操作仅预览与继续分配，不含审批流程选择或审批动作。
- *
- * @param onPreview 打开发票预览。
- * @param onStartSession 继续分配已登记发票。
- */
-export function createInvoiceColumns({
-    onPreview,
-    onStartSession,
-    canStartSession = () => true,
-    startSessionPending = false,
-    permissionReason,
-}: ColumnActions): ColumnDef<SalesInvoiceRow>[] {
+/** 销项发票列表只展示事实，操作由行预览 Sheet 承载。 */
+export function createInvoiceColumns(): ColumnDef<SalesInvoiceRow>[] {
     return [
         {
             id: "doc",
@@ -114,64 +99,6 @@ export function createInvoiceColumns({
                     label={row.original.statusLabel}
                     tone={row.original.statusTone}
                 />
-            ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default" },
-            cell: ({ row }) => (
-                <div className="flex flex-wrap justify-end gap-1">
-                    <Button
-                        id={`customer-receivables-invoice-row-${toAutomationIdSegment(row.original.invoiceId)}-preview`}
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                            onPreview({
-                                kind: "invoice",
-                                id: row.original.invoiceId,
-                            })
-                        }
-                    >
-                        预览
-                    </Button>
-                    {row.original.allowedActions.includes(
-                        "CONTINUE_ALLOCATE",
-                    ) ? (
-                        <Button
-                            id={`customer-receivables-invoice-row-${toAutomationIdSegment(row.original.invoiceId)}-continue-allocate`}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                                startSessionPending ||
-                                !canStartSession("invoice")
-                            }
-                            title={
-                                canStartSession("invoice")
-                                    ? undefined
-                                    : permissionReason
-                            }
-                            onClick={() =>
-                                void onStartSession(
-                                    "invoice",
-                                    row.original.counterpartyPartyId,
-                                    row.original.invoiceId,
-                                )
-                            }
-                        >
-                            {startSessionPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
-                            {startSessionPending ? "创建中…" : "继续分配"}
-                        </Button>
-                    ) : null}
-                </div>
             ),
         },
     ]

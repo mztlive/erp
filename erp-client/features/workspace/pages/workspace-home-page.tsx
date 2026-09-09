@@ -458,7 +458,7 @@ export function WorkspaceHomeView({
                     side="right"
                     size="detail"
                     closeButtonId="workspace-detail-sheet-close"
-                    className="w-full p-0 sm:max-w-lg [&_[data-slot=workspace-task-header]]:pr-14"
+                    className="w-full p-0 sm:max-w-lg [&_[data-slot=workspace-task-header]]:px-7 [&_[data-slot=workspace-task-header]]:pt-10 [&_[data-slot=workspace-task-header]]:pr-14 [&_[data-slot=workspace-task-header]_h2]:leading-8 [&_[data-slot=workspace-task-footer]]:px-7 [&_[data-slot=workspace-task-footer]]:py-4"
                 >
                     <SheetTitle className="sr-only">
                         {selected?.objectTitle ?? "任务详情"}

@@ -6,7 +6,6 @@ import Link from "next/link"
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import type {
     ContractCenterView,
     ContractListRow,
@@ -40,12 +39,15 @@ export function ContractPreviewPanel({
         <ScrollArea className="min-h-0 flex-1">
             <div
                 data-slot="contract-detail-preview"
-                className="flex flex-col gap-5 p-4 md:p-5"
+                className="flex flex-col gap-6 px-7 py-6"
             >
-                <section className="space-y-3" aria-label="基本信息">
+                <section
+                    className="space-y-3 border-b border-border pb-6 last:border-b-0 last:pb-0"
+                    aria-label="基本信息"
+                >
                     <SectionTitle>基本信息</SectionTitle>
-                    <div className="rounded-xl border border-border bg-card p-3">
-                        <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-2 text-sm">
+                    <div>
+                        <dl className="grid grid-cols-[6.5rem_1fr] gap-x-5 gap-y-3 text-sm">
                             <Fact
                                 label="客户"
                                 value={row.customer.displayName}
@@ -86,15 +88,18 @@ export function ContractPreviewPanel({
                     </div>
                 </section>
 
-                <section className="space-y-3" aria-label="结算与开票">
+                <section
+                    className="space-y-3 border-b border-border pb-6 last:border-b-0 last:pb-0"
+                    aria-label="结算与开票"
+                >
                     <SectionTitle>结算与开票</SectionTitle>
-                    <div className="rounded-xl border border-border bg-card p-3">
+                    <div>
                         {detailLoading && !detail ? (
                             <p className="text-sm text-muted-foreground">
                                 加载条款摘要…
                             </p>
                         ) : (
-                            <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-2 text-sm">
+                            <dl className="grid grid-cols-[6.5rem_1fr] gap-x-5 gap-y-3 text-sm">
                                 <Fact
                                     label="结算主体"
                                     value={
@@ -132,7 +137,10 @@ export function ContractPreviewPanel({
                     </div>
                 </section>
 
-                <section className="space-y-3" aria-label="附件">
+                <section
+                    className="space-y-3 border-b border-border pb-6 last:border-b-0 last:pb-0"
+                    aria-label="附件"
+                >
                     <div className="flex items-center justify-between gap-2">
                         <SectionTitle>附件</SectionTitle>
                         <span className="text-xs text-muted-foreground">
@@ -144,7 +152,7 @@ export function ContractPreviewPanel({
                             {rev ? ` · 版本 v${rev.revisionNo}` : null}
                         </span>
                     </div>
-                    <div className="rounded-xl border border-border bg-card p-3">
+                    <div>
                         {detailLoading && !detail ? (
                             <p className="text-sm text-muted-foreground">
                                 附件加载中…
@@ -195,9 +203,10 @@ export function ContractPreviewPanel({
                     </div>
                 </section>
 
-                <Separator />
-
-                <section className="space-y-3" aria-label="关联销售单">
+                <section
+                    className="space-y-3 border-b border-border pb-6 last:border-b-0 last:pb-0"
+                    aria-label="关联销售单"
+                >
                     <div className="flex items-center justify-between gap-2">
                         <SectionTitle>关联销售单</SectionTitle>
                         <span className="text-xs text-muted-foreground">
@@ -205,7 +214,7 @@ export function ContractPreviewPanel({
                             {row.activeSalesOrderCount}
                         </span>
                     </div>
-                    <div className="rounded-xl border border-border bg-card p-3">
+                    <div>
                         {detailLoading && !detail ? (
                             <p className="text-sm text-muted-foreground">
                                 加载关联单据…
@@ -289,11 +298,7 @@ export function ContractPreviewPanel({
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-    return (
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {children}
-        </h3>
-    )
+    return <h3 className="text-sm font-medium text-foreground">{children}</h3>
 }
 
 function Fact({
@@ -307,8 +312,13 @@ function Fact({
 }) {
     return (
         <>
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className={cn(numeric && "num", "min-w-0 break-words")}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd
+                className={cn(
+                    numeric && "num",
+                    "min-w-0 break-words text-right text-[13px]",
+                )}
+            >
                 {value}
             </dd>
         </>

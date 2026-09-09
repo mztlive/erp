@@ -499,16 +499,11 @@ function QuickPreviewSheet({
                 overlayClassName={overlayClassName}
                 closeButtonId={closeButtonId}
             >
-                <SheetHeader
-                    className={cn(
-                        "shrink-0 border-b border-border",
-                        isDetail && "space-y-2 py-4",
-                    )}
-                >
+                <SheetHeader className="border-b border-border">
                     {identity ? (
                         <div
                             data-slot="quick-preview-identity"
-                            className="text-sm text-muted-foreground"
+                            className="text-xs text-muted-foreground"
                         >
                             {identity}
                         </div>
@@ -535,7 +530,7 @@ function QuickPreviewSheet({
                     <ScrollArea className="min-h-0 flex-1">
                         <div
                             data-slot="quick-preview-content"
-                            className="space-y-5 p-6"
+                            className="space-y-6 px-7 py-6"
                         >
                             {children}
                         </div>
@@ -543,13 +538,7 @@ function QuickPreviewSheet({
                 )}
 
                 {footer ? (
-                    <SheetFooter
-                        className={cn(
-                            "shrink-0 border-t border-border",
-                            isDetail &&
-                                "flex-row flex-wrap justify-end gap-2 py-3",
-                        )}
-                    >
+                    <SheetFooter className="border-t border-border">
                         {footer}
                     </SheetFooter>
                 ) : null}

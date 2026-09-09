@@ -33,7 +33,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
         <SheetPrimitive.Backdrop
             data-slot="sheet-overlay"
             className={cn(
-                "fixed inset-0 z-50 bg-overlay transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0",
+                "fixed inset-0 z-50 bg-black/20 supports-backdrop-filter:backdrop-blur-none transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0",
                 className,
             )}
             {...props}
@@ -101,7 +101,10 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
     return (
         <div
             data-slot="sheet-header"
-            className={cn("flex flex-col gap-1.5 p-6", className)}
+            className={cn(
+                "flex shrink-0 flex-col gap-3 px-7 pt-10 pb-6",
+                className,
+            )}
             {...props}
         />
     )
@@ -111,7 +114,10 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
     return (
         <div
             data-slot="sheet-footer"
-            className={cn("mt-auto flex flex-col gap-2 p-6", className)}
+            className={cn(
+                "mt-auto flex shrink-0 flex-row flex-wrap items-center justify-end gap-2 px-7 py-4",
+                className,
+            )}
             {...props}
         />
     )
@@ -122,7 +128,7 @@ function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
         <SheetPrimitive.Title
             data-slot="sheet-title"
             className={cn(
-                "font-heading text-base font-medium text-foreground",
+                "font-heading text-xl leading-8 font-semibold break-words text-foreground",
                 className,
             )}
             {...props}
@@ -137,7 +143,10 @@ function SheetDescription({
     return (
         <SheetPrimitive.Description
             data-slot="sheet-description"
-            className={cn("text-sm text-muted-foreground", className)}
+            className={cn(
+                "text-sm leading-6 break-words text-muted-foreground",
+                className,
+            )}
             {...props}
         />
     )

@@ -53,7 +53,7 @@ function InventoryBalancePreview({
             title={detail ? `${detail.balance.skuName}` : "余额详情"}
             identity={
                 detail ? (
-                    <span className="num text-sm">
+                    <span className="num text-xs">
                         {detail.balance.warehouseCode} ·{" "}
                         {detail.balance.skuCode}
                     </span>
@@ -126,8 +126,8 @@ function InventoryBalancePreview({
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : detail ? (
-                <div className="flex flex-col gap-4">
-                    <div className="grid grid-cols-3 gap-2 rounded-xl border bg-card p-3">
+                <div className="flex flex-col gap-6">
+                    <div className="grid grid-cols-3 gap-4 border-b border-border pb-6">
                         <div>
                             <div className="text-xs text-muted-foreground">
                                 账面现存
@@ -166,7 +166,7 @@ function InventoryBalancePreview({
                         </div>
                     </div>
 
-                    <section className="space-y-2">
+                    <section className="space-y-3">
                         <h3 className="text-sm font-medium">最近流水</h3>
                         {detail.recentMovements.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
@@ -177,7 +177,7 @@ function InventoryBalancePreview({
                                 {detail.recentMovements.map((m) => (
                                     <li
                                         key={m.movementId}
-                                        className="rounded-lg border px-3 py-2 text-sm"
+                                        className="border-b border-border py-3 text-sm last:border-b-0"
                                     >
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
@@ -229,7 +229,7 @@ function InventoryBalancePreview({
 
                     <Separator />
 
-                    <section className="space-y-2">
+                    <section className="space-y-3">
                         <h3 className="text-sm font-medium">来源单据</h3>
                         {detail.sourceDocuments.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
@@ -273,7 +273,7 @@ function InventoryBalancePreview({
 
                     <Separator />
 
-                    <section className="space-y-2">
+                    <section className="space-y-3">
                         <h3 className="text-sm font-medium">有效预占</h3>
                         {detail.reservations.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
@@ -284,7 +284,7 @@ function InventoryBalancePreview({
                                 {detail.reservations.map((r) => (
                                     <li
                                         key={r.reservationId}
-                                        className="rounded-lg border px-3 py-2 text-sm"
+                                        className="border-b border-border py-3 text-sm last:border-b-0"
                                     >
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
@@ -339,7 +339,7 @@ function InventoryBalancePreview({
                     {detail.pendingAdjustments.length > 0 ? (
                         <>
                             <Separator />
-                            <section className="space-y-2">
+                            <section className="space-y-3">
                                 <h3 className="text-sm font-medium">
                                     进行中的调整
                                 </h3>

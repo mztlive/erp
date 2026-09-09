@@ -70,6 +70,11 @@ export function paymentPreviewHref(paymentId: string): string {
     return `/finance/supplier-accounts?${params.toString()}`
 }
 
+/** 进项发票原单预览地址，按发票主键读取，不依赖当前列表页。 */
+export function invoicePreviewHref(invoiceId: string): string {
+    return `/finance/supplier-accounts?${new URLSearchParams({ view: "purchase_invoice", detailId: invoiceId, previewKind: "invoice" })}`
+}
+
 /**
  * 供应商付款冲正预览地址。
  *

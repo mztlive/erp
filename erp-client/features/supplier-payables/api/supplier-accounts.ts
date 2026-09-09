@@ -43,7 +43,10 @@ import {
     SOURCE_TYPE_LABEL,
 } from "@/features/supplier-payables/types"
 import { fetchPartyOption } from "@/features/entity-selectors/api/parties"
-import { fetchSupplierOption, fetchSupplierPartyId } from "@/features/entity-selectors/api/suppliers"
+import {
+    fetchSupplierOption,
+    fetchSupplierPartyId,
+} from "@/features/entity-selectors/api/suppliers"
 import {
     businessLabelOrPlaceholder,
     MISSING_SUPPLIER_NAME,
@@ -230,6 +233,19 @@ export async function fetchSupplierAccounts(
         },
         allowFullBankReveal: false,
     }
+}
+
+/** 按主键读取进项原票，避免红票跳转受当前分页或筛选限制。 */
+export async function fetchSupplierInvoice(
+    invoiceId: string,
+): Promise<PurchaseInvoiceRow> {
+    const seed = await apiGet<BackendInvoice>(
+        `/admin/invoices/${encodeURIComponent(invoiceId)}`,
+    )
+    if (seed.invoice_direction !== "purchase")
+        throw new Error("该单据不是进项发票")
+    const [invoice] = await hydrateInvoicePartyNames([projectInvoice(seed)])
+    return invoice!
 }
 
 export async function fetchPayableDetail(

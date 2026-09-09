@@ -6,7 +6,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
     parsePreviewKind,
     parseWorkItemId,
-    patchForViewChange,
 } from "@/features/supplier-payables/lib/url-state"
 import type {
     AllocationTrack,
@@ -49,6 +48,27 @@ export function useSupplierAccountsNavigation({
         previewKind === "refund" && detailId ? detailId : null
     const previewReversalId =
         previewKind === "reversal" && detailId ? detailId : null
+
+    const previewInvoiceId =
+        previewKind === "invoice" && detailId ? detailId : null
+    const previewUnallocatedId =
+        previewKind === "unallocated" && detailId ? detailId : null
+    const lastFocusedRow = React.useRef<HTMLElement | null>(null)
+    const rememberRow = React.useCallback((id: string) => {
+        const row = document.querySelector<HTMLElement>(
+            `[data-row-id="${CSS.escape(id)}"]`,
+        )
+        if (row) lastFocusedRow.current = row
+    }, [])
+    const restoreRowFocus = React.useCallback(() => {
+        if (lastFocusedRow.current?.isConnected) lastFocusedRow.current.focus()
+    }, [])
+
+    const previousDetailId = React.useRef(detailId)
+    React.useEffect(() => {
+        if (previousDetailId.current && !detailId) restoreRowFocus()
+        previousDetailId.current = detailId
+    }, [detailId, restoreRowFocus])
 
     const [session, setSession] = React.useState<SessionState | null>(null)
     const [lastResult, setLastResult] =
@@ -130,6 +150,7 @@ export function useSupplierAccountsNavigation({
                     draftSessionId: next.draftSessionId ?? null,
                     invoiceId: next.existingInvoiceId ?? null,
                     detailId: null,
+                    previewKind: null,
                 },
                 { replace: true },
             )
@@ -164,6 +185,7 @@ export function useSupplierAccountsNavigation({
 
     const openPreview = React.useCallback(
         (payableAccountId: string) => {
+            rememberRow(payableAccountId)
             patchUrl(
                 {
                     detailId: payableAccountId,
@@ -172,38 +194,60 @@ export function useSupplierAccountsNavigation({
                 { replace: true },
             )
         },
-        [patchUrl],
+        [patchUrl, rememberRow],
     )
     const openPaymentPreview = React.useCallback(
         (paymentId: string) => {
+            rememberRow(paymentId)
             patchUrl(
                 {
-                    ...patchForViewChange("payment"),
                     detailId: paymentId,
                     previewKind: "payment",
                 },
                 { replace: true },
             )
         },
-        [patchUrl],
+        [patchUrl, rememberRow],
     )
     const openRefundPreview = React.useCallback(
         (refundId: string) => {
+            rememberRow(refundId)
             patchUrl(
                 { detailId: refundId, previewKind: "refund" },
                 { replace: true },
             )
         },
-        [patchUrl],
+        [patchUrl, rememberRow],
     )
     const openReversalPreview = React.useCallback(
         (reversalId: string) => {
+            rememberRow(reversalId)
             patchUrl(
                 { detailId: reversalId, previewKind: "reversal" },
                 { replace: true },
             )
         },
-        [patchUrl],
+        [patchUrl, rememberRow],
+    )
+    const openInvoicePreview = React.useCallback(
+        (id: string) => {
+            rememberRow(id)
+            patchUrl(
+                { detailId: id, previewKind: "invoice" },
+                { replace: true },
+            )
+        },
+        [patchUrl, rememberRow],
+    )
+    const openUnallocatedPreview = React.useCallback(
+        (id: string) => {
+            rememberRow(id)
+            patchUrl(
+                { detailId: id, previewKind: "unallocated" },
+                { replace: true },
+            )
+        },
+        [patchUrl, rememberRow],
     )
     const closePreview = React.useCallback(() => {
         patchUrl({ detailId: null, previewKind: null }, { replace: true })
@@ -225,6 +269,12 @@ export function useSupplierAccountsNavigation({
         previewPaymentId,
         previewRefundId,
         previewReversalId,
+        previewInvoiceId,
+        previewUnallocatedId,
+        previewRowId: detailId ?? null,
+        restoreRowFocus,
+        openInvoicePreview,
+        openUnallocatedPreview,
         workItemId,
         openPreview,
         openPaymentPreview,

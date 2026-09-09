@@ -1,10 +1,13 @@
 "use client"
 
-import * as React from "react"
-
-import { MoneyValue, taxAmountToneClass } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+import { CustomerSourceDocuments } from "./customer-source-documents"
+import { MoneyValue } from "@/components/business"
+import {
+    PreviewAmount,
+    PreviewSection,
+    PreviewFact,
+    PreviewNote,
+} from "@/components/business/financial-preview"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { CustomerReceiptApprovalArea } from "@/features/customer-receivables/components/customer-receipt-approval-area"
 import { CustomerRefundApprovalArea } from "@/features/customer-receivables/components/customer-refund-approval-area"
@@ -13,6 +16,7 @@ import { customerReceiptApprovalPhase } from "@/features/customer-receivables/li
 import { customerRefundApprovalPhase } from "@/features/customer-receivables/lib/customer-refund-approval"
 import { receiptReversalApprovalPhase } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
+    AllocationLine,
     CustomerRefundRow,
     ReceiptReversalRow,
     ReceiptRow,
@@ -21,73 +25,90 @@ import type {
 } from "@/features/customer-receivables/types"
 import { formatDateTime } from "@/lib/datetime"
 
+const bodyClassName = "min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm"
+
+const receivableEntryLabels: Record<string, string> = {
+    original: "原始应收",
+    sales_change_delta: "销售变更差额",
+    void_reduction: "作废冲减",
+    refund: "退款",
+    reversal: "冲正",
+}
+
 export function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="往来主体" value={row.counterpartyPartyName} />
-                <Fact label="经营归属客户" value={row.customerName} />
-                <Fact label="销售单" value={row.salesOrderNo} mono />
-                <Fact label="业务性质" value={row.businessTypeLabel} />
-                <Fact
-                    label="应收总额"
-                    value={
-                        <MoneyValue value={row.grossTotal} taxBasis="gross" />
-                    }
-                />
-                <Fact
-                    label="开放应收"
-                    value={
-                        <MoneyValue value={row.openTotal} taxBasis="gross" />
-                    }
-                />
-                <Fact
-                    label="已核销回款"
-                    value={
-                        <MoneyValue value={row.settledTotal} taxBasis="gross" />
-                    }
-                />
-                <Fact
-                    label="净已开票"
-                    value={
-                        <MoneyValue
-                            value={row.invoicedTotal}
-                            taxBasis="gross"
-                        />
-                    }
-                />
-                <Fact label="到期日" value={row.dueDate} mono />
-            </div>
-            <p className="text-xs text-muted-foreground">
-                回款进度与开票进度独立；不可用开票状态推断结清。
-            </p>
-            <section>
-                <h4 className="mb-2 text-sm font-semibold">不可变分录</h4>
-                <ul className="space-y-2">
-                    {row.entries.map((entry) => (
-                        <li
-                            key={entry.entryId}
-                            className="rounded-xl border px-3 py-2 text-sm"
-                        >
-                            <div className="flex justify-between gap-2">
-                                <span>
-                                    {entry.entryType} ·{" "}
-                                    {entry.direction === "increase"
-                                        ? "增加"
-                                        : "减少"}
-                                </span>
-                                <MoneyValue
-                                    value={entry.amountGross}
-                                    taxBasis="gross"
-                                />
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                                {entry.sourceLabel} · 到期 {entry.dueDate}
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            </section>
+        <div className={bodyClassName}>
+            <PreviewAmount label="待收金额（含税）" value={row.openTotal}>
+                <span>
+                    应收总额 <MoneyValue value={row.grossTotal} />
+                </span>
+                <span>
+                    已核销回款 <MoneyValue value={row.settledTotal} />
+                </span>
+            </PreviewAmount>
+            <PreviewSection title="收款安排">
+                <dl className="space-y-3">
+                    <PreviewFact label="到期日">
+                        <span className="num">{row.dueDate}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                            {row.dueStateLabel}
+                        </span>
+                    </PreviewFact>
+                    {row.customerName !== row.counterpartyPartyName ? (
+                        <PreviewFact label="经营归属客户">
+                            {row.customerName}
+                        </PreviewFact>
+                    ) : null}
+                    <PreviewFact label="业务性质">
+                        {row.businessTypeLabel}
+                    </PreviewFact>
+                </dl>
+            </PreviewSection>
+            <PreviewSection title="开票进度">
+                <dl className="space-y-3">
+                    <PreviewFact label="待开票（含税）">
+                        <MoneyValue value={row.openInvoiceableTotal} />
+                    </PreviewFact>
+                    <PreviewFact label="净已开票（含税）">
+                        <MoneyValue value={row.invoicedTotal} />
+                    </PreviewFact>
+                </dl>
+                <PreviewNote>开票与回款独立，已开票不代表已收款。</PreviewNote>
+            </PreviewSection>
+            <PreviewSection title="应收构成">
+                {row.entries.length ? (
+                    <ul className="divide-y divide-border">
+                        {row.entries.map((entry) => (
+                            <li
+                                key={entry.entryId}
+                                className="py-3 first:pt-0 last:pb-0"
+                            >
+                                <div className="flex items-baseline justify-between gap-5">
+                                    <span>
+                                        {receivableEntryLabels[
+                                            entry.entryType
+                                        ] ?? "应收调整"}
+                                    </span>
+                                    <span className="shrink-0">
+                                        <span className="mr-1 text-muted-foreground">
+                                            {entry.direction === "increase"
+                                                ? "+"
+                                                : "−"}
+                                        </span>
+                                        <MoneyValue value={entry.amountGross} />
+                                    </span>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    {entry.sourceLabel} · 到期{" "}
+                                    <span className="num">{entry.dueDate}</span>
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <PreviewNote>暂无应收构成记录</PreviewNote>
+                )}
+            </PreviewSection>
         </div>
     )
 }
@@ -110,108 +131,68 @@ export function ReceiptDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            {posted ? (
-                <Alert variant="info">
-                    <AlertTitle>已过账记录只读</AlertTitle>
-                    <AlertDescription>
-                        已过账记录不可编辑、不可删除；纠错仅能追加退款/冲正。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            <CustomerReceiptApprovalArea
-                phase={customerReceiptApprovalPhase(
-                    row.approval,
-                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
-                )}
-                approval={row.approval}
-                documentId={row.receiptId}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={onDecisionApplied}
+        <div className={bodyClassName}>
+            <PreviewAmount label="待核销回款" value={row.unallocatedAmount}>
+                <span>
+                    到账金额 <MoneyValue value={row.amount} />
+                </span>
+                <span>
+                    已核销 <MoneyValue value={row.allocatedTotal} />
+                </span>
+            </PreviewAmount>
+            <PreviewSection title="到账信息">
+                <dl className="space-y-3">
+                    <PreviewFact label="到账时间">
+                        <span className="num">
+                            {formatDateTime(
+                                row.receivedAt,
+                                "full",
+                                "passthrough",
+                            )}
+                        </span>
+                    </PreviewFact>
+                    <PreviewFact label="银行引用">
+                        <span className="num">
+                            {row.bankReferenceMasked || "—"}
+                        </span>
+                    </PreviewFact>
+                    {row.customerName !== row.counterpartyPartyName ? (
+                        <PreviewFact label="经营归属客户">
+                            {row.customerName}
+                        </PreviewFact>
+                    ) : null}
+                </dl>
+            </PreviewSection>
+            <AllocationSection rows={row.allocations} />
+            <CustomerSourceDocuments
+                scope={{
+                    entryIds: row.allocations.map(
+                        (allocation) => allocation.targetId,
+                    ),
+                    counterpartyPartyId: row.counterpartyPartyId,
+                }}
             />
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="回款单号" value={row.receiptNo} mono />
-                <Fact label="往来主体" value={row.counterpartyPartyName} />
-                <Fact
-                    label="到账时间"
-                    value={formatDateTime(
-                        row.receivedAt,
-                        "full",
-                        "passthrough",
+            <PreviewSection title="审批记录">
+                <CustomerReceiptApprovalArea
+                    phase={customerReceiptApprovalPhase(
+                        row.approval,
+                        row.status === "in_approval"
+                            ? "IN_APPROVAL"
+                            : row.status,
                     )}
-                    mono
+                    approval={row.approval}
+                    documentId={row.receiptId}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
                 />
-                <Fact
-                    label="到账金额"
-                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
-                />
-                <Fact label="银行引用" value={row.bankReferenceMasked} mono />
-                <Fact
-                    label="净已分配"
-                    value={
-                        <MoneyValue
-                            value={row.allocatedTotal}
-                            taxBasis="gross"
-                        />
-                    }
-                />
-                <Fact
-                    label="未分配"
-                    value={
-                        <MoneyValue
-                            value={row.unallocatedAmount}
-                            taxBasis="gross"
-                        />
-                    }
-                />
-            </div>
-            <section>
-                <h4 className="mb-2 text-sm font-semibold">
-                    分配明细（新增不覆盖原金额）
-                </h4>
-                {row.allocations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">尚无分配行</p>
-                ) : (
-                    <ul className="space-y-2">
-                        {row.allocations.map((allocation) => (
-                            <li
-                                key={allocation.allocationId}
-                                className="rounded-xl border px-3 py-2 text-sm"
-                            >
-                                <div className="flex justify-between gap-2">
-                                    <span>
-                                        <Badge
-                                            variant={
-                                                allocation.action === "REVERSE"
-                                                    ? "warning"
-                                                    : "secondary"
-                                            }
-                                        >
-                                            {allocation.action}
-                                        </Badge>{" "}
-                                        {allocation.targetLabel}
-                                    </span>
-                                    <MoneyValue
-                                        value={allocation.amountGross}
-                                    />
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                    {formatDateTime(
-                                        allocation.occurredAt,
-                                        "full",
-                                        "passthrough",
-                                    )}
-                                    {allocation.reverseOfAllocationId
-                                        ? " · 冲减原分配"
-                                        : null}
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </section>
+            </PreviewSection>
+            {posted ? (
+                <PreviewNote>
+                    已过账回款不可编辑或删除；纠错请办理退款或冲正。
+                </PreviewNote>
+            ) : null}
         </div>
     )
 }
@@ -234,44 +215,46 @@ export function CustomerRefundDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            {posted ? (
-                <Alert variant="info">
-                    <AlertTitle>已过账记录只读</AlertTitle>
-                    <AlertDescription>
-                        已过账退款不可编辑、不可删除；纠错须追加新的反向记录。
-                    </AlertDescription>
-                </Alert>
+        <div className={bodyClassName}>
+            <PreviewAmount label="退款金额" value={row.amount} />
+            <PreviewSection title="原因说明">
+                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <PreviewNote>
+                    退款时间：
+                    {formatDateTime(row.occurredAt, "full", "passthrough")}
+                </PreviewNote>
+            </PreviewSection>
+            {!row.originalReceiptId ? (
+                <CustomerSourceDocuments
+                    scope={{
+                        entryIds: row.originalReceivableEntryId
+                            ? [row.originalReceivableEntryId]
+                            : [],
+                        customerId: row.customerId,
+                    }}
+                />
             ) : null}
-            <CustomerRefundApprovalArea
-                phase={customerRefundApprovalPhase(
-                    row.approval,
-                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
-                )}
-                approval={row.approval}
-                documentId={row.refundId}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={onDecisionApplied}
-            />
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="退款单号" value={row.refundNo} mono />
-                <Fact
-                    label="退款金额"
-                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
-                />
-                <Fact
-                    label="退款时间"
-                    value={formatDateTime(
-                        row.occurredAt,
-                        "full",
-                        "passthrough",
+            <PreviewSection title="审批记录">
+                <CustomerRefundApprovalArea
+                    phase={customerRefundApprovalPhase(
+                        row.approval,
+                        row.status === "in_approval"
+                            ? "IN_APPROVAL"
+                            : row.status,
                     )}
-                    mono
+                    approval={row.approval}
+                    documentId={row.refundId}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
                 />
-                <Fact label="原因说明" value={row.reasonText} />
-            </div>
+            </PreviewSection>
+            {posted ? (
+                <PreviewNote>
+                    已过账记录不可编辑或删除；纠错须追加反向记录。
+                </PreviewNote>
+            ) : null}
         </div>
     )
 }
@@ -294,44 +277,36 @@ export function ReceiptReversalDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            {posted ? (
-                <Alert variant="info">
-                    <AlertTitle>已过账记录只读</AlertTitle>
-                    <AlertDescription>
-                        已过账冲正不可编辑、不可删除；纠错须追加新的反向记录。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            <ReceiptReversalApprovalArea
-                phase={receiptReversalApprovalPhase(
-                    row.approval,
-                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
-                )}
-                approval={row.approval}
-                documentId={row.reversalId}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={onDecisionApplied}
-            />
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="冲正单号" value={row.reversalNo} mono />
-                <Fact
-                    label="冲正金额"
-                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
-                />
-                <Fact
-                    label="冲正时间"
-                    value={formatDateTime(
-                        row.occurredAt,
-                        "full",
-                        "passthrough",
+        <div className={bodyClassName}>
+            <PreviewAmount label="冲正金额" value={row.amount} />
+            <PreviewSection title="原因说明">
+                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <PreviewNote>
+                    冲正时间：
+                    {formatDateTime(row.occurredAt, "full", "passthrough")}
+                </PreviewNote>
+            </PreviewSection>
+            <PreviewSection title="审批记录">
+                <ReceiptReversalApprovalArea
+                    phase={receiptReversalApprovalPhase(
+                        row.approval,
+                        row.status === "in_approval"
+                            ? "IN_APPROVAL"
+                            : row.status,
                     )}
-                    mono
+                    approval={row.approval}
+                    documentId={row.reversalId}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
                 />
-                <Fact label="原因说明" value={row.reasonText} />
-            </div>
+            </PreviewSection>
+            {posted ? (
+                <PreviewNote>
+                    已过账记录不可编辑或删除；纠错须追加反向记录。
+                </PreviewNote>
+            ) : null}
         </div>
     )
 }
@@ -342,119 +317,87 @@ export function ReceiptReversalDetailBody({
  */
 export function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            <Alert variant="info">
-                <AlertTitle>已登记发票只读</AlertTitle>
-                <AlertDescription>
-                    已登记发票不可编辑、不可删除；红票为独立记录加反向分配。
-                </AlertDescription>
-            </Alert>
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="发票号码" value={row.invoiceNo} mono />
-                <Fact label="种类" value={row.invoiceKindLabel} />
-                <Fact label="代码" value={row.invoiceCode ?? "—"} mono />
-                <Fact label="开票日期" value={row.invoiceDate} mono />
-                <Fact
-                    label="含税"
-                    value={
-                        <MoneyValue
-                            value={row.grossAmount}
-                            taxBasis="gross"
-                            className={taxAmountToneClass("含税金额")}
-                        />
-                    }
-                />
-                <Fact
-                    label="不含税 / 税额"
-                    value={
-                        <span>
-                            <MoneyValue value={row.netAmount} /> /{" "}
-                            <MoneyValue
-                                value={row.taxAmount}
-                                className={taxAmountToneClass("税额")}
-                            />
-                        </span>
-                    }
-                />
-                <Fact
-                    label="净已分配"
-                    value={
-                        <MoneyValue
-                            value={row.allocatedTotal}
-                            taxBasis="gross"
-                        />
-                    }
-                />
-                <Fact
-                    label="未分配"
-                    value={
-                        <MoneyValue
-                            value={row.unallocatedAmount}
-                            taxBasis="gross"
-                        />
-                    }
-                />
-            </div>
-            <section>
-                <h4 className="mb-2 text-sm font-semibold">
-                    分配明细（独立于回款）
-                </h4>
-                {row.allocations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">尚无分配行</p>
-                ) : (
-                    <ul className="space-y-2">
-                        {row.allocations.map((allocation) => (
-                            <li
-                                key={allocation.allocationId}
-                                className="rounded-xl border px-3 py-2 text-sm"
-                            >
-                                <div className="flex justify-between gap-2">
-                                    <span>
-                                        <Badge
-                                            variant={
-                                                allocation.action === "REVERSE"
-                                                    ? "warning"
-                                                    : "secondary"
-                                            }
-                                        >
-                                            {allocation.action === "REVERSE"
-                                                ? "反向记录"
-                                                : "分配"}
-                                        </Badge>{" "}
-                                        {allocation.targetLabel}
-                                    </span>
-                                    <MoneyValue
-                                        value={allocation.amountGross}
-                                    />
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </section>
+        <div className={bodyClassName}>
+            <PreviewAmount
+                label="待分配金额（含税）"
+                value={row.unallocatedAmount}
+            >
+                <span>
+                    发票金额 <MoneyValue value={row.grossAmount} />
+                </span>
+                <span>
+                    已分配 <MoneyValue value={row.allocatedTotal} />
+                </span>
+            </PreviewAmount>
+            <PreviewSection title="发票资料">
+                <dl className="space-y-3">
+                    <PreviewFact label="开票日期">
+                        <span className="num">{row.invoiceDate}</span>
+                    </PreviewFact>
+                    <PreviewFact label="发票代码">
+                        <span className="num">{row.invoiceCode || "—"}</span>
+                    </PreviewFact>
+                    <PreviewFact label="不含税金额">
+                        <MoneyValue value={row.netAmount} />
+                    </PreviewFact>
+                    <PreviewFact label="税额">
+                        <MoneyValue value={row.taxAmount} />
+                    </PreviewFact>
+                </dl>
+            </PreviewSection>
+            <AllocationSection rows={row.allocations} />
+            <CustomerSourceDocuments
+                scope={{
+                    accountIds: row.allocations.map(
+                        (allocation) => allocation.targetId,
+                    ),
+                }}
+            />
+            <PreviewNote>
+                开票分配独立于回款。已登记发票不可编辑或删除；纠错请办理红票。
+            </PreviewNote>
         </div>
     )
 }
 
-function Fact({
-    label,
-    value,
-    mono,
-}: {
-    label: string
-    value: React.ReactNode
-    mono?: boolean
-}) {
+function AllocationSection({ rows }: { rows: readonly AllocationLine[] }) {
     return (
-        <div>
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div
-                className={
-                    mono ? "num text-sm font-medium" : "text-sm font-medium"
-                }
-            >
-                {value}
-            </div>
-        </div>
+        <PreviewSection title="核销去向">
+            {rows.length ? (
+                <ul className="divide-y divide-border">
+                    {rows.map((allocation) => (
+                        <li
+                            key={allocation.allocationId}
+                            className="py-3 first:pt-0 last:pb-0"
+                        >
+                            <div className="flex items-baseline justify-between gap-5">
+                                <span className="min-w-0 break-words">
+                                    {allocation.targetLabel}
+                                </span>
+                                <MoneyValue
+                                    value={allocation.amountGross}
+                                    className="shrink-0"
+                                />
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {allocation.action === "REVERSE"
+                                    ? "撤销核销"
+                                    : "核销"}{" "}
+                                ·{" "}
+                                <span className="num">
+                                    {formatDateTime(
+                                        allocation.occurredAt,
+                                        "full",
+                                        "passthrough",
+                                    )}
+                                </span>
+                            </p>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <PreviewNote>尚未关联应收单据</PreviewNote>
+            )}
+        </PreviewSection>
     )
 }

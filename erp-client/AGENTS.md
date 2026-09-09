@@ -275,19 +275,27 @@ export function CreateOrderForm() {
 
 必须使用 `QuickPreviewSheet`，`size="preview"`，从右侧滑出。不要为点读再包一层裸 `Sheet`。
 
-当前 chrome 合同（商品池 / 卡券类目 / 账号权限只读预览共用）：
+### 所有侧边 Sheet 的视觉契约
+
+- `components/ui/sheet.tsx` 负责共享遮罩、头部、标题与页脚样式；`components/business/list.tsx` 的 `QuickPreviewSheet` 负责预览插槽与正文布局。业务调用方必须复用共享样式，不得复制后代选择器覆盖头、标题和页脚。
+- 商品池、卡券类目、账号权限采用窄栏；其他 Sheet 按内容选择宽度。宽度差异不得改变字体层级、留白、边线和按钮风格。
+- `size="detail"` 的正文由业务组件负责滚动，外缘统一 `px-7 py-6`。不得在共享壳与正文各加一次水平 padding，也不得把完整单据强制压成窄栏。
+- 分区使用正文级标题、细分隔线与 24px 间距；仅对需要独立识别的业务单据、警示或输入区域使用边框容器。
+- 页脚横排右对齐，空间不足时换行；保留关闭入口。右上角关闭与页脚关闭必须使用不同的稳定原生 ID。
+- 高级筛选沿用同一外观，保留重置和应用操作；工作台沿用作业面内容与操作；移动端导航保留导航结构。
+
+业务调用方只声明所需宽度，例如：
 
 ```tsx
-overlayClassName="bg-black/20 supports-backdrop-filter:backdrop-blur-none"
-contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px] [&_[data-slot=sheet-header]]:gap-3 [&_[data-slot=sheet-header]]:px-7 [&_[data-slot=sheet-header]]:pt-10 [&_[data-slot=sheet-title]]:text-xl [&_[data-slot=sheet-title]]:leading-8 [&_[data-slot=sheet-title]]:font-semibold [&_[data-slot=quick-preview-identity]]:text-xs [&_[data-slot=quick-preview-content]]:px-7 [&_[data-slot=sheet-footer]]:flex-row [&_[data-slot=sheet-footer]]:justify-end [&_[data-slot=sheet-footer]]:px-7 [&_[data-slot=sheet-footer]]:py-4"
+contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
 ```
 
 原则（改 class 时先改原则，再改数字）：
 
-- **宽 460px**：比默认 preview token（400px）略宽，容得下大数字和右对齐键值；远小于 detail 的 768px。窄栏是设计，不是省空间。
+- **宽度按内容选择**：轻预览采用窄栏，完整单据采用宽栏。宽度独立配置，不得通过统一宽度代替样式一致性。
 - **浅遮罩、不模糊**（`bg-black/20` + 关闭 backdrop-blur）：表格还在，用户知道自己从哪一行进来。深遮罩或 blur 会把点读做成挡住整页的模态框。
 - **头 / 正文 / 脚同一条竖边**：`px-7`。头额外 `pt-10`，标题才有呼吸；脚 `py-4` 横排右对齐，不要默认那一列全宽按钮。
-- **标题按对象名排版**：`text-xl leading-8 font-semibold`，不是默认 `SheetTitle` 的 `text-base font-medium`。
+- **标题按对象名排版**：`text-xl leading-8 font-semibold`，由共享 `SheetTitle` 提供。
 - 关闭按钮（右上角 X）保留；页脚再给一个「关闭」，出口必须一眼能找到。
 
 ### 头部分层：四个插槽各司其职
@@ -341,5 +349,5 @@ contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460
 - 标题写「预览」「详情」，把对象名埋进正文第一行。
 - 深色遮罩或 blur，把背后的列表藏掉。
 - 在窄栏里塞行项目表、纸质单据、完整时间线或筛选控件。
-- 为单个页面改 `QuickPreviewSheet` 默认 padding / 标题级，却不复用商品池 chrome——结果是同一种点读五种宽。
+- 在业务页面复制或覆盖共享 padding、标题字号与页脚排列；仅为内容需要调整宽度。
 - 页脚只放「查看详情」outline、没有主色「打开对象」；或反过来只有打开、没有关闭。

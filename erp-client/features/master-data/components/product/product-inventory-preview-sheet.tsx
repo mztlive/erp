@@ -177,7 +177,7 @@ export function ProductInventoryPreviewSheet({
 
         return (
             <ScrollArea className="min-h-0 flex-1">
-                <div className="space-y-4 p-4 md:p-5">
+                <div className="space-y-6 px-7 py-6">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <DataFreshness
                             updatedAt={formatDateTime(

@@ -484,7 +484,7 @@ function WorkspaceDocumentTaskDetail({
             aria-label="当前任务"
         >
             <div className="flex w-full flex-col">
-                <div className="flex flex-col gap-2 px-5 pt-2 pb-1">
+                <div className="flex flex-col gap-2 px-5 pt-2 pb-1 in-data-[slot=sheet-content]:px-7">
                     <div className="flex items-start justify-between gap-3">
                         <h3 className="min-w-0 break-words text-lg font-semibold">
                             {canReadSensitive

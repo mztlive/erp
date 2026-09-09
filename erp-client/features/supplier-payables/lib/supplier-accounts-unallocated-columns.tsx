@@ -4,19 +4,9 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type {
-    SessionState,
-    SupplierAccountsListView,
-    UnallocatedRow,
-} from "@/features/supplier-payables/types"
+import type { UnallocatedRow } from "@/features/supplier-payables/types"
 
-export function buildUnallocatedColumns(input: {
-    data: SupplierAccountsListView | undefined
-    openSession: (next: SessionState) => void
-}): ColumnDef<UnallocatedRow>[] {
-    const { data, openSession } = input
+export function buildUnallocatedColumns(): ColumnDef<UnallocatedRow>[] {
     return [
         {
             id: "track",
@@ -67,44 +57,6 @@ export function buildUnallocatedColumns(input: {
                     </div>
                 </div>
             ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => {
-                const invoice = data?.invoices.find(
-                    (p) =>
-                        `${p.invoiceCode}-${p.invoiceNo}` ===
-                        row.original.documentNo,
-                )
-                const isPayment = row.original.track === "payment"
-                return (
-                    <Button
-                        id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.id)}-continue-allocate`}
-                        type="button"
-                        size="xs"
-                        disabled={isPayment || !invoice}
-                        title={
-                            isPayment
-                                ? "付款必须在付款任务登记时完成核销"
-                                : invoice
-                                  ? undefined
-                                  : "未找到原发票，请回到进项发票视图操作"
-                        }
-                        onClick={() => {
-                            if (!invoice || isPayment) return
-                            openSession({
-                                track: "purchase_invoice",
-                                supplierId: row.original.supplierId,
-                                existingInvoiceId: invoice.invoiceId,
-                            })
-                        }}
-                    >
-                        继续核销
-                    </Button>
-                )
-            },
         },
     ]
 }

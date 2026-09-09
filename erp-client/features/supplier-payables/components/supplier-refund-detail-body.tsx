@@ -1,10 +1,13 @@
 "use client"
 
-import * as React from "react"
 import Link from "next/link"
+import { SupplierSourceDocuments } from "./supplier-source-documents"
 
-import { MoneyValue } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+    PreviewAmount,
+    PreviewSection,
+    PreviewNote,
+} from "@/components/business/financial-preview"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { SupplierRefundApprovalArea } from "@/features/supplier-payables/components/supplier-refund-approval-area"
@@ -32,90 +35,63 @@ export function SupplierRefundDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            {posted ? (
-                <Alert variant="info">
-                    <AlertTitle>已过账记录只读</AlertTitle>
-                    <AlertDescription>
-                        已过账退款不可编辑、不可删除；纠错须追加新的反向记录。
-                    </AlertDescription>
-                </Alert>
+        <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
+            <PreviewAmount label="退款金额" value={row.amount} />
+            <PreviewSection title="原因说明">
+                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <PreviewNote>
+                    退款时间：
+                    {formatDateTime(row.occurredAt, "full", "passthrough")}
+                </PreviewNote>
+            </PreviewSection>
+            {row.originalPaymentId ? (
+                <PreviewSection title="原付款">
+                    {" "}
+                    <Button
+                        id={`supplier-payables-refund-detail-${toAutomationIdSegment(row.refundId)}-open-original`}
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        className="mt-1"
+                        render={
+                            <Link
+                                href={paymentPreviewHref(row.originalPaymentId)}
+                            />
+                        }
+                    >
+                        查看原付款
+                    </Button>
+                </PreviewSection>
             ) : null}
-            <SupplierRefundApprovalArea
-                phase={supplierRefundApprovalPhase(
-                    row.approval,
-                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
-                )}
-                approval={row.approval}
-                documentId={row.refundId}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={onDecisionApplied}
-            />
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="退款单号" value={row.refundNo} mono />
-                <Fact
-                    label="退款金额"
-                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
+            {!row.originalPaymentId ? (
+                <SupplierSourceDocuments
+                    scope={{
+                        entryId: row.originalPayableEntryId,
+                        supplierId: row.supplierId,
+                    }}
                 />
-                <Fact
-                    label="退款时间"
-                    value={formatDateTime(
-                        row.occurredAt,
-                        "full",
-                        "passthrough",
+            ) : null}
+            <PreviewSection title="审批记录">
+                <SupplierRefundApprovalArea
+                    phase={supplierRefundApprovalPhase(
+                        row.approval,
+                        row.status === "in_approval"
+                            ? "IN_APPROVAL"
+                            : row.status,
                     )}
-                    mono
+                    approval={row.approval}
+                    documentId={row.refundId}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
                 />
-                <Fact label="原因说明" value={row.reasonText} />
-                {row.originalPaymentId ? (
-                    <div className="col-span-2">
-                        <div className="text-xs text-muted-foreground">
-                            原付款单
-                        </div>
-                        <Button
-                            id={`supplier-payables-refund-detail-${toAutomationIdSegment(row.refundId)}-open-original`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            className="mt-1"
-                            render={
-                                <Link
-                                    href={paymentPreviewHref(
-                                        row.originalPaymentId,
-                                    )}
-                                />
-                            }
-                        >
-                            查看原付款
-                        </Button>
-                    </div>
-                ) : null}
-            </div>
-        </div>
-    )
-}
-
-function Fact({
-    label,
-    value,
-    mono,
-}: {
-    label: string
-    value: React.ReactNode
-    mono?: boolean
-}) {
-    return (
-        <div>
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div
-                className={
-                    mono ? "num text-sm font-medium" : "text-sm font-medium"
-                }
-            >
-                {value}
-            </div>
+            </PreviewSection>
+            {posted ? (
+                <PreviewNote>
+                    已过账记录不可编辑或删除；纠错须追加反向记录。
+                </PreviewNote>
+            ) : null}
         </div>
     )
 }

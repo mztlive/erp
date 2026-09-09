@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/column-types"
+
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
@@ -65,6 +67,8 @@ type CustomerReceivablesTableProps = {
     receivableColumns: ColumnDef<ReceivableAccountRow>[]
     receiptColumns: ColumnDef<ReceiptRow>[]
     invoiceColumns: ColumnDef<SalesInvoiceRow>[]
+    preview: CustomerAccountPreviewTarget | null
+    onPreview: (target: CustomerAccountPreviewTarget) => void
     toolbar: React.ReactNode
     patchUrl: CustomerReceivablesPatchUrl
     onPaginationChange: (next: PaginationState) => void
@@ -83,6 +87,8 @@ export function CustomerReceivablesTable({
     receivableColumns,
     receiptColumns,
     invoiceColumns,
+    preview,
+    onPreview,
     toolbar,
     patchUrl,
     onPaginationChange,
@@ -154,11 +160,21 @@ export function CustomerReceivablesTable({
                             data={[...data.unallocated.receipts]}
                             columns={receiptColumns}
                             getRowId={(r) => r.receiptId}
+                            onRowPreview={(row) =>
+                                onPreview({
+                                    kind: "receipt",
+                                    id: row.receiptId,
+                                })
+                            }
+                            highlightedRowId={
+                                preview?.kind === "receipt"
+                                    ? preview.id
+                                    : undefined
+                            }
                             rowCount={data.unallocated.receipts.length}
                             layout="flush"
                             defaultColumnPinning={{
                                 left: ["doc"],
-                                right: ["actions"],
                             }}
                         />
                     )}
@@ -189,11 +205,21 @@ export function CustomerReceivablesTable({
                             data={[...data.unallocated.invoices]}
                             columns={invoiceColumns}
                             getRowId={(r) => r.invoiceId}
+                            onRowPreview={(row) =>
+                                onPreview({
+                                    kind: "invoice",
+                                    id: row.invoiceId,
+                                })
+                            }
+                            highlightedRowId={
+                                preview?.kind === "invoice"
+                                    ? preview.id
+                                    : undefined
+                            }
                             rowCount={data.unallocated.invoices.length}
                             layout="flush"
                             defaultColumnPinning={{
                                 left: ["doc"],
-                                right: ["actions"],
                             }}
                         />
                     )}
@@ -241,13 +267,18 @@ export function CustomerReceivablesTable({
                 columns={receivableColumns}
                 defaultColumnVisibility={{ settled: false }}
                 getRowId={(r) => r.accountId}
+                onRowPreview={(row) =>
+                    onPreview({ kind: "receivable", id: row.accountId })
+                }
+                highlightedRowId={
+                    preview?.kind === "receivable" ? preview.id : undefined
+                }
                 rowCount={data.total}
                 pagination={pagination}
                 onPaginationChange={onPaginationChange}
                 layout="flush"
                 defaultColumnPinning={{
                     left: ["party"],
-                    right: ["actions"],
                 }}
             />
         ) : view === "receipt" && data ? (
@@ -256,13 +287,18 @@ export function CustomerReceivablesTable({
                 data={[...data.receipts]}
                 columns={receiptColumns}
                 getRowId={(r) => r.receiptId}
+                onRowPreview={(row) =>
+                    onPreview({ kind: "receipt", id: row.receiptId })
+                }
+                highlightedRowId={
+                    preview?.kind === "receipt" ? preview.id : undefined
+                }
                 rowCount={data.total}
                 pagination={pagination}
                 onPaginationChange={onPaginationChange}
                 layout="flush"
                 defaultColumnPinning={{
                     left: ["doc"],
-                    right: ["actions"],
                 }}
             />
         ) : view === "sales_invoice" && data ? (
@@ -271,13 +307,18 @@ export function CustomerReceivablesTable({
                 data={[...data.invoices]}
                 columns={invoiceColumns}
                 getRowId={(r) => r.invoiceId}
+                onRowPreview={(row) =>
+                    onPreview({ kind: "invoice", id: row.invoiceId })
+                }
+                highlightedRowId={
+                    preview?.kind === "invoice" ? preview.id : undefined
+                }
                 rowCount={data.total}
                 pagination={pagination}
                 onPaginationChange={onPaginationChange}
                 layout="flush"
                 defaultColumnPinning={{
                     left: ["doc"],
-                    right: ["actions"],
                 }}
             />
         ) : (

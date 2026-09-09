@@ -1,19 +1,9 @@
-import { LoaderCircleIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { ColumnActions } from "./column-types"
 
-export function createReceivableColumns({
-    onPreview,
-    onStartSession,
-    canStartSession = () => true,
-    startSessionPending = false,
-    permissionReason,
-}: ColumnActions): ColumnDef<ReceivableAccountRow>[] {
+export function createReceivableColumns(): ColumnDef<ReceivableAccountRow>[] {
     return [
         {
             id: "party",
@@ -127,71 +117,6 @@ export function createReceivableColumns({
                         label={row.original.statusLabel}
                         tone={row.original.statusTone}
                     />
-                </div>
-            ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default" },
-            cell: ({ row }) => (
-                <div className="flex flex-nowrap justify-end gap-1">
-                    <Button
-                        id={`customer-receivables-receivable-row-${toAutomationIdSegment(row.original.accountId)}-preview`}
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        onClick={() =>
-                            onPreview({
-                                kind: "receivable",
-                                id: row.original.accountId,
-                            })
-                        }
-                    >
-                        预览
-                    </Button>
-                    <Button
-                        id={`customer-receivables-receivable-row-${toAutomationIdSegment(row.original.accountId)}-allocate`}
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        disabled={
-                            startSessionPending ||
-                            !row.original.allowedActions.includes(
-                                "REGISTER_RECEIPT",
-                            ) ||
-                            !canStartSession("receipt")
-                        }
-                        title={
-                            !canStartSession("receipt")
-                                ? permissionReason
-                                : row.original.allowedActions.includes(
-                                        "REGISTER_RECEIPT",
-                                    )
-                                  ? undefined
-                                  : "当前不能登记回款并核销"
-                        }
-                        onClick={() =>
-                            void onStartSession(
-                                "receipt",
-                                row.original.counterpartyPartyId,
-                                undefined,
-                                {
-                                    salesOrderId: row.original.salesOrderId,
-                                    receivableAccountId: row.original.accountId,
-                                },
-                            )
-                        }
-                    >
-                        {startSessionPending ? (
-                            <LoaderCircleIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                                className="animate-spin"
-                            />
-                        ) : null}
-                        {startSessionPending ? "创建中…" : "核销"}
-                    </Button>
                 </div>
             ),
         },

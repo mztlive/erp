@@ -1,10 +1,14 @@
 "use client"
 
-import * as React from "react"
 import Link from "next/link"
 
 import { MoneyValue } from "@/components/business"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+    PreviewAmount,
+    PreviewSection,
+    PreviewFact,
+    PreviewNote,
+} from "@/components/business/financial-preview"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { PaymentReversalApprovalArea } from "@/features/supplier-payables/components/payment-reversal-approval-area"
@@ -35,107 +39,70 @@ export function PaymentReversalDetailBody({
     const originalPaymentQuery = useSupplierPaymentQuery(row.originalPaymentId)
     const originalPayment = originalPaymentQuery.data
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            {posted ? (
-                <Alert variant="info">
-                    <AlertTitle>已过账记录只读</AlertTitle>
-                    <AlertDescription>
-                        已过账冲正不可编辑、不可删除；纠错须追加新的反向记录。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            <PaymentReversalApprovalArea
-                phase={paymentReversalApprovalPhase(
-                    row.approval,
-                    row.status === "in_approval" ? "IN_APPROVAL" : row.status,
-                )}
-                approval={row.approval}
-                documentId={row.reversalId}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={onDecisionApplied}
-            />
-            <div className="grid grid-cols-2 gap-3">
-                <Fact label="冲正单号" value={row.reversalNo} mono />
-                <Fact
-                    label="冲正金额"
-                    value={<MoneyValue value={row.amount} taxBasis="gross" />}
-                />
-                <Fact
-                    label="冲正时间"
-                    value={formatDateTime(
-                        row.occurredAt,
-                        "full",
-                        "passthrough",
-                    )}
-                    mono
-                />
-                <Fact label="原因说明" value={row.reasonText} />
-                <Fact
-                    label="原付款单"
-                    value={
-                        originalPaymentQuery.isPending
-                            ? "正在读取…"
-                            : (originalPayment?.paymentNo ?? "付款信息待补全")
+        <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
+            <PreviewAmount label="冲正金额" value={row.amount} />
+            <PreviewSection title="原因说明">
+                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <PreviewNote>
+                    冲正时间：
+                    {formatDateTime(row.occurredAt, "full", "passthrough")}
+                </PreviewNote>
+            </PreviewSection>
+            <PreviewSection title="原付款">
+                <dl className="space-y-3">
+                    <PreviewFact label="付款单号">
+                        <span className="num">
+                            {originalPaymentQuery.isPending
+                                ? "正在读取…"
+                                : (originalPayment?.paymentNo ??
+                                  "付款信息待补全")}
+                        </span>
+                    </PreviewFact>
+                    <PreviewFact label="供应商">
+                        {originalPayment?.supplierName ?? "供应商信息待补全"}
+                    </PreviewFact>
+                    {originalPayment ? (
+                        <PreviewFact label="原付款金额">
+                            <MoneyValue value={originalPayment.amount} />
+                        </PreviewFact>
+                    ) : null}
+                </dl>{" "}
+                <Button
+                    id={`supplier-payables-reversal-detail-${toAutomationIdSegment(row.reversalId)}-open-original`}
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    className="mt-1"
+                    render={
+                        <Link
+                            href={paymentPreviewHref(row.originalPaymentId)}
+                        />
                     }
-                    mono={Boolean(originalPayment?.paymentNo)}
+                >
+                    打开原付款
+                </Button>
+            </PreviewSection>
+            <PreviewSection title="审批记录">
+                <PaymentReversalApprovalArea
+                    phase={paymentReversalApprovalPhase(
+                        row.approval,
+                        row.status === "in_approval"
+                            ? "IN_APPROVAL"
+                            : row.status,
+                    )}
+                    approval={row.approval}
+                    documentId={row.reversalId}
+                    workItemId={workItemId}
+                    expectedTaskVersion={expectedTaskVersion}
+                    workItemAllowedActions={workItemAllowedActions}
+                    onDecisionApplied={onDecisionApplied}
                 />
-                <Fact
-                    label="供应商"
-                    value={originalPayment?.supplierName ?? "供应商信息待补全"}
-                />
-                {originalPayment ? (
-                    <Fact
-                        label="原付款金额"
-                        value={
-                            <MoneyValue
-                                value={originalPayment.amount}
-                                taxBasis="gross"
-                            />
-                        }
-                    />
-                ) : null}
-                <div>
-                    <Button
-                        id={`supplier-payables-reversal-detail-${toAutomationIdSegment(row.reversalId)}-open-original`}
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        className="mt-1"
-                        render={
-                            <Link
-                                href={paymentPreviewHref(row.originalPaymentId)}
-                            />
-                        }
-                    >
-                        打开原付款
-                    </Button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function Fact({
-    label,
-    value,
-    mono,
-}: {
-    label: string
-    value: React.ReactNode
-    mono?: boolean
-}) {
-    return (
-        <div>
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div
-                className={
-                    mono ? "num text-sm font-medium" : "text-sm font-medium"
-                }
-            >
-                {value}
-            </div>
+            </PreviewSection>
+            {posted ? (
+                <PreviewNote>
+                    已过账记录不可编辑或删除；纠错须追加反向记录。
+                </PreviewNote>
+            ) : null}
         </div>
     )
 }

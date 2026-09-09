@@ -1,30 +1,17 @@
 /** W12 供应商往来 · 付款列定义（纯构建函数，供 useSupplierAccountsColumns 组装）。 */
 
 import type { ColumnDef } from "@tanstack/react-table"
-import type { Dispatch, SetStateAction } from "react"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import type {
-    PaymentRow,
-    ReverseTarget,
-    SupplierRefundRequest,
-} from "@/features/supplier-payables/types"
+import type { PaymentRow } from "@/features/supplier-payables/types"
 
 export function buildPaymentColumns(input: {
-    openPaymentPreview: (paymentId: string) => void
     openReversalPreview: (reversalId: string) => void
-    setReverseTarget: Dispatch<SetStateAction<ReverseTarget | null>>
-    setRefundRequest?: Dispatch<SetStateAction<SupplierRefundRequest | null>>
 }): ColumnDef<PaymentRow>[] {
-    const {
-        openPaymentPreview,
-        openReversalPreview,
-        setReverseTarget,
-        setRefundRequest,
-    } = input
+    const { openReversalPreview } = input
     return [
         {
             id: "doc",
@@ -137,67 +124,6 @@ export function buildPaymentColumns(input: {
                 <span className="num text-[13px] text-muted-foreground">
                     {formatDateTime(row.original.paidAt, "full", "passthrough")}
                 </span>
-            ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => (
-                <div className="flex flex-wrap justify-end gap-1">
-                    {row.original.allowedActions.includes("VIEW_DETAIL") ? (
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-view`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                                openPaymentPreview(row.original.paymentId)
-                            }
-                        >
-                            查看
-                        </Button>
-                    ) : null}
-                    {row.original.allowedActions.includes("REVERSE") ? (
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-reverse`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                                setReverseTarget({
-                                    kind: "payment",
-                                    id: row.original.paymentId,
-                                    no: row.original.paymentNo,
-                                    amount: row.original.amount,
-                                    supplierName: row.original.supplierName,
-                                })
-                            }
-                        >
-                            冲正
-                        </Button>
-                    ) : null}
-                    {row.original.allowedActions.includes("REFUND") &&
-                    setRefundRequest ? (
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-refund`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                                setRefundRequest({
-                                    sourcePaymentId: row.original.paymentId,
-                                    sourcePaymentNo: row.original.paymentNo,
-                                    supplierName: row.original.supplierName,
-                                    supplierId: row.original.supplierId,
-                                    amount: row.original.amount,
-                                })
-                            }
-                        >
-                            退款
-                        </Button>
-                    ) : null}
-                </div>
             ),
         },
     ]

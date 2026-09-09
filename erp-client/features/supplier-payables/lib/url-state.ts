@@ -7,6 +7,8 @@ export type SupplierAccountsPreviewKind =
     | "payment"
     | "refund"
     | "reversal"
+    | "invoice"
+    | "unallocated"
 
 /**
  * 解析详情预览种类。缺省或未知值按应付台账处理。
@@ -17,6 +19,8 @@ export function parsePreviewKind(
     raw: string | null,
 ): SupplierAccountsPreviewKind {
     if (
+        raw === "invoice" ||
+        raw === "unallocated" ||
         raw === "payment" ||
         raw === "refund" ||
         raw === "reversal" ||

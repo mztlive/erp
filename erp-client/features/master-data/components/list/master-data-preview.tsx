@@ -36,12 +36,12 @@ export function MasterDataPreviewPanel({
     )
 
     return (
-        <div className="min-h-0 space-y-5 overflow-y-auto p-6 text-sm [&_dd]:min-w-0 [&_dd]:break-words [&_h3]:font-semibold [&_h3]:text-foreground">
+        <div className="min-h-0 space-y-6 overflow-y-auto px-7 py-6 text-sm [&_dd]:min-w-0 [&_dd]:break-words [&_dd]:text-right [&_dd]:text-[13px] [&_dt]:text-xs [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-foreground">
             <section className="space-y-2">
                 <h3 className="text-xs font-medium text-muted-foreground">
                     {masterDataCopy.previewIdentity}
                 </h3>
-                <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5">
+                <dl className="grid grid-cols-[7rem_1fr] gap-x-5 gap-y-3">
                     <dt className="text-muted-foreground">
                         {masterDataCopy.colStableNo}
                     </dt>
@@ -53,7 +53,7 @@ export function MasterDataPreviewPanel({
                     <dt className="text-muted-foreground">
                         {masterDataCopy.colLifecycle}
                     </dt>
-                    <dd className="flex flex-wrap items-center gap-2">
+                    <dd className="flex flex-wrap items-center justify-end gap-2">
                         <BusinessStatusBadge
                             context="preview"
                             label={row.lifecycleStatusLabel}
@@ -110,7 +110,7 @@ export function MasterDataPreviewPanel({
                 <h3 className="text-xs font-medium text-muted-foreground">
                     {masterDataCopy.previewKeyFacts}
                 </h3>
-                <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5">
+                <dl className="grid grid-cols-[7rem_1fr] gap-x-5 gap-y-3">
                     {row.keyFacts.map((fact) => (
                         <div key={fact.label} className="contents">
                             <dt className="text-muted-foreground">
@@ -129,6 +129,11 @@ export function MasterDataPreviewPanel({
                     {masterDataCopy.previewUsability}
                 </h3>
                 <ul className="space-y-1.5">
+                    {row.selectorEligibility.length === 0 ? (
+                        <li className="text-xs text-muted-foreground">
+                            暂无适用业务信息
+                        </li>
+                    ) : null}
                     {row.selectorEligibility.map((s) => (
                         <li
                             key={s.context}

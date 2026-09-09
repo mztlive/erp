@@ -3,30 +3,9 @@
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type {
-    PayableRow,
-    SessionState,
-    SupplierAccountsListView,
-} from "@/features/supplier-payables/types"
+import type { PayableRow } from "@/features/supplier-payables/types"
 
-export function buildPayableColumns(input: {
-    data: SupplierAccountsListView | undefined
-    returnTo?: string
-    fromWorkspace?: string
-    paymentTaskPayableAccountId?: string
-    openPreview: (payableAccountId: string) => void
-    openSession: (next: SessionState) => void
-}): ColumnDef<PayableRow>[] {
-    const {
-        data,
-        returnTo,
-        fromWorkspace,
-        paymentTaskPayableAccountId,
-        openPreview,
-        openSession,
-    } = input
+export function buildPayableColumns(): ColumnDef<PayableRow>[] {
     return [
         {
             id: "supplier",
@@ -136,60 +115,6 @@ export function buildPayableColumns(input: {
                     ) : null}
                 </div>
             ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => {
-                const canExecutePayment =
-                    Boolean(data?.canRegisterPayment) &&
-                    row.original.payableAccountId ===
-                        paymentTaskPayableAccountId
-                return (
-                    <div className="flex flex-nowrap justify-end gap-1">
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.payableAccountId)}-preview`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                                openPreview(row.original.payableAccountId)
-                            }
-                        >
-                            预览
-                        </Button>
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.payableAccountId)}-allocate-payment`}
-                            type="button"
-                            size="xs"
-                            onClick={() =>
-                                openSession({
-                                    track: "payment",
-                                    supplierId: row.original.supplierId,
-                                    preselectPayableAccountId:
-                                        row.original.payableAccountId,
-                                    purchaseOrderId:
-                                        row.original.sourceType ===
-                                        "PURCHASE_ORDER"
-                                            ? row.original.sourceDocumentId
-                                            : undefined,
-                                    returnTo,
-                                    fromWorkspace,
-                                })
-                            }
-                            disabled={!canExecutePayment}
-                            title={
-                                canExecutePayment
-                                    ? undefined
-                                    : "付款必须由当前负责人从对应付款任务进入"
-                            }
-                        >
-                            核销付款
-                        </Button>
-                    </div>
-                )
-            },
         },
     ]
 }

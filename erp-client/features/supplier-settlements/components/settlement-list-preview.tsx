@@ -1,8 +1,9 @@
 "use client"
 
+import { ArrowUpRightIcon } from "lucide-react"
+
 import {
     BusinessStatusBadge,
-    DocumentTotals,
     MoneyValue,
     QuickPreviewSheet,
 } from "@/components/business"
@@ -29,112 +30,144 @@ export function SettlementListPreviewSheet({
             open={open}
             onOpenChange={onOpenChange}
             size="detail"
-            title={row?.statementNo ?? "结算预览"}
-            description={
-                row ? `${row.supplierName} · ${row.periodLabel}` : undefined
+            title={row?.supplierName ?? "结算预览"}
+            identity={
+                row ? (
+                    <span className="num">结算单号：{row.statementNo}</span>
+                ) : null
             }
-        >
-            {row ? (
-                <div className="space-y-4 p-1">
-                    <DocumentTotals
-                        title="金额摘要（含税）"
-                        items={[
-                            {
-                                id: "erp",
-                                label: "ERP 计算金额",
-                                value: (
-                                    <MoneyValue
-                                        value={row.erpAmountGross}
-                                        taxBasis="gross"
-                                    />
-                                ),
-                                basis: "含税",
-                            },
-                            {
-                                id: "bill",
-                                label: "供应商账单金额",
-                                value: row.supplierAmountGross ? (
-                                    <MoneyValue
-                                        value={row.supplierAmountGross}
-                                        taxBasis="gross"
-                                    />
-                                ) : (
-                                    "账单未同步"
-                                ),
-                                basis: "含税",
-                            },
-                            {
-                                id: "diff",
-                                label: "差异",
-                                value: row.differenceAmountGross ? (
-                                    <MoneyValue
-                                        value={row.differenceAmountGross}
-                                        taxBasis="gross"
-                                    />
-                                ) : (
-                                    "—"
-                                ),
-                                warning: row.differenceDirectionLabel,
-                            },
-                        ]}
+            description={row?.periodLabel}
+            summary={
+                row ? (
+                    <BusinessStatusBadge
+                        context="preview"
+                        label={row.statusLabel}
+                        tone={row.statusTone}
                     />
-                    <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                        <span>
-                            经办 {row.preparedByLabel} · 复核{" "}
-                            {row.reviewedByLabel}
-                        </span>
-                        <BusinessStatusBadge
-                            context="list"
-                            label={row.statusLabel}
-                            tone={row.statusTone}
-                        />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
+                ) : null
+            }
+            footer={
+                <>
+                    <Button
+                        id="supplier-settlements-list-preview-close"
+                        type="button"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        关闭
+                    </Button>
+                    {row?.unresolvedDifferenceCount ? (
+                        <Button
+                            id="supplier-settlements-list-preview-open-differences"
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                                patchUrl({
+                                    statementId: row.statementId,
+                                    section: "differences",
+                                    preview: undefined,
+                                })
+                            }
+                        >
+                            打开差异处理
+                        </Button>
+                    ) : null}
+                    {row ? (
                         <Button
                             id="supplier-settlements-list-preview-open"
                             type="button"
                             onClick={() => onOpen(row.statementId)}
                         >
-                            查看详情
+                            打开结算单
+                            <ArrowUpRightIcon
+                                data-icon="inline-end"
+                                aria-hidden
+                            />
                         </Button>
-                        {row.unresolvedDifferenceCount > 0 ? (
-                            <Button
-                                id="supplier-settlements-list-preview-open-differences"
-                                type="button"
-                                variant="secondary"
-                                onClick={() =>
-                                    patchUrl({
-                                        statementId: row.statementId,
-                                        section: "differences",
-                                        preview: undefined,
-                                    })
-                                }
-                            >
-                                打开差异处理
-                            </Button>
-                        ) : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        键盘：列表 Enter
-                        打开预览；详情页可继续提交复核并查询处理结果。
-                    </p>
-                </div>
-            ) : (
-                <div className="flex flex-col items-start gap-3 p-5">
+                    ) : null}
+                </>
+            }
+        >
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6 text-sm">
+                {row ? (
+                    <>
+                        <section className="space-y-3 border-b border-border pb-6">
+                            <h3 className="text-xs font-medium text-muted-foreground">
+                                ERP 计算金额（含税）
+                            </h3>
+                            <MoneyValue
+                                value={row.erpAmountGross}
+                                className="[&>span:first-child]:text-[32px] [&>span:first-child]:font-semibold [&>span:first-child]:tracking-tight"
+                            />
+                            <dl className="space-y-3 pt-3">
+                                <div className="flex items-baseline justify-between gap-5">
+                                    <dt className="text-xs text-muted-foreground">
+                                        供应商账单金额（含税）
+                                    </dt>
+                                    <dd>
+                                        {row.supplierAmountGross ? (
+                                            <MoneyValue
+                                                value={row.supplierAmountGross}
+                                            />
+                                        ) : (
+                                            "账单未同步"
+                                        )}
+                                    </dd>
+                                </div>
+                                <div className="flex items-baseline justify-between gap-5">
+                                    <dt className="text-xs text-muted-foreground">
+                                        差异
+                                    </dt>
+                                    <dd className="text-right">
+                                        {row.differenceAmountGross ? (
+                                            <MoneyValue
+                                                value={
+                                                    row.differenceAmountGross
+                                                }
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                        {row.differenceDirectionLabel ? (
+                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                {row.differenceDirectionLabel}
+                                            </p>
+                                        ) : null}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
+                        <section className="space-y-3">
+                            <h3 className="font-medium">经办与复核</h3>
+                            <dl className="space-y-3">
+                                <div className="flex items-baseline justify-between gap-5">
+                                    <dt className="text-xs text-muted-foreground">
+                                        经办
+                                    </dt>
+                                    <dd className="min-w-0 break-words text-right text-[13px]">
+                                        {row.preparedByLabel || "—"}
+                                    </dd>
+                                </div>
+                                <div className="flex items-baseline justify-between gap-5">
+                                    <dt className="text-xs text-muted-foreground">
+                                        复核
+                                    </dt>
+                                    <dd className="min-w-0 break-words text-right text-[13px]">
+                                        {row.reviewedByLabel || "—"}
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
+                        <p className="border-t border-border pt-6 text-xs leading-5 text-muted-foreground">
+                            详情页可继续提交复核并查询处理结果。
+                        </p>
+                    </>
+                ) : (
                     <p className="text-sm text-muted-foreground">
                         未找到预览行，可能已被移出当前筛选范围。
                     </p>
-                    <Button
-                        id="supplier-settlements-list-preview-close"
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => patchUrl({ preview: undefined })}
-                    >
-                        关闭预览
-                    </Button>
-                </div>
-            )}
+                )}
+            </div>
         </QuickPreviewSheet>
     )
 }

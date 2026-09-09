@@ -67,16 +67,21 @@ export function CostDetailSheet({
                 ) : null
             }
             footer={
-                <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
+                <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                    <p className="mr-auto w-full text-xs leading-5 text-muted-foreground">
                         不可删除成本或直接改金额；更正请走原业务对象变更/冲减。
                     </p>
+                    <Button
+                        id="actual-profit-loss-cost-detail-dismiss"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        关闭
+                    </Button>
                     {costDetailRow?.objectId ? (
                         <Button
                             id={`actual-profit-loss-cost-detail-${toAutomationIdSegment(costDetailRow.rowId)}-w05`}
                             type="button"
-                            size="sm"
-                            variant="outline"
                             render={
                                 <Link
                                     id={`actual-profit-loss-cost-detail-${toAutomationIdSegment(costDetailRow.rowId)}-w05`}
@@ -92,7 +97,7 @@ export function CostDetailSheet({
                 </div>
             }
         >
-            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto px-7 py-6">
                 {costDetailRow && costDetailRow.coverageBlockers.length > 0 ? (
                     <Alert variant="warning">
                         <AlertTitle>成本缺口原因</AlertTitle>

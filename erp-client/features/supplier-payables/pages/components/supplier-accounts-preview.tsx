@@ -1,26 +1,32 @@
 "use client"
 
 import Link from "next/link"
+import {
+    sourceDocumentHref,
+    sourceDocumentOpenLabel,
+} from "../../lib/related-documents"
 import type { UseQueryResult } from "@tanstack/react-query"
 import { ExternalLinkIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { PaymentReversalDetailBody } from "@/features/supplier-payables/components/payment-reversal-detail-body"
-import { SupplierPaymentDetailDialog } from "@/features/supplier-payables/components/supplier-payment-detail-dialog"
+import { SupplierAccountRecordPreview } from "./supplier-account-record-preview"
 import { SupplierRefundDetailBody } from "@/features/supplier-payables/components/supplier-refund-detail-body"
 import { isUnsubmittedPaymentReversalStatus } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import { isUnsubmittedSupplierRefundStatus } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import { buildPayableActivity } from "@/features/supplier-payables/lib/payable-preview-activity"
 import type {
     PayableDetailView,
-    PayableRow,
     PaymentReversalRow,
     PaymentRow,
+    PurchaseInvoiceRow,
     SessionState,
+    SupplierAccountsListView,
+    ReverseTarget,
+    SupplierRefundRequest,
     SupplierRefundRow,
 } from "@/features/supplier-payables/types"
 import {
@@ -29,11 +35,24 @@ import {
 } from "./payable-preview-body"
 
 export interface SupplierAccountsPreviewProps {
+    previewInvoiceId: string | null
+    previewUnallocatedId: string | null
+    listData: SupplierAccountsListView | undefined
+    listLoading: boolean
+    listError?: string
+    onRetryList: () => void
+    onOpenReversal: (id: string) => void
+    onReverse: (target: ReverseTarget) => void
+    onRedInvoiceNo: (value: string) => void
+    onRefund: (request: SupplierRefundRequest) => void
+    onClosed?: () => void
+    canRegisterPayment?: boolean
     previewPayableId: string | null
     previewPaymentId: string | null
     previewRefundId: string | null
     previewReversalId: string | null
     detailQuery: UseQueryResult<PayableDetailView | null, Error>
+    invoiceQuery?: UseQueryResult<PurchaseInvoiceRow, Error>
     paymentQuery: UseQueryResult<PaymentRow | null, Error>
     refundQuery: UseQueryResult<SupplierRefundRow | null, Error>
     reversalQuery: UseQueryResult<PaymentReversalRow | null, Error>
@@ -54,16 +73,29 @@ export interface SupplierAccountsPreviewProps {
 }
 
 /**
- * 供应商往来详情。付款走分区 Dialog；退款与付款冲正仍用详情抽屉并嵌入通用审批区。
+ * 供应商往来预览与操作入口；付款完整明细由预览进入分区 Dialog。
  * 应付预览只能为当前付款任务打开付款作业。
  */
 export function SupplierAccountsPreview({
+    previewInvoiceId,
+    previewUnallocatedId,
+    listData,
+    listLoading,
+    listError,
+    onRetryList,
+    onOpenReversal,
+    onReverse,
+    onRedInvoiceNo,
+    onRefund,
+    onClosed,
+    canRegisterPayment: paymentAllowed = false,
     previewPayableId,
     previewPaymentId,
     previewRefundId,
     previewReversalId,
     detailQuery,
     paymentQuery,
+    invoiceQuery,
     refundQuery,
     reversalQuery,
     onRequestRefundSubmit,
@@ -95,19 +127,46 @@ export function SupplierAccountsPreview({
                 onOpenChange={(open) => {
                     if (!open) onClose()
                 }}
+                onOpenChangeComplete={(open) => {
+                    if (!open) onClosed?.()
+                }}
                 size="detail"
-                title={reversalQuery.data?.reversalNo ?? "冲正详情"}
-                description="付款冲正记录与审批信息"
+                contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
+                title="付款冲正"
+                identity={
+                    reversalQuery.data
+                        ? `冲正单：${reversalQuery.data.reversalNo}`
+                        : undefined
+                }
+                summary={
+                    reversalQuery.data ? (
+                        <BusinessStatusBadge
+                            context="preview"
+                            label={reversalQuery.data.statusLabel}
+                            tone={reversalQuery.data.statusTone}
+                        />
+                    ) : undefined
+                }
                 footer={
-                    canSubmitDraft ? (
+                    <>
                         <Button
-                            id="supplier-payables-preview-reversal-submit"
+                            id="supplier-payables-preview-reversal-dismiss"
                             type="button"
-                            onClick={onRequestReversalSubmit}
+                            variant="outline"
+                            onClick={onClose}
                         >
-                            提交审批
+                            关闭
                         </Button>
-                    ) : null
+                        {canSubmitDraft ? (
+                            <Button
+                                id="supplier-payables-preview-reversal-submit"
+                                type="button"
+                                onClick={onRequestReversalSubmit}
+                            >
+                                提交审批
+                            </Button>
+                        ) : null}
+                    </>
                 }
             >
                 {reversalQuery.isPending ? (
@@ -121,7 +180,7 @@ export function SupplierAccountsPreview({
                         onDecisionApplied={onDecisionApplied}
                     />
                 ) : reversalQuery.isError ? (
-                    <div className="space-y-3 p-6">
+                    <div className="space-y-3 px-7 py-6">
                         <p className="text-sm text-muted-foreground">
                             {getErrorMessage(
                                 reversalQuery.error,
@@ -139,7 +198,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="p-6 text-sm text-muted-foreground">
+                    <p className="px-7 py-6 text-sm text-muted-foreground">
                         未找到冲正详情
                     </p>
                 )}
@@ -162,19 +221,46 @@ export function SupplierAccountsPreview({
                 onOpenChange={(open) => {
                     if (!open) onClose()
                 }}
+                onOpenChangeComplete={(open) => {
+                    if (!open) onClosed?.()
+                }}
                 size="detail"
-                title={refundQuery.data?.refundNo ?? "退款详情"}
-                description="供应商退款记录与审批信息"
+                contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
+                title="供应商退款"
+                identity={
+                    refundQuery.data
+                        ? `退款单：${refundQuery.data.refundNo}`
+                        : undefined
+                }
+                summary={
+                    refundQuery.data ? (
+                        <BusinessStatusBadge
+                            context="preview"
+                            label={refundQuery.data.statusLabel}
+                            tone={refundQuery.data.statusTone}
+                        />
+                    ) : undefined
+                }
                 footer={
-                    canSubmitDraft ? (
+                    <>
                         <Button
-                            id="supplier-payables-preview-refund-submit"
+                            id="supplier-payables-preview-refund-dismiss"
                             type="button"
-                            onClick={onRequestRefundSubmit}
+                            variant="outline"
+                            onClick={onClose}
                         >
-                            提交审批
+                            关闭
                         </Button>
-                    ) : null
+                        {canSubmitDraft ? (
+                            <Button
+                                id="supplier-payables-preview-refund-submit"
+                                type="button"
+                                onClick={onRequestRefundSubmit}
+                            >
+                                提交审批
+                            </Button>
+                        ) : null}
+                    </>
                 }
             >
                 {refundQuery.isPending ? (
@@ -188,7 +274,7 @@ export function SupplierAccountsPreview({
                         onDecisionApplied={onDecisionApplied}
                     />
                 ) : refundQuery.isError ? (
-                    <div className="space-y-3 p-6">
+                    <div className="space-y-3 px-7 py-6">
                         <p className="text-sm text-muted-foreground">
                             {getErrorMessage(
                                 refundQuery.error,
@@ -206,7 +292,7 @@ export function SupplierAccountsPreview({
                         </Button>
                     </div>
                 ) : (
-                    <p className="p-6 text-sm text-muted-foreground">
+                    <p className="px-7 py-6 text-sm text-muted-foreground">
                         未找到退款详情
                     </p>
                 )}
@@ -214,27 +300,90 @@ export function SupplierAccountsPreview({
         )
     }
 
-    if (previewPaymentId) {
+    if (previewPaymentId || previewInvoiceId || previewUnallocatedId) {
+        const unallocated = listData?.unallocated.find(
+            (row) => row.id === previewUnallocatedId,
+        )
+        const invoiceId =
+            previewInvoiceId ??
+            (unallocated?.track === "purchase_invoice" ? unallocated.id : null)
+        const payment = previewPaymentId
+            ? paymentQuery.data
+            : unallocated?.track === "payment"
+              ? listData?.payments.find(
+                    (row) => row.paymentId === unallocated.id,
+                )
+              : undefined
         return (
-            <SupplierPaymentDetailDialog
-                open
-                onOpenChange={(open) => {
-                    if (!open) onClose()
-                }}
-                isPending={paymentQuery.isPending}
-                isError={paymentQuery.isError}
-                error={paymentQuery.error}
-                onRetry={() => void paymentQuery.refetch()}
-                row={paymentQuery.data}
+            <SupplierAccountRecordPreview
+                key={
+                    previewPaymentId ?? previewInvoiceId ?? previewUnallocatedId
+                }
+                kind={
+                    previewPaymentId
+                        ? "payment"
+                        : previewInvoiceId
+                          ? "invoice"
+                          : "unallocated"
+                }
+                payment={payment}
+                invoice={
+                    invoiceQuery?.data ??
+                    listData?.invoices.find(
+                        (row) => row.invoiceId === invoiceId,
+                    )
+                }
+                unallocated={unallocated}
+                loading={
+                    previewPaymentId
+                        ? paymentQuery.isPending
+                        : previewInvoiceId && invoiceQuery
+                          ? invoiceQuery.isPending
+                          : listLoading
+                }
+                error={
+                    previewPaymentId
+                        ? paymentQuery.isError
+                            ? getErrorMessage(
+                                  paymentQuery.error,
+                                  "付款详情加载失败，请重试。",
+                              )
+                            : undefined
+                        : previewInvoiceId && invoiceQuery?.isError
+                          ? getErrorMessage(
+                                invoiceQuery.error,
+                                "原发票读取失败，请重试。",
+                            )
+                          : listError
+                }
+                onRetry={
+                    previewPaymentId
+                        ? () => void paymentQuery.refetch()
+                        : previewInvoiceId && invoiceQuery
+                          ? () => void invoiceQuery.refetch()
+                          : onRetryList
+                }
+                onClose={onClose}
+                onClosed={onClosed}
                 onOpenPayable={onOpenPayable}
+                onOpenReversal={onOpenReversal}
+                onOpenSession={onOpenSession}
+                onReverse={onReverse}
+                onRedInvoiceNo={onRedInvoiceNo}
+                onRefund={onRefund}
             />
         )
     }
 
     const payable = detailQuery.data?.payable
     const canRegisterPayment =
+        paymentAllowed &&
         payable != null &&
         payable.payableAccountId === paymentTaskPayableAccountId
+    const sourceHref = payable
+        ? (payable.sourceHref ??
+          sourceDocumentHref(payable.sourceType, payable.sourceDocumentId))
+        : undefined
     const showRegisterInvoice =
         payable != null &&
         canRegisterInvoice &&
@@ -247,31 +396,25 @@ export function SupplierAccountsPreview({
             onOpenChange={(open) => {
                 if (!open) onClose()
             }}
+            onOpenChangeComplete={(open) => {
+                if (!open) onClosed?.()
+            }}
             size="detail"
-            title={payable?.sourceDocumentNo ?? "应付详情"}
+            contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
+            title={payable?.supplierName ?? "应付详情"}
             identity={
-                payable ? (
-                    <span>
-                        {payable.supplierName} · {payable.sourceTypeLabel}
-                    </span>
-                ) : null
+                payable
+                    ? `${payable.sourceTypeLabel}：${payable.sourceDocumentNo}`
+                    : undefined
             }
             summary={
                 payable ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                        <BusinessStatusBadge
-                            context="preview"
-                            label={payable.statusLabel}
-                            tone={payable.statusTone}
-                        />
-                        <Badge variant={dueBadgeVariant(payable.dueState)}>
-                            {payable.dueStateLabel}
-                        </Badge>
-                        <span className="num text-sm text-muted-foreground">
-                            {payable.dueDate}
-                        </span>
-                    </div>
-                ) : null
+                    <BusinessStatusBadge
+                        context="preview"
+                        label={payable.statusLabel}
+                        tone={payable.statusTone}
+                    />
+                ) : undefined
             }
             footer={
                 payable ? (
@@ -284,14 +427,14 @@ export function SupplierAccountsPreview({
                         >
                             关闭
                         </Button>
-                        {payable.sourceHref ? (
+                        {sourceHref ? (
                             <Button
                                 id="supplier-payables-preview-open-source"
                                 type="button"
                                 variant="outline"
-                                render={<Link href={payable.sourceHref} />}
+                                render={<Link href={sourceHref} />}
                             >
-                                查看来源
+                                {sourceDocumentOpenLabel(payable.sourceType)}
                                 <ExternalLinkIcon data-icon="inline-end" />
                             </Button>
                         ) : null}
@@ -301,7 +444,6 @@ export function SupplierAccountsPreview({
                                 type="button"
                                 variant="outline"
                                 onClick={() => {
-                                    onClose()
                                     onOpenSession({
                                         track: "purchase_invoice",
                                         supplierId: payable.supplierId,
@@ -318,7 +460,6 @@ export function SupplierAccountsPreview({
                                 id="supplier-payables-preview-register-payment"
                                 type="button"
                                 onClick={() => {
-                                    onClose()
                                     onOpenSession({
                                         track: "payment",
                                         supplierId: payable.supplierId,
@@ -373,18 +514,10 @@ export function SupplierAccountsPreview({
                     </Button>
                 </div>
             ) : (
-                <p className="p-6 text-sm text-muted-foreground">
+                <p className="px-7 py-6 text-sm text-muted-foreground">
                     未找到应付详情
                 </p>
             )}
         </QuickPreviewSheet>
     )
-}
-
-function dueBadgeVariant(
-    dueState: PayableRow["dueState"],
-): "destructive" | "warning" | "neutral" {
-    if (dueState === "overdue") return "destructive"
-    if (dueState === "due_today") return "warning"
-    return "neutral"
 }

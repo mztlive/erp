@@ -1,9 +1,10 @@
 "use client"
 
-import { LoaderCircleIcon } from "lucide-react"
+import Link from "next/link"
+import { customerDocumentHref, salesOrderHref } from "../lib/source-documents"
+import { ArrowUpRightIcon, LoaderCircleIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
@@ -41,6 +42,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
     error: unknown
     onRetry: () => void
     onClose: () => void
+    onClosed?: () => void
     onStartSession: (
         mode: AllocationMode,
         partyId: string,
@@ -56,6 +58,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
     canSubmitRefund?: boolean
     canSubmitReversal?: boolean
     permissionReason?: string
+    invoiceSessionBlockedReason?: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -76,6 +79,7 @@ export function CustomerAccountDetailPreview({
     error,
     onRetry,
     onClose,
+    onClosed,
     onStartSession,
     canStartSession = () => true,
     startSessionPending = false,
@@ -86,12 +90,27 @@ export function CustomerAccountDetailPreview({
     canSubmitRefund = true,
     canSubmitReversal = true,
     permissionReason,
+    invoiceSessionBlockedReason,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
     showCorrectionActions = true,
 }: CustomerAccountDetailPreviewProps) {
+    const originalReceiptId =
+        data?.refund?.originalReceiptId ?? data?.reversal?.originalReceiptId
+    const originalHref = data?.receivable?.salesOrderId
+        ? salesOrderHref(data.receivable.salesOrderId)
+        : originalReceiptId
+          ? customerDocumentHref("receipt", originalReceiptId)
+          : data?.invoice?.originalInvoiceId
+            ? customerDocumentHref("invoice", data.invoice.originalInvoiceId)
+            : undefined
+    const originalLabel = data?.receivable
+        ? "打开销售单"
+        : originalReceiptId
+          ? "打开原回款"
+          : "打开原发票"
     return (
         <QuickPreviewSheet
             id="customer-receivables-preview-sheet"
@@ -99,32 +118,33 @@ export function CustomerAccountDetailPreview({
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
             }}
+            onOpenChangeComplete={(nextOpen) => {
+                if (!nextOpen) onClosed?.()
+            }}
             size="detail"
+            contentClassName="data-[side=right]:sm:w-[480px] data-[side=right]:sm:max-w-[480px]"
             title={
-                data?.receivable
-                    ? data.receivable.salesOrderNo
-                    : data?.receipt
-                      ? data.receipt.receiptNo
-                      : data?.invoice
-                        ? data.invoice.invoiceNo
-                        : data?.refund
-                          ? data.refund.refundNo
-                          : data?.reversal
-                            ? data.reversal.reversalNo
-                            : "往来详情"
+                data?.receivable?.counterpartyPartyName ??
+                data?.receipt?.counterpartyPartyName ??
+                data?.invoice?.counterpartyPartyName ??
+                (data?.refund
+                    ? "客户退款"
+                    : data?.reversal
+                      ? "回款冲正"
+                      : "往来详情")
             }
             identity={
-                data?.receivable ? (
-                    <span>{data.receivable.counterpartyPartyName}</span>
-                ) : data?.receipt ? (
-                    <span>{data.receipt.counterpartyPartyName}</span>
-                ) : data?.invoice ? (
-                    <span>{data.invoice.counterpartyPartyName}</span>
-                ) : data?.refund ? (
-                    <span>{data.refund.refundNo}</span>
-                ) : data?.reversal ? (
-                    <span>{data.reversal.reversalNo}</span>
-                ) : null
+                data?.receivable
+                    ? `销售单：${data.receivable.salesOrderNo}`
+                    : data?.receipt
+                      ? `回款单：${data.receipt.receiptNo}`
+                      : data?.invoice
+                        ? `发票号码：${data.invoice.invoiceNo}`
+                        : data?.refund
+                          ? `退款单：${data.refund.refundNo}`
+                          : data?.reversal
+                            ? `冲正单：${data.reversal.reversalNo}`
+                            : undefined
             }
             summary={
                 data?.receivable ? (
@@ -146,7 +166,9 @@ export function CustomerAccountDetailPreview({
                             label={data.invoice.statusLabel}
                             tone={data.invoice.statusTone}
                         />
-                        <Badge>{data.invoice.invoiceKindLabel}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                            {data.invoice.invoiceKindLabel}
+                        </span>
                     </div>
                 ) : data?.refund ? (
                     <BusinessStatusBadge
@@ -173,18 +195,36 @@ export function CustomerAccountDetailPreview({
                         >
                             关闭
                         </Button>
+                        {originalHref ? (
+                            <Button
+                                id="customer-receivables-preview-open-original"
+                                type="button"
+                                variant="outline"
+                                render={<Link href={originalHref} />}
+                            >
+                                {originalLabel}
+                                <ArrowUpRightIcon data-icon="inline-end" />
+                            </Button>
+                        ) : null}
                         {data.receivable ? (
                             <Button
                                 id="customer-receivables-preview-receivable-register-receipt"
                                 type="button"
                                 disabled={
                                     startSessionPending ||
-                                    !canStartSession("receipt")
+                                    !canStartSession("receipt") ||
+                                    !data.receivable!.allowedActions.includes(
+                                        "REGISTER_RECEIPT",
+                                    )
                                 }
                                 title={
-                                    canStartSession("receipt")
-                                        ? undefined
-                                        : permissionReason
+                                    !canStartSession("receipt")
+                                        ? permissionReason
+                                        : data.receivable!.allowedActions.includes(
+                                                "REGISTER_RECEIPT",
+                                            )
+                                          ? undefined
+                                          : "当前不能登记回款并核销"
                                 }
                                 onClick={() =>
                                     void onStartSession(
@@ -308,7 +348,8 @@ export function CustomerAccountDetailPreview({
                                 title={
                                     canStartSession("invoice")
                                         ? undefined
-                                        : permissionReason
+                                        : (invoiceSessionBlockedReason ??
+                                          permissionReason)
                                 }
                                 onClick={() =>
                                     void onStartSession(
@@ -403,12 +444,12 @@ export function CustomerAccountDetailPreview({
             }
         >
             {isPending ? (
-                <div className="space-y-3 p-6">
+                <div className="space-y-3 px-7 py-6">
                     <div className="h-24 animate-pulse rounded-xl bg-muted" />
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : isError ? (
-                <div className="space-y-3 p-6">
+                <div className="space-y-3 px-7 py-6">
                     <p className="text-sm text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
@@ -451,7 +492,7 @@ export function CustomerAccountDetailPreview({
             ) : data?.invoice ? (
                 <InvoiceDetailBody row={data.invoice} />
             ) : (
-                <div className="p-6 text-sm text-muted-foreground">
+                <div className="px-7 py-6 text-sm text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}

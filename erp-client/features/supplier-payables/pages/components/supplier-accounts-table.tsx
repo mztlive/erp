@@ -21,11 +21,8 @@ import {
     type PayableRow,
     type PaymentRow,
     type PurchaseInvoiceRow,
-    type ReverseTarget,
-    type SessionState,
     type SupplierAccountsListView,
     type SupplierAccountsView,
-    type SupplierRefundRequest,
     type UnallocatedRow,
 } from "@/features/supplier-payables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -50,18 +47,12 @@ export interface SupplierAccountsTableProps {
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
     onClearFilters: () => void
-    returnTo: string | undefined
-    fromWorkspace: string | undefined
-    paymentTaskPayableAccountId?: string
+    previewRowId: string | null
     openPreview: (payableAccountId: string) => void
     openPaymentPreview: (paymentId: string) => void
+    openInvoicePreview: (invoiceId: string) => void
+    openUnallocatedPreview: (id: string) => void
     openReversalPreview: (reversalId: string) => void
-    openSession: (next: SessionState) => void
-    setReverseTarget: React.Dispatch<React.SetStateAction<ReverseTarget | null>>
-    setRedInvoiceNo: React.Dispatch<React.SetStateAction<string>>
-    setRefundRequest?: React.Dispatch<
-        React.SetStateAction<SupplierRefundRequest | null>
-    >
     toolbar: React.ReactNode
 }
 
@@ -80,16 +71,12 @@ export function SupplierAccountsTable({
     sorting,
     onSortingChange,
     onClearFilters,
-    returnTo,
-    fromWorkspace,
-    paymentTaskPayableAccountId,
+    previewRowId,
     openPreview,
     openPaymentPreview,
+    openInvoicePreview,
+    openUnallocatedPreview,
     openReversalPreview,
-    openSession,
-    setReverseTarget,
-    setRedInvoiceNo,
-    setRefundRequest,
     toolbar,
 }: SupplierAccountsTableProps) {
     const {
@@ -97,19 +84,7 @@ export function SupplierAccountsTable({
         paymentColumns,
         invoiceColumns,
         unallocatedColumns,
-    } = useSupplierAccountsColumns({
-        data,
-        returnTo,
-        fromWorkspace,
-        paymentTaskPayableAccountId,
-        openPreview,
-        openPaymentPreview,
-        openReversalPreview,
-        openSession,
-        setReverseTarget,
-        setRedInvoiceNo,
-        setRefundRequest,
-    })
+    } = useSupplierAccountsColumns({ openReversalPreview })
 
     return (
         <ListWorkSurface
@@ -154,6 +129,9 @@ export function SupplierAccountsTable({
                     unallocatedColumns={unallocatedColumns}
                     openPreview={openPreview}
                     openPaymentPreview={openPaymentPreview}
+                    openInvoicePreview={openInvoicePreview}
+                    openUnallocatedPreview={openUnallocatedPreview}
+                    previewRowId={previewRowId}
                 />
             }
         />
@@ -180,6 +158,9 @@ function SupplierAccountsTableBody({
     unallocatedColumns,
     openPreview,
     openPaymentPreview,
+    openInvoicePreview,
+    openUnallocatedPreview,
+    previewRowId,
 }: Pick<
     SupplierAccountsTableProps,
     | "view"
@@ -197,6 +178,9 @@ function SupplierAccountsTableBody({
     | "onClearFilters"
     | "openPreview"
     | "openPaymentPreview"
+    | "openInvoicePreview"
+    | "openUnallocatedPreview"
+    | "previewRowId"
 > & {
     payableColumns: ReturnType<
         typeof useSupplierAccountsColumns
@@ -275,6 +259,7 @@ function SupplierAccountsTableBody({
                 rowCount={rowCount}
                 layout="flush"
                 loading={loading}
+                highlightedRowId={previewRowId ?? undefined}
                 onRowPreview={(row) => openPreview(row.payableAccountId)}
                 rowLabel={(row) =>
                     `${row.supplierName} ${row.sourceDocumentNo}`
@@ -296,6 +281,7 @@ function SupplierAccountsTableBody({
                 rowCount={rowCount}
                 layout="flush"
                 loading={loading}
+                highlightedRowId={previewRowId ?? undefined}
                 onRowPreview={(row) => openPaymentPreview(row.paymentId)}
                 rowLabel={(row) => `${row.paymentNo} ${row.supplierName}`}
             />
@@ -309,6 +295,9 @@ function SupplierAccountsTableBody({
                 columns={invoiceColumns}
                 data={pageRows as PurchaseInvoiceRow[]}
                 getRowId={(r) => r.invoiceId}
+                onRowPreview={(row) => openInvoicePreview(row.invoiceId)}
+                highlightedRowId={previewRowId ?? undefined}
+                rowLabel={(row) => `${row.invoiceNo} ${row.supplierName}`}
                 pagination={pagination}
                 onPaginationChange={onPaginationChange}
                 rowCount={rowCount}
@@ -324,6 +313,9 @@ function SupplierAccountsTableBody({
             columns={unallocatedColumns}
             data={pageRows as UnallocatedRow[]}
             getRowId={(r) => r.id}
+            onRowPreview={(row) => openUnallocatedPreview(row.id)}
+            highlightedRowId={previewRowId ?? undefined}
+            rowLabel={(row) => `${row.documentNo} ${row.supplierName}`}
             pagination={pagination}
             onPaginationChange={onPaginationChange}
             rowCount={rowCount}

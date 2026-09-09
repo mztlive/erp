@@ -1,5 +1,7 @@
 "use client"
 
+import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/column-types"
+
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
@@ -28,6 +30,8 @@ type Props = {
     receivableColumns: ColumnDef<ReceivableAccountRow>[]
     receiptColumns: ColumnDef<ReceiptRow>[]
     invoiceColumns: ColumnDef<SalesInvoiceRow>[]
+    preview: CustomerAccountPreviewTarget | null
+    onPreview: (target: CustomerAccountPreviewTarget) => void
 }
 
 /** 客户往来列表分区：权限/范围状态、指标、筛选和表格。 */
@@ -42,6 +46,8 @@ export function CustomerReceivablesListPane({
     receivableColumns,
     receiptColumns,
     invoiceColumns,
+    preview,
+    onPreview,
 }: Props) {
     if (data && !data.moduleAllowed) {
         return (
@@ -78,6 +84,8 @@ export function CustomerReceivablesListPane({
                 receivableColumns={receivableColumns}
                 receiptColumns={receiptColumns}
                 invoiceColumns={invoiceColumns}
+                preview={preview}
+                onPreview={onPreview}
                 toolbar={
                     <CustomerReceivablesToolbar
                         view={urlState.view}

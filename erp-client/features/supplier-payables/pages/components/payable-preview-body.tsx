@@ -3,6 +3,12 @@
 import Link from "next/link"
 
 import { MoneyValue } from "@/components/business"
+import {
+    PreviewAmount,
+    PreviewSection,
+    PreviewFact,
+    PreviewNote,
+} from "@/components/business/financial-preview"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
@@ -22,7 +28,7 @@ export interface PayablePreviewBodyProps {
 /** 应付详情抽屉加载占位。 */
 export function PayablePreviewSkeleton() {
     return (
-        <div className="flex flex-col gap-4 p-6">
+        <div className="flex flex-col gap-6 px-7 py-6">
             <Skeleton className="h-28 w-full" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-32 w-full" />
@@ -51,19 +57,16 @@ export function PayablePreviewBody({
     const showGate = gate?.state === "BLOCKED"
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-6">
-            {showGate && gate ? (
-                <Alert variant="warning">
-                    <AlertTitle>先款条件未满足</AlertTitle>
-                    <AlertDescription>
-                        {gate.message} · 已核销 {gate.allocated} / 门槛{" "}
-                        {gate.required} · 差额 {gate.gap}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
-                <h3 className="text-sm font-semibold">进度</h3>
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto px-7 py-6">
+            <PreviewAmount label="待付金额（含税）" value={payable.openTotal}>
+                <span>
+                    应付总额 <MoneyValue value={payable.grossTotal} />
+                </span>
+                <span>
+                    已付 <MoneyValue value={payable.settledTotal} />
+                </span>
+            </PreviewAmount>
+            <PreviewSection title="结算进度">
                 <ProgressTrackRow
                     label="付款进度"
                     percent={paymentPercent}
@@ -80,10 +83,62 @@ export function PayablePreviewBody({
                     allocatedCaption="已收"
                     totalCaption="可收"
                 />
-            </section>
+                <dl className="space-y-3 pt-1">
+                    <PreviewFact label="待收票（含税）">
+                        <MoneyValue value={payable.openInvoiceableTotal} />
+                    </PreviewFact>
+                </dl>
+                <PreviewNote>
+                    付款与收票分别核销，已收票不代表已付款。
+                </PreviewNote>
+            </PreviewSection>
+            <PreviewSection title="付款安排">
+                <dl className="space-y-3">
+                    <PreviewFact label="到期日">
+                        <span className="num">{payable.dueDate}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                            {payable.dueStateLabel}
+                        </span>
+                    </PreviewFact>
+                    <PreviewFact label="应付来源">
+                        {payable.sourceTypeLabel}
+                    </PreviewFact>
+                    {payable.paymentRecipient ? (
+                        <>
+                            <PreviewFact label="收款户名">
+                                {payable.paymentRecipient.accountName}
+                            </PreviewFact>
+                            <PreviewFact label="收款银行">
+                                {payable.paymentRecipient.bankName}
+                            </PreviewFact>
+                            <PreviewFact label="收款账号">
+                                <span className="num">
+                                    {
+                                        payable.paymentRecipient
+                                            .accountNumberMasked
+                                    }
+                                </span>
+                            </PreviewFact>
+                        </>
+                    ) : null}
+                </dl>
+                {showGate && gate ? (
+                    <Alert variant="warning">
+                        <AlertTitle>先款条件未满足</AlertTitle>
+                        <AlertDescription>
+                            已核销 <MoneyValue value={gate.allocated} /> / 要求{" "}
+                            <MoneyValue value={gate.required} />
+                            ，还差 <MoneyValue value={gate.gap} />。
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
 
-            <section className="flex flex-col gap-3">
-                <h3 className="text-sm font-semibold">构成</h3>
+                {paymentBlockedReason ? (
+                    <PreviewNote>{paymentBlockedReason}</PreviewNote>
+                ) : null}
+            </PreviewSection>
+
+            <PreviewSection title="应付构成">
                 {entries.length === 0 ? (
                     <p className="text-sm text-muted-foreground">暂无分录</p>
                 ) : (
@@ -91,7 +146,7 @@ export function PayablePreviewBody({
                         {entries.map((entry) => (
                             <li
                                 key={entry.entryId}
-                                className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
+                                className="flex items-start justify-between gap-5 border-b border-border py-3 text-sm last:border-b-0"
                             >
                                 <div className="min-w-0">
                                     <p>
@@ -119,10 +174,9 @@ export function PayablePreviewBody({
                         ))}
                     </ul>
                 )}
-            </section>
+            </PreviewSection>
 
-            <section className="flex flex-col gap-3">
-                <h3 className="text-sm font-semibold">往来</h3>
+            <PreviewSection title="核销记录">
                 {activity.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         尚无付款或进项核销记录
@@ -134,13 +188,7 @@ export function PayablePreviewBody({
                         ))}
                     </ul>
                 )}
-            </section>
-
-            {paymentBlockedReason ? (
-                <p className="text-xs text-muted-foreground">
-                    {paymentBlockedReason}
-                </p>
-            ) : null}
+            </PreviewSection>
         </div>
     )
 }
@@ -176,16 +224,17 @@ function ProgressTrackRow({
 function ActivityRow({ item }: { item: PayableActivityItem }) {
     const content = (
         <>
-            <span className="w-24 shrink-0 text-xs text-muted-foreground">
-                {formatDateTime(item.occurredAt, "monthDay", "dash")}
-            </span>
-            <span className="min-w-0 flex-1 truncate">
-                {item.trackLabel} · {item.actionLabel}
-                <span className="text-muted-foreground">
-                    {" "}
-                    · {item.documentNo}
-                </span>
-            </span>
+            <div className="min-w-0 flex-1">
+                <p>
+                    {item.trackLabel} · {item.actionLabel}
+                </p>
+                <p className="num mt-1 break-words text-xs text-muted-foreground">
+                    {item.documentNo}
+                </p>
+                <p className="num mt-1 text-xs text-muted-foreground">
+                    {formatDateTime(item.occurredAt, "full", "dash")}
+                </p>
+            </div>
             <MoneyValue value={item.amount} className="shrink-0" />
         </>
     )

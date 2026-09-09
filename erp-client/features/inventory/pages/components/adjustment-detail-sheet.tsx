@@ -46,7 +46,7 @@ export function AdjustmentDetailSheet({
             title={adjustment ? adjustment.adjustmentNo : "调整详情"}
             identity={
                 adjustment ? (
-                    <span className="num text-sm">
+                    <span className="num text-xs">
                         {adjustment.warehouseName} · {adjustment.skuCode}
                     </span>
                 ) : null
@@ -77,8 +77,8 @@ export function AdjustmentDetailSheet({
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : detail ? (
-                <div className="flex flex-col gap-4">
-                    <div className="rounded-xl border bg-card p-3 text-sm">
+                <div className="flex flex-col gap-6">
+                    <div className="border-b border-border pb-6 text-sm">
                         <div className="font-medium">
                             {detail.adjustment.reasonTypeLabel} ·{" "}
                             {detail.adjustment.direction === "increase"

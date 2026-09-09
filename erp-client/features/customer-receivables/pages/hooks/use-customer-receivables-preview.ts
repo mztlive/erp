@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useSearchParams } from "next/navigation"
 
 import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/customer-account-columns"
 import type { CustomerAccountsView } from "@/features/customer-receivables/types"
@@ -23,10 +22,13 @@ export function useCustomerReceivablesPreview(args: {
     preview: CustomerAccountPreviewTarget | null
     openPreview: (next: CustomerAccountPreviewTarget | null) => void
     closePreview: () => void
+    restoreRowFocus: () => void
 } {
-    const { view, previewKind, previewId, focusId, patchUrl } = args
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
+    const { previewKind, previewId, focusId, patchUrl } = args
+    const lastFocusedRow = React.useRef<HTMLElement | null>(null)
+    const restoreRowFocus = React.useCallback(() => {
+        if (lastFocusedRow.current?.isConnected) lastFocusedRow.current.focus()
+    }, [])
 
     const [preview, setPreview] =
         React.useState<CustomerAccountPreviewTarget | null>(() =>
@@ -37,10 +39,23 @@ export function useCustomerReceivablesPreview(args: {
                   : null,
         )
 
+    React.useEffect(() => {
+        setPreview(
+            previewKind && previewId
+                ? { kind: previewKind, id: previewId }
+                : focusId
+                  ? { kind: "receivable", id: focusId }
+                  : null,
+        )
+    }, [previewKind, previewId, focusId])
+
     const openPreview = React.useCallback(
         (next: CustomerAccountPreviewTarget | null) => {
             setPreview(next)
             if (next) {
+                lastFocusedRow.current = document.querySelector<HTMLElement>(
+                    `[data-row-id="${CSS.escape(next.id)}"]`,
+                )
                 // 打开/关闭详情用 push（P2）；旧 focusId 一并清理
                 patchUrl(
                     {
@@ -52,8 +67,7 @@ export function useCustomerReceivablesPreview(args: {
                 )
             }
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [searchParams, pathname, view],
+        [patchUrl],
     )
 
     const closePreview = React.useCallback(() => {
@@ -66,8 +80,7 @@ export function useCustomerReceivablesPreview(args: {
             },
             { replace: false },
         )
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams, pathname, view])
+    }, [patchUrl])
 
-    return { preview, openPreview, closePreview }
+    return { preview, openPreview, closePreview, restoreRowFocus }
 }

@@ -1,20 +1,10 @@
-import { LoaderCircleIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import type { ReceiptRow } from "@/features/customer-receivables/types"
 import { formatDateTime } from "@/lib/datetime"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { ColumnActions } from "./column-types"
 
-export function createReceiptColumns({
-    onPreview,
-    onStartSession,
-    canStartSession = () => true,
-    startSessionPending = false,
-    permissionReason,
-}: ColumnActions): ColumnDef<ReceiptRow>[] {
+export function createReceiptColumns(): ColumnDef<ReceiptRow>[] {
     return [
         {
             id: "doc",
@@ -92,64 +82,6 @@ export function createReceiptColumns({
                     label={row.original.statusLabel}
                     tone={row.original.statusTone}
                 />
-            ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default" },
-            cell: ({ row }) => (
-                <div className="flex flex-wrap justify-end gap-1">
-                    <Button
-                        id={`customer-receivables-receipt-row-${toAutomationIdSegment(row.original.receiptId)}-preview`}
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                            onPreview({
-                                kind: "receipt",
-                                id: row.original.receiptId,
-                            })
-                        }
-                    >
-                        预览
-                    </Button>
-                    {row.original.allowedActions.includes(
-                        "CONTINUE_ALLOCATE",
-                    ) ? (
-                        <Button
-                            id={`customer-receivables-receipt-row-${toAutomationIdSegment(row.original.receiptId)}-continue-allocate`}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={
-                                startSessionPending ||
-                                !canStartSession("receipt")
-                            }
-                            title={
-                                canStartSession("receipt")
-                                    ? undefined
-                                    : permissionReason
-                            }
-                            onClick={() =>
-                                void onStartSession(
-                                    "receipt",
-                                    row.original.counterpartyPartyId,
-                                    row.original.receiptId,
-                                )
-                            }
-                        >
-                            {startSessionPending ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
-                            {startSessionPending ? "创建中…" : "继续核销"}
-                        </Button>
-                    ) : null}
-                </div>
             ),
         },
     ]

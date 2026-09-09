@@ -9,6 +9,7 @@ export {
     fetchPayableDetail,
     fetchSupplierAccounts,
     fetchSupplierPayment,
+    fetchSupplierInvoice,
     revealPaymentRecipient,
 } from "@/features/supplier-payables/api/supplier-accounts"
 

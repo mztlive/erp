@@ -49,8 +49,7 @@ export function VoucherCategoryPreviewSheet({
                 }
             }}
             size="preview"
-            overlayClassName="bg-black/20 supports-backdrop-filter:backdrop-blur-none"
-            contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px] [&_[data-slot=sheet-header]]:gap-3 [&_[data-slot=sheet-header]]:px-7 [&_[data-slot=sheet-header]]:pt-10 [&_[data-slot=sheet-title]]:text-xl [&_[data-slot=sheet-title]]:leading-8 [&_[data-slot=sheet-title]]:font-semibold [&_[data-slot=quick-preview-identity]]:text-xs [&_[data-slot=quick-preview-content]]:px-7 [&_[data-slot=sheet-footer]]:flex-row [&_[data-slot=sheet-footer]]:justify-end [&_[data-slot=sheet-footer]]:px-7 [&_[data-slot=sheet-footer]]:py-4"
+            contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
             title={detail?.name ?? row?.name ?? "卡券类目详情"}
             identity={
                 row ? (

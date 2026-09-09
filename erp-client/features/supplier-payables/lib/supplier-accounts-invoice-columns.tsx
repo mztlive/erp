@@ -1,24 +1,12 @@
 /** W12 供应商往来 · 进项发票列定义（纯构建函数，供 useSupplierAccountsColumns 组装）。 */
 
 import type { ColumnDef } from "@tanstack/react-table"
-import type { Dispatch, SetStateAction } from "react"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import type {
-    PurchaseInvoiceRow,
-    ReverseTarget,
-    SessionState,
-} from "@/features/supplier-payables/types"
+import type { PurchaseInvoiceRow } from "@/features/supplier-payables/types"
 
-export function buildInvoiceColumns(input: {
-    openSession: (next: SessionState) => void
-    setReverseTarget: Dispatch<SetStateAction<ReverseTarget | null>>
-    setRedInvoiceNo: Dispatch<SetStateAction<string>>
-}): ColumnDef<PurchaseInvoiceRow>[] {
-    const { openSession, setReverseTarget, setRedInvoiceNo } = input
+export function buildInvoiceColumns(): ColumnDef<PurchaseInvoiceRow>[] {
     return [
         {
             id: "doc",
@@ -88,51 +76,6 @@ export function buildInvoiceColumns(input: {
                     tone={row.original.statusTone}
                     description="与付款进度独立"
                 />
-            ),
-        },
-        {
-            id: "actions",
-            header: "操作",
-            meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => (
-                <div className="flex flex-wrap justify-end gap-1">
-                    {row.original.allowedActions.includes(
-                        "CONTINUE_ALLOCATE",
-                    ) ? (
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.invoiceId)}-continue-allocate`}
-                            type="button"
-                            size="xs"
-                            onClick={() =>
-                                openSession({
-                                    track: "purchase_invoice",
-                                    supplierId: row.original.supplierId,
-                                    existingInvoiceId: row.original.invoiceId,
-                                })
-                            }
-                        >
-                            继续核销
-                        </Button>
-                    ) : null}
-                    {row.original.allowedActions.includes("RED_INVOICE") ? (
-                        <Button
-                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.invoiceId)}-red-invoice`}
-                            type="button"
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                                setRedInvoiceNo(`R${row.original.invoiceNo}`)
-                                setReverseTarget({
-                                    kind: "invoice",
-                                    id: row.original.invoiceId,
-                                    no: `${row.original.invoiceCode}-${row.original.invoiceNo}`,
-                                })
-                            }}
-                        >
-                            红票
-                        </Button>
-                    ) : null}
-                </div>
             ),
         },
     ]

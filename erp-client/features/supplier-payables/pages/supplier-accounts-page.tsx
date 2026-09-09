@@ -1,5 +1,6 @@
 "use client"
 
+import { getErrorMessage } from "@/lib/api/errors"
 import { BusinessEmptyState, PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"
 import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
@@ -12,6 +13,7 @@ import {
     usePaymentReversalQuery,
     useReverseInvoiceMutation,
     useSupplierPaymentQuery,
+    useSupplierInvoiceQuery,
     useSupplierRefundQuery,
 } from "@/features/supplier-payables/hooks/queries"
 import { isPaymentReversalWorkItem } from "@/features/supplier-payables/lib/payment-reversal-approval"
@@ -65,6 +67,12 @@ export function SupplierAccountsPage() {
         handlePaginationChange,
         sorting,
         setSorting,
+        previewInvoiceId,
+        previewUnallocatedId,
+        previewRowId,
+        restoreRowFocus,
+        openInvoicePreview,
+        openUnallocatedPreview,
         previewPayableId,
         previewPaymentId,
         previewRefundId,
@@ -171,6 +179,7 @@ export function SupplierAccountsPage() {
     const focusedRefundId = previewRefundId ?? workItemRefundId ?? null
     const focusedReversalId = previewReversalId ?? workItemReversalId ?? null
     const detailQuery = usePayableDetailQuery(previewPayableId)
+    const invoiceQuery = useSupplierInvoiceQuery(previewInvoiceId)
     const paymentQuery = useSupplierPaymentQuery(focusedPaymentId)
     const refundQuery = useSupplierRefundQuery(focusedRefundId)
     const reversalQuery = usePaymentReversalQuery(focusedReversalId)
@@ -321,30 +330,44 @@ export function SupplierAccountsPage() {
                         sorting={sorting}
                         onSortingChange={setSorting}
                         onClearFilters={clearFilters}
-                        returnTo={returnTo}
-                        fromWorkspace={fromWorkspace}
-                        paymentTaskPayableAccountId={
-                            paymentExecutionTask?.businessObjectId
-                        }
+                        previewRowId={previewRowId}
                         openPreview={openPreview}
                         openPaymentPreview={openPaymentPreview}
+                        openInvoicePreview={openInvoicePreview}
+                        openUnallocatedPreview={openUnallocatedPreview}
                         openReversalPreview={openReversalPreview}
-                        openSession={openSession}
-                        setReverseTarget={setReverseTarget}
-                        setRedInvoiceNo={setRedInvoiceNo}
-                        setRefundRequest={refundFlow.setRefundRequest}
                         toolbar={filterToolbar}
                     />
                 </>
             )}
 
             <SupplierAccountsPreview
+                previewInvoiceId={previewInvoiceId}
+                previewUnallocatedId={previewUnallocatedId}
+                listData={data}
+                listLoading={listQuery.isPending}
+                listError={
+                    listQuery.isError
+                        ? getErrorMessage(
+                              listQuery.error,
+                              "往来记录加载失败，请重试。",
+                          )
+                        : undefined
+                }
+                onRetryList={() => void listQuery.refetch()}
+                onOpenReversal={openReversalPreview}
+                onReverse={setReverseTarget}
+                onRedInvoiceNo={setRedInvoiceNo}
+                onRefund={refundFlow.setRefundRequest}
+                onClosed={restoreRowFocus}
+                canRegisterPayment={data?.canRegisterPayment}
                 previewPayableId={previewPayableId}
                 previewPaymentId={focusedPaymentId}
                 previewRefundId={focusedRefundId}
                 previewReversalId={focusedReversalId}
                 detailQuery={detailQuery}
                 paymentQuery={paymentQuery}
+                invoiceQuery={invoiceQuery}
                 refundQuery={refundQuery}
                 reversalQuery={reversalQuery}
                 onRequestRefundSubmit={() => {

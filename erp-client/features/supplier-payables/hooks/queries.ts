@@ -11,6 +11,7 @@ import {
     fetchPaymentReversal,
     fetchSupplierAccounts,
     fetchSupplierPayment,
+    fetchSupplierInvoice,
     fetchSupplierPaymentBankReceiptBlob,
     fetchSupplierRefund,
     revealPaymentRecipient,
@@ -39,6 +40,8 @@ export const supplierPayablesKeys = {
         [...supplierPayablesKeys.all, "list", query] as const,
     detail: (payableAccountId: string) =>
         [...supplierPayablesKeys.all, "detail", payableAccountId] as const,
+    invoice: (invoiceId: string) =>
+        [...supplierPayablesKeys.all, "invoice", invoiceId] as const,
     payment: (paymentId: string) =>
         [...supplierPayablesKeys.all, "payment", paymentId] as const,
     paymentReceipt: (paymentId: string) =>
@@ -79,6 +82,14 @@ export function usePayableDetailQuery(payableAccountId: string | null) {
  *
  * @param paymentId 付款主键；空值不发请求。
  */
+export function useSupplierInvoiceQuery(invoiceId: string | null) {
+    return useQuery({
+        queryKey: supplierPayablesKeys.invoice(invoiceId ?? ""),
+        queryFn: () => fetchSupplierInvoice(invoiceId!),
+        enabled: Boolean(invoiceId),
+    })
+}
+
 export function useSupplierPaymentQuery(paymentId: string | null) {
     return useQuery({
         queryKey: supplierPayablesKeys.payment(paymentId ?? ""),
