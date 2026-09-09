@@ -39,3 +39,20 @@ test("成本掩码时金额显示为占位", () => {
     expect(screen.getAllByText("•••").length).toBeGreaterThan(0)
     expect(screen.queryByText("1,130.00")).toBeNull()
 })
+
+test("概览五列明细保留类型、税率和税额，并遵守成本掩码", () => {
+    const order = makePurchaseOrderCenter()
+    const { container, unmount } = render(
+        <LinesTable order={order} costMasked={false} summary />,
+    )
+    expect(container.querySelectorAll("th")).toHaveLength(5)
+    expect(container.textContent).toContain("商品/服务")
+    expect(container.textContent).toContain("13.00%")
+    expect(container.textContent).toContain("130.00")
+    unmount()
+    const masked = render(<LinesTable order={order} costMasked summary />)
+    expect(masked.container.textContent).not.toMatch(
+        /100\.00|130\.00|1,130\.00/,
+    )
+    expect(masked.container.querySelectorAll("th")).toHaveLength(5)
+})

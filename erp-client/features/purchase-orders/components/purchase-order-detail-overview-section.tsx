@@ -1,178 +1,142 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 
-import { DocumentSection, PrepaymentGate } from "@/components/business"
-import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import { Button } from "@/components/ui/button"
-
+import { MoneyValue } from "@/components/business"
 import { LinesTable } from "@/features/purchase-orders/components/purchase-order-surfaces"
-import { PurchaseOrderDetailTotals } from "@/features/purchase-orders/components/purchase-order-detail-totals"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
-    PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
-type GateView = PurchaseOrderCenterView["progress"]["prepaymentGate"]
+function OverviewField({
+    label,
+    children,
+}: {
+    label: string
+    children: ReactNode
+}) {
+    return (
+        <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-3">
+            <dt className="text-sm text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 break-words text-sm leading-6">
+                {children}
+            </dd>
+        </div>
+    )
+}
 
+/** 概览先展示采购明细，再展示来源与交易约定；金额和责任摘要由侧栏承载。 */
 export function PurchaseOrderDetailOverviewSection({
     order,
     costMasked,
-    gate,
-    canPay,
-    w12PayHref,
 }: {
     order: PurchaseOrderCenterView
     costMasked: boolean
-    gate: GateView
-    canPay: boolean
-    w12PayHref: string
 }) {
+    const id = toAutomationIdSegment(order.identity.purchaseOrderId)
     return (
-        <DocumentSection title="概览">
-            <DescriptionList columns="three" className="gap-x-8 gap-y-6">
-                <DescriptionItem>
-                    <DescriptionTerm>供应商</DescriptionTerm>
-                    <DescriptionDetails>
-                        {order.header.supplierSnapshot}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>来源销售单</DescriptionTerm>
-                    <DescriptionDetails>
+        <div className="space-y-5">
+            <section
+                aria-labelledby="purchase-order-lines-heading"
+                className="min-w-0 rounded-lg border border-border/70 p-4 md:p-5"
+            >
+                <div className="mb-4 flex items-baseline justify-between gap-2">
+                    <h2
+                        id="purchase-order-lines-heading"
+                        className="text-lg font-semibold"
+                    >
+                        采购明细
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                        共 {order.currentContent.lines.length} 行
+                    </p>
+                </div>
+                <LinesTable order={order} costMasked={costMasked} summary />
+                <div className="flex items-baseline justify-end gap-5 pt-5 text-sm">
+                    <span className="text-muted-foreground">合计（含税）</span>
+                    <span className="text-xl font-semibold">
+                        {costMasked ? (
+                            "•••"
+                        ) : (
+                            <MoneyValue
+                                value={order.currentContent.totals.gross}
+                            />
+                        )}
+                    </span>
+                </div>
+            </section>
+            <section
+                aria-labelledby="purchase-order-transaction-heading"
+                className="rounded-lg border border-border/70 p-4 md:p-5"
+            >
+                <h2
+                    id="purchase-order-transaction-heading"
+                    className="mb-5 text-lg font-semibold"
+                >
+                    交易约定
+                </h2>
+                <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
+                    <OverviewField label="来源销售单">
                         <Link
-                            id={`procurement-orders-detail-overview-sales-order-${order.identity.purchaseOrderId}`}
+                            id={`procurement-orders-detail-overview-sales-order-${id}`}
                             href={`/sales/orders/${order.header.salesOrderId}`}
-                            className="num text-primary underline-offset-2 hover:underline"
+                            className="num break-all text-primary underline-offset-2 hover:underline"
                         >
                             {order.header.salesOrderNo}
                         </Link>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>同销售单采购单</DescriptionTerm>
-                    <DescriptionDetails>
+                    </OverviewField>
+                    <OverviewField label="同销售单采购单">
                         <Link
-                            id={`procurement-orders-detail-overview-related-${order.identity.purchaseOrderId}`}
+                            id={`procurement-orders-detail-overview-related-${id}`}
                             href={`/procurement/orders?salesOrderId=${encodeURIComponent(order.header.salesOrderId)}`}
                             className="text-primary underline-offset-2 hover:underline"
                         >
                             查看拆分结果
                         </Link>
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>采购类型</DescriptionTerm>
-                    <DescriptionDetails>
-                        {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>履约责任</DescriptionTerm>
-                    <DescriptionDetails>
+                    </OverviewField>
+                    <OverviewField label="付款条件">
+                        {order.header.paymentTermLabel || "—"}
+                    </OverviewField>
+                    <OverviewField label="履约责任">
                         {
                             FULFILLMENT_RESPONSIBILITY_LABEL[
                                 order.header.fulfillmentResponsibility
                             ]
                         }
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>付款条件</DescriptionTerm>
-                    <DescriptionDetails>
-                        {order.header.paymentTermLabel}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>内容来源</DescriptionTerm>
-                    <DescriptionDetails>
+                    </OverviewField>
+                    <OverviewField label="最近预计交期">
+                        <span className="num">
+                            {order.header.expectedDate ?? "—"}
+                        </span>
+                    </OverviewField>
+                    <OverviewField label="当前采购版本">
+                        {order.identity.revisionNo == null
+                            ? "尚未生效"
+                            : `v${order.identity.revisionNo}`}
+                    </OverviewField>
+                    <OverviewField label="内容来源">
                         {order.currentContent.source === "DRAFT"
                             ? "草稿"
                             : order.currentContent.source === "SUBMISSION"
                               ? "已提交内容"
                               : "生效版本"}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>最近预计交期</DescriptionTerm>
-                    <DescriptionDetails className="num">
-                        {order.header.expectedDate ?? "—"}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>负责人</DescriptionTerm>
-                    <DescriptionDetails>
-                        {order.header.ownerName}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                {order.header.targetWarehouseId ? (
-                    <DescriptionItem>
-                        <DescriptionTerm>目标收货仓</DescriptionTerm>
-                        <DescriptionDetails className="num">
-                            {order.header.targetWarehouseId}
-                        </DescriptionDetails>
-                    </DescriptionItem>
-                ) : null}
-            </DescriptionList>
-            {gate.state !== "NOT_APPLICABLE" ? (
-                <div className="mt-4">
-                    <PrepaymentGate
-                        condition={{
-                            kind: "amount",
-                            required: costMasked ? "•••" : gate.required,
-                            description: gate.message,
-                        }}
-                        allocated={costMasked ? "•••" : gate.allocated}
-                        gap={costMasked ? "•••" : gate.gap}
-                        updatedAt={{
-                            dateTime: gate.updatedAt,
-                            label: gate.updatedAt,
-                        }}
-                        allowed={gate.state === "SATISFIED"}
-                        paymentAction={
-                            canPay ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    render={
-                                        <Link
-                                            id={`procurement-orders-detail-overview-pay-${order.identity.purchaseOrderId}`}
-                                            href={w12PayHref}
-                                        />
-                                    }
-                                >
-                                    去供应商往来
-                                </Button>
-                            ) : undefined
-                        }
-                    />
-                </div>
-            ) : null}
-            <PurchaseOrderDetailTotals
-                className="mt-6 ml-auto max-w-md"
-                order={order}
-                costMasked={costMasked}
-            />
-        </DocumentSection>
-    )
-}
-
-export function PurchaseOrderDetailSummarySection({
-    order,
-    costMasked,
-}: {
-    order: PurchaseOrderCenterView
-    costMasked: boolean
-}) {
-    return (
-        <DocumentSection title="明细摘要">
-            <LinesTable order={order} costMasked={costMasked} />
-        </DocumentSection>
+                    </OverviewField>
+                    {order.header.targetWarehouseId ? (
+                        <OverviewField label="目标收货仓">
+                            <Link
+                                id={`procurement-orders-detail-overview-warehouse-${id}`}
+                                href={`/master-data/warehouses/${encodeURIComponent(order.header.targetWarehouseId)}`}
+                                className="text-primary underline-offset-2 hover:underline"
+                            >
+                                查看收货仓资料
+                            </Link>
+                        </OverviewField>
+                    ) : null}
+                </dl>
+            </section>
+        </div>
     )
 }

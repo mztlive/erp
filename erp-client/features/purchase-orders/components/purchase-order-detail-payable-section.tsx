@@ -17,12 +17,12 @@ export function PurchaseOrderDetailPayableSection({
     order,
     costMasked,
     canPay,
-    w12PayHref,
+    payableHref,
 }: {
     order: PurchaseOrderCenterView
     costMasked: boolean
     canPay: boolean
-    w12PayHref: string
+    payableHref: string
 }) {
     return (
         <DocumentSection title="应付与票款">
@@ -85,11 +85,11 @@ export function PurchaseOrderDetailPayableSection({
                     render={
                         <Link
                             id={`procurement-orders-detail-payable-go-${order.identity.purchaseOrderId}`}
-                            href={w12PayHref}
+                            href={payableHref}
                         />
                     }
                 >
-                    去供应商往来
+                    查看应付记录
                 </Button>
             </div>
         </DocumentSection>

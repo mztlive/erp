@@ -26,7 +26,7 @@ export function PurchaseOrderDetailFulfillmentSection({
     gate,
     canFulfill,
     fulfillBlocker,
-    w12PayHref,
+    payableHref,
 }: {
     order: PurchaseOrderCenterView
     costMasked: boolean
@@ -35,7 +35,7 @@ export function PurchaseOrderDetailFulfillmentSection({
     fulfillBlocker:
         | PurchaseOrderCenterView["actionBlockers"][number]
         | undefined
-    w12PayHref: string
+    payableHref: string
 }) {
     return (
         <DocumentSection title="履约">
@@ -111,11 +111,11 @@ export function PurchaseOrderDetailFulfillmentSection({
                         render={
                             <Link
                                 id={`procurement-orders-detail-fulfillment-pay-${order.identity.purchaseOrderId}`}
-                                href={w12PayHref}
+                                href={payableHref}
                             />
                         }
                     >
-                        去供应商往来
+                        查看应付记录
                     </Button>
                 ) : null}
             </div>
@@ -141,11 +141,11 @@ export function PurchaseOrderDetailFulfillmentSection({
                                 render={
                                     <Link
                                         id={`procurement-orders-detail-gate-pay-${order.identity.purchaseOrderId}`}
-                                        href={w12PayHref}
+                                        href={payableHref}
                                     />
                                 }
                             >
-                                去供应商往来
+                                查看应付记录
                             </Button>
                         }
                     />

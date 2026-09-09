@@ -38,20 +38,26 @@ function MaskedAmount() {
 
 function buildPurchaseOrderLinesColumns(
     costMasked: boolean,
+    summary: boolean,
 ): ColumnDef<PurchaseOrderLineRow>[] {
     return [
         {
             id: "item",
             accessorFn: (row) => row.itemName,
             header: "项目",
-            meta: { label: "项目", width: "flex" },
+            meta: { label: "项目", width: summary ? "default" : "flex" },
             cell: ({ row }) => {
                 const line = row.original
                 return (
                     <div className="whitespace-normal">
                         <div className="font-medium">{line.itemName}</div>
+                        {summary ? (
+                            <div className="text-xs text-muted-foreground">
+                                {lineTypeLabel(line.lineType)}
+                            </div>
+                        ) : null}
                         {line.procurementConfirmationLineId ? (
-                            <div className="text-tiny text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                                 {line.salesAllocationLabel ??
                                     `确认分行 · ${line.itemName}`}
                             </div>
@@ -106,7 +112,20 @@ function buildPurchaseOrderLinesColumns(
                 costMasked ? (
                     <MaskedAmount />
                 ) : (
-                    <MoneyValue value={row.original.unitCostGross} />
+                    <div>
+                        <MoneyValue value={row.original.unitCostGross} />
+                        {summary ? (
+                            <div className="text-xs text-muted-foreground">
+                                税率{" "}
+                                <RateValue
+                                    value={taxRatePercent(
+                                        row.original.inputTaxRate,
+                                    )}
+                                    precision={2}
+                                />
+                            </div>
+                        ) : null}
+                    </div>
                 ),
         },
         {
@@ -145,7 +164,7 @@ function buildPurchaseOrderLinesColumns(
         {
             id: "gross",
             accessorKey: "grossAmount",
-            header: "行含税",
+            header: summary ? "含税小计" : "行含税",
             meta: {
                 label: "行含税",
                 width: "amount",
@@ -156,10 +175,18 @@ function buildPurchaseOrderLinesColumns(
                 costMasked ? (
                     <MaskedAmount />
                 ) : (
-                    <MoneyValue
-                        value={row.original.grossAmount}
-                        className={taxAmountToneClass("行含税")}
-                    />
+                    <div>
+                        <MoneyValue
+                            value={row.original.grossAmount}
+                            className={taxAmountToneClass("行含税")}
+                        />
+                        {summary ? (
+                            <div className="text-xs text-muted-foreground">
+                                税额{" "}
+                                <MoneyValue value={row.original.taxAmount} />
+                            </div>
+                        ) : null}
+                    </div>
                 ),
         },
         {
@@ -188,14 +215,16 @@ function buildPurchaseOrderLinesColumns(
 export function LinesTable({
     order,
     costMasked,
+    summary = false,
 }: {
     order: PurchaseOrderLinesTableOrder
     costMasked: boolean
+    summary?: boolean
 }) {
     const lines = order.currentContent.lines
     const columns = React.useMemo(
-        () => buildPurchaseOrderLinesColumns(costMasked),
-        [costMasked],
+        () => buildPurchaseOrderLinesColumns(costMasked, summary),
+        [costMasked, summary],
     )
 
     return (
@@ -203,6 +232,9 @@ export function LinesTable({
             id={`procurement-orders-detail-lines-table-${order.identity.purchaseOrderId}`}
             data={[...lines]}
             columns={columns}
+            defaultColumnVisibility={
+                summary ? { type: false, taxRate: false, tax: false } : {}
+            }
             getRowId={(row) => row.lineId}
             rowCount={lines.length}
             rowLabel={(row) => row.itemName}

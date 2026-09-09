@@ -6,18 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation"
 import {
     ObjectSectionTabs,
     ObjectSectionTabsPanel,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 
 import { PurchaseOrderDetailAuditSection } from "@/features/purchase-orders/components/purchase-order-detail-audit-section"
 import { PurchaseOrderDetailChangesSection } from "@/features/purchase-orders/components/purchase-order-detail-changes-section"
 import { PurchaseOrderDetailFulfillmentSection } from "@/features/purchase-orders/components/purchase-order-detail-fulfillment-section"
-import {
-    PurchaseOrderDetailOverviewSection,
-    PurchaseOrderDetailSummarySection,
-} from "@/features/purchase-orders/components/purchase-order-detail-overview-section"
+import { PurchaseOrderDetailOverviewSection } from "@/features/purchase-orders/components/purchase-order-detail-overview-section"
 import { PurchaseOrderDetailPayableSection } from "@/features/purchase-orders/components/purchase-order-detail-payable-section"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
 import { isPurchaseOrderApprovalInProgress } from "@/features/purchase-orders/lib/purchase-order-approval"
@@ -25,7 +20,6 @@ import {
     PURCHASE_ORDER_DETAIL_NAV,
     purchaseOrderSectionHref,
     resolvePurchaseOrderDetailSection,
-    type PurchaseOrderDetailMode,
     type PurchaseOrderDetailSectionId,
 } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
@@ -42,7 +36,7 @@ type ActionBlocker =
 export function PurchaseOrderDetailSections({
     order,
     activeSection,
-    mode,
+    editor,
     costMasked,
     gate,
     canPay,
@@ -50,7 +44,7 @@ export function PurchaseOrderDetailSections({
     fulfillBlocker,
     canChange,
     changeBlocker,
-    w12PayHref,
+    payableHref,
     onRequestChange,
     changeWorkItemId,
     changeExpectedTaskVersion,
@@ -60,7 +54,7 @@ export function PurchaseOrderDetailSections({
 }: {
     order: PurchaseOrderCenterView
     activeSection: PurchaseOrderDetailSectionId
-    mode: PurchaseOrderDetailMode
+    editor?: React.ReactNode
     costMasked: boolean
     gate: GateView
     canPay: boolean
@@ -68,7 +62,7 @@ export function PurchaseOrderDetailSections({
     fulfillBlocker: ActionBlocker
     canChange: boolean
     changeBlocker: ActionBlocker
-    w12PayHref: string
+    payableHref: string
     onRequestChange: () => void
     changeWorkItemId?: string
     changeExpectedTaskVersion?: string
@@ -108,7 +102,7 @@ export function PurchaseOrderDetailSections({
     }))
 
     return (
-        <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
+        <div className="min-w-0">
             <ObjectSectionTabs
                 id={`procurement-orders-detail-tabs-${order.identity.purchaseOrderId}`}
                 value={activeSection}
@@ -117,21 +111,12 @@ export function PurchaseOrderDetailSections({
                 listLabel="采购单分区"
             >
                 <ObjectSectionTabsPanel value="overview">
-                    {mode === "view" ? (
-                        <>
-                            <PurchaseOrderDetailOverviewSection
-                                order={order}
-                                costMasked={costMasked}
-                                gate={gate}
-                                canPay={canPay}
-                                w12PayHref={w12PayHref}
-                            />
-                            <PurchaseOrderDetailSummarySection
-                                order={order}
-                                costMasked={costMasked}
-                            />
-                        </>
-                    ) : null}
+                    {editor ?? (
+                        <PurchaseOrderDetailOverviewSection
+                            order={order}
+                            costMasked={costMasked}
+                        />
+                    )}
                 </ObjectSectionTabsPanel>
 
                 <ObjectSectionTabsPanel value="approval">
@@ -145,7 +130,7 @@ export function PurchaseOrderDetailSections({
                         gate={gate}
                         canFulfill={canFulfill}
                         fulfillBlocker={fulfillBlocker}
-                        w12PayHref={w12PayHref}
+                        payableHref={payableHref}
                     />
                 </ObjectSectionTabsPanel>
 
@@ -154,7 +139,7 @@ export function PurchaseOrderDetailSections({
                         order={order}
                         costMasked={costMasked}
                         canPay={canPay}
-                        w12PayHref={w12PayHref}
+                        payableHref={payableHref}
                     />
                 </ObjectSectionTabsPanel>
 

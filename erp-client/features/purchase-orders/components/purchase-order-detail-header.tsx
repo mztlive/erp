@@ -20,13 +20,11 @@ import { Button } from "@/components/ui/button"
 
 import { PurchaseOrderCancelApprovalButton } from "@/features/purchase-orders/components/purchase-order-cancel-approval-button"
 import {
-    FULFILLMENT_RESPONSIBILITY_LABEL,
     PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
-import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 
 export function PurchaseOrderDetailHeader({
     order,
@@ -36,10 +34,6 @@ export function PurchaseOrderDetailHeader({
     titleRef,
     router,
     baseHref,
-    w12PayHref,
-    w27SettleHref,
-    canPay,
-    canFulfill,
     canEdit,
     canSubmit,
     canVoid,
@@ -59,10 +53,6 @@ export function PurchaseOrderDetailHeader({
     titleRef: React.RefObject<HTMLHeadingElement | null>
     router: ReturnType<typeof useRouter>
     baseHref: string
-    w12PayHref: string
-    w27SettleHref: string
-    canPay: boolean
-    canFulfill: boolean
     canEdit: boolean
     canSubmit: boolean
     canVoid: boolean
@@ -84,65 +74,74 @@ export function PurchaseOrderDetailHeader({
                         <span
                             ref={titleRef}
                             tabIndex={-1}
-                            className="text-sm font-normal text-muted-foreground outline-none"
+                            id="procurement-orders-detail-heading"
+                            className="text-sm font-medium text-muted-foreground outline-none"
                         >
                             采购单
                         </span>
-                        <span>{modeLabel}</span>
+                        {mode === "edit" ? <span>{modeLabel}</span> : null}
                     </span>
                 }
                 actions={
+                    <PageActions
+                        id="procurement-orders-detail-navigation"
+                        actions={[
+                            {
+                                actionKey: "back",
+                                label: "返回列表",
+                                icon: ArrowLeftIcon,
+                                variant: "outline",
+                                onClick: () =>
+                                    requestLeave(() =>
+                                        router.push("/procurement/orders"),
+                                    ),
+                                id: "procurement-orders-detail-back",
+                            },
+                        ]}
+                    />
+                }
+            />
+
+            {result ? (
+                <FormalActionResult
+                    status={result.status}
+                    title={result.title}
+                    description={result.description}
+                    reference={result.reference}
+                    facts={result.facts}
+                    actions={
+                        <Button
+                            id="procurement-orders-detail-result-close"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={onDismissResult}
+                        >
+                            关闭
+                        </Button>
+                    }
+                />
+            ) : null}
+
+            <DocumentHeader
+                density="compact"
+                className="border-0 pb-0 [&>div:first-child]:flex-col sm:[&>div:first-child]:flex-row [&_h1]:wrap-anywhere [&_h1]:text-3xl"
+                title={order.header.supplierSnapshot || "采购单"}
+                documentNumber={displayNo}
+                primaryStatus={{
+                    label: order.identity.statusLabel,
+                    tone: order.identity.statusTone,
+                }}
+                titleExtra={
+                    <Badge variant="secondary" className="font-normal">
+                        {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
+                    </Badge>
+                }
+                secondaryActions={
                     <div className="flex flex-wrap items-center gap-2">
                         <PageActions
+                            id="procurement-orders-detail-actions"
                             actions={[
-                                {
-                                    actionKey: "back",
-                                    label: "返回列表",
-                                    icon: ArrowLeftIcon,
-                                    variant: "outline",
-                                    onClick: () =>
-                                        requestLeave(() =>
-                                            router.push("/procurement/orders"),
-                                        ),
-                                    id: "procurement-orders-detail-back",
-                                },
-                                ...(canPay
-                                    ? [
-                                          {
-                                              actionKey: "pay",
-                                              label: "去供应商往来",
-                                              variant: "outline" as const,
-                                              onClick: () =>
-                                                  router.push(w12PayHref),
-                                              id: "procurement-orders-detail-pay",
-                                          },
-                                          {
-                                              actionKey: "settle",
-                                              label: "去对账结算",
-                                              variant: "outline" as const,
-                                              onClick: () =>
-                                                  router.push(w27SettleHref),
-                                              id: "procurement-orders-detail-settle",
-                                          },
-                                      ]
-                                    : []),
-                                ...(canFulfill
-                                    ? [
-                                          {
-                                              actionKey: "fulfill",
-                                              label: "去交付",
-                                              variant: "outline" as const,
-                                              onClick: () =>
-                                                  router.push(
-                                                      fulfillmentTasksHref(
-                                                          order.identity
-                                                              .purchaseOrderId,
-                                                      ),
-                                                  ),
-                                              id: "procurement-orders-detail-fulfill",
-                                          },
-                                      ]
-                                    : []),
                                 ...(canEdit && mode !== "edit"
                                     ? [
                                           {
@@ -200,110 +199,6 @@ export function PurchaseOrderDetailHeader({
                         />
                     </div>
                 }
-            />
-
-            {result ? (
-                <FormalActionResult
-                    status={result.status}
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={result.facts}
-                    actions={
-                        <Button
-                            id="procurement-orders-detail-result-close"
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={onDismissResult}
-                        >
-                            关闭
-                        </Button>
-                    }
-                />
-            ) : null}
-
-            <DocumentHeader
-                density="compact"
-                title={order.header.supplierSnapshot || "采购单"}
-                documentNumber={displayNo}
-                primaryStatus={{
-                    label: order.identity.statusLabel,
-                    tone: order.identity.statusTone,
-                }}
-                version={
-                    order.identity.revisionNo == null
-                        ? "尚未生效"
-                        : `v${order.identity.revisionNo}`
-                }
-                meta={
-                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <span>来源 {order.header.salesOrderNo}</span>
-                        <span aria-hidden="true">·</span>
-                        <Badge variant="secondary" className="font-normal">
-                            {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
-                        </Badge>
-                        <Badge variant="secondary" className="font-normal">
-                            {
-                                FULFILLMENT_RESPONSIBILITY_LABEL[
-                                    order.header.fulfillmentResponsibility
-                                ]
-                            }
-                        </Badge>
-                    </span>
-                }
-                statuses={[
-                    {
-                        id: "review",
-                        label: "审批",
-                        status: {
-                            label: order.identity.reviewLabel,
-                            tone:
-                                order.identity.reviewStatus === "PENDING"
-                                    ? "warning"
-                                    : order.identity.reviewStatus === "APPROVED"
-                                      ? "success"
-                                      : order.identity.reviewStatus ===
-                                          "REJECTED"
-                                        ? "destructive"
-                                        : "neutral",
-                        },
-                    },
-                    {
-                        id: "payment",
-                        label: "付款",
-                        status: {
-                            label: order.progress.payment,
-                            tone:
-                                order.progress.payment === "已付"
-                                    ? "success"
-                                    : order.progress.payment === "部分"
-                                      ? "info"
-                                      : "neutral",
-                        },
-                    },
-                    {
-                        id: "invoice",
-                        label: "进项票",
-                        status: {
-                            label: order.progress.invoice,
-                            tone:
-                                order.progress.invoice === "完成"
-                                    ? "success"
-                                    : order.progress.invoice === "部分"
-                                      ? "info"
-                                      : "neutral",
-                        },
-                    },
-                    {
-                        id: "fulfillment",
-                        label: "履约",
-                        status: {
-                            label: order.progress.fulfillment,
-                            tone: order.fulfillmentSummary.progressTone,
-                        },
-                    },
-                ]}
             />
         </>
     )

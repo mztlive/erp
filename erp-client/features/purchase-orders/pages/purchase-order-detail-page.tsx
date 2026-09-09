@@ -19,6 +19,7 @@ import { PurchaseOrderApprovalArea } from "@/features/purchase-orders/components
 import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
+import { PurchaseOrderDetailSidebar } from "@/features/purchase-orders/components/purchase-order-detail-sidebar"
 import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
 import {
     usePurchaseOrderCenterQuery,
@@ -242,8 +243,7 @@ export function PurchaseOrderDetailPage({
     }
 
     const baseHref = `/procurement/orders/${order.identity.purchaseOrderId}`
-    const w12PayHref = `/finance/supplier-accounts?view=payable&session=payment&from=W08&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&supplierId=${encodeURIComponent(order.header.supplierId)}&returnTo=${encodeURIComponent(baseHref)}`
-    const w27SettleHref = `/supplier-api/settlements?supplierId=${encodeURIComponent(order.header.supplierId)}&returnTo=${encodeURIComponent(baseHref)}`
+    const payableHref = `/finance/supplier-accounts?view=payable&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&supplierId=${encodeURIComponent(order.header.supplierId)}&returnTo=${encodeURIComponent(baseHref)}`
     const displayNo =
         order.identity.purchaseNo ??
         order.identity.draftLabel ??
@@ -259,7 +259,7 @@ export function PurchaseOrderDetailPage({
             : "详情"
 
     return (
-        <PageScaffold>
+        <PageScaffold density="compact">
             <PurchaseOrderDetailHeader
                 order={order}
                 mode={mode}
@@ -268,10 +268,6 @@ export function PurchaseOrderDetailPage({
                 titleRef={titleRef}
                 router={router}
                 baseHref={baseHref}
-                w12PayHref={w12PayHref}
-                w27SettleHref={w27SettleHref}
-                canPay={permissions.canPay}
-                canFulfill={permissions.canFulfill}
                 canEdit={permissions.canEdit}
                 canSubmit={permissions.canSubmit}
                 canVoid={permissions.canVoid}
@@ -296,78 +292,96 @@ export function PurchaseOrderDetailPage({
                 />
             ) : null}
 
-            {mode === "edit" && permissions.canEdit ? (
-                <EditSurface
+            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+                <PurchaseOrderDetailSections
                     order={order}
-                    lineEdits={editActions.lineEdits}
-                    setLineEdits={editActions.setLineEdits}
-                    draftEditToken={editActions.draftEditToken}
-                    canSubmit={permissions.canSubmit}
-                    savePending={editActions.savePending}
-                    onSave={() => void editActions.handleSave()}
-                    onSubmitOpen={() => editActions.setSubmitConfirmOpen(true)}
-                />
-            ) : null}
+                    activeSection={activeSection}
+                    editor={
+                        mode === "edit" && permissions.canEdit ? (
+                            <EditSurface
+                                order={order}
+                                lineEdits={editActions.lineEdits}
+                                setLineEdits={editActions.setLineEdits}
+                                draftEditToken={editActions.draftEditToken}
+                                canSubmit={permissions.canSubmit}
+                                savePending={editActions.savePending}
+                                onSave={() => void editActions.handleSave()}
+                                onSubmitOpen={() =>
+                                    editActions.setSubmitConfirmOpen(true)
+                                }
+                            />
+                        ) : undefined
+                    }
 
-            <PurchaseOrderDetailSections
-                order={order}
-                activeSection={activeSection}
-                mode={mode}
-                costMasked={costMasked}
-                gate={gate}
-                canPay={permissions.canPay}
-                canFulfill={permissions.canFulfill}
-                fulfillBlocker={permissions.fulfillBlocker}
-                canChange={permissions.canChange}
-                changeBlocker={permissions.changeBlocker}
-                w12PayHref={w12PayHref}
-                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
-                changeWorkItemId={
-                    isChangeOrderTask ? focusedWorkItem?.workItemId : undefined
-                }
-                changeExpectedTaskVersion={
-                    isChangeOrderTask ? focusedWorkItem?.taskVersion : undefined
-                }
-                changeWorkItemAllowedActions={
-                    isChangeOrderTask
-                        ? focusedWorkItem?.allowedActions
-                        : undefined
-                }
-                onChangeApprovalResult={handleResult}
-                approvalPanel={
-                    <PurchaseOrderApprovalArea
-                        phase={purchaseOrderApprovalPhase(
-                            order.approval,
-                            order.identity.status,
-                        )}
-                        approval={order.approval}
-                        documentId={order.identity.purchaseOrderId}
-                        workItemId={focusedWorkItem?.workItemId}
-                        expectedTaskVersion={focusedWorkItem?.taskVersion}
-                        workItemAllowedActions={focusedWorkItem?.allowedActions}
-                        onDecisionApplied={(view: ApprovalCommandView) =>
-                            handleResult({
-                                status: "succeeded",
-                                title: "审批决定已提交",
-                                description: view.latestRejectionReason
-                                    ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                                    : "已按当前任务提交决定。",
-                                reference:
-                                    order.identity.purchaseNo ??
-                                    order.identity.draftLabel,
-                                facts: view.currentAssigneeName
-                                    ? [
-                                          {
-                                              label: "当前审批人",
-                                              value: view.currentAssigneeName,
-                                          },
-                                      ]
-                                    : undefined,
-                            })
-                        }
-                    />
-                }
-            />
+                    costMasked={costMasked}
+                    gate={gate}
+                    canPay={permissions.canPay}
+                    canFulfill={permissions.canFulfill}
+                    fulfillBlocker={permissions.fulfillBlocker}
+                    canChange={permissions.canChange}
+                    changeBlocker={permissions.changeBlocker}
+                    payableHref={payableHref}
+                    onRequestChange={() =>
+                        editActions.setChangeConfirmOpen(true)
+                    }
+                    changeWorkItemId={
+                        isChangeOrderTask
+                            ? focusedWorkItem?.workItemId
+                            : undefined
+                    }
+                    changeExpectedTaskVersion={
+                        isChangeOrderTask
+                            ? focusedWorkItem?.taskVersion
+                            : undefined
+                    }
+                    changeWorkItemAllowedActions={
+                        isChangeOrderTask
+                            ? focusedWorkItem?.allowedActions
+                            : undefined
+                    }
+                    onChangeApprovalResult={handleResult}
+                    approvalPanel={
+                        <PurchaseOrderApprovalArea
+                            phase={purchaseOrderApprovalPhase(
+                                order.approval,
+                                order.identity.status,
+                            )}
+                            approval={order.approval}
+                            documentId={order.identity.purchaseOrderId}
+                            workItemId={focusedWorkItem?.workItemId}
+                            expectedTaskVersion={focusedWorkItem?.taskVersion}
+                            workItemAllowedActions={
+                                focusedWorkItem?.allowedActions
+                            }
+                            onDecisionApplied={(view: ApprovalCommandView) =>
+                                handleResult({
+                                    status: "succeeded",
+                                    title: "审批决定已提交",
+                                    description: view.latestRejectionReason
+                                        ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                        : "已按当前任务提交决定。",
+                                    reference:
+                                        order.identity.purchaseNo ??
+                                        order.identity.draftLabel,
+                                    facts: view.currentAssigneeName
+                                        ? [
+                                              {
+                                                  label: "当前审批人",
+                                                  value: view.currentAssigneeName,
+                                              },
+                                          ]
+                                        : undefined,
+                                })
+                            }
+                        />
+                    }
+                />
+
+                <PurchaseOrderDetailSidebar
+                    order={order}
+                    costMasked={costMasked}
+                />
+            </div>
 
             <PurchaseOrderDetailDialogs
                 order={order}
