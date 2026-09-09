@@ -1,11 +1,13 @@
 //! Fixed first-formalization posting order within the caller's transaction.
 
 use super::formalize::{persist_procurement_work_items, FormalizedSubmissionWrite};
-use crate::{Error, Result};
+#[cfg(test)]
+use crate::Error;
+use crate::Result;
 use async_trait::async_trait;
 use erp_audit::{AuditExt, AuditLog};
 use erp_core::ids::SalesOrderId;
-use erp_finance::entity::receivable::{ReceivableAccount, SalesBusinessTypeFact};
+use erp_finance::entity::receivable::SalesBusinessTypeFact;
 use erp_finance::service::receivable::initial_account::{create_initial_receivable, InitialReceivableInput};
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::Executor;
@@ -20,7 +22,6 @@ enum PostingStep {
     SynchronizeProcurement,
     SalesSubmission,
     Receivable,
-    InvoiceTask,
     Audit,
 }
 
@@ -41,7 +42,6 @@ async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> 
         SynchronizeProcurement,
         SalesSubmission,
         Receivable,
-        InvoiceTask,
         Audit,
     ] {
         steps.apply(step, executor).await?;
@@ -52,7 +52,6 @@ async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> 
 struct MongoPosting<'a> {
     write: FormalizedSubmissionWrite,
     audit: &'a AuditLog,
-    account: Option<ReceivableAccount>,
 }
 
 #[async_trait]
@@ -120,37 +119,25 @@ impl PostingSteps for MongoPosting<'_> {
             }
             Receivable => {
                 let order = &write.order;
-                self.account = Some(
-                    create_initial_receivable(
-                        &write.db,
-                        InitialReceivableInput {
-                            business_type: match order.business_type {
-                                erp_sales::entity::sales_order::BusinessType::GoodsService => {
-                                    SalesBusinessTypeFact::GoodsService
-                                }
-                                erp_sales::entity::sales_order::BusinessType::Voucher => {
-                                    SalesBusinessTypeFact::Voucher
-                                }
-                            },
-                            sales_order_id: order.base.id.clone().into(),
-                            customer_id: order.customer_id.clone(),
-                            counterparty_party_id: order.settlement_party_id.clone(),
-                            source_sales_order_revision_id: write.aggregate.revision.base.id.clone().into(),
-                            gross_total: write.aggregate.revision.gross_amount,
-                            posted_at: write.now,
+                create_initial_receivable(
+                    &write.db,
+                    InitialReceivableInput {
+                        business_type: match order.business_type {
+                            erp_sales::entity::sales_order::BusinessType::GoodsService => {
+                                SalesBusinessTypeFact::GoodsService
+                            }
+                            erp_sales::entity::sales_order::BusinessType::Voucher => {
+                                SalesBusinessTypeFact::Voucher
+                            }
                         },
-                        executor,
-                    )
-                    .await?,
-                );
-            }
-            InvoiceTask => {
-                let account = self
-                    .account
-                    .as_ref()
-                    .ok_or_else(|| Error::Internal("首次应收步骤缺少已创建子账".into()))?;
-                crate::finance_posting::receivable::invoice_task::ensure_sales_invoice_task(
-                    &write.db, account, executor,
+                        sales_order_id: order.base.id.clone().into(),
+                        customer_id: order.customer_id.clone(),
+                        counterparty_party_id: order.settlement_party_id.clone(),
+                        source_sales_order_revision_id: write.aggregate.revision.base.id.clone().into(),
+                        gross_total: write.aggregate.revision.gross_amount,
+                        posted_at: write.now,
+                    },
+                    executor,
                 )
                 .await?;
             }
@@ -179,15 +166,7 @@ pub(super) async fn post(
     audit: &AuditLog,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    execute(
-        &mut MongoPosting {
-            write,
-            audit,
-            account: None,
-        },
-        executor,
-    )
-    .await
+    execute(&mut MongoPosting { write, audit }, executor).await
 }
 
 #[cfg(test)]
@@ -228,7 +207,6 @@ mod tests {
             SynchronizeProcurement,
             SalesSubmission,
             Receivable,
-            InvoiceTask,
             Audit,
         ]
     }

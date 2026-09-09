@@ -104,3 +104,13 @@ test("partial invoice keeps the execution task open", () => {
     assert.equal(invoiceExecutionIsComplete("100", "100.00"), true)
     assert.equal(invoiceExecutionIsComplete("not-an-amount", "100.00"), false)
 })
+
+test("approved invoice request task opens its source receivable", () => {
+    assert.deepEqual(
+        workspaceInvoiceDescriptor({
+            ...BASE,
+            reasonCode: "SALES_INVOICE_REQUEST_APPROVED",
+        }),
+        { receivableAccountId: "receivable-42", salesOrderId: "sales-7" },
+    )
+})

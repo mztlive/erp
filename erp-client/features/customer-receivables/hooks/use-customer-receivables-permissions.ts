@@ -42,6 +42,8 @@ export function useCustomerReceivablesPermissions() {
           : "当前账号没有执行此操作的权限。"
 
     return {
+        canSubmitInvoiceRequest:
+            ready && hasPermission(granted, "sales_invoice_request:submit"),
         canRegisterReceipt,
         canRegisterInvoice,
         canExport:

@@ -75,3 +75,5 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
 }
 
 pub mod money_progress;
+
+mod invoice_request;

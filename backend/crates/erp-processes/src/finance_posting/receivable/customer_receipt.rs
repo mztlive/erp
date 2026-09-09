@@ -29,10 +29,10 @@ use super::dto::{
     CustomerReceiptView, SubmitCustomerReceiptRequest,
 };
 use super::start_approval::{
-    build_customer_receipt_start_input, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_start_receipt, load_start_receipt_with_executor,
-    persist_customer_receipt_start, persist_customer_receipt_start_in_transaction,
-    replay_customer_receipt_start_with_executor, CustomerReceiptStartInput, CustomerReceiptStartPersistInput,
+    build_document_start_input, load_bound_definition_graph, load_bound_definition_graph_with_executor,
+    load_start_receipt, load_start_receipt_with_executor, persist_customer_receipt_start,
+    persist_customer_receipt_start_in_transaction, replay_customer_receipt_start_with_executor,
+    CustomerReceiptStartPersistInput, DocumentStartInput,
 };
 use super::ReceivableProcess;
 use crate::{Error, Result};
@@ -257,7 +257,8 @@ impl ReceivableProcess {
                         session,
                     )
                     .await?;
-                    let start_input = build_customer_receipt_start_input(CustomerReceiptStartInput {
+                    let start_input = build_document_start_input(DocumentStartInput {
+                        document_type: DocumentType::CustomerReceipt,
                         graph,
                         binding: &binding,
                         subject,
@@ -426,7 +427,8 @@ impl ReceivableProcess {
             &idempotency_key,
         )
         .await?;
-        let start_input = build_customer_receipt_start_input(CustomerReceiptStartInput {
+        let start_input = build_document_start_input(DocumentStartInput {
+            document_type: DocumentType::CustomerReceipt,
             graph,
             binding: &binding,
             subject,

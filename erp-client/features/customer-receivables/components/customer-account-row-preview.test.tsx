@@ -18,6 +18,8 @@ import {
     createReceiptColumns,
 } from "./customer-account-columns"
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
 vi.mock("@/components/business", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/components/business")>()),
     QuickPreviewSheet: ({ footer }: { footer: ReactNode }) => (

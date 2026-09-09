@@ -19,7 +19,7 @@ pub enum SalesBusinessKind {
 /// 将 ERP 单据类型映射为 BPM 流程种类。
 ///
 /// # 参数
-/// * `document_type` - 合同固定的 20 种单据类型之一
+/// * `document_type` - 合同固定的 21 种单据类型之一
 ///
 /// # 返回
 /// 返回与该单据类型一一对应的流程种类。
@@ -38,6 +38,7 @@ pub fn process_kind_of(document_type: DocumentType) -> ProcessKind {
         DocumentType::PurchaseChangeOrder => ProcessKind::PurchaseChangeOrder,
         DocumentType::StockAdjustment => ProcessKind::StockAdjustment,
         DocumentType::CustomerReceipt => ProcessKind::CustomerReceipt,
+        DocumentType::SalesInvoiceRequest => ProcessKind::SalesInvoiceRequest,
         DocumentType::SupplierPayment => ProcessKind::SupplierPayment,
         DocumentType::CustomerRefund => ProcessKind::CustomerRefund,
         DocumentType::SupplierRefund => ProcessKind::SupplierRefund,
@@ -76,6 +77,7 @@ pub fn document_type_of(process_kind: ProcessKind) -> DocumentType {
         ProcessKind::PurchaseChangeOrder => DocumentType::PurchaseChangeOrder,
         ProcessKind::StockAdjustment => DocumentType::StockAdjustment,
         ProcessKind::CustomerReceipt => DocumentType::CustomerReceipt,
+        ProcessKind::SalesInvoiceRequest => DocumentType::SalesInvoiceRequest,
         ProcessKind::SupplierPayment => DocumentType::SupplierPayment,
         ProcessKind::CustomerRefund => DocumentType::CustomerRefund,
         ProcessKind::SupplierRefund => DocumentType::SupplierRefund,
@@ -180,7 +182,7 @@ mod tests {
     use crate::entity::document_registry::DocumentType;
     use bpm::ProcessKind;
 
-    const PROCESS_KINDS: [ProcessKind; 20] = [
+    const PROCESS_KINDS: [ProcessKind; 21] = [
         ProcessKind::SalesOrder,
         ProcessKind::VoucherSalesOrder,
         ProcessKind::SalesChangeOrder,
@@ -188,6 +190,7 @@ mod tests {
         ProcessKind::PurchaseChangeOrder,
         ProcessKind::StockAdjustment,
         ProcessKind::CustomerReceipt,
+        ProcessKind::SalesInvoiceRequest,
         ProcessKind::SupplierPayment,
         ProcessKind::CustomerRefund,
         ProcessKind::SupplierRefund,
@@ -203,11 +206,11 @@ mod tests {
         ProcessKind::PurchaseReturnOrder,
     ];
 
-    /// 20 种单据类型与流程种类双向一一对应，稳定代码一致。
+    /// 21 种单据类型与流程种类双向一一对应，稳定代码一致。
     #[test]
     fn document_type_and_process_kind_round_trip() {
-        assert_eq!(DocumentType::ALL.len(), 20);
-        assert_eq!(PROCESS_KINDS.len(), 20);
+        assert_eq!(DocumentType::ALL.len(), 21);
+        assert_eq!(PROCESS_KINDS.len(), 21);
 
         for document_type in DocumentType::ALL {
             let process_kind = process_kind_of(document_type);
@@ -264,7 +267,7 @@ mod tests {
             assert_eq!(subject.subject_kind(), process_kind_of(document_type).as_str());
             assert!(kinds.insert(subject.subject_kind().to_string()));
         }
-        assert_eq!(kinds.len(), 20);
+        assert_eq!(kinds.len(), 21);
 
         let sales = subject_ref_for_sales_business(SalesBusinessKind::GoodsService, "so-1").unwrap();
         let voucher = subject_ref_for_sales_business(SalesBusinessKind::Voucher, "so-1").unwrap();

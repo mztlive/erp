@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/column-types"
 
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
@@ -94,6 +95,7 @@ export function CustomerReceivablesTable({
     onPaginationChange,
     clearFilters,
 }: CustomerReceivablesTableProps) {
+    const router = useRouter()
     const standalone = React.useContext(
         CustomerReceivablesStandaloneListContext,
     )
@@ -388,16 +390,27 @@ export function CustomerReceivablesTable({
             views={
                 <ListWorkspaceViews
                     ariaLabel="客户往来工作视图"
-                    items={CUSTOMER_RECEIVABLE_VIEWS.map((item) => ({
-                        id: `customer-receivables-view-${item}`,
-                        label: VIEW_LABEL[item],
-                        count:
-                            item === view
-                                ? (data?.total ?? 0).toLocaleString("zh-CN")
-                                : undefined,
-                        active: item === view,
-                        onClick: () => changeView(item),
-                    }))}
+                    items={[
+                        ...CUSTOMER_RECEIVABLE_VIEWS.map((item) => ({
+                            id: `customer-receivables-view-${item}`,
+                            label: VIEW_LABEL[item],
+                            count:
+                                item === view
+                                    ? (data?.total ?? 0).toLocaleString("zh-CN")
+                                    : undefined,
+                            active: item === view,
+                            onClick: () => changeView(item),
+                        })),
+                        {
+                            id: "customer-receivables-view-invoice-requests",
+                            label: "开票申请",
+                            active: false,
+                            onClick: () =>
+                                router.push(
+                                    "/finance/customer-accounts/invoice-requests",
+                                ),
+                        },
+                    ]}
                 />
             }
             toolbar={toolbar}

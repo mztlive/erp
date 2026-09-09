@@ -17,7 +17,7 @@ pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_
 pub const STATIC_APPROVE_PERMISSION: &str = "approval_instance:decide";
 
 /// 合同 §4.3 固定 20 个单据类型，复用实体层权威穷尽集合。
-pub const ALL_DOCUMENT_TYPES: [DocumentType; 20] = DocumentType::ALL;
+pub const ALL_DOCUMENT_TYPES: [DocumentType; 21] = DocumentType::ALL;
 
 const NO_PURPOSES: &[ApprovalNodePurpose] = &[];
 
@@ -299,6 +299,12 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
             ApprovalDomainAction::StockAdjustmentPost,
             ApprovalDomainAction::StockAdjustmentCancelApproval,
         ),
+        DocumentType::SalesInvoiceRequest => finance_required(
+            document_type,
+            ApprovalDomainAction::SalesInvoiceRequestSubmit,
+            ApprovalDomainAction::SalesInvoiceRequestApprove,
+            ApprovalDomainAction::SalesInvoiceRequestCancelApproval,
+        ),
         DocumentType::CustomerReceipt => finance_required(
             document_type,
             ApprovalDomainAction::CustomerReceiptSubmit,
@@ -491,6 +497,7 @@ fn owner_role(document_type: DocumentType) -> Result<WorkItemOwnerRole> {
         DocumentType::PurchaseChangeOrder => "purchase_change_order_approver",
         DocumentType::StockAdjustment => "stock_adjustment_approver",
         DocumentType::CustomerReceipt => "customer_receipt_approver",
+        DocumentType::SalesInvoiceRequest => "sales_invoice_request_approver",
         DocumentType::CustomerRefund => "customer_refund_approver",
         DocumentType::SupplierRefund => "supplier_refund_approver",
         DocumentType::ReceiptReversal => "receipt_reversal_approver",
@@ -524,6 +531,9 @@ fn ensure_real_action(action: ApprovalDomainAction) -> Result<()> {
         | ApprovalDomainAction::StockAdjustmentSubmit
         | ApprovalDomainAction::StockAdjustmentPost
         | ApprovalDomainAction::StockAdjustmentCancelApproval
+        | ApprovalDomainAction::SalesInvoiceRequestSubmit
+        | ApprovalDomainAction::SalesInvoiceRequestApprove
+        | ApprovalDomainAction::SalesInvoiceRequestCancelApproval
         | ApprovalDomainAction::CustomerReceiptSubmit
         | ApprovalDomainAction::CustomerReceiptPost
         | ApprovalDomainAction::CustomerReceiptCancelApproval
@@ -567,10 +577,10 @@ mod tests {
     use super::*;
     use crate::service::approval::process_kind::{document_type_of, process_kind_of};
 
-    /// 20 行政策穷尽：11 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
+    /// 21 行政策穷尽：12 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
     #[test]
     fn policies_are_exhaustive_and_match_process_kind() {
-        assert_eq!(ALL_DOCUMENT_TYPES.len(), 20);
+        assert_eq!(ALL_DOCUMENT_TYPES.len(), 21);
         let mut required = 0;
         let mut no_approval = 0;
         for document_type in ALL_DOCUMENT_TYPES {
@@ -589,7 +599,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(required, 11);
+        assert_eq!(required, 12);
         assert_eq!(no_approval, 9);
     }
 
@@ -736,6 +746,15 @@ mod tests {
                 start: ApprovalDomainAction::CustomerReceiptSubmit,
                 approve: ApprovalDomainAction::CustomerReceiptPost,
                 cancel: ApprovalDomainAction::CustomerReceiptCancelApproval,
+            }),
+            DocumentType::SalesInvoiceRequest => Some(ExpectedRequiredPolicy {
+                purposes: NO_PURPOSES,
+                version: ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
+                snapshot: FINANCE_SNAPSHOT,
+                owner_role: "sales_invoice_request_approver",
+                start: ApprovalDomainAction::SalesInvoiceRequestSubmit,
+                approve: ApprovalDomainAction::SalesInvoiceRequestApprove,
+                cancel: ApprovalDomainAction::SalesInvoiceRequestCancelApproval,
             }),
             DocumentType::CustomerRefund => Some(ExpectedRequiredPolicy {
                 purposes: NO_PURPOSES,

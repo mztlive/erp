@@ -11,6 +11,7 @@
 use crate::repository::owned::{
     CustomerReceiptRepository, InvoiceRepository, ReceiptAllocationRepository, ReceivableAccountRepository,
     ReceivableEntryOffsetRepository, ReceivableEntryRepository, SalesInvoiceAllocationRepository,
+    SalesInvoiceRequestRepository,
 };
 use mongodb::Database;
 
@@ -20,6 +21,10 @@ use super::super::receivable::{
 
 /// 域 D18 仓储访问器。
 pub trait ReceivableExt {
+    /// 销项开票申请集合。
+    const SALES_INVOICE_REQUESTS: &'static str = "sales_invoice_requests";
+    /// 返回开票申请拥有仓储。
+    fn sales_invoice_requests(&self) -> SalesInvoiceRequestRepository<'_>;
     /// `receivable_account` 集合名。
     const RECEIVABLE_ACCOUNTS: &'static str = "receivable_accounts";
     /// `receivable_entry` 集合名。
@@ -94,6 +99,9 @@ pub trait ReceivableExt {
 }
 
 impl ReceivableExt for Database {
+    fn sales_invoice_requests(&self) -> SalesInvoiceRequestRepository<'_> {
+        SalesInvoiceRequestRepository::new(self, Self::SALES_INVOICE_REQUESTS)
+    }
     type ReceivableAccountFilter = ReceivableAccountFilter;
     type CustomerReceiptFilter = CustomerReceiptFilter;
     type InvoiceFilter = InvoiceFilter;

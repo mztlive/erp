@@ -203,6 +203,13 @@ function buildDocumentApprovalHref(
             }
             return withParams("/inventory", params)
         case "W11":
+            if (item.businessObjectType === "sales_invoice_request") {
+                params.set("requestId", businessObjectId)
+                return withParams(
+                    "/finance/customer-accounts/invoice-requests",
+                    params,
+                )
+            }
             if (!customerApprovalPreviewKind(item.businessObjectType)) {
                 return null
             }

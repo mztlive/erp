@@ -67,6 +67,7 @@ fn adapter_object_read_for_type(
             crate::procure_to_pay::purchase_change_order_object_readable(organization_id, assignee_user_id)
                 .map_err(map_workflow_error)?,
         )),
+        WorkflowDocumentType::SalesInvoiceRequest => Ok(Some(true)),
         WorkflowDocumentType::CustomerReceipt => Ok(Some(
             crate::finance_posting::receivable::customer_receipt_object_readable(
                 organization_id,

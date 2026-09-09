@@ -36,6 +36,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         facts: &mut ObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.load_invoice_request_facts(keys, facts, executor).await?;
         let ids = object_ids(keys, ObjectKind::CustomerReceipt);
         if ids.is_empty() {
             return Ok(());
@@ -248,6 +249,59 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             fact.display.approval_subject_version = (!reversal.status.as_str().eq_ignore_ascii_case("draft"))
                 .then_some(reversal.approval_subject_version);
             facts.insert((ObjectKind::ReceiptReversal, reversal.base.id.clone()), fact);
+        }
+        Ok(())
+    }
+}
+
+impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+    /// 读取申请用于当前展示及不可变审批快照；税号与内容取提交实体。
+    async fn load_invoice_request_facts(
+        &self,
+        keys: &HashSet<(ObjectKind, String)>,
+        facts: &mut ObjectFactMap,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        use erp_finance::repository::ReceivableExt;
+        use erp_workflow::entity::approval_integration::display_snapshot::{
+            ApprovalBriefSection, ApprovalBriefSource,
+        };
+        let ids = object_ids(keys, ObjectKind::SalesInvoiceRequest);
+        if ids.is_empty() {
+            return Ok(());
+        }
+        for request in self
+            .db
+            .sales_invoice_requests()
+            .list_active_by_ids(&ids, executor)
+            .await?
+        {
+            let mut fact =
+                WorkbenchObjectFact::from_authority(authority_mapping::invoice_request_fact(&request));
+            fact.display.approval_subject_version = Some(request.approval_subject_version);
+            let sections = [
+                ("申请金额", request.data.amount.to_string()),
+                ("开票抬头", request.data.invoice_title.clone()),
+                ("税号", request.data.tax_number.clone()),
+                ("开票内容", request.data.invoice_content.clone()),
+                ("申请事由", request.data.reason.clone()),
+            ]
+            .into_iter()
+            .map(|(label, value)| ApprovalBriefSection {
+                label: label.into(),
+                value,
+                numeric: label == "申请金额",
+                object_id: None,
+            })
+            .collect();
+            fact.display.brief_source = Some(ApprovalBriefSource {
+                customer: Some(request.data.invoice_title.clone()),
+                amount_label: Some(format!("申请开票 {} 元", request.data.amount)),
+                list_summary: format!("{} · {} 元", request.data.invoice_title, request.data.amount),
+                extra_sections: sections,
+                ..Default::default()
+            });
+            facts.insert((ObjectKind::SalesInvoiceRequest, request.base.id), fact);
         }
         Ok(())
     }

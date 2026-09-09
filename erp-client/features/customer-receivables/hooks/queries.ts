@@ -113,6 +113,9 @@ export function usePostAllocationMutation() {
             ),
         onSuccess: async (result, input) => {
             if (result.status === "succeeded") {
+                await queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.invoiceRequests,
+                })
                 queryClient.setQueryData<AllocationSessionView>(
                     customerReceivableKeys.session(input.draftSessionId),
                     (current) =>

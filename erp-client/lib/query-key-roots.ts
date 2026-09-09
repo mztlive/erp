@@ -3,6 +3,7 @@
  * 各 feature 的完整 query key 工厂仍由本域公开入口持有。
  */
 export const queryKeyRoots = {
+    invoiceRequests: ["invoice-requests"] as const,
     salesOrders: ["sales-orders"] as const,
     workspaceHome: ["workspace-home"] as const,
     entitySelectors: ["entity-selectors"] as const,

@@ -84,6 +84,10 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
 
 /// 销售推荐权限。
 const SALES_PERMISSIONS: &[&str] = &[
+    "sales_invoice_request:list",
+    "sales_invoice_request:detail",
+    "sales_invoice_request:submit",
+    "sales_invoice_request:cancel",
     "procurement_responsibility:list",
     "work_item:list",
     "work_item:detail",
@@ -139,6 +143,10 @@ const SALES_PERMISSIONS: &[&str] = &[
 
 /// 销售领导推荐权限。
 const SALES_LEADER_PERMISSIONS: &[&str] = &[
+    "sales_invoice_request:list",
+    "sales_invoice_request:detail",
+    "sales_invoice_request:submit",
+    "sales_invoice_request:cancel",
     "work_item:list",
     "work_item:detail",
     // 直接指派的审批任务依赖 manage 参与权可见（与采购/财务等审批角色一致）；
@@ -360,6 +368,10 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
 
 /// 财务推荐权限。
 const FINANCE_PERMISSIONS: &[&str] = &[
+    "sales_invoice_request:list",
+    "sales_invoice_request:detail",
+    "sales_invoice_request:submit",
+    "sales_invoice_request:cancel",
     "finance_responsibility:list",
     "finance_responsibility:manage",
     "work_item:list",

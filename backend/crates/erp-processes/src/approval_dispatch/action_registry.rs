@@ -92,6 +92,24 @@ async fn dispatch_action(
             .await
             .map(|_| ())
         }
+        ApprovalDomainAction::SalesInvoiceRequestApprove => {
+            crate::finance_posting::receivable::invoice_request::approve_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                actor,
+                executor,
+            )
+            .await
+        }
+        ApprovalDomainAction::SalesInvoiceRequestCancelApproval => {
+            crate::finance_posting::receivable::invoice_request::cancel_in_transaction(
+                &registry.db,
+                context.business_object_id(),
+                actor,
+                executor,
+            )
+            .await
+        }
         ApprovalDomainAction::CustomerReceiptPost => {
             let session = require_transaction(executor)?;
             crate::finance_posting::receivable::post_customer_receipt_in_transaction(

@@ -19,6 +19,9 @@ use persistence_core::{PageResult, Pagination, QueryFilter};
 /// 发票列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvoiceRow {
+    /// 该销项发票消耗的批准申请。
+    #[serde(default)]
+    pub sales_invoice_request_id: Option<String>,
     /// 实体主键。
     pub id: String,
     /// 稳定公共字段（状态/版本归属/审计人）。
@@ -285,6 +288,7 @@ fn invoice_projection() -> Document {
         "tax_amount": 1,
         "rounding_adjustment_amount": 1,
         "rounding_reason": 1,
+        "sales_invoice_request_id": 1,
         "original_invoice_id": 1,
         "version": 1,
         "created_at": 1,

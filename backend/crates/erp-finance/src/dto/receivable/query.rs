@@ -300,6 +300,8 @@ pub struct SalesInvoiceAllocationView {
 /// 发票响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct InvoiceView {
+    /// 销项蓝票消耗的批准申请；历史及进项发票为空。
+    pub sales_invoice_request_id: Option<String>,
     /// 实体主键。
     pub id: String,
     /// 发票方向。

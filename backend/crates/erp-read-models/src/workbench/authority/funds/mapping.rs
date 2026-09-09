@@ -177,3 +177,20 @@ pub(in crate::workbench) fn receivable_account_impact(is_voucher: bool) -> Strin
         "不复核则票款与开票事实不能确认".to_string()
     }
 }
+
+/// 开票申请的授权事实来源；申请创建人及销售根对象均取实体。
+pub(in crate::workbench) fn invoice_request_fact(
+    request: &erp_finance::entity::receivable::SalesInvoiceRequest,
+) -> ObjectFact {
+    let mut fact = ObjectFact::new(
+        request.sales_order_id.to_string(),
+        format!("开票申请 {}", request.request_no),
+        request.created_by.clone(),
+    );
+    fact.counterparty_label = Some(request.data.invoice_title.clone());
+    fact.impact_summary = Some(format!(
+        "申请开票 {} 元，审批通过后交财务开票",
+        request.data.amount
+    ));
+    fact
+}

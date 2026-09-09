@@ -91,6 +91,12 @@ const DEFINITIONS = [
     nodes: [{ node_name: "财务审批成本影响", display_order: 1, assignee: "finance" }],
   },
   {
+    type: "sales_invoice_request",
+    name: "开票申请审批",
+    submitter: "sales",
+    nodes: [{ node_name: "财务审批开票金额与资料", display_order: 1, assignee: "finance" }],
+  },
+  {
     type: "customer_receipt",
     name: "客户回款单审批",
     submitter: "payment",

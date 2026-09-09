@@ -1,6 +1,6 @@
 //! 审批业务适配器注册与资格重验。
 //!
-//! 11 个 `PROCESS_REQUIRED` 类型必须登记完整规格；9 个 `NO_APPROVAL` 类型
+//! 12 个 `PROCESS_REQUIRED` 类型必须登记完整规格；9 个 `NO_APPROVAL` 类型
 //! 不得注册空适配器。领域动作由各 DocumentType 子阶段接线。
 
 use crate::entity::document_registry::DocumentType;
@@ -355,7 +355,7 @@ mod tests {
     use super::*;
     use crate::service::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
 
-    /// 11 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
+    /// 12 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
     #[test]
     fn adapter_registry_is_complete_and_no_approval_has_no_adapter() {
         let mut required = 0;
@@ -375,7 +375,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(required, 11);
+        assert_eq!(required, 12);
         assert_eq!(no_approval, 9);
     }
 

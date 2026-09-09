@@ -73,7 +73,7 @@ export function CustomerReceivablesHeader({
                     id: embedded
                         ? "customer-receivables-header-embedded-register-invoice"
                         : "customer-receivables-header-register-invoice",
-                    label: startSessionPending ? "创建中…" : "登记销项发票",
+                    label: startSessionPending ? "创建中…" : "新建开票申请",
                     icon: startSessionPending ? LoaderCircleIcon : FileTextIcon,
                     variant: "outline",
                     mobileVisibility: embedded ? "show" : "hide",
@@ -82,7 +82,7 @@ export function CustomerReceivablesHeader({
                         ? undefined
                         : (invoiceBlockedReason ??
                           permissionReason ??
-                          "当前无销项发票登记权限"),
+                          "当前无开票申请权限"),
                     onClick: onRegisterInvoice,
                 },
                 {

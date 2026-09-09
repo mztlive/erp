@@ -8,6 +8,10 @@ import { useSalesOrderReceivable } from "../hooks/use-sales-order-receivable"
 import type { SalesOrderDetailView } from "../api/sales-orders"
 import type { CustomerAcceptanceWorkspaceView } from "../lib/acceptance-types"
 
+// 原有票款记录只读契约独立验证；新申请交互由 invoice-requests 测试覆盖。
+vi.mock("@/features/invoice-requests/components/request-panel", () => ({
+    InvoiceRequestPanel: () => null,
+}))
 vi.mock("../api/acceptance", () => ({
     fetchCustomerAcceptanceWorkspace: vi.fn(),
 }))

@@ -977,6 +977,7 @@ components:
         - customer_acceptance
         - stock_adjustment
         - customer_receipt
+        - sales_invoice_request
         - supplier_payment
         - invoice
         - sales_return_case

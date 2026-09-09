@@ -7,12 +7,8 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{PartyId, ReceivableAccountId, WorkItemId};
 use erp_finance::entity::receivable::ReceivableAccount;
 use erp_finance::repository::ReceivableExt;
-use erp_workflow::entity::work_item::{
-    is_zero_amount, matches_sales_invoice_identity, new_sales_invoice_task, sales_invoice_impact_summary,
-    FinanceResponsibilityOperation, SalesInvoiceTaskReason, SalesInvoiceTaskSpec, WorkItem, WorkItemStatus,
-};
+use erp_workflow::entity::work_item::{matches_sales_invoice_identity, WorkItem};
 use erp_workflow::WorkItemExt;
-use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::adapters::workflow::work_item_service;
@@ -30,32 +26,6 @@ pub(crate) enum SalesInvoiceTaskChange {
     ReceivableChanged,
 }
 
-/// 为新形成且存在可开票额度的应收子账建立唯一开放销项开票任务。
-///
-/// # 错误
-/// 任务重复、财务责任规则缺失、负责人无权限或仓储写入失败时返回错误。
-pub(crate) async fn ensure_sales_invoice_task(
-    db: &mongodb::Database,
-    account: &ReceivableAccount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    if is_zero_amount(account.open_invoiceable_total) {
-        return Ok(());
-    }
-    let tasks = sales_invoice_tasks(db, &account.base.id, executor).await?;
-    let open = open_tasks(&tasks);
-    match open.as_slice() {
-        [] if tasks.is_empty() => {
-            create_invoice_task(db, account, SalesInvoiceTaskReason::Initial, executor).await
-        }
-        [task] => ensure_task_identity(task, account),
-        [] => Err(Error::BusinessLogicError(
-            "应收子账已存在开票任务历史，不能重复建立初始任务".to_string(),
-        )),
-        _ => Err(duplicate_open_task_error()),
-    }
-}
-
 /// 在开票、红冲或应收金额变更事务内同步销项开票执行任务。
 ///
 /// # 错误
@@ -71,38 +41,18 @@ pub(crate) async fn sync_sales_invoice_task(
         .find_by_id(account_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
-    let tasks = sales_invoice_tasks(db, &account.base.id, executor).await?;
-    if tasks.is_empty() && change != SalesInvoiceTaskChange::ReceivableChanged {
-        return Err(Error::BusinessLogicError(
-            "应收子账缺少销项开票任务历史，请联系管理员修复后重试".to_string(),
-        ));
-    }
-    let open = open_tasks(&tasks);
-    if open.len() > 1 {
-        return Err(duplicate_open_task_error());
-    }
-    if is_zero_amount(account.open_invoiceable_total) {
-        return complete_open_task(db, open.into_iter().next(), &account, executor).await;
-    }
-    if let Some(task) = open.into_iter().next() {
-        return update_open_task_summary(db, task, &account, executor).await;
-    }
-    let reason = match (tasks.is_empty(), change) {
-        (true, SalesInvoiceTaskChange::ReceivableChanged) => SalesInvoiceTaskReason::Initial,
-        (true, _) => {
-            return Err(Error::BusinessLogicError(
-                "应收子账缺少销项开票任务历史，请联系管理员修复后重试".to_string(),
-            ));
-        }
-        (false, SalesInvoiceTaskChange::RedInvoiceIssued) => SalesInvoiceTaskReason::ReopenedByRedInvoice,
-        (false, SalesInvoiceTaskChange::ReceivableChanged) => SalesInvoiceTaskReason::ReopenedBySalesChange,
-        (false, SalesInvoiceTaskChange::InvoicePosted) => {
-            return Err(Error::BusinessLogicError(
-                "销项开票后仍有可开票额度但原任务已关闭，请联系管理员处理".to_string(),
-            ));
-        }
-    };
-    create_invoice_task(db, &account, reason, executor).await
+    let _ = change;
+    super::invoice_request::ensure_reserved_capacity(db, &account, executor).await?;
+    super::invoice_request::sync_authorized_tasks(db, &account, executor).await
+}
+
+/// 同一次开票的任务身份、来源和额度，必须由外层正式提交命令提供。
+pub(crate) struct InvoiceExecutionInput<'a> {
+    pub work_item_id: &'a WorkItemId,
+    pub expected_task_version: u64,
+    pub party_id: &'a PartyId,
+    pub account_ids: &'a [ReceivableAccountId],
+    pub invoice_amount: erp_core::money::Amount,
 }
 
 /// 在销项发票正式提交事务内校验并记录当前开票执行任务活动。
@@ -111,13 +61,17 @@ pub(crate) async fn sync_sales_invoice_task(
 /// 任务版本、当前责任人、应收子账、往来主体或任一分配目标不属于同一任务时失败关闭。
 pub(crate) async fn record_invoice_execution(
     db: &mongodb::Database,
-    work_item_id: &WorkItemId,
-    expected_task_version: u64,
-    party_id: &PartyId,
-    account_ids: &[ReceivableAccountId],
+    input: InvoiceExecutionInput<'_>,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<String> {
+    let InvoiceExecutionInput {
+        work_item_id,
+        expected_task_version,
+        party_id,
+        account_ids,
+        invoice_amount,
+    } = input;
     let mut task = db
         .work_items()
         .find_by_id(work_item_id, executor)
@@ -158,97 +112,19 @@ pub(crate) async fn record_invoice_execution(
             "一次销项开票只能分配到当前任务绑定的应收子账".to_string(),
         ));
     }
-    task.record_activity(actor.id(), Instant::now())
-        .map_err(Error::Logic)?;
-    db.work_items().update(&mut task, executor).await?;
-    Ok(())
-}
-
-async fn create_invoice_task(
-    db: &mongodb::Database,
-    account: &ReceivableAccount,
-    reason: SalesInvoiceTaskReason,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let responsibility = work_item_service(
-        db.clone(),
-        crate::adapters::identity::shared_rbac_service(db.clone()),
-    )
-    .resolve_finance_responsibility(
-        FinanceResponsibilityOperation::SalesInvoice,
-        account.customer_id.as_ref(),
+    let request_id = super::invoice_request::consume_authorization(
+        db,
+        work_item_id.as_ref(),
+        &account.base.id,
+        party_id,
+        invoice_amount,
         executor,
     )
     .await?;
-    let task = new_sales_invoice_task(
-        WorkItemId::new(next_id()),
-        SalesInvoiceTaskSpec {
-            account_id: account.base.id.clone(),
-            subject_version: account.base.version.to_string(),
-            owner_organization_id: account.counterparty_party_id.to_string(),
-            owner_user_id: responsibility.owner_user_id,
-            reason,
-            open_invoiceable_total: account.open_invoiceable_total,
-        },
-        responsibility.responsibility_key,
-    )
-    .map_err(Error::Logic)?;
-    db.work_items().create(&task, executor).await?;
-    Ok(())
-}
-
-async fn complete_open_task(
-    db: &mongodb::Database,
-    task: Option<&WorkItem>,
-    account: &ReceivableAccount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let Some(task) = task else {
-        return Ok(());
-    };
-    ensure_task_identity(task, account)?;
-    let mut task = task.clone();
-    task.complete_when_fully_invoiced(Instant::now())
+    task.record_activity(actor.id(), Instant::now())
         .map_err(Error::Logic)?;
     db.work_items().update(&mut task, executor).await?;
-    Ok(())
-}
-
-async fn update_open_task_summary(
-    db: &mongodb::Database,
-    task: &WorkItem,
-    account: &ReceivableAccount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    ensure_task_identity(task, account)?;
-    let impact = sales_invoice_impact_summary(account.open_invoiceable_total);
-    let subject_version = account.base.version.to_string();
-    if task.impact_summary.as_deref() == Some(impact.as_str()) && task.subject_version == subject_version {
-        return Ok(());
-    }
-    let mut task = task.clone();
-    task.subject_version = subject_version;
-    task.update_impact_summary(Some(impact)).map_err(Error::Logic)?;
-    db.work_items().update(&mut task, executor).await?;
-    Ok(())
-}
-
-async fn sales_invoice_tasks(
-    db: &mongodb::Database,
-    receivable_account_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<Vec<WorkItem>> {
-    db.work_items()
-        .list_sales_invoice_execution_by_receivable_newest_first(receivable_account_id, executor)
-        .await
-        .map_err(Into::into)
-}
-
-fn open_tasks(tasks: &[WorkItem]) -> Vec<&WorkItem> {
-    tasks
-        .iter()
-        .filter(|task| task.status == WorkItemStatus::Open)
-        .collect()
+    Ok(request_id)
 }
 
 fn ensure_task_identity(task: &WorkItem, account: &ReceivableAccount) -> Result<()> {
@@ -258,8 +134,4 @@ fn ensure_task_identity(task: &WorkItem, account: &ReceivableAccount) -> Result<
     Err(Error::BusinessLogicError(
         "销项开票任务责任身份与应收子账不一致，请联系管理员修复后重试".to_string(),
     ))
-}
-
-fn duplicate_open_task_error() -> Error {
-    Error::BusinessLogicError("同一应收子账存在多个开放销项开票任务，请联系管理员处理".to_string())
 }

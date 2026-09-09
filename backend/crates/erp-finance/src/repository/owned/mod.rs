@@ -30,3 +30,6 @@ pub use receivable_entry::ReceivableEntryRepository;
 pub use receivable_entry_offset::ReceivableEntryOffsetRepository;
 pub use sales_invoice_allocation::SalesInvoiceAllocationRepository;
 pub use supplier_payment::SupplierPaymentRepository;
+
+mod invoice_request;
+pub use invoice_request::SalesInvoiceRequestRepository;

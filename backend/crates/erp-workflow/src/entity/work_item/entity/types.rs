@@ -75,6 +75,7 @@ pub enum WorkItemBriefObjectKind {
     PayableAccount,
     /// 客户回款。
     CustomerReceipt,
+    SalesInvoiceRequest,
     /// 客户退款。
     CustomerRefund,
     /// 回款冲正。
@@ -265,6 +266,12 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         object_kind: WorkItemBriefObjectKind::StockAdjustment,
         business_object_type: "stock_adjustment",
         read_permission: "stock_adjustment:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::SalesInvoiceRequest,
+        business_object_type: "sales_invoice_request",
+        read_permission: "sales_invoice_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,

@@ -46,6 +46,36 @@ pub(crate) const SALES_INVOICE_ALLOCATIONS: &str =
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
+    create_indexes(
+        db,
+        <Database as ReceivableExt>::SALES_INVOICE_REQUESTS,
+        vec![
+            unique_index("uk_invoice_request_no", doc! {"request_no": 1}),
+            named_index(
+                "idx_invoice_request_account_status",
+                doc! {"receivable_account_id": 1, "status": 1},
+            ),
+            named_index(
+                "idx_invoice_request_sales",
+                doc! {"sales_order_id": 1, "created_at": -1, "id": 1},
+            ),
+            named_index(
+                "idx_invoice_request_customer",
+                doc! {"customer_id": 1, "created_at": -1, "id": 1},
+            ),
+            IndexModel::builder()
+                .keys(doc! {"work_item_id": 1})
+                .options(
+                    IndexOptions::builder()
+                        .name("uk_invoice_request_task".to_string())
+                        .unique(true)
+                        .partial_filter_expression(doc! {"work_item_id": {"$type": "string"}})
+                        .build(),
+                )
+                .build(),
+        ],
+    )
+    .await?;
     create_indexes(db, RECEIVABLE_ACCOUNTS, receivable_account_indexes()).await?;
     create_indexes(db, RECEIVABLE_ENTRIES, receivable_entry_indexes()).await?;
     create_indexes(db, RECEIVABLE_ENTRY_OFFSETS, receivable_entry_offset_indexes()).await?;

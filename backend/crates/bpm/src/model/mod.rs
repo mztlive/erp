@@ -63,6 +63,8 @@ pub enum ProcessKind {
     StockAdjustment,
     /// 客户回款流程。
     CustomerReceipt,
+    /// 销项开票申请。
+    SalesInvoiceRequest,
     /// 供应商付款流程。
     SupplierPayment,
     /// 客户退款流程。
@@ -108,6 +110,7 @@ impl ProcessKind {
             Self::PurchaseChangeOrder => "purchase_change_order",
             Self::StockAdjustment => "stock_adjustment",
             Self::CustomerReceipt => "customer_receipt",
+            Self::SalesInvoiceRequest => "sales_invoice_request",
             Self::SupplierPayment => "supplier_payment",
             Self::CustomerRefund => "customer_refund",
             Self::SupplierRefund => "supplier_refund",
@@ -146,6 +149,7 @@ impl ProcessKind {
             "purchase_change_order" => Ok(Self::PurchaseChangeOrder),
             "stock_adjustment" => Ok(Self::StockAdjustment),
             "customer_receipt" => Ok(Self::CustomerReceipt),
+            "sales_invoice_request" => Ok(Self::SalesInvoiceRequest),
             "supplier_payment" => Ok(Self::SupplierPayment),
             "customer_refund" => Ok(Self::CustomerRefund),
             "supplier_refund" => Ok(Self::SupplierRefund),
@@ -359,6 +363,7 @@ mod tests {
             ProcessKind::PurchaseChangeOrder,
             ProcessKind::StockAdjustment,
             ProcessKind::CustomerReceipt,
+            ProcessKind::SalesInvoiceRequest,
             ProcessKind::SupplierPayment,
             ProcessKind::CustomerRefund,
             ProcessKind::SupplierRefund,
@@ -373,7 +378,7 @@ mod tests {
             ProcessKind::SalesReturnCase,
             ProcessKind::PurchaseReturnOrder,
         ];
-        assert_eq!(kinds.len(), 20);
+        assert_eq!(kinds.len(), 21);
         for kind in kinds {
             assert!(!kind.as_str().is_empty());
             assert!(kind.as_str().len() <= PROCESS_KIND_MAX_LEN);

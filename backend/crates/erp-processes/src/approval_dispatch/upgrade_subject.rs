@@ -86,6 +86,9 @@ impl ApprovalUpgradeSubjectFacts {
             DocumentType::PurchaseOrder => load_purchase_order(db, document_id, executor).await,
             DocumentType::PurchaseChangeOrder => load_purchase_change(db, document_id, executor).await,
             DocumentType::StockAdjustment => load_stock_adjustment(db, document_id, executor).await,
+            DocumentType::SalesInvoiceRequest => Err(Error::ConflictError(
+                "开票申请创建即提交，不支持升级已提交申请的审批绑定".into(),
+            )),
             DocumentType::CustomerReceipt => load_customer_receipt(db, document_id, executor).await,
             DocumentType::CustomerRefund => load_customer_refund(db, document_id, executor).await,
             DocumentType::SupplierRefund => load_supplier_refund(db, document_id, executor).await,
@@ -181,6 +184,9 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
         DocumentType::PurchaseOrder => ensure_fresh_purchase_order(db, facts, executor).await,
         DocumentType::PurchaseChangeOrder => ensure_fresh_purchase_change(db, facts, executor).await,
         DocumentType::StockAdjustment => ensure_fresh_stock_adjustment(db, facts, executor).await,
+        DocumentType::SalesInvoiceRequest => Err(Error::ConflictError(
+            "开票申请创建即提交，不支持升级已提交申请的审批绑定".into(),
+        )),
         DocumentType::CustomerReceipt => ensure_fresh_customer_receipt(db, facts, executor).await,
         DocumentType::CustomerRefund => ensure_fresh_customer_refund(db, facts, executor).await,
         DocumentType::SupplierRefund => ensure_fresh_supplier_refund(db, facts, executor).await,

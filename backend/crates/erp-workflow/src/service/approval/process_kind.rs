@@ -28,6 +28,7 @@ pub fn process_kind_of(document_type: DocumentType) -> ProcessKind {
         | DocumentType::PurchaseOrder
         | DocumentType::PurchaseChangeOrder
         | DocumentType::StockAdjustment
+        | DocumentType::SalesInvoiceRequest
         | DocumentType::CustomerReceipt
         | DocumentType::SupplierPayment
         | DocumentType::CustomerRefund
@@ -66,6 +67,7 @@ pub fn document_type_of(process_kind: ProcessKind) -> DocumentType {
         | ProcessKind::PurchaseOrder
         | ProcessKind::PurchaseChangeOrder
         | ProcessKind::StockAdjustment
+        | ProcessKind::SalesInvoiceRequest
         | ProcessKind::CustomerReceipt
         | ProcessKind::SupplierPayment
         | ProcessKind::CustomerRefund

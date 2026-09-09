@@ -59,5 +59,5 @@ test("表格覆盖全部固定单据，无需审批没有写入口", () => {
         expect(screen.getByText(DOCUMENT_TYPE_LABEL[type])).toBeTruthy()
     expect(screen.queryByRole("button", { name: "继续编辑" })).toBeNull()
     expect(screen.getAllByText("无需审批")).toHaveLength(9)
-    expect(screen.getAllByRole("link", { name: "查看流程" })).toHaveLength(11)
+    expect(screen.getAllByRole("link", { name: "查看流程" })).toHaveLength(12)
 })

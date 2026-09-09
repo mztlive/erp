@@ -25,10 +25,10 @@ pub use finance_responsibility::{
 };
 pub use finance_task::{
     is_purchase_payable, is_zero_amount, matches_sales_invoice_identity, matches_supplier_payment_identity,
-    new_sales_invoice_task, new_supplier_payment_task, payment_due_at, sales_invoice_impact_summary,
-    supplier_payment_impact_summary, PayablePurchaseAdmissionFact, SalesInvoiceTaskReason,
-    SalesInvoiceTaskSpec, SupplierPaymentTaskReason, SupplierPaymentTaskSpec, FINANCE_OWNER_ROLE,
-    PAYABLE_OBJECT_TYPE, RECEIVABLE_OBJECT_TYPE,
+    new_approved_sales_invoice_task, new_sales_invoice_task, new_supplier_payment_task, payment_due_at,
+    sales_invoice_impact_summary, supplier_payment_impact_summary, PayablePurchaseAdmissionFact,
+    SalesInvoiceTaskReason, SalesInvoiceTaskSpec, SupplierPaymentTaskReason, SupplierPaymentTaskSpec,
+    FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, RECEIVABLE_OBJECT_TYPE,
 };
 pub use fulfillment_responsibility::FulfillmentResponsibilityKey;
 pub use queue_context::{QueueContextField, QueueContextIdentity};

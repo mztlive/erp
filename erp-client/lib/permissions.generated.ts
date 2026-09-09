@@ -2792,6 +2792,62 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "开票申请",
+        description: "开票申请与授权管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-invoice-requests",
+                description: "查询开票申请列表",
+                permission: {
+                    resource: "sales_invoice_request",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-invoice-requests/submit",
+                description: "提交开票申请",
+                permission: {
+                    resource: "sales_invoice_request",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-invoice-requests/{id}",
+                description: "查询开票申请详情",
+                permission: {
+                    resource: "sales_invoice_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-invoice-requests/{id}/cancel",
+                description: "撤回开票申请",
+                permission: {
+                    resource: "sales_invoice_request",
+                    action: "cancel",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-invoice-requests/amounts/{id}",
+                description: "查询可申请开票额度",
+                permission: {
+                    resource: "sales_invoice_request",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
         name: "供应商往来",
         description: "应付台账、付款单与进项发票登记管理（W12）",
         permissions: [

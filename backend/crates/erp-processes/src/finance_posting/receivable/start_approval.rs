@@ -230,7 +230,7 @@ pub(super) async fn replay_customer_receipt_start_with_executor(
 /// 客户回款启动输入。
 ///
 /// # 用途
-/// 收拢 `build_customer_receipt_start_input` 的定义图、绑定与提交人参数。
+/// 收拢 `build_document_start_input` 的定义图、绑定与提交人参数。
 ///
 /// # 参数
 /// 无。
@@ -243,7 +243,9 @@ pub(super) async fn replay_customer_receipt_start_with_executor(
 ///
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
-pub(super) struct CustomerReceiptStartInput<'a> {
+pub(super) struct DocumentStartInput<'a> {
+    /// 必须审批的业务类型。
+    pub document_type: DocumentType,
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 冻结绑定。
@@ -282,10 +284,9 @@ pub(super) struct CustomerReceiptStartInput<'a> {
 ///
 /// # 关键业务约束
 /// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
-pub(super) fn build_customer_receipt_start_input(
-    input: CustomerReceiptStartInput<'_>,
-) -> Result<StartExecutionInput> {
-    let CustomerReceiptStartInput {
+pub(super) fn build_document_start_input(input: DocumentStartInput<'_>) -> Result<StartExecutionInput> {
+    let DocumentStartInput {
+        document_type,
         graph,
         binding,
         subject,
@@ -323,7 +324,7 @@ pub(super) fn build_customer_receipt_start_input(
             idempotency_key,
             now: timestamp,
         },
-        process_kind: process_kind_of(DocumentType::CustomerReceipt),
+        process_kind: process_kind_of(document_type),
         subject,
         subject_version,
         binding_id: binding.approval_process_definition_id.as_ref().to_string(),
@@ -500,7 +501,10 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
     persist_runtime_writes(
         db,
         &writes,
-        &snapshot_payload,
+        RuntimeSubject {
+            document_type: DocumentType::CustomerReceipt,
+            snapshot_payload: &snapshot_payload,
+        },
         owner_role,
         &organization_id,
         now,
@@ -511,19 +515,29 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
     Ok(receipt)
 }
 
+/// 启动时固定的业务类型及提交快照。
+pub(super) struct RuntimeSubject<'a> {
+    pub document_type: DocumentType,
+    pub snapshot_payload: &'a ApprovalSubjectSnapshotPayload,
+}
+
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
-async fn persist_runtime_writes(
+pub(super) async fn persist_runtime_writes(
     db: &Database,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
-    snapshot_payload: &ApprovalSubjectSnapshotPayload,
+    subject: RuntimeSubject<'_>,
     owner_role: &str,
     organization_id: &str,
     now: Instant,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let RuntimeSubject {
+        document_type,
+        snapshot_payload,
+    } = subject;
     let first = writes
         .created_executions
         .first()
@@ -540,7 +554,7 @@ async fn persist_runtime_writes(
     let mut snapshot = ApprovalSubjectSnapshot::new(
         ApprovalSubjectSnapshotId::new(next_id()),
         ApprovalProcessInstanceId::new(writes.instance.base.id.clone()),
-        DocumentType::CustomerReceipt,
+        document_type,
         writes.instance.subject.subject_id(),
         writes.instance.subject_version,
         snapshot_payload.clone(),
@@ -558,7 +572,16 @@ async fn persist_runtime_writes(
     db.approval_subject_snapshots()
         .create_immutable_snapshot(&snapshot, session)
         .await?;
-    persist_open_tasks(db, writes, owner_role, organization_id, now, session).await
+    persist_open_tasks(
+        db,
+        document_type,
+        writes,
+        owner_role,
+        organization_id,
+        now,
+        session,
+    )
+    .await
 }
 
 /// 由入口执行构造有界列表投影。
@@ -590,6 +613,7 @@ fn list_projection_from_execution(
 /// 责任人为空或仓储失败时返回错误。
 async fn persist_open_tasks(
     db: &Database,
+    document_type: DocumentType,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     owner_role: &str,
     organization_id: &str,
@@ -609,7 +633,7 @@ async fn persist_open_tasks(
             WorkItemId::new(next_id()),
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
-                business_object_type: DocumentType::CustomerReceipt.as_str().to_string(),
+                business_object_type: document_type.as_str().to_string(),
                 business_object_id: writes.instance.subject.subject_id().to_string(),
                 subject_version: writes.instance.subject_version.to_string(),
                 owner_role: owner_role.to_string(),

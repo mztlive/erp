@@ -1,6 +1,6 @@
 //! Receivable account creation coordinating finance, workflow tasks and audit.
 
-use super::{invoice_task, ReceivableProcess};
+use super::ReceivableProcess;
 use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditExt};
@@ -121,7 +121,6 @@ impl ReceivableProcess {
                     db.receivable()
                         .create_receivable_with_entry(&account, &entry, session)
                         .await?;
-                    invoice_task::ensure_sales_invoice_task(&db, &account, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::Error>(())
                 })

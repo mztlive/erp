@@ -17,6 +17,21 @@ impl super::super::WorkItemFactsReader {
         facts: &mut ObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        use erp_finance::repository::ReceivableExt;
+        let request_ids = object_ids(keys, ObjectKind::SalesInvoiceRequest);
+        if !request_ids.is_empty() {
+            for request in self
+                .db
+                .sales_invoice_requests()
+                .list_active_by_ids(&request_ids, executor)
+                .await?
+            {
+                facts.insert(
+                    (ObjectKind::SalesInvoiceRequest, request.base.id.clone()),
+                    mapping::invoice_request_fact(&request),
+                );
+            }
+        }
         let ids = object_ids(keys, ObjectKind::CustomerReceipt);
         if ids.is_empty() {
             return Ok(());

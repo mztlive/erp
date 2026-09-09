@@ -95,6 +95,7 @@ impl ReceivableService {
                 ),
             };
             views.push(InvoiceView {
+                sales_invoice_request_id: row.sales_invoice_request_id,
                 id: row.id,
                 invoice_direction: row.invoice_direction,
                 invoice_kind: row.invoice_kind,
@@ -175,6 +176,7 @@ impl ReceivableService {
             }
         };
         Ok(InvoiceView {
+            sales_invoice_request_id: invoice.sales_invoice_request_id.clone(),
             id: invoice.base.id.clone(),
             invoice_direction: invoice.invoice_direction,
             invoice_kind: invoice.invoice_kind,

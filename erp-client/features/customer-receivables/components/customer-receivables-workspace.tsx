@@ -369,17 +369,18 @@ export function CustomerReceivablesWorkspace({
                         description: `已按当前筛选生成 CSV 文件 ${fileName}，并开始下载。`,
                     })
                 }}
-                onRegisterInvoice={() => openRegister("invoice")}
+                onRegisterInvoice={() =>
+                    router.push(
+                        "/finance/customer-accounts/invoice-requests?create=1",
+                    )
+                }
                 onRegisterReceipt={() => openRegister("receipt")}
                 startSessionPending={startSessionPending}
-                canRegisterInvoice={
-                    permissions.canRegisterInvoice &&
-                    Boolean(invoiceExecutionTask)
-                }
+                canRegisterInvoice={permissions.canSubmitInvoiceRequest}
                 canRegisterReceipt={permissions.canRegisterReceipt}
                 canExport={permissions.canExport}
                 permissionReason={permissions.reason}
-                invoiceBlockedReason={invoiceTaskBlockedReason}
+                invoiceBlockedReason="当前账号没有提交开票申请的权限"
             />
 
             {urlState.from === "W05" && urlState.returnTo ? (

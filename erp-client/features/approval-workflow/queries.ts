@@ -7,6 +7,7 @@ import {
     useQueryClient,
 } from "@tanstack/react-query"
 
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import { workItemKeys } from "@/features/work-items/queries"
 
 import {
@@ -55,6 +56,12 @@ const invalidateApprovalCaches = async (
     await Promise.all([
         queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
         queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({
+            queryKey: queryKeyRoots.invoiceRequests,
+        }),
+        queryClient.invalidateQueries({
+            queryKey: queryKeyRoots.workspaceHome,
+        }),
         input?.instanceId
             ? queryClient.invalidateQueries({
                   queryKey: approvalKeys.instance(input.instanceId),

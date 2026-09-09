@@ -183,6 +183,7 @@ mod tests {
         assert!(serde_json::from_value::<CreateInvoiceRequest>(forged).is_err());
 
         let view = InvoiceView {
+            sales_invoice_request_id: None,
             id: "inv-1".into(),
             invoice_direction: InvoiceDirection::Sales,
             invoice_kind: InvoiceKind::Blue,
@@ -241,3 +242,6 @@ mod tests {
         );
     }
 }
+
+pub mod invoice_request;
+pub use invoice_request::*;

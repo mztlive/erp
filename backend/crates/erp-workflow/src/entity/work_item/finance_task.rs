@@ -27,6 +27,8 @@ pub const FINANCE_OWNER_ROLE: &str = "role-finance";
 /// 销项开票任务产生原因。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SalesInvoiceTaskReason {
+    /// 开票申请最终审批通过。
+    ApprovedInvoiceRequest,
     /// 新形成且存在可开票额度。
     Initial,
     /// 红票恢复可开票额度后重开。
@@ -39,6 +41,7 @@ impl SalesInvoiceTaskReason {
     /// 返回稳定的原因代码。
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::ApprovedInvoiceRequest => "SALES_INVOICE_REQUEST_APPROVED",
             Self::Initial => "RECEIVABLE_INVOICE_REQUIRED",
             Self::ReopenedByRedInvoice => "INVOICEABLE_REOPENED_BY_RED_INVOICE",
             Self::ReopenedBySalesChange => "INVOICEABLE_REOPENED_BY_SALES_CHANGE",
@@ -155,6 +158,26 @@ pub fn new_sales_invoice_task(
     )
 }
 
+/// 为批准申请生成独立责任身份，保留应收作业面与申请额度摘要。
+/// # 错误
+/// 请求身份为空、责任键或摘要过长时返回错误。
+pub fn new_approved_sales_invoice_task(
+    id: WorkItemId,
+    mut spec: SalesInvoiceTaskSpec,
+    responsibility_key: &str,
+    request_id: &str,
+    request_no: &str,
+) -> Result<WorkItem> {
+    if request_id.trim().is_empty() || request_no.trim().is_empty() {
+        return Err(Error::from("批准的开票申请身份不能为空"));
+    }
+    let remaining = spec.open_invoiceable_total;
+    spec.reason = SalesInvoiceTaskReason::ApprovedInvoiceRequest;
+    let mut task = new_sales_invoice_task(id, spec, format!("{responsibility_key}:request:{request_id}"))?;
+    task.update_impact_summary(Some(format!("申请 {request_no} · 待开票 {remaining} 元")))?;
+    Ok(task)
+}
+
 /// 创建供应商付款执行任务（W12 factory，应付域复用同一 contract）。
 ///
 /// # 参数
@@ -214,7 +237,8 @@ pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool
         && matches!(
             task.reason_code.as_deref(),
             Some(
-                "RECEIVABLE_INVOICE_REQUIRED"
+                "SALES_INVOICE_REQUEST_APPROVED"
+                    | "RECEIVABLE_INVOICE_REQUIRED"
                     | "INVOICEABLE_REOPENED_BY_RED_INVOICE"
                     | "INVOICEABLE_REOPENED_BY_SALES_CHANGE"
             )
@@ -317,6 +341,44 @@ mod tests {
             reason: SalesInvoiceTaskReason::Initial,
             open_invoiceable_total: amount("100.00"),
         }
+    }
+
+    #[test]
+    fn approved_requests_have_independent_task_identity_and_frozen_amount() {
+        let first = new_approved_sales_invoice_task(
+            WorkItemId::new("t1"),
+            sales_spec(),
+            "finance:SALES_INVOICE:rule",
+            "request1",
+            "KP-001",
+        )
+        .unwrap();
+        let second = new_approved_sales_invoice_task(
+            WorkItemId::new("t2"),
+            sales_spec(),
+            "finance:SALES_INVOICE:rule",
+            "request2",
+            "KP-002",
+        )
+        .unwrap();
+        assert_eq!(first.business_object_id, second.business_object_id);
+        assert_ne!(first.responsibility_key(), second.responsibility_key());
+        assert!(matches_sales_invoice_identity(&first, "ra-1"));
+        assert!(matches_sales_invoice_identity(&second, "ra-1"));
+        assert_eq!(
+            first.reason_code.as_deref(),
+            Some("SALES_INVOICE_REQUEST_APPROVED")
+        );
+        assert!(first.impact_summary.as_deref().unwrap().contains("KP-001"));
+        assert!(first.impact_summary.as_deref().unwrap().contains("100.00"));
+        assert!(new_approved_sales_invoice_task(
+            WorkItemId::new("t3"),
+            sales_spec(),
+            "finance:SALES_INVOICE:rule",
+            "",
+            "KP-003"
+        )
+        .is_err());
     }
 
     fn sales_task() -> WorkItem {

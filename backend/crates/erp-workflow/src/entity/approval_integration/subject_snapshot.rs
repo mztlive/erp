@@ -224,6 +224,7 @@ fn requires_amount(document_type: DocumentType) -> bool {
             | DocumentType::SalesChangeOrder
             | DocumentType::PurchaseOrder
             | DocumentType::PurchaseChangeOrder
+            | DocumentType::SalesInvoiceRequest
             | DocumentType::CustomerReceipt
             | DocumentType::SupplierPayment
             | DocumentType::CustomerRefund

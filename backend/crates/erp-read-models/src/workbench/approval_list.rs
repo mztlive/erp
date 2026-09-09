@@ -199,13 +199,13 @@ mod tests {
         let json = serde_json::to_value(old).unwrap();
         assert!(json.get("allowed_actions").is_none());
     }
-    /// 二十种单据政策与工作台审批对象注册必须一一对应，执行类不能伪造审批入口。
+    /// 二十一种单据政策与工作台审批对象注册必须一一对应，执行类不能伪造审批入口。
     #[test]
     fn all_document_policies_match_workbench_approval_relations() {
         use erp_workflow::entity::document_registry::DocumentType;
         use erp_workflow::service::approval::policy::{policy_of, ApprovalRequirement};
         let relations = WorkItemType::registered_brief_relations();
-        assert_eq!(relations.len(), 28);
+        assert_eq!(relations.len(), 29);
         assert_eq!(
             relations
                 .iter()
@@ -225,7 +225,7 @@ mod tests {
             );
             required += usize::from(needs_approval);
         }
-        assert_eq!(required, 11);
+        assert_eq!(required, 12);
         assert_eq!(
             relations
                 .iter()

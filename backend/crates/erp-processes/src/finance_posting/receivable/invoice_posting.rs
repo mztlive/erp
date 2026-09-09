@@ -89,16 +89,21 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
             .iter()
             .map(|line| line.receivable_account_id.clone())
             .collect::<Vec<_>>();
-        invoice_task::record_invoice_execution(
+        let request_id = invoice_task::record_invoice_execution(
             self.db,
-            self.input.work_item_id,
-            self.input.expected_task_version,
-            &self.invoice.party_id,
-            &account_ids,
+            invoice_task::InvoiceExecutionInput {
+                work_item_id: self.input.work_item_id,
+                expected_task_version: self.input.expected_task_version,
+                party_id: &self.invoice.party_id,
+                account_ids: &account_ids,
+                invoice_amount: self.invoice.gross_amount,
+            },
             self.input.actor,
             executor,
         )
-        .await
+        .await?;
+        self.invoice.sales_invoice_request_id = Some(request_id);
+        Ok(())
     }
 
     async fn persist_finance(&mut self, executor: &mut dyn Executor) -> Result<()> {

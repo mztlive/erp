@@ -460,6 +460,8 @@ mod tests {
                     "invoice:list",
                     "invoice:detail",
                     "invoice:create",
+                    "sales_invoice_request:list",
+                    "sales_invoice_request:detail",
                     "invoice:post",
                 ]
                 .as_slice()

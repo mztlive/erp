@@ -204,17 +204,18 @@ fn fulfillment_queue_index() -> IndexModel {
         .build()
 }
 
-/// 同一应收子账只允许一条开放销项开票执行任务。
+/// 同一申请责任键只允许一条开放销项任务；同一应收支持多张批准申请。
 fn unique_open_sales_invoice_execution_object_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! {
             "business_object_type": 1,
             "business_object_id": 1,
             "work_item_type": 1,
+            "responsibility_key": 1,
         })
         .options(
             IndexOptions::builder()
-                .name("uk_work_items_open_sales_invoice_execution_object".to_string())
+                .name("uk_work_items_open_sales_invoice_execution_request".to_string())
                 .unique(true)
                 .partial_filter_expression(doc! {
                     "status": "OPEN",
@@ -432,13 +433,14 @@ mod tests {
             })
         );
 
-        let invoice = index_named(&indexes, "uk_work_items_open_sales_invoice_execution_object");
+        let invoice = index_named(&indexes, "uk_work_items_open_sales_invoice_execution_request");
         assert_eq!(
             invoice.keys,
             doc! {
                 "business_object_type": 1,
                 "business_object_id": 1,
                 "work_item_type": 1,
+                "responsibility_key": 1,
             }
         );
         assert_eq!(invoice.options.as_ref().unwrap().unique, Some(true));

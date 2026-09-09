@@ -435,7 +435,9 @@ fn document_approval_route(business_object_type: &str) -> Result<(&'static str, 
         "sales_order" | "voucher_sales_order" | "sales_change_order" => Ok(("document_approval", "W05")),
         "purchase_order" | "purchase_change_order" => Ok(("document_approval", "W08")),
         "stock_adjustment" => Ok(("document_approval", "W10")),
-        "customer_receipt" | "customer_refund" | "receipt_reversal" => Ok(("document_approval", "W11")),
+        "sales_invoice_request" | "customer_receipt" | "customer_refund" | "receipt_reversal" => {
+            Ok(("document_approval", "W11"))
+        }
         "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
         _ => Err(Error::ValidationError(
             "APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string(),

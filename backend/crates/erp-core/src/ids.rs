@@ -321,6 +321,7 @@ id_type!(ReceivableEntryOffsetId);
 id_type!(CustomerReceiptId);
 id_type!(ReceiptAllocationId);
 id_type!(InvoiceId);
+id_type!(SalesInvoiceRequestId);
 id_type!(SalesInvoiceAllocationId);
 
 // D19 payable

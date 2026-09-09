@@ -130,6 +130,46 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/sales-invoice-requests",
+            with_permission(
+                get(receivable::invoice_request::invoice_request_list),
+                rbac,
+                receivable::invoice_request::invoice_request_list_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-invoice-requests/submit",
+            with_permission(
+                post(receivable::invoice_request::invoice_request_submit),
+                rbac,
+                receivable::invoice_request::invoice_request_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-invoice-requests/{id}",
+            with_permission(
+                get(receivable::invoice_request::invoice_request_detail),
+                rbac,
+                receivable::invoice_request::invoice_request_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-invoice-requests/{id}/cancel",
+            with_permission(
+                post(receivable::invoice_request::invoice_request_cancel),
+                rbac,
+                receivable::invoice_request::invoice_request_cancel_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-invoice-requests/amounts/{id}",
+            with_permission(
+                get(receivable::invoice_request::invoice_request_amounts),
+                rbac,
+                receivable::invoice_request::invoice_request_amounts_permission_key(),
+            ),
+        )
+        .route(
             "/invoices/commit",
             with_permission(
                 post(receivable::invoice_commit),

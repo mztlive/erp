@@ -1,6 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
+import { subtractFixed } from "@/lib/fixed-decimal"
+import type { InvoiceRequest } from "@/features/invoice-requests/api"
 
 import {
     WorkspaceTaskPane,
@@ -37,6 +41,14 @@ export function WorkspaceInvoiceTask({
     item,
     onTaskCompleted,
 }: WorkspaceInvoiceTaskProps) {
+    const requestQuery = useInvoiceRequests({
+        work_item_id: item.workItemId,
+        page_size: 2,
+    })
+    const approvedRequest =
+        requestQuery.data?.items.length === 1
+            ? requestQuery.data.items[0]
+            : undefined
     const descriptor = workspaceInvoiceDescriptor(item)
     const receivableQuery = useCustomerAccountsDetailQuery(
         descriptor ? "receivable" : null,
@@ -112,10 +124,50 @@ export function WorkspaceInvoiceTask({
                             "当前账号没有处理此开票任务的资格。"}
                     </AlertDescription>
                 </Alert>
+            ) : requestQuery.isPending ? (
+                <InvoiceSessionSkeleton />
+            ) : requestQuery.isError ? (
+                <Alert variant="destructive">
+                    <AlertTitle>开票申请读取失败</AlertTitle>
+                    <AlertDescription>
+                        {getErrorMessage(requestQuery.error, "请刷新后重试")}
+                        <Button
+                            id="workspace-invoice-request-retry"
+                            variant="outline"
+                            onClick={() => void requestQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            ) : approvedRequest?.status === "completed" ? (
+                <Alert>
+                    <AlertTitle>本次申请已全部开票</AlertTitle>
+                    <AlertDescription>
+                        批准额度已执行完毕，可返回工作台查看其他任务。
+                    </AlertDescription>
+                </Alert>
+            ) : !approvedRequest ||
+              approvedRequest.status !== "approved" ||
+              approvedRequest.receivable_account_id !== receivable.accountId ? (
+                <Alert variant="warning">
+                    <AlertTitle>此任务没有可执行的已批准申请</AlertTitle>
+                    <AlertDescription>
+                        请从销售单发起开票申请，或刷新查看最新处理结果。
+                    </AlertDescription>
+                </Alert>
             ) : (
                 <WorkspaceInvoiceSession
+                    request={approvedRequest}
                     item={item}
-                    receivable={receivable}
+                    receivable={{
+                        ...receivable,
+                        openInvoiceableTotal: subtractFixed(
+                            approvedRequest.data.amount,
+                            approvedRequest.invoiced_amount,
+                            { maxScale: 2, outputScale: 2 },
+                        ),
+                    }}
                     onTaskCompleted={onTaskCompleted}
                 />
             )}
@@ -137,14 +189,17 @@ function InvoiceSessionSkeleton() {
 
 /** 应收身份确认后展开核销工作面；提交结果留在当前任务。 */
 function WorkspaceInvoiceSession({
+    request,
     item,
     receivable,
     onTaskCompleted,
 }: {
+    request: InvoiceRequest
     item: WorkspaceWorkItem
     receivable: ReceivableAccountRow
     onTaskCompleted?: (workItemId: string) => void
 }) {
+    const queryClient = useQueryClient()
     const [resetNonce, setResetNonce] = React.useState(0)
     const fingerprint = `${item.workItemId}:${item.taskVersion}:${receivable.accountId}:${resetNonce}`
     const [draftSessionId, setDraftSessionId] = React.useState<string>()
@@ -169,6 +224,16 @@ function WorkspaceInvoiceSession({
             })
             .then((session) => {
                 if (cancelled) return
+                queryClient.setQueryData(
+                    ["customer-receivables", "session", session.draftSessionId],
+                    {
+                        ...session,
+                        pool: session.pool.map((target) => ({
+                            ...target,
+                            openAmount: receivable.openInvoiceableTotal,
+                        })),
+                    },
+                )
                 setDraftSessionId(session.draftSessionId)
             })
             .catch((error: unknown) => {
@@ -205,28 +270,52 @@ function WorkspaceInvoiceSession({
     }
 
     return (
-        <AllocationSessionScreen
-            isPending={!draftSessionId || sessionQuery.isPending}
-            session={sessionQuery.data}
-            onBackToList={() => setResetNonce((value) => value + 1)}
-            onClose={() => setResetNonce((value) => value + 1)}
-            onPosted={(result) => {
-                if (
-                    invoiceExecutionIsComplete(
-                        result.allocatedTotal,
-                        receivable.openInvoiceableTotal,
-                    )
-                ) {
-                    onTaskCompleted?.(item.workItemId)
-                }
-            }}
-            canOperate
-            workItemId={item.workItemId}
-            expectedTaskVersion={item.taskVersion}
-            taskReceivableAccountId={item.businessObjectId}
-            embedded
-            hideSessionClose
-            closeLabel="继续处理"
-        />
+        <>
+            <section
+                className="mx-5 mt-4 rounded-lg border p-4 text-sm"
+                aria-label="已批准开票要求"
+            >
+                <p className="font-semibold">
+                    {request.request_no} · 本次剩余批准金额{" "}
+                    {receivable.openInvoiceableTotal} 元
+                </p>
+                <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {[
+                        ["开票抬头", request.data.invoice_title],
+                        ["税号", request.data.tax_number],
+                        ["开票内容", request.data.invoice_content],
+                        ["申请事由", request.data.reason],
+                    ].map(([label, value]) => (
+                        <div key={label}>
+                            <dt className="text-muted-foreground">{label}</dt>
+                            <dd className="break-words">{value}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </section>
+            <AllocationSessionScreen
+                isPending={!draftSessionId || sessionQuery.isPending}
+                session={sessionQuery.data}
+                onBackToList={() => setResetNonce((value) => value + 1)}
+                onClose={() => setResetNonce((value) => value + 1)}
+                onPosted={(result) => {
+                    if (
+                        invoiceExecutionIsComplete(
+                            result.allocatedTotal,
+                            receivable.openInvoiceableTotal,
+                        )
+                    ) {
+                        onTaskCompleted?.(item.workItemId)
+                    }
+                }}
+                canOperate
+                workItemId={item.workItemId}
+                expectedTaskVersion={item.taskVersion}
+                taskReceivableAccountId={item.businessObjectId}
+                embedded
+                hideSessionClose
+                closeLabel="继续处理"
+            />
+        </>
     )
 }

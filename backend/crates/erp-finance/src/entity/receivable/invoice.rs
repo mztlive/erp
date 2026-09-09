@@ -623,6 +623,9 @@ pub struct Invoice {
     pub rounding_reason: Option<String>,
     /// 红票原蓝票。
     pub original_invoice_id: Option<InvoiceId>,
+    /// 销项蓝票执行所消耗的批准申请；历史及进项发票为空。
+    #[serde(default)]
+    pub sales_invoice_request_id: Option<String>,
 }
 
 impl PartialEq for Invoice {
@@ -710,6 +713,7 @@ impl Invoice {
             rounding_adjustment_amount: data.rounding_adjustment_amount,
             rounding_reason,
             original_invoice_id: data.original_invoice_id,
+            sales_invoice_request_id: None,
         })
     }
 

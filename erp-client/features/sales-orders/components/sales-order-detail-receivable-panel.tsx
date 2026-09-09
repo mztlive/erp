@@ -1,5 +1,6 @@
 "use client"
 
+import { InvoiceRequestPanel } from "@/features/invoice-requests/components/request-panel"
 import type { ReactNode } from "react"
 import {
     DetailHint,
@@ -149,7 +150,7 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
                 />
                 <DetailSummaryItem
                     title="开票"
-                    label="待开票金额"
+                    label="未开票余额"
                     value={summaryAmount(total("openInvoiceableTotal"))}
                     detail={
                         <>
@@ -179,6 +180,15 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
                     onRetry={() => void state.profile.refetch()}
                 />
             ) : null}
+            <InvoiceRequestPanel
+                salesOrderId={order.id}
+                accountId={
+                    readableAccounts?.length === 1
+                        ? readableAccounts[0]?.accountId
+                        : undefined
+                }
+                title={order.customerName}
+            />
             <div className="divide-y divide-border/70">
                 <DetailRecordSection
                     title="应收明细"

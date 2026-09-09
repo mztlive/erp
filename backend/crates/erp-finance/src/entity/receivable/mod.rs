@@ -17,6 +17,8 @@ pub mod customer_receipt;
 pub mod external_facts;
 pub mod funds_ledger;
 pub mod invoice;
+pub mod invoice_request;
+pub use invoice_request::*;
 pub mod receipt_allocation;
 pub mod receivable_account;
 pub mod receivable_entry;

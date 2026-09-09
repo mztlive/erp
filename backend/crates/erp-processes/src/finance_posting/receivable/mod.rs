@@ -27,6 +27,7 @@ mod customer_receipt;
 mod dto;
 mod invoice;
 mod invoice_posting;
+pub(crate) mod invoice_request;
 
 pub(crate) mod invoice_task;
 mod red_invoice;
