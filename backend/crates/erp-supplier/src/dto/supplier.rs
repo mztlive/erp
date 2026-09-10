@@ -907,6 +907,65 @@ mod tests {
     };
     use crate::error::Error;
 
+    /// Node 种子生成器与 Rust 共享固定日期请求，验证最新 DTO、结算及合同资格合同。
+    #[test]
+    fn development_seed_requests_match_current_domain_contracts() {
+        use crate::{
+            QualificationStatus, SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData,
+            SupplierQualification, SupplierQualificationData,
+        };
+        use erp_core::ids::{
+            SupplierAccountId, SupplierCommercialProfileRevisionId, SupplierQualificationId,
+        };
+        let rows: Vec<serde_json::Value> = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../scripts/fixtures/dev-supplier-profiles.json"
+        )))
+        .unwrap();
+        let today = "2026-09-10".parse().unwrap();
+        assert_eq!(rows.len(), 9);
+        for mut row in rows {
+            let request: SaveSupplierProfileRequest = serde_json::from_value(row.clone()).unwrap();
+            request.validate_contract().unwrap();
+            row["supplier_id"] = "seed-supplier".into();
+            row["revision_no"] = 1.into();
+            let data: SupplierCommercialProfileRevisionData = serde_json::from_value(row).unwrap();
+            SupplierCommercialProfileRevision::new(
+                SupplierCommercialProfileRevisionId::new("seed-profile"),
+                data,
+            )
+            .unwrap();
+            let mut contracts = Vec::new();
+            for input in request.qualifications {
+                let qualification = SupplierQualification::new(
+                    SupplierQualificationId::new("seed-contract"),
+                    SupplierQualificationData {
+                        supplier_id: SupplierAccountId::new("seed-supplier"),
+                        qualification_type: input.qualification_type,
+                        certificate_no: input.certificate_no,
+                        issuer: input.issuer,
+                        valid_from: input.valid_from,
+                        valid_to: input.valid_to,
+                        attachment_id: input.attachment_id,
+                        status: QualificationStatus::Active,
+                    },
+                    "seed-actor",
+                )
+                .unwrap();
+                contracts.push(qualification);
+            }
+            let blocked = matches!(
+                request.supplier_no.as_deref(),
+                Some("SUP-DEV-UNVERIFIED" | "SUP-DEV-EXPIRED")
+            );
+            assert_eq!(
+                crate::entity::supplier::eligibility::ensure_linked_contracts_qualified(&contracts, today)
+                    .is_err(),
+                blocked
+            );
+        }
+    }
+
     fn save_supplier_profile_request() -> SaveSupplierProfileRequest {
         SaveSupplierProfileRequest {
             idempotency_key: "supplier-profile-command-1".to_string(),

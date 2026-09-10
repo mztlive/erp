@@ -11,16 +11,13 @@
  * 用法: node scripts/seed-dev-catalog.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
+import { pathToFileURL } from "node:url";
+import { COMPANY_PARTY, SUPPLIER_SCENARIOS, todayBusinessDate, ensureCompanyParty, ensureSupplier, verifyOffering } from "./dev-supplier-seed.mjs";
+import { ACCOUNTS, login as loginAccount } from "./dev-seed-lib.mjs";
+
 const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001";
 
 const ADMIN = { account: "admin", password: "123456" };
-
-const COMPANY_PARTY = {
-  partyNo: "FSY",
-  legalName: "北京福尚云科技有限公司",
-  shortName: "福尚云",
-  unifiedCreditCode: "91110108MA01FSY01X",
-};
 
 const UNITS = [
   { unitCode: "JIAN", name: "件", symbol: "件", quantityScale: 0 },
@@ -40,7 +37,7 @@ const CATEGORIES = [
   { categoryCode: "SVC", name: "上门服务", productKind: "OFFLINE_SERVICE" },
 ];
 
-const SUPPLIERS = [
+export const SUPPLIERS = [
   {
     supplierNo: "SUP-HZSF",
     partyNo: "PTY-HZSF",
@@ -54,10 +51,12 @@ const SUPPLIERS = [
     accountNumber: "5719056188108012",
     taxNo: "91330106MA2HSF001X",
     settlementMode: "prepayment",
+    reconciliationCycle: "none",
+    contractState: "valid",
     paymentTerm: "PREPAY_50",
     businessCategory: "茶叶、年节礼盒",
     invoiceType: "vat_special",
-    invoiceTaxRate: "0.13",
+    invoiceTaxRates: ["0.09", "0.13"],
     capabilityCodes: ["physical"],
     rating: "A",
     score: 92,
@@ -75,10 +74,12 @@ const SUPPLIERS = [
     accountNumber: "1001264009006801234",
     taxNo: "91310115MA1TK0010X",
     settlementMode: "cash_settlement",
+    reconciliationCycle: "none",
+    contractState: "valid",
     paymentTerm: "CASH_ON_APPROVAL",
     businessCategory: "预付卡、电子卡券",
     invoiceType: "vat_special",
-    invoiceTaxRate: "0.06",
+    invoiceTaxRates: ["0.06"],
     capabilityCodes: ["virtual"],
     rating: "A",
     score: 88,
@@ -95,22 +96,25 @@ const SUPPLIERS = [
     bankName: "北京银行旧宫支行",
     accountNumber: "2000001234567890123",
     taxNo: "91110115MA01AD001X",
-    settlementMode: "pay_after_use",
-    paymentTerm: "POSTPAY_NET15",
+    settlementMode: "monthly",
+    reconciliationCycle: "monthly",
+    contractState: "valid",
+    paymentTerm: "PERIOD_MONTH_15",
     businessCategory: "家电安装、礼包派送",
     invoiceType: "vat_special",
-    invoiceTaxRate: "0.06",
+    invoiceTaxRates: ["0.06"],
     capabilityCodes: ["offline_service"],
     rating: "B",
     score: 81,
   },
 ];
 
-const PRODUCTS = [
+export const PRODUCTS = [
   {
     kind: "PHYSICAL",
     productNo: "TEA-SF-LJ-001",
     skuNo: "TEA-SF-LJ-250",
+    inputTaxRate: "0.09",
     name: "狮峰明前龙井礼盒",
     skuName: "狮峰明前龙井礼盒 250g",
     description: "西湖产区明前特级龙井，纸质礼盒装，适合作春节、开业及客户馈赠。",
@@ -274,12 +278,6 @@ const PRODUCTS = [
   },
 ];
 
-function todayBusinessDate() {
-  const date = new Date();
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 async function call(method, path, { token, body } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -323,33 +321,6 @@ async function login() {
 
 function pageItems(page) {
   return page?.items ?? [];
-}
-
-async function ensureCompanyParty(token) {
-  const named = pageItems(
-    await call(
-      "GET",
-      `/admin/parties?keyword=${encodeURIComponent(COMPANY_PARTY.partyNo)}&status=active&page=1&page_size=50&sort_by=party_no&sort_dir=asc`,
-      { token },
-    ),
-  ).find((row) => row.party_no === COMPANY_PARTY.partyNo);
-  if (named) {
-    console.log("公司主体已存在:", named.party_no, COMPANY_PARTY.legalName);
-    return named;
-  }
-  const created = await call("POST", "/admin/parties", {
-    token,
-    body: {
-      party_no: COMPANY_PARTY.partyNo,
-      legal_name: COMPANY_PARTY.legalName,
-      short_name: COMPANY_PARTY.shortName,
-      unified_credit_code: COMPANY_PARTY.unifiedCreditCode,
-      change_reason: "主数据初始化：公司签约及付款主体",
-      status: "active",
-    },
-  });
-  console.log("公司主体已创建:", created.party_no, COMPANY_PARTY.legalName);
-  return created;
 }
 
 async function ensureUnit(token, spec) {
@@ -414,80 +385,6 @@ async function ensureCategory(token, spec) {
   return created;
 }
 
-async function findSupplier(token, supplierNo) {
-  const items = pageItems(
-    await call(
-      "GET",
-      `/admin/suppliers?keyword=${encodeURIComponent(supplierNo)}&page=1&page_size=50`,
-      { token },
-    ),
-  );
-  return items.find((row) => row.supplier_no === supplierNo) ?? null;
-}
-
-async function ensureSupplier(token, spec, companyPartyId) {
-  const existing = await findSupplier(token, spec.supplierNo);
-  if (existing) {
-    console.log("供应商已存在:", existing.supplier_no, spec.legalName);
-    return existing;
-  }
-  const created = await call("POST", "/admin/supplier-profiles", {
-    token,
-    body: {
-      idempotency_key: `seed-supplier-${spec.supplierNo}`,
-      party_no: spec.partyNo,
-      supplier_no: spec.supplierNo,
-      expected_party_version: null,
-      expected_supplier_version: null,
-      legal_name: spec.legalName,
-      short_name: spec.shortName,
-      unified_credit_code: spec.unifiedCreditCode,
-      contact: {
-        contact_name: spec.contactName,
-        mobile: spec.mobile,
-        telephone: null,
-        email: null,
-      },
-      clear_contact: false,
-      address: {
-        address: spec.address,
-        contact_name: spec.contactName,
-      },
-      clear_address: false,
-      tax_no: spec.taxNo,
-      clear_tax_profile: false,
-      bank_account: {
-        bank_name: spec.bankName,
-        account_number: spec.accountNumber,
-      },
-      clear_bank_account: false,
-      settlement_mode: spec.settlementMode,
-      reconciliation_cycle: "monthly",
-      payment_term_snapshot: spec.paymentTerm,
-      business_category: spec.businessCategory,
-      invoice_type: spec.invoiceType,
-      invoice_tax_rate: spec.invoiceTaxRate,
-      signing_entity_party_id: companyPartyId,
-      payment_entity_party_id: companyPartyId,
-      capability_codes: spec.capabilityCodes,
-      qualifications: [],
-      rating: {
-        initial_score: spec.score,
-        rating: spec.rating,
-        current_score: spec.score,
-        valid_from: todayBusinessDate(),
-      },
-      effective_from: todayBusinessDate(),
-      change_reason: "主数据初始化：供应商建档",
-    },
-  });
-  console.log("供应商已创建:", created.supplier_no, spec.legalName);
-  return { id: created.supplier_id, supplier_no: created.supplier_no };
-}
-
-/**
- * 校验供应商默认收款账户满足工作台展示与付款并发校验合同。
- */
 async function verifySupplierPaymentRecipient(token, supplier, spec) {
   const detail = await call("GET", `/admin/suppliers/${encodeURIComponent(supplier.id)}`, {
     token,
@@ -636,7 +533,7 @@ async function ensureOffering(token, spec, sku, supplierId) {
   )[0];
   if (existing) {
     console.log("供给已存在:", spec.skuNo, existing.id);
-    return existing;
+    return verifyOffering(existing, spec, supplierId, sku.skuId);
   }
   const created = await call("POST", "/admin/supplier-offerings", {
     token,
@@ -649,7 +546,7 @@ async function ensureOffering(token, spec, sku, supplierId) {
       terms: {
         dropship_supply_price_gross: spec.dropshipPrice,
         bulk_supply_price_gross: spec.bulkPrice,
-        input_tax_rate: spec.kind === "PHYSICAL" ? "0.13" : "0.06",
+        input_tax_rate: spec.inputTaxRate ?? (spec.kind === "PHYSICAL" ? "0.13" : "0.06"),
         bulk_minimum_order_quantity: spec.moq,
         supply_region: spec.supplyRegion,
         product_capabilities: [],
@@ -658,11 +555,14 @@ async function ensureOffering(token, spec, sku, supplierId) {
       availability_status: "AVAILABLE",
       available_quantity: spec.availableQty,
       change_reason: "主数据初始化：登记供给",
-      idempotency_key: `seed-offering-${spec.skuNo}`,
+      idempotency_key: `seed-offering-${spec.supplierNo}-${spec.skuNo}`,
     },
   });
   console.log("供给已创建:", spec.skuNo, created.offering_id);
-  return created;
+  const rows = pageItems(await call("GET", `/admin/supplier-offerings?sku_id=${encodeURIComponent(sku.skuId)}&supplier_id=${encodeURIComponent(supplierId)}&page=1&page_size=10`, { token }));
+  const saved = rows.find((row) => row.id === created.offering_id);
+  if (!saved) throw new Error(`供给 ${spec.skuNo} 创建后无法回读`);
+  return verifyOffering(saved, spec, supplierId, sku.skuId);
 }
 
 async function verifySellable(token, spec) {
@@ -678,9 +578,23 @@ async function verifySellable(token, spec) {
   return hit;
 }
 
+/** 核对实际岗位能读公司列表与详情；不能只用超级管理员证明选择器可用。 */
+async function verifyCompanyAccess(company) {
+  for (const spec of [ACCOUNTS.procurement, ACCOUNTS.sysadmin]) {
+    const token = await loginAccount(spec.account, spec.password);
+    const list = await call("GET", `/admin/companies?keyword=${encodeURIComponent(COMPANY_PARTY.aliases[0])}&status=active&page=1&page_size=100`, { token });
+    if (!(list.items ?? []).some((row) => row.id === company.id)) {
+      throw new Error(`${spec.label}无法按别名选择开发公司主体`);
+    }
+    const detail = await call("GET", `/admin/companies/${encodeURIComponent(company.id)}`, { token });
+    if (detail.id !== company.id) throw new Error(`${spec.label}公司主体详情回显不一致`);
+  }
+}
+
 async function main() {
   const token = await login();
-  const companyParty = await ensureCompanyParty(token);
+  const companyParty = await ensureCompanyParty(call, token);
+  await verifyCompanyAccess(companyParty);
 
   const units = {};
   for (const spec of UNITS) {
@@ -696,13 +610,15 @@ async function main() {
   }
 
   const suppliers = {};
-  for (const spec of SUPPLIERS) {
-    const row = await ensureSupplier(token, spec, companyParty.id);
+  for (const spec of [...SUPPLIERS, ...SUPPLIER_SCENARIOS]) {
+    const row = await ensureSupplier(call, token, spec, companyParty.id);
     await verifySupplierPaymentRecipient(token, row, spec);
+    console.log("供应商资料及收款账户已核对:", spec.supplierNo, spec.shortName);
     suppliers[spec.supplierNo] = row;
   }
 
   const seeded = [];
+  let scenarioSku;
   for (const spec of PRODUCTS) {
     const refs = {
       categoryId: categories[spec.categoryCode].id,
@@ -713,6 +629,7 @@ async function main() {
       spec.kind === "VOUCHER"
         ? await createVoucherProduct(token, spec, refs)
         : await createPhysicalOrServiceProduct(token, spec, refs);
+    if (spec === PRODUCTS[0]) scenarioSku = sku;
     const supplier = suppliers[spec.supplierNo];
     if (!supplier) throw new Error(`商品 ${spec.productNo} 缺少供应商 ${spec.supplierNo}`);
     await ensureOffering(token, spec, sku, supplier.id);
@@ -720,11 +637,16 @@ async function main() {
     seeded.push(`${spec.kind} ${sellable.sku_no} ${sellable.name}`);
   }
 
+  for (const spec of SUPPLIER_SCENARIOS.filter((row) => row.contractState === "valid")) {
+    await ensureOffering(token, { ...PRODUCTS[0], supplierNo: spec.supplierNo }, scenarioSku, suppliers[spec.supplierNo].id);
+  }
+  console.log("周期样例: 周结 0 天、月结 15 天、季结 27 天、半年结 15 天、年结 366 天");
+  console.log("合同阻断样例（不生成供给）: SUP-DEV-UNVERIFIED、SUP-DEV-EXPIRED");
   console.log("");
   console.log("== 开发开单目录已就绪 ==");
   console.log(`公司主体: ${COMPANY_PARTY.legalName}`);
   console.log(
-    `供应商（均已配置默认收款账户）: ${SUPPLIERS.map((row) => row.shortName).join("、")}`,
+    `供应商（均已配置默认收款账户）: ${[...SUPPLIERS, ...SUPPLIER_SCENARIOS].map((row) => row.shortName).join("、")}`,
   );
   console.log("公司商品池:");
   for (const line of seeded) {
@@ -732,7 +654,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((error) => {
   console.error("开发开单目录失败:", error.message);
   process.exit(1);
 });

@@ -184,6 +184,8 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
 
 /// 采购推荐权限。
 const PROCUREMENT_PERMISSIONS: &[&str] = &[
+    "company:list",
+    "company:detail",
     "procurement_responsibility:list",
     "work_item:list",
     "work_item:detail",
@@ -506,6 +508,10 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
 
 /// 系统管理员（技术运维，非超级管理员）推荐权限。
 const SYSADMIN_PERMISSIONS: &[&str] = &[
+    "company:list",
+    "company:detail",
+    "company:create",
+    "company:update",
     "procurement_responsibility:list",
     "procurement_responsibility:manage",
     "finance_responsibility:list",
@@ -1089,6 +1095,32 @@ mod tests {
         SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS,
     };
     use crate::entity::rbac::{Permission, PermissionSet};
+
+    /// 采购选择已有公司，系统管理员维护公司；启动补权限保留额外人工授权。
+    #[test]
+    fn company_permissions_follow_role_duties_and_append_without_replacing() {
+        let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
+        let sysadmin = PermissionSet::new(parse_permissions(super::SYSADMIN_PERMISSIONS).unwrap());
+        for action in ["list", "detail", "create", "update"] {
+            let permission = Permission::parse(format!("company:{action}")).unwrap();
+            assert!(sysadmin.covers_one(&permission));
+            assert_eq!(
+                procurement.covers_one(&permission),
+                matches!(action, "list" | "detail")
+            );
+        }
+        let mut previous = super::remove_permissions(
+            &parse_permissions(PROCUREMENT_PERMISSIONS).unwrap(),
+            &["company:list", "company:detail"],
+        );
+        let custom = Permission::parse("custom_resource:read").unwrap();
+        previous.push(custom.clone());
+        let old = PermissionSet::new(previous);
+        let merged = old.with_missing(&procurement).unwrap();
+        assert!(merged.covers(&procurement));
+        assert!(merged.covers_one(&custom));
+        assert!(merged.with_missing(&procurement).is_none());
+    }
 
     #[test]
     fn predefined_role_ids_are_unique_and_stable() {
