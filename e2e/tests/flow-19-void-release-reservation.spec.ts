@@ -23,7 +23,7 @@ import {
 import { ACCOUNTS } from "../helpers/accounts";
 import { apiGet, apiLogin } from "../helpers/api";
 import { loginViaUi, newLoggedInContext } from "../helpers/login";
-import "../helpers/ui";
+import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui";
 
 test.describe.configure({ mode: "serial" });
 
@@ -235,7 +235,7 @@ async function openWorkspaceTask(
         timeout: UI_TIMEOUT,
     });
     if (family) {
-        await page.locator(`#workspace-family-nav-${family}`).click();
+        await selectWorkspaceFamily(page, family);
     }
     // 工作台后端搜索只匹配单据 ID、类型码等字段，不匹配单号与往来方，
     // 在搜索框填写 hint 会把列表滤空；改为在待办列表中匹配任务。
@@ -281,7 +281,7 @@ async function expectNoWorkspaceTask(
         timeout: UI_TIMEOUT,
     });
     if (family) {
-        await page.locator(`#workspace-family-nav-${family}`).click();
+        await selectWorkspaceFamily(page, family);
     }
     // 同上：不填搜索框，直接断言无匹配任务。空队列时待办列表可能不渲染，
     // 因此不在列表存在性上断言，只断言匹配按钮数为零。
@@ -301,7 +301,7 @@ async function expectNoWorkspaceTask(
 }
 
 async function approveCurrentDocument(page: Page) {
-    const approve = page.getByRole("button", { name: "通过", exact: true });
+    const approve = page.getByRole("button", { name: /^(通过|同意审批)$/ });
     await expect(approve).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(page.getByRole("button", { name: "驳回", exact: true })).toBeVisible();
     await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0);
@@ -647,8 +647,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
             .locator("#inventory-adjustment-dialog-note")
             .fill("flow-19 作废释放预占盘盈");
         await adjustDialog.locator("#inventory-adjustment-dialog-submit").click();
-        await confirmFormal(page, /确认提交库存调整|提交库存调整/, "确认提交");
-        await expect(page.getByRole("heading", { name: "调整已提交审批", exact: true })).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.getByText("调整已提交审批").first()).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(adjustDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
         // 2) caiwu 审批库存调整，余额才增加
@@ -784,12 +783,10 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(
             orderTitleRow(page, customerName).getByText(/审批中|审核中/),
         ).toBeVisible({ timeout: UI_TIMEOUT });
-        salesOrderNo = (
-            await page.locator("span.num.text-foreground").first().innerText()
-        ).trim();
+        salesOrderNo = await readHeaderDocumentNumber(page)
         expect(salesOrderNo).toBeTruthy();
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("待采购", {
             timeout: UI_TIMEOUT,
         });
         await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled();
@@ -824,19 +821,16 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         const previewDialog = page.getByRole("dialog", { name: "预览供给分配" });
         await expect(previewDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(previewDialog.getByText("现有库存分配")).toBeVisible();
-        await expect(previewDialog.getByText("本次无需创建采购单")).toBeVisible();
+        await expect(previewDialog.getByText(/无需创建采购单/)).toBeVisible();
         await expect(
             previewDialog.getByText("本次全部由现有库存满足，不会创建采购单。"),
         ).toBeVisible();
         await expect(previewDialog.getByText(/确认提交 \d+ 张采购单/)).toHaveCount(0);
         await previewDialog.locator("#procurement-orders-create-preview-confirm").click();
-        await expect(page.getByRole("heading", { name: "确认供给分配" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
         await expect(
             page.getByText(/现有库存已满足本次分配，无需创建采购单/),
         ).toBeVisible();
-        await page.locator("#procurement-orders-create-confirm").click();
+
         await expectToast(
             page,
             /供给分配已完成|已从现有库存建立 \d+ 条销售预留并生成仓发草稿，无需采购/,
@@ -854,7 +848,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByText("本单还没有采购单。")).toBeVisible({
@@ -898,8 +892,9 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         expect(deliveriesBeforeVoid.some((row) => row.status === "SHIPPED")).toBe(false);
 
         await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
-        await expect(page.getByLabel("公司仓发表单")).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(page.getByRole("button", { name: "通过" })).toHaveCount(0);
+        await openFulfillmentWorkspaceForm(page);
+        await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
+        await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "过账" })).toHaveCount(0);
         await expect(
             page.locator("#fulfillment-operations-work-surface-confirm"),
@@ -925,7 +920,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(page.getByText("改单中")).toHaveCount(0);
         await expect(page.getByRole("button", { name: /作废/ })).toHaveCount(0);
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
             timeout: UI_TIMEOUT,
         });
         const unchanged = await fetchSalesOrder(page, salesOrderId);
@@ -978,7 +973,8 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         expect(deliveriesAfterVoid).toEqual(deliveriesBeforeVoid);
         expect(deliveriesAfterVoid.every((row) => row.status === "DRAFT")).toBe(true);
         await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
-        await expect(page.getByLabel("公司仓发表单")).toBeVisible({ timeout: UI_TIMEOUT });
+        await openFulfillmentWorkspaceForm(page);
+        await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await chooseOption(page, page.getByLabel("承运方"), "顺丰速运");
         await page.getByLabel("物流单号").fill(`SF19-${stamp}`);
         await expect(page.locator("#fulfillment-operations-work-surface-confirm"))

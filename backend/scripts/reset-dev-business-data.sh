@@ -51,11 +51,13 @@ usage() {
      ERP_RESET_ALLOWED_REMOTE_HOSTS 精确列出 URI 中全部主机
      （逗号分隔，禁止通配符）。
   6. preview / execute / verify 必须使用同一目标与同一集合摘要；
-     摘要由 database.db_name、ERP_RESET_INCLUDE_CATALOG 与 mongosh 脚本内容计算，
+     摘要由 database.db_name、ERP_RESET_INCLUDE_CATALOG、ERP_RESET_E2E 与 mongosh 脚本内容计算，
      不一致则失败关闭。
   7. 本工具不得调用 dropDatabase()，只 drop 固定集合或按固定过滤删除。
   8. ERP_RESET_INCLUDE_CATALOG=1 时额外 drop 供应商/商品/SKU/供给、
      仓库、分类/品牌/单位字典及全部 Party。默认 0，E2E 继续保留主数据。
+  9. ERP_RESET_E2E=1 时保留已发布 BPM 定义集合，并对业务集合 deleteMany
+     而不 drop，以便 E2E 在 web-api 运行中清库并保留索引。
 
 本工具不会输出 MongoDB URI、用户名、密码、证书或 config.toml 中的其他密钥。
 EOF
@@ -161,7 +163,8 @@ case "${DB_NAME}" in
 esac
 
 SCOPE_DIGEST="$(
-    ERP_RESET_INCLUDE_CATALOG="${ERP_RESET_INCLUDE_CATALOG:-0}" python3 - "${DB_NAME}" "${MONGOSH_SCRIPT}" <<'PY'
+    ERP_RESET_INCLUDE_CATALOG="${ERP_RESET_INCLUDE_CATALOG:-0}" \
+    ERP_RESET_E2E="${ERP_RESET_E2E:-0}" python3 - "${DB_NAME}" "${MONGOSH_SCRIPT}" <<'PY'
 import hashlib
 import os
 import pathlib
@@ -170,8 +173,17 @@ import sys
 db_name = sys.argv[1]
 script = pathlib.Path(sys.argv[2]).read_bytes()
 flag = b"1" if os.environ.get("ERP_RESET_INCLUDE_CATALOG", "0") == "1" else b"0"
+e2e = b"1" if os.environ.get("ERP_RESET_E2E", "0") == "1" else b"0"
 sys.stdout.write(
-    hashlib.sha256(db_name.encode("utf-8") + b"\n" + script + b"\ninclude-catalog=" + flag).hexdigest()
+    hashlib.sha256(
+        db_name.encode("utf-8")
+        + b"\n"
+        + script
+        + b"\ninclude-catalog="
+        + flag
+        + b"\ne2e="
+        + e2e
+    ).hexdigest()
 )
 PY
 )"
@@ -307,6 +319,9 @@ if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
 else
     echo "主数据范围: 保留供应商/商品/仓库主数据"
 fi
+if [[ "${ERP_RESET_E2E:-0}" == "1" ]]; then
+    echo "E2E 快路径: 保留已发布审批定义，清空集合而不 drop"
+fi
 if [[ "${EXECUTE}" -eq 1 ]]; then
     echo "运行模式: EXECUTE（清理已授权）"
 elif [[ "${VERIFY}" -eq 1 ]]; then
@@ -326,4 +341,5 @@ ERP_RESET_EXECUTE="${EXECUTE}" \
 ERP_RESET_VERIFY="${VERIFY}" \
 ERP_RESET_CONFIRMED_DB="${CONFIRM_DB}" \
 ERP_RESET_INCLUDE_CATALOG="${ERP_RESET_INCLUDE_CATALOG:-0}" \
+ERP_RESET_E2E="${ERP_RESET_E2E:-0}" \
     mongosh --nodb --norc --quiet --file "${MONGOSH_SCRIPT}"

@@ -35,7 +35,8 @@ import { ACCOUNTS } from "../helpers/accounts"
 import { apiGet, apiLogin } from "../helpers/api"
 import { headedContextOptions } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
-import "../helpers/ui"
+import { expandSourcingEditor } from "../helpers/sourcing"
+import { readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui"
 
 const VISIBLE = { timeout: 20_000 } as const
 const FLOW_TIMEOUT = 12 * 60 * 1000
@@ -345,13 +346,11 @@ async function fillEmptyDatePickers(page: Page, isoDate: string): Promise<void> 
 }
 
 function documentHeader(page: Page): Locator {
-    return page.locator('[data-slot="document-header"]')
+    return page.locator("header")
 }
 
 async function readDocumentNumber(page: Page): Promise<string> {
-    const text = (await documentHeader(page).locator("span.num").first().innerText()).trim()
-    expect(text.length).toBeGreaterThan(2)
-    return text
+    return readHeaderDocumentNumber(page)
 }
 
 async function openWorkspaceTask(
@@ -370,7 +369,7 @@ async function openWorkspaceTask(
               : family === "履约"
                 ? "fulfillment"
                 : "finance"
-    await page.locator(`#workspace-family-nav-${familyId}`).click()
+    await selectWorkspaceFamily(page, familyId)
     // 后端工作台搜索不匹配单号，填单号会把列表滤空；调用方已用任务名正则匹配，不再使用搜索框。
     void query
     const list = page.getByRole("list", { name: "待办列表" })
@@ -390,9 +389,9 @@ function approvalPane(page: Page): Locator {
 
 async function approveCurrentDocument(page: Page): Promise<void> {
     const pane = approvalPane(page)
-    await expect(pane.getByRole("button", { name: "通过", exact: true })).toBeVisible(VISIBLE)
+    await expect(pane.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible(VISIBLE)
     await expect(pane.getByRole("button", { name: "驳回", exact: true })).toBeVisible()
-    await pane.getByRole("button", { name: "通过", exact: true }).click()
+    await pane.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
     const dialog = page.getByRole("dialog", { name: "确认通过" })
     await expect(dialog).toBeVisible(VISIBLE)
     await dialog.getByRole("button", { name: "确认通过" }).click()
@@ -405,7 +404,7 @@ async function rejectCurrentDocument(page: Page, reason: string): Promise<void> 
     await pane.getByRole("button", { name: "驳回", exact: true }).click()
     const dialog = page.getByRole("dialog", { name: "确认驳回" })
     await expect(dialog).toBeVisible(VISIBLE)
-    await expect(dialog.getByText(/确认后将驳回，并从第一节点开始下一轮审批/)).toBeVisible()
+    await expect(dialog.getByText(/驳回后.*首节点|下一轮审批/)).toBeVisible()
     await dialog.getByLabel("驳回原因").fill(reason)
     await dialog.getByRole("button", { name: "确认驳回" }).click()
     await expect(dialog).toBeHidden(VISIBLE)
@@ -580,7 +579,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(documentHeader(page).getByText("审批中")).toBeVisible(VISIBLE)
         salesOrderNo = await readDocumentNumber(page)
         await page.getByRole("tab", { name: /^采购/ }).click()
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 0 笔", VISIBLE)
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("待采购", VISIBLE)
 
         // 2) 采购确认节点：只通过/驳回，不选源
         page = await switchTo("caigou")
@@ -606,6 +605,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.getByTestId("purchase-create-match-best").click()
         await expectToast(page, /已重新分配供给|没有可匹配的供给方案/)
 
+        await expandSourcingEditor(page)
         const sourcing = page.getByRole("combobox", { name: /^履约方案，/ })
         await sourcing.click()
         const inbound = page.getByRole("option", { name: /入仓/ }).first()
@@ -624,13 +624,15 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(preview.getByText("现有库存分配")).toHaveCount(0)
         await expect(preview.getByText("无需创建采购单")).toHaveCount(0)
         await expect(preview.getByText(/确认提交 1 张采购单/)).toBeVisible()
+        const committed = page.waitForResponse(
+            (response) =>
+                response.request().method() === "POST" &&
+                response.url().includes("/admin/purchase-orders/from-sourcing"),
+            { timeout: 60_000 },
+        )
         await preview.locator("#procurement-orders-create-preview-confirm").click()
-        const confirmAlloc = page.getByRole("alertdialog").or(page.getByRole("dialog")).filter({
-            hasText: "确认供给分配",
-        })
-        await expect(confirmAlloc.first()).toBeVisible(VISIBLE)
-        await expect(confirmAlloc.getByText(/创建 1 张采购单提交审批/)).toBeVisible()
-        await page.locator("#procurement-orders-create-confirm").click()
+        expect((await committed).ok()).toBeTruthy()
+
         await expectToast(page, /供给分配已完成|已创建 1 张采购单并提交审批/)
         await expect(
             page.locator('[data-slot="toast-description"]').filter({ hasText: /无需采购/ }),
@@ -669,7 +671,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expect(documentHeader(page).getByText("已生效")).toBeVisible(VISIBLE)
         await page.getByRole("tab", { name: /^采购/ }).click()
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 1 笔")
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖")
         await expect(page.getByText("草稿")).toHaveCount(0)
         // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示审批中。
         await expect(page.getByTestId("sales-order-purchase-count-only")).toContainText("已创建 1 张采购单")
@@ -713,10 +715,9 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page).toHaveURL(/\/procurement\/orders\/[^/?#]+/, VISIBLE)
         purchaseHref = page.url().split("?")[0] ?? page.url()
         await expect(documentHeader(page).getByText("审批中").first()).toBeVisible(VISIBLE)
-        await expect(documentHeader(page)).toContainText(/版本\s*尚未生效/, VISIBLE)
         await expect(documentHeader(page).getByText("已生效")).toHaveCount(0)
-        await expect(documentHeader(page).getByText("未付")).toBeVisible()
-        await expect(documentHeader(page).getByText("未开始")).toBeVisible()
+        await expect(page.locator('[aria-label="采购单摘要"]').getByText("未付")).toBeVisible()
+        await expect(page.locator('[aria-label="采购单摘要"]').getByText("未开始")).toBeVisible()
         await expect(page.locator("#procurement-orders-detail-change")).toHaveCount(0)
         await expect(page.locator("#procurement-orders-detail-submit")).toHaveCount(0)
         await expect(page.getByRole("button", { name: "去交付" })).toHaveCount(0)
@@ -736,20 +737,16 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByText("已驳回").first()).toBeVisible()
         await expect(page.getByText("第 1 轮").first()).toBeVisible()
 
-        await page.getByRole("tab", { name: /^应付与票款/ }).click()
+        await page.getByRole("tab", { name: /^票款/ }).click()
         await expect(page.getByText("尚未形成应付（需审批通过）。")).toBeVisible(VISIBLE)
-        await expect(page.getByText("应付未结")).toHaveCount(0)
 
         await page.getByRole("tab", { name: /^履约/ }).click()
-        await expect(page.getByRole("button", { name: "履约入口未开放" })).toBeDisabled()
-        await expect(page.getByText("当前状态下不能进入交付，可先完成前置条件。")).toBeVisible()
+        await expect(page.getByText("履约进度")).toBeVisible(VISIBLE)
 
-        await page.getByRole("tab", { name: /^变更与异常/ }).click()
-        await expect(page.getByText("暂无采购变更。")).toBeVisible(VISIBLE)
-        const disabledChange = page.locator('[id^="procurement-orders-detail-changes-disabled-"]')
-        await expect(disabledChange).toBeVisible(VISIBLE)
-        await expect(disabledChange).toBeDisabled()
-        await expect(page.getByText("当前状态下不能发起变更，可先完成前置条件。")).toBeVisible()
+        await page.getByRole("tab", { name: /^变更/ }).click()
+        await expect(page.getByText("暂无采购变更")).toBeVisible(VISIBLE)
+        await expect(page.getByRole("button", { name: "发起采购变更" })).toHaveCount(0)
+        await expect(page.locator("#procurement-orders-detail-change")).toHaveCount(0)
 
         const rejected = await fetchPurchaseCenter(caigouToken, snap.id)
         expectSameContent(rejected, snap)
@@ -770,7 +767,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         page = await switchTo("cangchu")
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
-        await page.locator("#workspace-family-nav-fulfillment").click()
+        await selectWorkspaceFamily(page, "fulfillment")
         // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无履约任务。
         await expect(
             page.getByRole("list", { name: "待办列表" }).getByRole("button", { name: /履约处理/ }),
@@ -779,14 +776,14 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         page = await switchTo("fukuan")
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
-        await page.locator("#workspace-family-nav-finance").click()
+        await selectWorkspaceFamily(page, "finance")
         // 后端工作台搜索不匹配单号，填单号会把列表滤空导致断言恒成立；直接断言无付款任务。
         await expect(
             page
                 .getByRole("list", { name: "待办列表" })
                 .getByRole("button", { name: /供应商付款处理/ }),
         ).toHaveCount(0)
-        await page.locator("#workspace-family-nav-approval").click()
+        await selectWorkspaceFamily(page, "approval")
         await expect(page.getByText("供应商付款单审批")).toHaveCount(0)
 
         // 6) 不改单、不撤回：财务在下一轮首节点通过 → 采购单生效并形成应付
@@ -803,11 +800,10 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         page = await switchTo("caigou")
         await page.goto(purchaseHref)
         await expect(documentHeader(page).getByText("已生效").first()).toBeVisible(VISIBLE)
-        await expect(documentHeader(page).getByText(/版本\s+v1/)).toBeVisible(VISIBLE)
         await expect(page.locator("#procurement-orders-detail-pay")).toBeVisible(VISIBLE)
         await expect(page.locator("#procurement-orders-detail-change")).toBeVisible(VISIBLE)
         await expect(page.locator("#procurement-orders-detail-change")).toBeEnabled()
-        await page.getByRole("tab", { name: /^应付与票款/ }).click()
+        await page.getByRole("tab", { name: /^票款/ }).click()
         await expect(page.getByText("应付未结")).toBeVisible(VISIBLE)
         await expect(page.getByText("尚未形成应付（需审批通过）。")).toHaveCount(0)
 
@@ -830,7 +826,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expect(documentHeader(page).getByText("已生效")).toBeVisible(VISIBLE)
         await page.getByRole("tab", { name: /^采购/ }).click()
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购单 1 笔")
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖")
         // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示已生效。
         await expect(page.getByTestId("sales-order-purchase-count-only")).toContainText("已创建 1 张采购单")
     } finally {

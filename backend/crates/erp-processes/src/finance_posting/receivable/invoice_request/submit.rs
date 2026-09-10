@@ -16,7 +16,7 @@ use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::{attach_published_binding, BindPublishedDefinitionCommand};
 use erp_workflow::service::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use erp_workflow::service::approval::execution::{prepare_start, PreparedExecution};
-use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
+use erp_workflow::service::document_registry::{find_registered_document, new_registered_document};
 use erp_workflow::{BpmExt, DocumentRegistryExt};
 use id_generator::next_id;
 
@@ -112,7 +112,25 @@ async fn candidate(
     db.sales_invoice_requests().create(&request, executor).await?;
     Ok(request)
 }
-/// 在首次创建事务内绑定发布定义；重提沿用原绑定。
+/// 首次提交时注册单据并绑定已发布流程；重提沿用原绑定。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 共享 RBAC。
+/// * `object_read` - 审批对象读取端口。
+/// * `request` - 已写入的开票申请。
+/// * `actor` - 提交人。
+/// * `session` - 当前业务事务。
+///
+/// # 返回
+/// 已绑定的发布定义。
+///
+/// # 错误
+/// 未发布流程、绑定校验失败，或重提时注册行没有绑定时返回错误。
+///
+/// # 约束
+/// 未注册表示首次提交。`find_approval_binding` 会把 `DocumentMissing` 映射成
+/// NotFound，首次提交不得调用它；与回款单一样先算绑定再写入注册行。
 async fn bind(
     db: &Database,
     rbac: &erp_identity::SharedRbacService,
@@ -121,8 +139,10 @@ async fn bind(
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
 ) -> Result<erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding> {
-    if let Some(binding) = find_approval_binding(db, &request.base.id, session).await? {
-        return Ok(binding);
+    if let Some(document) = find_registered_document(db, &request.base.id, session).await? {
+        return document
+            .approval_binding
+            .ok_or_else(|| Error::ConflictError("请先发布开票申请审批流程".into()));
     }
     let command = BindPublishedDefinitionCommand {
         document_type: DocumentType::SalesInvoiceRequest,
@@ -246,4 +266,28 @@ async fn ensure_effective_source(
         return Err(Error::ConflictError("仅可为已生效销售单提交开票申请".into()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod first_submit_binding_tests {
+    /// 首次提交必须先绑定再注册，不能把未注册单据当成 NotFound。
+    #[test]
+    fn first_submit_does_not_treat_missing_document_as_not_found() {
+        let production = include_str!("submit.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let bind_fn = production
+            .split("async fn bind(")
+            .nth(1)
+            .and_then(|rest| rest.split("async fn start(").next())
+            .expect("bind 生产片段");
+        assert!(bind_fn.contains("find_registered_document"));
+        assert!(bind_fn.contains("bind_published_definition_on_document_create"));
+        assert!(bind_fn.contains("new_registered_document"));
+        assert!(
+            !bind_fn.contains("find_approval_binding"),
+            "find_approval_binding 会把 DocumentMissing 映射成 NotFound，首次提交不得调用"
+        );
+    }
 }

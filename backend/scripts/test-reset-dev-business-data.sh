@@ -64,7 +64,8 @@ for collection in \
     approval_command_receipts \
     approval_subject_snapshots \
     approval_notification_outbox \
-    work_items; do
+    work_items \
+    sales_invoice_requests; do
     grep -q "\"${collection}\"" "${MONGOSH_SCRIPT}" ||
         fail "审批或业务重置集合未纳入合同: ${collection}"
 done
@@ -98,7 +99,10 @@ grep -q -- "--verify" "${help_output}" || fail "--help 未声明 --verify"
 grep -q -- "--expect-summary" "${help_output}" || fail "--help 未声明 --expect-summary"
 grep -q "dropDatabase" "${help_output}" || fail "--help 未声明禁止 dropDatabase()"
 grep -q "ERP_RESET_INCLUDE_CATALOG" "${help_output}" || fail "--help 未声明 ERP_RESET_INCLUDE_CATALOG"
+grep -q "ERP_RESET_E2E" "${help_output}" || fail "--help 未声明 ERP_RESET_E2E"
 grep -q "CATALOG_DROP_GROUPS" "${MONGOSH_SCRIPT}" || fail "供应商/商品主数据重置分组未纳入合同"
+grep -q "KEPT_PUBLISHED_DEFINITION_COLLECTIONS" "${MONGOSH_SCRIPT}" || fail "E2E 保留审批定义集合未纳入合同"
+grep -q "ERP_RESET_E2E" "${MONGOSH_SCRIPT}" || fail "mongosh 未读取 ERP_RESET_E2E"
 
 mkdir -p "${TEST_DIR}/bin"
 fixture_config="${TEST_DIR}/config.toml"
@@ -134,13 +138,16 @@ import sys
 db_name = sys.argv[1]
 script = pathlib.Path(sys.argv[2]).read_bytes()
 flag = b"1" if os.environ.get("ERP_RESET_INCLUDE_CATALOG", "0") == "1" else b"0"
-print(hashlib.sha256(db_name.encode("utf-8") + b"\n" + script + b"\ninclude-catalog=" + flag).hexdigest())
+e2e = b"1" if os.environ.get("ERP_RESET_E2E", "0") == "1" else b"0"
+print(hashlib.sha256(db_name.encode("utf-8") + b"\n" + script + b"\ninclude-catalog=" + flag + b"\ne2e=" + e2e).hexdigest())
 PY
 }
 
 PREVIEW_DIGEST="$(scope_digest reset_contract_test)"
 CATALOG_DIGEST="$(ERP_RESET_INCLUDE_CATALOG=1 scope_digest reset_contract_test)"
+E2E_DIGEST="$(ERP_RESET_E2E=1 scope_digest reset_contract_test)"
 [[ "${PREVIEW_DIGEST}" != "${CATALOG_DIGEST}" ]] || fail "主数据重置开关未计入集合摘要"
+[[ "${PREVIEW_DIGEST}" != "${E2E_DIGEST}" ]] || fail "E2E 快路径未计入集合摘要"
 
 preview_output="${TEST_DIR}/preview.txt"
 PATH="${TEST_DIR}/bin:${PATH}" EXPECTED_EXECUTE=0 EXPECTED_VERIFY=0 \

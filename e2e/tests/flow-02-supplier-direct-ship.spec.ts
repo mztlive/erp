@@ -28,6 +28,7 @@ import path from "node:path"
 
 import { ACCOUNTS } from "../helpers/accounts"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { expectToast, openFulfillmentWorkspaceForm, readHeaderDocumentNumber } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
 
@@ -128,21 +129,6 @@ async function closeSession(session: Session) {
     await session.context.close()
 }
 
-async function expectToast(page: Page, title: string | RegExp) {
-    await expect(
-        page.locator('[data-slot="toast"]').filter({ hasText: title }),
-    ).toBeVisible({ timeout: 20000 })
-    // 关闭已确认的悬浮提示，避免其遮挡后续按钮造成偶发点击失败。
-    for (let i = 0; i < 5; i += 1) {
-        const dismiss = page
-            .locator('[data-slot="toast"]')
-            .getByRole("button", { name: "关闭提示", includeHidden: true })
-            .first()
-        if ((await dismiss.count()) === 0) break
-        await dismiss.click({ timeout: 5_000 }).catch(() => undefined)
-    }
-}
-
 async function chooseOption(
     page: Page,
     input: Locator,
@@ -205,10 +191,10 @@ async function openInboxTask(
 
 async function approveCurrentTask(page: Page) {
     const surface = page.getByLabel("当前工作台任务")
-    await expect(surface.getByRole("button", { name: "通过" })).toBeVisible({
+    await expect(surface.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
         timeout: 20000,
     })
-    await surface.getByRole("button", { name: "通过" }).click()
+    await surface.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
     const dialog = page.getByRole("dialog", { name: "确认通过" })
     await expect(dialog).toBeVisible({ timeout: 20000 })
     await dialog.getByRole("button", { name: "确认通过" }).click()
@@ -216,11 +202,7 @@ async function approveCurrentTask(page: Page) {
 }
 
 async function readDocumentNumber(page: Page): Promise<string> {
-    const number = page.locator("header").locator("span.num.text-foreground")
-    await expect(number).toBeVisible({ timeout: 20000 })
-    const text = ((await number.innerText()) ?? "").trim()
-    expect(text.length).toBeGreaterThan(0)
-    return text
+    return readHeaderDocumentNumber(page)
 }
 
 async function ensureProcurementDispatcher(page: Page) {
@@ -264,7 +246,7 @@ async function assertInventoryUntouched(page: Page) {
         timeout: 20000,
     })
     await expect(
-        page.getByText("当前仓库尚无 ERP 自有库存记录"),
+        page.getByText(/当前仓库尚无 ERP 自有库存记录|尚未建立库存台账|没有符合条件的库存/),
     ).toBeVisible({ timeout: 20000 })
     await expect(page.getByText("采购入库")).toHaveCount(0)
 
@@ -342,9 +324,18 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             new RegExp(legalName),
             { timeout: 20000 },
         )
-        await dialog.locator("#card-contracts-upload-submit").click()
-        await expectToast(page, "合同 PDF 已归档")
-        await expect(dialog).toBeHidden({ timeout: 20000 })
+        const submit = dialog.locator("#card-contracts-upload-submit")
+        await expect(submit).toBeEnabled({ timeout: 20000 })
+        const uploaded = page.waitForResponse(
+            (response) =>
+                response.request().method() === "POST" &&
+                response.url().includes("/admin/contracts/upload"),
+            { timeout: 60_000 },
+        )
+        await submit.click()
+        const uploadResponse = await uploaded
+        expect(uploadResponse.ok(), await uploadResponse.text()).toBeTruthy()
+        await expect(dialog).toBeHidden({ timeout: 20_000 })
         await expect(page.getByText(contractNo).first()).toBeVisible({ timeout: 20000 })
         await closeSession(session)
     }
@@ -431,7 +422,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await openInboxTask(page, "approval", /销售单审批/)
         await expect(page.getByText("供给来源 / 履约责任")).toHaveCount(0)
         await expect(page.getByRole("button", { name: "预览供给分配" })).toHaveCount(0)
-        await expect(page.getByRole("button", { name: "通过" })).toBeVisible({
+        await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible({
             timeout: 20000,
         })
         await approveCurrentTask(page)
@@ -479,6 +470,10 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await expect(page.getByText("销售明细与供给方案")).toBeVisible({
             timeout: 20000,
         })
+        const expandSourcing = page.getByRole("button", { name: "调整方案" }).first()
+        if (await expandSourcing.isVisible().catch(() => false)) {
+            await expandSourcing.click()
+        }
 
         const sourcing = page.locator(
             '[id^="procurement-orders-create-row-"][id$="-sourcing-option"]',
@@ -487,24 +482,21 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await chooseOption(page, sourcing, DIRECT_OPTION, "供应商直发")
         await expect(sourcing).toHaveValue(new RegExp("供应商直发"))
         await expect(sourcing).not.toHaveValue(WAREHOUSE_OPTION)
-        await expect(page.getByText("不适用")).toBeVisible()
+        await expect(page.locator('[id$="-warehouse"]')).toHaveCount(0)
         await expect(page.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0)
 
         await page.locator("#procurement-orders-create-preview").click()
         const preview = page.getByRole("dialog", { name: "预览供给分配" })
         await expect(preview).toBeVisible({ timeout: 20000 })
-        await expect(preview.getByText("本次不占用现有库存")).toBeVisible({
+        await expect(
+            preview.getByText(/本次不占用现有库存|将为供给缺口创建|张采购单提交审批/),
+        ).toBeVisible({
             timeout: 20000,
         })
         await expect(preview.getByText("现有库存分配")).toHaveCount(0)
         await expect(preview.getByText("供应商直发")).toBeVisible()
         await expect(preview.getByText("入仓")).not.toBeVisible()
         await preview.getByRole("button", { name: /确认提交 1 张采购单/ }).click()
-
-        const confirm = page.getByRole("alertdialog", { name: "确认供给分配" })
-        await expect(confirm).toBeVisible({ timeout: 20000 })
-        await expect(confirm.getByText(/创建 1 张采购单提交审批/)).toBeVisible()
-        await confirm.locator("#procurement-orders-create-confirm").click()
         await expectToast(page, "供给分配已完成")
         await closeSession(session)
     }
@@ -565,7 +557,8 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         const page = session.page
         await openInboxTask(page, "fulfillment", /履约处理|供应商直发|代发/)
         await expect(page.getByText("供应商直发").first()).toBeVisible({ timeout: 20000 })
-        await expect(page.getByLabel("供应商直发表单")).toBeVisible({
+        await openFulfillmentWorkspaceForm(page)
+        await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({
             timeout: 20000,
         })
         const confirmBtn = page.locator("#fulfillment-operations-work-surface-confirm")
@@ -603,7 +596,8 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         const session = await openSession(browser, "caigou")
         const page = session.page
         await openInboxTask(page, "fulfillment", /履约处理|供应商直发|代发/)
-        await expect(page.getByLabel("供应商直发表单")).toBeVisible({
+        await openFulfillmentWorkspaceForm(page)
+        await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({
             timeout: 20000,
         })
         await expect(page.getByText("不走自有仓库，库存不变")).toBeVisible()

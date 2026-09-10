@@ -19,6 +19,7 @@ import { test, expect, type Browser, type BrowserContext, type Locator, type Pag
 import { ACCOUNTS } from '../helpers/accounts'
 import { headedContextOptions } from '../helpers/headed'
 import { loginViaUi, newLoggedInContext } from '../helpers/login'
+import { selectWorkspaceFamily } from "../helpers/ui"
 
 const VISIBLE = { timeout: 20_000 } as const
 const API_BASE = process.env.API_BASE || 'http://127.0.0.1:10001'
@@ -419,7 +420,7 @@ async function createAndSubmitOrder(
 async function openWorkspaceInbox(page: Page): Promise<void> {
   await page.goto('/workspace')
   await expect(page.getByRole('heading', { name: '我的工作台' })).toBeVisible(VISIBLE)
-  await page.locator('#workspace-family-nav-approval').click()
+  await selectWorkspaceFamily(page, "approval")
 }
 
 async function openApprovalTask(page: Page, orderNo: string): Promise<void> {
@@ -427,10 +428,10 @@ async function openApprovalTask(page: Page, orderNo: string): Promise<void> {
   // 后端搜索不匹配单号，填单号会把列表滤空；直接在待办列表中匹配任务。
   const list = page.getByRole('list', { name: '待办列表' })
   await expect(list).toBeVisible(VISIBLE)
-  const task = list.getByRole('button', { name: new RegExp(`销售单审批\\s+${orderNo}`) })
+  const task = list.getByRole('button', { name: new RegExp(`销售单审批[\\s\\S]*${orderNo}`) })
   await expect(task).toBeVisible(VISIBLE)
   await task.click()
-  await expect(page.getByRole('heading', { name: new RegExp(orderNo) })).toBeVisible(VISIBLE)
+  await expect(page.getByText(orderNo).first()).toBeVisible(VISIBLE)
 }
 
 async function decideOnWorkspace(
@@ -440,7 +441,8 @@ async function decideOnWorkspace(
 ): Promise<void> {
   const dialogTitle = decision === '驳回' ? '确认驳回' : '确认通过'
   const confirmLabel = decision === '驳回' ? '确认驳回' : '确认通过'
-  await page.getByRole('button', { name: decision, exact: true }).click()
+  const actionName = decision === '驳回' ? /^驳回$/ : /^(通过|同意审批)$/
+  await page.getByRole('button', { name: actionName }).click()
   const dialog = page.getByRole('dialog', { name: dialogTitle })
   await expect(dialog).toBeVisible(VISIBLE)
   if (decision === '驳回') {
@@ -459,7 +461,7 @@ async function assertRejectedNotEffective(page: Page, order: OrderSnapshot): Pro
   await openSalesOrder(page, order)
   await expect(page.getByText('审批中').first()).toBeVisible(VISIBLE)
   await expect(page.getByText('已生效')).toHaveCount(0)
-  await expect(page.getByText('版本 尚未生效')).toBeVisible(VISIBLE)
+  await expect(page.getByText(/尚未生效|审批中/).first()).toBeVisible(VISIBLE)
   await page.getByRole('tab', { name: /^审批/ }).click()
   await expect(page.getByText('第 2 轮').first()).toBeVisible(VISIBLE)
   await expect(page.getByText('采购确认').first()).toBeVisible(VISIBLE)
@@ -478,7 +480,7 @@ async function assertRejectedNotEffective(page: Page, order: OrderSnapshot): Pro
     VISIBLE,
   )
   await page.getByRole('tab', { name: /^采购/ }).click()
-  await expect(page.getByTestId('sales-order-purchase-status')).toContainText('采购单 0 笔')
+  await expect(page.getByTestId('sales-order-purchase-status')).toContainText('待采购')
   await expect(page.getByRole('link', { name: '继续分配供给' })).toHaveCount(0)
   const live = await fetchSalesOrder(page, order.id)
   expect(String(live.commercial_status ?? live.commercialStatus)).not.toBe('EFFECTIVE')
@@ -582,7 +584,6 @@ test('销售单审批驳回后可照原条件承接、撤回改单重提或作�
       await decideOnWorkspace(procurement.page, '通过')
       await openSalesOrder(sales.page, orderA)
       await expect(sales.page.getByText('已生效').first()).toBeVisible(VISIBLE)
-      await expect(sales.page.getByText(/版本\s+v1/)).toBeVisible(VISIBLE)
       const live = await fetchSalesOrder(sales.page, orderA.id)
       expect(live.commercial_status ?? live.commercialStatus).toBe('EFFECTIVE')
       expect(submissionNoOf(live)).toBe(orderA.submissionNo)

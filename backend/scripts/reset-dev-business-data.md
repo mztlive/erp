@@ -77,6 +77,13 @@ work_items.idx_work_items_team_pool
 
 不得只删除审批实例而保留引用它们的业务单据或 WorkItem。allowlist 外集合禁止 drop 或删除。
 
+`ERP_RESET_E2E=1`（由 `scripts/reset-db.sh` 的 `ERP_RESET_ONLY=1` 启用）是 E2E 例外：
+
+- 保留已发布 BPM 定义集合 `approval_process_definitions` / `approval_node_definitions` / `approval_transition_definitions`；
+- 对其余 allowlist 集合执行 `deleteMany({})` 而不 `drop`，以保留索引并允许 web-api 继续运行；
+- 不删除 `work_items` 冲突索引。
+日常开发重置不得设置该开关，仍须整体 drop 定义集合并重启应用。
+
 ### 3.2 必须整体重置的交易链
 
 工具按叶子到根的顺序 drop 下列集合。完整、可执行的唯一清单由 `reset-dev-business-data.mongosh.js` 的 `DROP_GROUPS` 固定。
@@ -117,7 +124,7 @@ supplier_fulfillment_items supplier_fulfillment_orders
 # 退货、资金与成本
 payment_reversals receipt_reversals supplier_refunds customer_refunds
 purchase_return_lines purchase_return_orders sales_return_lines sales_return_cases
-sales_invoice_allocations receipt_allocations receivable_entry_offsets receivable_funds_reviews
+sales_invoice_allocations sales_invoice_requests receipt_allocations receivable_entry_offsets receivable_funds_reviews
 receivable_entries customer_receipts invoices receivable_accounts
 purchase_invoice_allocations payment_allocations payable_entry_offsets payable_entries
 supplier_payments payable_accounts cost_allocations cost_entries

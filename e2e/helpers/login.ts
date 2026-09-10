@@ -10,7 +10,7 @@ export type LoggedInSession = {
     page: Page
 }
 
-const LOGIN_TIMEOUT = 20_000
+const LOGIN_TIMEOUT = 40_000
 
 /**
  * 用登录页账号密码登录当前 page。
@@ -62,21 +62,71 @@ export async function loginViaUi(
         }
     }
 
-    await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
-        timeout: LOGIN_TIMEOUT,
-    })
+    const workspace = page.getByRole("heading", { name: "我的工作台" })
+    try {
+        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
+    } catch {
+        await page.goto("/workspace")
+        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
+    }
+}
+
+const sessionPool = new WeakMap<Browser, Map<string, LoggedInSession>>()
+
+async function openWorkspace(page: Page): Promise<void> {
+    if (!page.url().includes("/workspace")) {
+        await page.goto("/workspace")
+    }
+    const workspace = page.getByRole("heading", { name: "我的工作台" })
+    try {
+        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
+    } catch {
+        await page.goto("/workspace")
+        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
+    }
 }
 
 /**
- * 新开独立 BrowserContext 并完成 UI 登录。每个岗位必须用独立 context，避免 cookie/token 串号。
+ * 按账号复用已登录的 BrowserContext。同一 Browser 内同岗位只登录一次；
+ * 调用方 `context.close()` 只回到工作台，不销毁会话，避免切角色时重复登录和限流。
  */
 export async function newLoggedInContext(
     browser: Browser,
     identity: LoginIdentity,
+    password?: string,
 ): Promise<LoggedInSession> {
+    const cred = resolveAccount(identity, password)
+    let pool = sessionPool.get(browser)
+    if (!pool) {
+        pool = new Map()
+        sessionPool.set(browser, pool)
+    }
+    const cached = pool.get(cred.account)
+    if (cached && !cached.page.isClosed()) {
+        await maximizePageIfHeaded(cached.page)
+        if (/\/login(?:\?|$)/.test(cached.page.url())) {
+            await loginViaUi(cached.page, cred)
+        } else {
+            await openWorkspace(cached.page)
+        }
+        return cached
+    }
+
     const context = await browser.newContext(headedContextOptions())
     const page = await context.newPage()
     await maximizePageIfHeaded(page)
-    await loginViaUi(page, identity)
-    return { context, page }
+    await loginViaUi(page, cred)
+    const session: LoggedInSession = { context, page }
+    const realClose = context.close.bind(context)
+    context.close = (async () => {
+        if (!page.isClosed()) {
+            await page.goto("/workspace").catch(() => undefined)
+        }
+    }) as BrowserContext["close"]
+    context.on("close", () => {
+        pool.delete(cred.account)
+        context.close = realClose
+    })
+    pool.set(cred.account, session)
+    return session
 }

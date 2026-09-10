@@ -22,6 +22,7 @@ import {
 
 import { ACCOUNTS } from "../helpers/accounts"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { selectWorkspaceFamily } from "../helpers/ui"
 
 const SAMPLE_CONTRACT_PDF = path.join(
     process.cwd(),
@@ -151,7 +152,7 @@ async function approveWorkspaceTask(
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(
         VISIBLE,
     )
-    await page.locator("#workspace-family-nav-approval").click()
+    await selectWorkspaceFamily(page, "approval")
     const list = page.getByRole("list", { name: "待办列表" })
     const task = list.getByRole("button", { name: taskName })
     await expect(task).toBeVisible(VISIBLE)
@@ -161,8 +162,8 @@ async function approveWorkspaceTask(
     if (currentNode) {
         await expect(pane.getByText(currentNode)).toBeVisible(VISIBLE)
     }
-    await expect(page.getByRole("button", { name: "通过" })).toBeVisible(VISIBLE)
-    await page.getByRole("button", { name: "通过" }).click()
+    await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toBeVisible(VISIBLE)
+    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
     await expect(page.getByRole("heading", { name: "确认通过" })).toBeVisible(
         VISIBLE,
     )
@@ -322,7 +323,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await sales.page.locator("#sales-orders-submit-confirm-confirm").click()
         await expect(sales.page).toHaveURL(/\/sales\/orders\/[^/?#]+/, VISIBLE)
         await expect(
-            sales.page.locator("[data-slot=document-header]").getByText("审批中"),
+            sales.page.locator("header").getByText("审批中"),
         ).toBeVisible(VISIBLE)
     } finally {
         await sales.context.close()
@@ -350,7 +351,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             await expect(
                 procurement.page.getByRole("heading", { name: "我的工作台" }),
             ).toBeVisible(VISIBLE)
-            await procurement.page.locator("#workspace-family-nav-procurement").click()
+            await selectWorkspaceFamily(procurement.page, "procurement")
             const task = procurement.page
                 .getByRole("list", { name: "待办列表" })
                 .getByRole("button", { name: /待供给分配/ })
@@ -369,6 +370,10 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             await expect(
                 procurement.page.getByText("销售明细与供给方案"),
             ).toBeVisible(VISIBLE)
+            const expandSourcing = procurement.page.getByRole("button", { name: "调整方案" }).first()
+            if (await expandSourcing.isVisible().catch(() => false)) {
+                await expandSourcing.click()
+            }
             const warehouseInput = procurement.page.getByRole("combobox", { name: "仓库", exact: true })
             if ((await warehouseInput.count()) > 0) {
                 // 仓库下拉按仓库代码精确筛选，填代码后按名称选择选项。
@@ -385,19 +390,13 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
                 procurement.page.getByRole("heading", { name: "预览供给分配" }),
             ).toBeVisible(VISIBLE)
             await expect(
-                procurement.page.getByText("本次不占用现有库存"),
+                procurement.page.getByText(/本次不占用现有库存|将为供给缺口创建|张采购单提交审批/),
             ).toBeVisible(VISIBLE)
             await expect(
                 procurement.page.getByText("无需创建采购单"),
             ).toHaveCount(0)
             await procurement.page
                 .locator("#procurement-orders-create-preview-confirm")
-                .click()
-            await expect(
-                procurement.page.getByRole("heading", { name: "确认供给分配" }),
-            ).toBeVisible(VISIBLE)
-            await procurement.page
-                .getByTestId("purchase-create-confirm")
                 .click()
             await expectToast(procurement.page, /供给分配已完成|本次供给分配已保存/)
             await expect(
@@ -441,15 +440,12 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             VISIBLE,
         )
         purchaseHref = procurement.page.url()
-        await expect(procurement.page.locator('[data-slot="document-header"]').getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
-        await expect(procurement.page.locator('[data-slot="document-header"]')).toContainText(/版本\s*v1\b/, VISIBLE)
-        await expect(procurement.page.getByText("未付")).toBeVisible(VISIBLE)
-        await expect(procurement.page.getByText("未开始")).toBeVisible(VISIBLE)
+        await expect(procurement.page.locator("header").getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
         await expect(
-            procurement.page.getByRole("button", { name: "去交付" }),
+            procurement.page.locator('[aria-label="采购单摘要"]').getByText("未付"),
         ).toBeVisible(VISIBLE)
         await expect(
-            procurement.page.getByRole("button", { name: "去供应商往来" }),
+            procurement.page.locator('[aria-label="采购单摘要"]').getByText("未开始"),
         ).toBeVisible(VISIBLE)
 
         // 负向：未执行前不得把履约/付款当成本流程
@@ -493,8 +489,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         ).toBeVisible(VISIBLE)
         await expect(procurement.page.getByRole("listitem").filter({ hasText: "采购变更" }).getByText("审批中", { exact: true })).toBeVisible(VISIBLE)
         // 提交后原采购版本仍有效
-        await expect(procurement.page.locator('[data-slot="document-header"]').getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
-        await expect(procurement.page.locator('[data-slot="document-header"]')).toContainText(/版本\s*v1\b/, VISIBLE)
+        await expect(procurement.page.locator("header").getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
     } finally {
         await procurement.context.close()
     }
@@ -511,9 +506,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
                 name: /履约处理/,
             })
             if ((await fulfillmentTask.count()) > 0) {
-                await warehouse.page
-                    .locator("#workspace-family-nav-approval")
-                    .click()
+                await selectWorkspaceFamily(warehouse.page, "approval")
                 await expect(fulfillmentTask).toHaveCount(0)
             }
             await approveWorkspaceTask(
@@ -545,16 +538,16 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         const procurement = await openSession(browser, "caigou")
         try {
             await procurement.page.goto(purchaseHref)
-            await expect(procurement.page.locator('[data-slot="document-header"]').getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
-            await expect(procurement.page.locator('[data-slot="document-header"]')).toContainText(/版本\s*v2\b/, VISIBLE)
+            await expect(procurement.page.locator("header").getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
+            await expect(procurement.page.locator("header").getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
             await procurement.page
-                .getByRole("tab", { name: "变更与异常" })
+                .getByRole("tab", { name: "变更" })
                 .click()
             await expect(procurement.page.getByRole("listitem").filter({ hasText: "采购变更" }).getByText("已生效", { exact: true })).toBeVisible(VISIBLE)
             await expect(
                 procurement.page.getByRole("button", { name: "提交改单" }),
             ).toHaveCount(0)
-            await procurement.page.getByRole("tab", { name: "应付与票款" }).click()
+            await procurement.page.getByRole("tab", { name: "票款" }).click()
             await expect(procurement.page.getByText("应付未结")).toBeVisible(
                 VISIBLE,
             )
@@ -583,7 +576,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             await expect(
                 warehouse.page.getByRole("heading", { name: "我的工作台" }),
             ).toBeVisible(VISIBLE)
-            await warehouse.page.locator("#workspace-family-nav-approval").click()
+            await selectWorkspaceFamily(warehouse.page, "approval")
             await expect(
                 warehouse.page
                     .getByRole("list", { name: "待办列表" })

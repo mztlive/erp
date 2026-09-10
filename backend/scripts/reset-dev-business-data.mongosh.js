@@ -5,6 +5,7 @@
 // 本文件默认只执行 count/distinct/aggregate；ERP_RESET_EXECUTE=1 才进入写分支。
 // ERP_RESET_VERIFY=1 只跑后置校验。禁止 dropDatabase()，只 drop 固定集合或按固定过滤删除。
 // ERP_RESET_INCLUDE_CATALOG=1 时额外 drop 供应商/商品/SKU/供给主数据。
+// ERP_RESET_E2E=1 时保留已发布 BPM 定义、清空集合而不 drop（保留索引），供 E2E 不停 web-api。
 
 const OLD_APPROVAL_COLLECTIONS = [
   "approval_step_instances",
@@ -23,6 +24,12 @@ const NEW_APPROVAL_COLLECTIONS = [
   "approval_transition_definitions",
   "approval_node_definitions",
   "approval_process_definitions",
+];
+
+const KEPT_PUBLISHED_DEFINITION_COLLECTIONS = [
+  "approval_process_definitions",
+  "approval_node_definitions",
+  "approval_transition_definitions",
 ];
 
 const APPROVAL_WORK_ITEM_TYPES = [
@@ -173,6 +180,7 @@ const DROP_GROUPS = [
       "sales_return_lines",
       "sales_return_cases",
       "sales_invoice_allocations",
+      "sales_invoice_requests",
       "receipt_allocations",
       "receivable_entry_offsets",
       "receivable_funds_reviews",
@@ -477,13 +485,24 @@ function chunks(values) {
   return result;
 }
 
-function activeDropGroups(includeCatalog) {
-  return includeCatalog ? [...DROP_GROUPS, ...CATALOG_DROP_GROUPS] : DROP_GROUPS;
+function activeDropGroups(includeCatalog, e2eFast) {
+  const groups = includeCatalog ? [...DROP_GROUPS, ...CATALOG_DROP_GROUPS] : DROP_GROUPS;
+  if (!e2eFast) {
+    return groups;
+  }
+  return groups
+    .map((group) => ({
+      name: group.name,
+      collections: group.collections.filter(
+        (name) => !KEPT_PUBLISHED_DEFINITION_COLLECTIONS.includes(name),
+      ),
+    }))
+    .filter((group) => group.collections.length > 0);
 }
 
-function dropCollectionNames(includeCatalog) {
+function dropCollectionNames(includeCatalog, e2eFast) {
   const names = [];
-  for (const group of activeDropGroups(includeCatalog)) {
+  for (const group of activeDropGroups(includeCatalog, e2eFast)) {
     names.push(...group.collections);
   }
   return names;
@@ -495,14 +514,21 @@ function resetObjectTypes(includeCatalog) {
     : BUSINESS_OBJECT_TYPES;
 }
 
-function printAllowlist(includeCatalog) {
+function printAllowlist(includeCatalog, e2eFast) {
   line("== 集合 allowlist ==");
   line(`- 旧审批集合: ${OLD_APPROVAL_COLLECTIONS.join(", ")}`);
   line(`- 新 BPM/集成集合: ${NEW_APPROVAL_COLLECTIONS.join(", ")}`);
+  if (e2eFast) {
+    line(
+      `- E2E 保留已发布定义: ${KEPT_PUBLISHED_DEFINITION_COLLECTIONS.join(", ")}`,
+    );
+  }
   line(
     `- 主数据范围: ${includeCatalog ? "重置供应商/商品/SKU/供给/仓库/分类/品牌/单位（保留账号）" : "保留供应商/商品/仓库主数据"}`,
   );
-  line(`- drop 集合: ${dropCollectionNames(includeCatalog).join(", ")}`);
+  line(
+    `- ${e2eFast ? "清空" : "drop"} 集合: ${dropCollectionNames(includeCatalog, e2eFast).join(", ")}`,
+  );
   line(`- 审批 WorkItem 类型: ${APPROVAL_WORK_ITEM_TYPES.join(", ")}`);
   line("- 审批 WorkItem 字段: approval_step_instance_id, approval_node_execution_id");
   line(
@@ -517,7 +543,8 @@ async function run() {
   const verifyOnly = process.env.ERP_RESET_VERIFY === "1";
   const confirmedDb = process.env.ERP_RESET_CONFIRMED_DB || "";
   const includeCatalog = process.env.ERP_RESET_INCLUDE_CATALOG === "1";
-  const dropGroups = activeDropGroups(includeCatalog);
+  const e2eFast = process.env.ERP_RESET_E2E === "1";
+  const dropGroups = activeDropGroups(includeCatalog, e2eFast);
   const objectTypes = resetObjectTypes(includeCatalog);
 
   if (!uri || !dbName) {
@@ -719,7 +746,7 @@ async function run() {
   ]);
 
   line();
-  printAllowlist(includeCatalog);
+  printAllowlist(includeCatalog, e2eFast);
 
   line();
   line("== 执行前范围 ==");
@@ -835,7 +862,7 @@ async function run() {
 
   if (execute) {
     for (const item of CONFLICTING_INDEX_ALLOWLIST) {
-      if (!existing.has(item.collection)) {
+      if (e2eFast || !existing.has(item.collection)) {
         continue;
       }
       const names = await listIndexNames(item.collection);
@@ -923,11 +950,19 @@ async function run() {
         if (!existing.has(collectionName)) {
           continue;
         }
-        await targetDb.getCollection(collectionName).drop();
-        existing.delete(collectionName);
+        if (e2eFast) {
+          await targetDb.getCollection(collectionName).deleteMany({});
+        } else {
+          await targetDb.getCollection(collectionName).drop();
+          existing.delete(collectionName);
+        }
         dropped += 1;
       }
-      line(`- ${group.name}: drop ${dropped} 个集合`);
+      line(
+        e2eFast
+          ? `- ${group.name}: 清空 ${dropped} 个集合（保留索引）`
+          : `- ${group.name}: drop ${dropped} 个集合`,
+      );
     }
 
     deletedTargets = deletedPartyTargets;
@@ -1030,7 +1065,7 @@ async function run() {
   }
 
   const failed =
-    remainingResetCollections !== 0 ||
+    (!e2eFast && remainingResetCollections !== 0) ||
     remainingResetDocuments !== 0 ||
     remainingSourceMaps !== 0 ||
     remainingSourceTargets !== 0 ||
@@ -1051,10 +1086,16 @@ async function run() {
   line();
   if (verifyOnly) {
     line(
-      "校验完成：重置后置条件通过。旧审批集合、新 BPM/集成集合、审批 WorkItem 与冲突索引均为空。",
+      e2eFast
+        ? "校验完成：业务集合已清空；已发布审批定义与集合索引保留。"
+        : "校验完成：重置后置条件通过。旧审批集合、新 BPM/集成集合、审批 WorkItem 与冲突索引均为空。",
     );
   } else {
-    line("清理完成：重置后置条件通过。必须重启应用以重建索引和审批定义，再执行应用级验收。");
+    line(
+      e2eFast
+        ? "清理完成：业务数据已清空，已发布审批定义与索引保留，web-api 可继续运行。"
+        : "清理完成：重置后置条件通过。必须重启应用以重建索引和审批定义，再执行应用级验收。",
+    );
   }
   line(
     includeCatalog

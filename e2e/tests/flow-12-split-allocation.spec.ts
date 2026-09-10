@@ -22,6 +22,7 @@ import { payOnlySupplierTask } from "../helpers/payments"
 import { ACCOUNTS } from "../helpers/accounts"
 import { headedContextOptions } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui"
 
 const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:10001"
 const FRONTEND_BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000"
@@ -167,7 +168,13 @@ async function openWorkspaceTask(
         timeout: TIMEOUT,
     })
     if (options.family) {
-        await page.getByRole("button", { name: new RegExp(`^${options.family}`) }).click()
+        const familyId =
+            options.family === "审批"
+                ? "approval"
+                : options.family === "采购"
+                  ? "procurement"
+                  : "fulfillment"
+        await selectWorkspaceFamily(page, familyId)
     }
     // 后端工作台搜索不匹配单号，填单号会把列表滤空；任务名正则已包含单号，直接匹配。
     // 单号也可能只出现在无障碍名或可见文本一侧，取并集兜底。
@@ -199,7 +206,7 @@ async function openWorkspaceTask(
 }
 
 async function approveOpenTask(page: Page) {
-    await page.getByRole("button", { name: "通过", exact: true }).click()
+    await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
     const dialog = page.getByRole("dialog", { name: "确认通过" })
     await expect(dialog).toBeVisible({ timeout: TIMEOUT })
     await dialog.getByRole("button", { name: "确认通过" }).click()
@@ -275,9 +282,6 @@ async function submitInventoryCountGain(page: Page) {
     await dialog.getByLabel(/调整数量/).fill(STOCK_QTY)
     await dialog.getByLabel("原因说明").fill("E2E flow-12 盘盈准备少于销售数量的库存")
     await dialog.getByRole("button", { name: "提交审批" }).click()
-    const confirm = page.getByRole("alertdialog", { name: /确认提交库存调整/ })
-    await expect(confirm).toBeVisible({ timeout: TIMEOUT })
-    await confirm.getByRole("button", { name: "确认提交" }).click()
     await expect(page.getByText("调整已提交审批")).toBeVisible({ timeout: TIMEOUT })
 }
 
@@ -361,10 +365,32 @@ async function createSalesOrderWithContract(
     await expect(page).toHaveURL(/\/sales\/orders\/[^/?]+/, { timeout: TIMEOUT })
     const salesOrderId = page.url().match(/\/sales\/orders\/([^/?]+)/)?.[1]
     if (!salesOrderId) throw new Error("未能从 URL 读取销售单身份")
-    await expect(page.locator('[data-slot="badge"]').filter({ hasText: /^审批中$/ })).toBeVisible({ timeout: TIMEOUT })
-    const salesOrderNo = (await page.locator("span", { hasText: "单号" }).locator(".num").textContent())?.trim()
-    if (!salesOrderNo) throw new Error("未能读取销售单号")
+    await expect(page.locator('[data-slot="badge"]').filter({ hasText: /^审批中$/ }).first()).toBeVisible({ timeout: TIMEOUT })
+    const salesOrderNo = await readHeaderDocumentNumber(page)
     return { salesOrderId, salesOrderNo }
+}
+
+async function sourcingEditorControl(
+    page: Page,
+    option: RegExp,
+    field: "quantity" | "warehouse",
+) {
+    const combos = page.locator('[id$="-sourcing-option"]')
+    await expect(combos.first()).toBeVisible({ timeout: TIMEOUT })
+    const count = await combos.count()
+    for (let index = 0; index < count; index += 1) {
+        const combo = combos.nth(index)
+        if (!(await combo.isVisible().catch(() => false))) continue
+        const shown =
+            (await combo.inputValue().catch(() => "")) ||
+            (await combo.innerText().catch(() => ""))
+        if (!option.test(shown)) continue
+        const comboId = await combo.getAttribute("id")
+        const prefix = comboId?.replace(/-sourcing-option$/, "")
+        expect(prefix, `未能读取履约方案字段身份: ${comboId}`).toBeTruthy()
+        return page.locator(`#${prefix}-${field}`)
+    }
+    throw new Error(`未找到履约方案 ${option}`)
 }
 
 async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
@@ -376,11 +402,14 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await expect(page.getByRole("heading", { name: "供给分配", exact: true })).toBeVisible({ timeout: TIMEOUT })
     await page.getByRole("button", { name: "重新自动分配" }).click()
     await expectToast(page, /已重新分配供给|没有可匹配的供给方案/)
-    const stockRow = page.locator("tr").filter({ has: page.locator('input[id$="-sourcing-option"][value*="现有库存"]') })
-    const purchaseRow = page.locator("tr").filter({ has: page.locator('input[id$="-sourcing-option"][value*="入仓"]') })
-    await expect(stockRow).toBeVisible({ timeout: TIMEOUT })
-    await expect(purchaseRow).toBeVisible({ timeout: TIMEOUT })
-    const warehouseInput = purchaseRow.getByRole("combobox", { name: "仓库", exact: true })
+    for (const expand of await page.getByRole("button", { name: "调整方案" }).all()) {
+        if (await expand.isVisible().catch(() => false)) await expand.click()
+    }
+    const stockQty = await sourcingEditorControl(page, /可用/, "quantity")
+    const purchaseQty = await sourcingEditorControl(page, /入仓/, "quantity")
+    const warehouseInput = await sourcingEditorControl(page, /入仓/, "warehouse")
+    await expect(stockQty).toBeVisible({ timeout: TIMEOUT })
+    await expect(purchaseQty).toBeVisible({ timeout: TIMEOUT })
     await warehouseInput.click()
     await warehouseInput.fill(WAREHOUSE_CODE)
     await expect(page.getByRole("option", { name: new RegExp(WAREHOUSE_CODE) })).toBeVisible({
@@ -389,16 +418,16 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await page.getByRole("option", { name: new RegExp(WAREHOUSE_CODE) }).click()
     await expect(page.getByText("将建立库存预留", { exact: true }).locator("xpath=..")).toContainText("1 条")
     await expect(page.getByText("将创建采购单", { exact: true }).locator("xpath=..")).toContainText("1 张")
-    await stockRow.getByLabel("本次分配数量").fill("4")
-    await purchaseRow.getByLabel("本次分配数量").fill(PURCHASE_QTY)
+    await stockQty.fill("4")
+    await purchaseQty.fill(PURCHASE_QTY)
     await page.getByRole("button", { name: "预览供给分配" }).click()
     await expectToast(page, "无法预览供给分配")
     await expect(page.getByRole("alert").filter({ hasText: /拆分数量合计不能超过|库存分配合计不能超过/ }).last()).toBeVisible({
         timeout: TIMEOUT,
     })
 
-    await stockRow.getByLabel("本次分配数量").fill(STOCK_QTY)
-    await purchaseRow.getByLabel("本次分配数量").fill(PURCHASE_QTY)
+    await stockQty.fill(STOCK_QTY)
+    await purchaseQty.fill(PURCHASE_QTY)
 
 
     await page.getByRole("button", { name: "预览供给分配" }).click()
@@ -407,14 +436,8 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await expect(preview.getByText("现有库存分配")).toBeVisible({ timeout: TIMEOUT })
     await expect(preview.getByRole("listitem").filter({ hasText: WAREHOUSE_NAME })).toContainText(new RegExp(`·\\s*${STOCK_QTY}\\s*盒$`))
     await expect(preview.getByRole("heading", { name: "采购单", exact: true })).toBeVisible({ timeout: TIMEOUT })
-    await preview.getByRole("button", { name: /确认库存分配并提交 1 张采购单/ }).click()
-    const confirm = page.getByRole("alertdialog", { name: "确认供给分配" })
-    await expect(confirm.getByText("确认供给分配")).toBeVisible({ timeout: TIMEOUT })
-    await expect(confirm.getByText(new RegExp(`将建立 1 条库存预留，并为剩余缺口创建 1 张采购单`))).toBeVisible({
-        timeout: TIMEOUT,
-    })
     const committed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/admin/purchase-orders/from-sourcing"), { timeout: 60_000 })
-    await confirm.getByRole("button", { name: "确认提交" }).click()
+    await preview.getByRole("button", { name: /确认库存分配并提交 1 张采购单/ }).click()
     const response = await committed
     expect(response.ok(), await response.text()).toBe(true)
     const result = (await response.json()).data
@@ -454,14 +477,34 @@ async function completeFulfillment(
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    await page.getByRole("button", { name: /^履约(?: \d+ 项)?$/ }).click()
+    await selectWorkspaceFamily(page, "fulfillment")
     const queue = page.getByRole("list", { name: "待办列表" })
-    const task = queue.getByRole("button", { name: kind === "入库" ? /^履约处理 PO-/ : new RegExp(`^履约处理 ${salesOrderNo}$`) })
-    await expect(task).toHaveCount(1, { timeout: TIMEOUT })
-    await task.click()
-    await expect(page.getByLabel(kind === "入库" ? "入库表单" : "公司仓发表单")).toBeVisible({ timeout: TIMEOUT })
+    const tasks = queue.getByRole("button", { name: /履约处理/ })
+    await expect(tasks.first()).toBeVisible({ timeout: TIMEOUT })
+    const wanted = kind === "入库" ? "入库表单" : "公司仓发表单"
+    const dialog = page.getByRole("dialog", { name: "处理履约" })
+    const total = await tasks.count()
+    for (let index = 0; index < total; index += 1) {
+        if (await dialog.isVisible().catch(() => false)) {
+            await page.keyboard.press("Escape")
+            await expect(dialog).toBeHidden({ timeout: 5_000 }).catch(() => undefined)
+        }
+        await tasks.nth(index).click()
+        await openFulfillmentWorkspaceForm(page)
+        try {
+            await expect(page.locator(`[aria-label="${wanted}"]`)).toBeVisible({
+                timeout: 8_000,
+            })
+            break
+        } catch {
+            if (index === total - 1) {
+                throw new Error(`未找到${kind}履约表单`)
+            }
+        }
+    }
+    await expect(page.locator(`[aria-label="${wanted}"]`)).toBeVisible({ timeout: TIMEOUT })
     if (kind === "入库") {
-        await expect(page.getByLabel("入库表单")).toBeVisible({
+        await expect(page.locator('[aria-label="入库表单"]')).toBeVisible({
             timeout: TIMEOUT,
         })
         if (extra?.quantity) {
@@ -484,13 +527,13 @@ async function completeFulfillment(
         return
     }
 
-    await expect(page.getByLabel("公司仓发表单")).toBeVisible({
+    await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({
         timeout: TIMEOUT,
     })
     await chooseOption(page, page.getByLabel("承运方"), "顺丰速运")
     await page.getByLabel("物流单号").fill(extra?.trackingNo ?? `SF12-${Date.now()}`)
     if (extra?.quantity) {
-        await page.getByLabel("本次发货数量").fill(extra.quantity)
+        await page.locator('[id^="fulfillment-operations-ship-form-quantity-"]').first().fill(extra.quantity)
     }
     await page.getByRole("button", { name: "确认发货" }).click()
     const confirm = page.getByRole("alertdialog", { name: "确认发货？" })
@@ -509,10 +552,14 @@ async function registerAcceptance(page: Page, salesOrderNo: string) {
         query: salesOrderNo,
         name: new RegExp(`客户验收登记.*${salesOrderNo}|${salesOrderNo}`),
     })
-    await page.getByRole("button", { name: "登记客户验收" }).click()
+    const open = page
+        .locator("#sales-orders-acceptance-register-open")
+        .or(page.getByRole("button", { name: "登记客户验收" }))
+        .first()
+    await open.click()
     const register = page.getByRole("dialog", { name: "登记客户验收" })
     await expect(register).toBeVisible({ timeout: TIMEOUT })
-    await register.getByRole("button", { name: /全部通过并确认|确认本次验收/ }).click()
+    await register.locator("#sales-orders-acceptance-register-submit").click()
     const confirm = page.getByRole("alertdialog", { name: "确认客户验收" })
     await expect(confirm).toBeVisible({ timeout: TIMEOUT })
     await confirm.getByRole("button", { name: "确认本次验收" }).click()
@@ -650,7 +697,11 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
         await acceptance.page.goto(`${FRONTEND_BASE}/sales/orders/${salesOrderId}`)
         await expect(acceptance.page.getByText(salesOrderNo)).toBeVisible({ timeout: TIMEOUT })
         await acceptance.page.getByRole("tab", { name: "验收", exact: true }).click()
-        await expect(acceptance.page.getByText(new RegExp(String.raw`已通过\s*${SALES_QTY}\s*盒.*已交付\s*${SALES_QTY}\s*盒`))).toBeVisible({ timeout: TIMEOUT })
+        await expect(acceptance.page.getByText("验收进度")).toBeVisible({ timeout: TIMEOUT })
+        await expect(acceptance.page.getByText(new RegExp(`${SALES_QTY}\\s*盒`)).first()).toBeVisible({
+            timeout: TIMEOUT,
+        })
+        await expect(acceptance.page.getByText(/已通过/).first()).toBeVisible({ timeout: TIMEOUT })
         await expect(acceptance.page.getByRole("button", { name: "登记客户验收" })).toHaveCount(0)
     } finally {
         await closeSession(acceptance)

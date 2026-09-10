@@ -27,6 +27,7 @@
 #
 # E2E 只清库模式：
 #   E2E_RESET=1 ERP_RESET_ONLY=1 [E2E_ALLOW_REMOTE_RESET=1] bash scripts/reset-db.sh
+#   该模式启用 ERP_RESET_E2E=1：保留已发布审批定义，清空集合而不 drop，且不停止 web-api。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -165,7 +166,8 @@ echo "== 开发数据库重置 =="
 echo "目标数据库: ${DB_NAME}"
 echo "目标主机: ${TARGET_HOSTS}"
 if [[ "${RESET_ONLY}" == "1" ]]; then
-    echo "完成模式: 只清库（不填种子、不重启 web-api）"
+    export ERP_RESET_E2E=1
+    echo "完成模式: 只清库（E2E 快路径：保留已发布审批定义，web-api 保持运行）"
 else
     echo "完成模式: 清库 + 岗位账号 + 审批定义 + 基础种子（web-api 保持运行）"
 fi
@@ -177,8 +179,12 @@ else
     echo "清理项: 客户/合同/销售单/采购单/票款/库存/审批实例/待办等业务数据"
 fi
 
-echo "-- 停止 web-api（停写） --"
-bash "${SCRIPT_DIR}/stop-backend.sh"
+if [[ "${RESET_ONLY}" == "1" ]]; then
+    echo "-- 跳过停止 web-api（E2E 快路径：清空集合并保留索引） --"
+else
+    echo "-- 停止 web-api（停写） --"
+    bash "${SCRIPT_DIR}/stop-backend.sh"
+fi
 
 # 1) preview：只读核对并输出集合摘要（同一目标与摘要贯穿 execute/verify）
 echo "-- [1/3] preview --"
@@ -203,9 +209,9 @@ echo "-- [3/3] verify --"
 
 if [[ "${RESET_ONLY}" == "1" ]]; then
     if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
-        echo "== 只清库完成：业务数据与主数据已清空，web-api 保持停止 =="
+        echo "== 只清库完成：业务数据与主数据已清空，已发布审批定义保留，web-api 保持运行 =="
     else
-        echo "== 只清库完成：业务数据已清空，账号与主数据保留，web-api 保持停止 =="
+        echo "== 只清库完成：业务数据已清空，账号、主数据与已发布审批定义保留，web-api 保持运行 =="
     fi
     exit 0
 fi

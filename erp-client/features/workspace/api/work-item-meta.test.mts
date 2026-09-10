@@ -84,6 +84,21 @@ test("procurement creation stays a supply allocation badge for a sales order", (
     )
 })
 
+test("invoice request approval is distinct from invoice execution", () => {
+    assert.equal(
+        workspaceTypeLabel("DOCUMENT_APPROVAL", "sales_invoice_request"),
+        "开票申请审批",
+    )
+    assert.equal(
+        workspaceTypeLabel("SALES_INVOICE_EXECUTION", "receivable_account"),
+        "销项开票处理",
+    )
+    assert.deepEqual(
+        workspaceDocumentBadge("DOCUMENT_APPROVAL", "SalesInvoiceRequest"),
+        { label: "开票申请", variant: "violet" },
+    )
+})
+
 test("supplier payment execution is a finance payable action", () => {
     assert.deepEqual(
         workspaceDocumentBadge("SUPPLIER_PAYMENT_EXECUTION", "payable_account"),

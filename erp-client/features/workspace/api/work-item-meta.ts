@@ -174,6 +174,12 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         documentName: "应收账户",
         badgeVariant: "violet",
     },
+    sales_invoice_request: {
+        approvalLabel: "开票申请审批",
+        badgeLabel: "开票申请",
+        documentName: "开票申请",
+        badgeVariant: "violet",
+    },
     customer_refund: {
         approvalLabel: "客户退款审批",
         badgeLabel: "客户退款",

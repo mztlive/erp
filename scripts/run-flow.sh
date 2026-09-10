@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 单个流程的完整 E2E 编排（每个 spec 文件即一个流程）：
 #   1. 确保前后端服务已启动（已启动则复用）；
-#   2. reset-db.sh 以 ERP_RESET_ONLY=1 停止 web-api 并只清业务数据（保留账号/主数据）
-#      → 重启 web-api 等待健康（重建索引/角色/RBAC）；
-#   3. 发布审批定义（reset 会删除全部定义，按合同必须先发布才能开单）；
+#   2. reset-db.sh 以 ERP_RESET_ONLY=1 清空业务数据（保留账号/主数据/已发布审批定义，
+#      不停止 web-api）；若健康检查失败才重启；
+#   3. 发布审批定义（已发布则跳过）；全量模式只 reset/发布一次；
 #   4. 执行对应 playwright spec。
 #
 # 用法:
@@ -66,26 +66,7 @@ spec_for_playwright() {
     fi
 }
 
-run_one() {
-    local spec_abs
-    local spec_arg
-    local name
-    local -a pw_args
-    spec_abs="$(resolve_spec "$1")"
-    spec_arg="$(spec_for_playwright "${spec_abs}")"
-    name="$(basename "${spec_abs}")"
-    pw_args=("${spec_arg}" --workers=1)
-    if [[ "${HEADED}" == "1" ]]; then
-        pw_args+=(--headed)
-    fi
-    # E2E_SLOW_MO 由 e2e/playwright.config.ts 读取为 launchOptions.slowMo；
-    # Playwright Test CLI 没有 --slow-mo，不能拼进 npx playwright test。
-
-    echo ""
-    echo "############################################################"
-    echo "# 流程: ${name}"
-    echo "############################################################"
-
+prepare_env() {
     bash "${SCRIPT_DIR}/ensure-services.sh"
 
     if [[ "${PREFLIGHT_DONE}" == "0" ]]; then
@@ -103,19 +84,49 @@ run_one() {
     fi
 
     if [[ "${RESET}" == "1" ]]; then
-        echo "-- 数据库 reset（E2E 只清库） --"
+        echo "-- 数据库 reset（E2E 快路径：保留审批定义，不停 web-api） --"
         E2E_RESET=1 ERP_RESET_ONLY=1 bash "${SCRIPT_DIR}/reset-db.sh"
-        echo "-- 重启 web-api --"
-        bash "${SCRIPT_DIR}/restart-backend.sh"
-        echo "-- 发布审批定义 --"
+        if ! curl -sf --max-time 3 http://127.0.0.1:10001/health >/dev/null; then
+            echo "-- web-api 未就绪，重启 --"
+            bash "${SCRIPT_DIR}/restart-backend.sh"
+        fi
+        echo "-- 发布审批定义（已发布则跳过） --"
         node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
+        RESET=0
     fi
+}
 
-    echo "-- 执行 playwright: ${pw_args[*]} --"
+playwright_args() {
+    local -a args=(--workers=1)
+    if [[ "${HEADED}" == "1" ]]; then
+        args+=(--headed)
+    fi
+    printf '%s\n' "${args[@]}"
+}
+
+run_one() {
+    local spec_abs
+    local spec_arg
+    local name
+    local -a pw_args
+    spec_abs="$(resolve_spec "$1")"
+    spec_arg="$(spec_for_playwright "${spec_abs}")"
+    name="$(basename "${spec_abs}")"
+    mapfile -t pw_args < <(playwright_args)
+    pw_args=("${spec_arg}" "${pw_args[@]}")
+
+    echo ""
+    echo "############################################################"
+    echo "# 流程: ${name}"
+    echo "############################################################"
+
+    prepare_env
+
     if [[ -n "${SLOW_MO}" ]]; then
         echo "-- 慢动作: E2E_SLOW_MO=${SLOW_MO}ms（playwright.config launchOptions.slowMo） --"
         export E2E_SLOW_MO
     fi
+    echo "-- 执行 playwright: ${pw_args[*]} --"
     (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}")
 }
 
@@ -126,11 +137,18 @@ if [[ "${1:-}" == "all" ]]; then
         echo "未找到 ${E2E_DIR}/tests/*.spec.ts" >&2
         exit 1
     fi
-    for spec in "${specs[@]}"; do
-        # 跳过 _ 前缀的基础设施测试（非业务流程）
-        [[ "$(basename "${spec}")" == _* ]] && continue
-        run_one "${spec}"
-    done
+    echo ""
+    echo "############################################################"
+    echo "# 全量流程：reset 一次后一次跑 Playwright"
+    echo "############################################################"
+    prepare_env
+    mapfile -t pw_args < <(playwright_args)
+    if [[ -n "${SLOW_MO}" ]]; then
+        echo "-- 慢动作: E2E_SLOW_MO=${SLOW_MO}ms（playwright.config launchOptions.slowMo） --"
+        export E2E_SLOW_MO
+    fi
+    echo "-- 执行 playwright: ${pw_args[*]} --"
+    (cd "${E2E_DIR}" && npx playwright test "${pw_args[@]}")
 else
     [[ -n "${1:-}" ]] || { echo "用法: bash scripts/run-flow.sh <spec 文件|all>" >&2; exit 2; }
     run_one "$1"

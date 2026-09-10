@@ -187,11 +187,6 @@ async function submitStockAdjustment(
     await page.getByLabel(/调整数量/).fill(input.quantity)
     await page.getByLabel("原因说明").fill(input.note)
     await page.getByRole("button", { name: "提交审批" }).click()
-    await expectHeading(page, "确认提交库存调整")
-    await expect(page.getByText("确认后启动审批。余额在审批通过前不会变化。")).toBeVisible(
-        VISIBLE,
-    )
-    await page.getByRole("button", { name: "确认提交" }).click()
     await expect(page.getByText("调整已提交审批")).toBeVisible(VISIBLE)
     const banner = page.getByText(/单号\s+\S+/)
     await expect(banner).toBeVisible(VISIBLE)
@@ -252,7 +247,7 @@ async function decideCurrentTask(
     reason: string,
 ): Promise<void> {
     if (decision === "approve") {
-        await page.getByRole("button", { name: "通过", exact: true }).click()
+        await page.getByRole("button", { name: /^(通过|同意审批)$/ }).click()
         await expectHeading(page, "确认通过")
         const reasonBox = page.getByLabel("原因（可选）")
         if (await reasonBox.isVisible().catch(() => false)) {

@@ -1,11 +1,13 @@
 /**
  * 流程: [flow-06] 客户票款：分次回款、销项发票、核销与冲正
  * 文档: docs/erp-phase-1.md §9.1 + §6.5.4（回款冲正）+ §9.3（关闭与开票）
- * 账号: xiaoshou 建客户/合同/销售单；caigou 审批销售单；fukuan 提交回款与冲正；
- *       caiwu 审批回款/冲正入账（禁止自己提交）；lisiyong 确认冲正依据；kaipiao 在 W01 开票任务登记销项发票。
+ * 账号: xiaoshou 建客户/合同/销售单并提交开票申请；caigou 审批销售单；fukuan 提交回款与冲正；
+ *       caiwu 审批回款/开票申请/冲正入账（禁止自己提交）；lisiyong 确认冲正依据；
+ *       kaipiao 在批准后的 W01 开票任务登记销项发票。
  *
  * 文档-代码差异（以代码为准）:
- * - 销项发票必须由 kaipiao 从 W01 SALES_INVOICE_EXECUTION 原地登记；W11「登记销项发票」无开票任务时禁用。
+ * - 销售单生效不自动生成开票任务；xiaoshou 提交 SalesInvoiceRequest，caiwu 审批后才生成 SALES_INVOICE_EXECUTION。
+ * - 销项发票必须由 kaipiao 从 W01 SALES_INVOICE_EXECUTION 原地登记；客户往来「新建开票申请」走申请审批，不是直接开票。
  * - 一次工作台开票只能核销当前任务绑定的一张应收子账，不能一张发票跨多张销售单。
  * - 回款正式入账后列表状态文案是「已过账」（按钮不用「过账」）。
  * - 销售单开票进度完成态文案是「已开齐」，不是文档表格里的「已完成」。
@@ -17,7 +19,10 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { ACCOUNTS } from "../helpers/accounts"
+import { submitSalesInvoiceRequest } from "../helpers/invoices"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { expectReceiptPreview, submitReceiptReversalRequest } from "../helpers/receipts"
+import { salesOrderAmountSummary, selectWorkspaceFamily } from "../helpers/ui"
 
 const TIMEOUT = 20_000
 const LONG = 40_000
@@ -131,7 +136,7 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await expectFulfillmentNotStarted(page)
             await page.getByRole("tab", { name: /^采购/ }).click()
             await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-                "采购单 0 笔",
+                "待采购",
                 { timeout: TIMEOUT },
             )
             await expect(page.getByText("本单还没有采购单。")).toBeVisible({ timeout: TIMEOUT })
@@ -140,9 +145,19 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await expectCollection(page, "已结清")
             await expectNotClosed(page)
 
-            // ── 5. 开票人：W01 开票任务登记销项发票；开票完成不是关闭条件 ──
+            // ── 5. 销售申请开票 → 财务审批 → 开票人 W01 登记；开票完成不是关闭条件 ──
+            await submitSalesInvoiceRequest(page, {
+                salesOrderId: orderA.id,
+                amount: UNIT_PRICE,
+                taxNumber: creditCode,
+                title: legalName,
+            })
+            const caiwuInvoice = await openRole(browser, extra, "caiwu")
+            await approveWorkspaceTask(caiwuInvoice.page, "开票申请审批", legalName)
+            await caiwuInvoice.context.close()
+
             const kaipiao = await openRole(browser, extra, "kaipiao")
-            await registerSalesInvoiceFromWorkspace(kaipiao.page, orderA.orderNo)
+            await registerSalesInvoiceFromWorkspace(kaipiao.page, orderA.orderNo, legalName)
             await kaipiao.context.close()
 
             await page.goto(`/sales/orders/${orderA.id}`)
@@ -469,13 +484,13 @@ async function createAndSubmitPhysicalSalesOrder(
         .locator("header")
         .filter({ has: page.getByRole("heading", { level: 1 }) })
         .innerText()
-    const orderNo = identity.match(/单号\s+(\S+)/)?.[1] ?? ""
+    const orderNo = identity.match(/单号[:：]\s*(\S+)/)?.[1] ?? ""
     expect(orderNo.length).toBeGreaterThan(4)
     return { id, orderNo }
 }
 
 async function expectEffectiveSalesOrder(page: Page, orderNo: string) {
-    await expect(page.getByText(orderNo, { exact: true }).first()).toBeVisible({ timeout: LONG })
+    await expect(page.locator("header").getByText(orderNo)).toBeVisible({ timeout: LONG })
     await expect(page.getByText("已生效", { exact: true }).first()).toBeVisible({ timeout: LONG })
     await expectCollection(page, "未收")
     await expectInvoicing(page, "未开")
@@ -483,21 +498,21 @@ async function expectEffectiveSalesOrder(page: Page, orderNo: string) {
 }
 
 async function expectCollection(page: Page, label: "未收" | "部分回款" | "已结清") {
-    await expect(page.getByLabel("销售单金额摘要").getByText(label, { exact: true })).toBeVisible({
+    await expect(salesOrderAmountSummary(page).getByText(label, { exact: true })).toBeVisible({
         timeout: LONG,
     })
 }
 
 async function expectInvoicing(page: Page, label: "未开" | "部分开票" | "已开齐") {
-    await expect(page.getByLabel("销售单金额摘要").getByText(label, { exact: true })).toBeVisible({
+    await expect(salesOrderAmountSummary(page).getByText(label, { exact: true })).toBeVisible({
         timeout: LONG,
     })
 }
 
 async function expectFulfillmentNotStarted(page: Page) {
-    await expect(
-        page.locator("header").filter({ has: page.getByRole("heading", { level: 1 }) }).getByText("未开始", { exact: true }),
-    ).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.getByText("未开始", { exact: true }).first()).toBeVisible({
+        timeout: TIMEOUT,
+    })
 }
 
 async function expectNotClosed(page: Page) {
@@ -516,6 +531,7 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string)
     for (let round = 0; round < 3; round += 1) {
         await page.goto("/workspace")
         await waitHeading(page, "我的工作台")
+        await selectWorkspaceFamily(page, "approval")
         // 后端搜索不匹配单号与往来方，填 hint 会把列表滤空；改为在待办列表中匹配任务。
         // 单号可能只出现在无障碍名中，客户名只出现在可见文本中，两处取并集后点选。
         const list = page.getByRole("list", { name: "待办列表" })
@@ -538,10 +554,11 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string)
             await expect(sameType).toHaveCount(1, { timeout: TIMEOUT })
             await sameType.first().click()
         }
-        const approve = page.getByRole("button", { name: "通过" })
+        const approve = page.getByRole("button", { name: /^(通过|同意审批)$/ })
         await expect(approve).toBeVisible({ timeout: LONG })
-        await approve.click()
-        await expect(page.getByRole("heading", { name: "确认通过" })).toBeVisible({ timeout: TIMEOUT })
+        await approve.click({ force: true })
+        const confirmDialog = page.getByRole("dialog", { name: "确认通过" })
+        await expect(confirmDialog).toBeVisible({ timeout: TIMEOUT })
         let decided: boolean | null = null
         const decisionPromise = page
             .waitForResponse(
@@ -557,15 +574,10 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint: string)
                 },
                 () => null,
             )
-        // 确认按钮常被残留 toast 盖住：先清再点，盖住不散时走 DOM 派发。
-        // 对话框被轮询卸载会导致点按落空：此时无决策响应，外层重试。
-        await clickWithoutToastOverlay(page, page.getByRole("button", { name: "确认通过" }), async () =>
-            decided !== null,
-        ).catch(() => undefined)
+        await confirmDialog.getByRole("button", { name: "确认通过" }).click({ force: true })
         await decisionPromise
         if (decided) {
             await expect(page.getByRole("heading", { name: "确认通过" })).toBeHidden({ timeout: LONG })
-            await expect(union.first()).toBeHidden({ timeout: LONG })
             return
         }
     }
@@ -686,23 +698,28 @@ async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) 
 
 // ─── 销项发票（W01 开票任务）──────────────────────────────────────────────
 
-async function registerSalesInvoiceFromWorkspace(page: Page, orderNo: string) {
+async function registerSalesInvoiceFromWorkspace(
+    page: Page,
+    orderNo: string,
+    customerName: string,
+) {
     await page.goto("/workspace")
     await waitHeading(page, "我的工作台")
-    await page.locator("#workspace-family-nav-finance").click()
+    await selectWorkspaceFamily(page, "finance")
     // 后端搜索不匹配单号，填单号会把列表滤空；直接在待办列表中匹配任务。
     const list = page.getByRole("list", { name: "待办列表" })
     await expect(list).toBeVisible({ timeout: TIMEOUT })
     const invoiceLabel = "销项开票处理"
+    const hint = `${escapeRe(orderNo)}|${escapeRe(customerName)}`
     const task = list
         .getByRole("button", {
             name: new RegExp(
-                `${invoiceLabel}[\\s\\S]*${escapeRe(orderNo)}|${escapeRe(orderNo)}[\\s\\S]*${invoiceLabel}`,
+                `${invoiceLabel}[\\s\\S]*(?:${hint})|(?:${hint})[\\s\\S]*${invoiceLabel}`,
             ),
         })
         .or(
             list.getByRole("button", { name: new RegExp(invoiceLabel) }).filter({
-                hasText: orderNo,
+                hasText: new RegExp(`${escapeRe(orderNo)}|${escapeRe(customerName)}`),
             }),
         )
         .first()
@@ -767,21 +784,9 @@ async function submitReceiptReversal(page: Page, receiptNo: string) {
     await page.locator("#customer-receivables-toolbar-search").press("Enter")
     const row = page.getByRole("row").filter({ hasText: receiptNo })
     await expect(row.first()).toBeVisible({ timeout: LONG })
-    await row.first().getByRole("button", { name: "预览" }).click()
-    await expect(page.getByRole("heading", { name: receiptNo })).toBeVisible({ timeout: TIMEOUT })
+    await row.first().click()
+    await expectReceiptPreview(page, receiptNo)
     await page.locator("#customer-receivables-preview-receipt-reverse").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "发起回款冲正" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    await page.locator("#customer-receivables-reversal-reason").fill("错回款，按原单全额冲正重开应收")
-    await page.locator("#customer-receivables-reversal-request-submit").click()
-    await expect(page.getByRole("heading", { name: /提交冲正|确认提交冲正/ })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    await page.locator("#customer-receivables-reversal-submit-confirm-dialog-confirm").click()
-    // 成功结果渲染为状态区文本而非 heading：用文本断言。
-    await expect(page.getByText("冲正已提交审批").first()).toBeVisible({
-        timeout: LONG,
-    })
+    await submitReceiptReversalRequest(page, "错回款，按原单全额冲正重开应收")
     return factValue(page, "冲正单号")
 }

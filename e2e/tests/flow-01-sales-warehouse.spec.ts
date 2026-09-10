@@ -10,13 +10,18 @@
  * - 文档 7.3.1 时序把「采购创建采购单」和「提交审批」画成两步；代码在供给分配确认同一事务内建单并立即提交
  * - 种子供应商狮峰茶叶付款条件为 PREPAY_50，入库/仓发可能被先款门禁拦住；本流程客户侧用货到付款
  * - 工作台 registry 短名为「今日工作台」，W01 PageHeader 实际为「我的工作台」
+ * - 销售单生效只形成可申请开票额度；xiaoshou 提交开票申请，caiwu 审批通过后 kaipiao 才有销项开票任务
+ * - 销售单票款页只读，回款改在客户往来页登记
  */
 import path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 import { payOnlySupplierTask } from "../helpers/payments";
 import { ACCOUNTS } from "../helpers/accounts";
+import { submitSalesInvoiceRequest } from "../helpers/invoices";
 import { loginViaUi, newLoggedInContext } from "../helpers/login";
+import { registerCustomerReceiptForOrder } from "../helpers/receipts";
+import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui";
 
 const UI_TIMEOUT = 20_000;
 const FLOW_TIMEOUT = 12 * 60 * 1000;
@@ -225,7 +230,7 @@ async function openWorkspaceTask(
         timeout: UI_TIMEOUT,
     });
     if (family) {
-        await page.locator(`#workspace-family-nav-${family}`).click();
+        await selectWorkspaceFamily(page, family);
     }
     // 工作台后端搜索只匹配单据 ID、类型码等字段，不匹配单号与往来方，
     // 在搜索框填写 hint 会把列表滤空；改为在待办列表中匹配任务。
@@ -249,7 +254,7 @@ async function openWorkspaceTask(
 }
 
 async function approveCurrentDocument(page: Page) {
-    const approve = page.getByRole("button", { name: "通过", exact: true });
+    const approve = page.getByRole("button", { name: /^(通过|同意审批)$/ });
     await expect(approve).toBeVisible({ timeout: UI_TIMEOUT });
     await expect(page.getByRole("button", { name: "驳回", exact: true })).toBeVisible();
     await expect(page.getByLabel("供给来源 / 履约责任")).toHaveCount(0);
@@ -324,6 +329,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
     test.setTimeout(FLOW_TIMEOUT);
     const stamp = Date.now().toString(36).toUpperCase();
     const customerName = `E2E仓发客户${stamp}`;
+    const creditCode = uniqueCreditCode(stamp);
     const contractNo = `HT-E2E-WH-${stamp}`;
     const dueDate = plusDaysIso(21);
     let session: Session | undefined;
@@ -352,7 +358,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(customerDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await customerDialog.locator("#customers-form-legal-name").fill(customerName);
         await customerDialog.locator("#customers-form-short-name").fill(`仓发${stamp}`);
-        await customerDialog.locator("#customers-form-credit-code").fill(uniqueCreditCode(stamp));
+        await customerDialog.locator("#customers-form-credit-code").fill(creditCode);
         await chooseOption(
             page,
             customerDialog.locator("#customers-form-payment-term"),
@@ -469,13 +475,11 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(orderTitleRow(page, customerName).getByText("审批中")).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        salesOrderNo = (
-            await page.locator("span.num.text-foreground").first().innerText()
-        ).trim();
+        salesOrderNo = await readHeaderDocumentNumber(page)
         expect(salesOrderNo).toBeTruthy();
         await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled();
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 0 笔/, {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("待采购", {
             timeout: UI_TIMEOUT,
         });
 
@@ -493,6 +497,10 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(page.getByRole("heading", { name: "销售明细与供给方案" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        const expandSourcing = page.getByRole("button", { name: "调整方案" }).first();
+        if (await expandSourcing.isVisible().catch(() => false)) {
+            await expandSourcing.click();
+        }
         const sourcingOption = page
             .locator('[id^="procurement-orders-create-row-"][id$="-sourcing-option"]')
             .first();
@@ -516,10 +524,6 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(previewDialog.getByText("现有库存分配")).toHaveCount(0);
         await expect(previewDialog.getByText(/确认提交 1 张采购单/)).toBeVisible();
         await previewDialog.locator("#procurement-orders-create-preview-confirm").click();
-        await expect(page.getByRole("heading", { name: "确认供给分配" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        await page.locator("#procurement-orders-create-confirm").click();
         await expectToast(page, /供给分配已完成|已创建 1 张采购单并提交审批/);
 
         page = await switchTo("xiaoshou");
@@ -528,7 +532,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             timeout: UI_TIMEOUT,
         });
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(/采购单 1 笔/, {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByText("草稿")).toHaveCount(0);
@@ -546,6 +550,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         // 7) 先履约后付款：仓储入库 → 仓发。若供给是先款条件，则先由出纳确认付款
         page = await switchTo("cangchu");
         await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+        let receiptForm = await openFulfillmentWorkspaceForm(page);
         const gate = page.locator("#prepayment-gate");
         if (
             (await gate.count()) &&
@@ -555,9 +560,9 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             await payOnlySupplierTask(page);
             page = await switchTo("cangchu");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+            receiptForm = await openFulfillmentWorkspaceForm(page);
         }
-
-        await expect(page.getByRole("heading", { name: "入库作业" })).toBeVisible({
+        await expect(receiptForm.locator('[aria-label="入库表单"]')).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByRole("button", { name: "过账" })).toHaveCount(0);
@@ -576,10 +581,21 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         if (await quality.count()) {
             await chooseOption(page, quality, "合格");
         }
+        const confirmReceipt = page.locator("#fulfillment-operations-work-surface-confirm");
+        if (!(await confirmReceipt.isEnabled().catch(() => false))) {
+            page = await switchTo("fukuan");
+            await payOnlySupplierTask(page);
+            page = await switchTo("cangchu");
+            await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
+            receiptForm = await openFulfillmentWorkspaceForm(page);
+        }
+        await expect(page.locator("#fulfillment-operations-work-surface-confirm")).toBeEnabled({
+            timeout: UI_TIMEOUT,
+        });
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
         await confirmFormal(page, "确认入库？", "确认入库");
 
-        const shipForm = page.getByLabel("公司仓发表单");
+        const shipForm = page.locator('[aria-label="公司仓发表单"]');
         if (!(await shipForm.isVisible().catch(() => false))) {
             const continueShip = page.locator(
                 "#fulfillment-operations-result-continue-warehouse-ship",
@@ -590,7 +606,10 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
                 await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             }
         }
-        await expect(page.getByLabel("公司仓发表单")).toBeVisible({ timeout: UI_TIMEOUT });
+        if (await page.getByRole("button", { name: "处理履约" }).isVisible().catch(() => false)) {
+            await openFulfillmentWorkspaceForm(page);
+        }
+        await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
         await chooseOption(
             page,
             page.locator("#fulfillment-operations-ship-form-carrier"),
@@ -631,44 +650,14 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(page.getByText(/未开/).first()).toBeVisible();
         await expect(page.getByText("应收结清").locator("xpath=..")).toBeVisible();
 
-        // 9) 出纳登记客户回款并提交，财务总监审批入账
+        // 9) 出纳在客户往来登记回款并提交，财务总监审批入账
         page = await switchTo("fukuan");
-        await page.goto(`/sales/orders/${salesOrderId}?section=receivable`);
-        await expect(page.getByRole("heading", { name: customerName })).toBeVisible({
-            timeout: UI_TIMEOUT,
+        await registerCustomerReceiptForOrder(page, {
+            customerName,
+            orderNo: salesOrderNo,
+            amount: "2576.00",
+            bankReference: `RC${stamp}`,
         });
-        await page.locator("#sales-orders-detail-receivable-register-receipt").click();
-        await expect(page.getByRole("heading", { name: `核销 · ${customerName}` })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        });
-        const receiptAmount = page.locator("#customer-receivables-session-amount");
-        await expect(receiptAmount).toBeVisible({ timeout: UI_TIMEOUT });
-        const openHint = page.getByText(/开放/).first();
-        if (!(await receiptAmount.inputValue())) {
-            const openText = (await openHint.innerText().catch(() => "")) || "";
-            const matched = openText.match(/[\d.]+/);
-            await receiptAmount.fill(matched?.[0] ?? "2576.00");
-        }
-        const addPool = page.getByRole("button", { name: "加入" }).first();
-        if (await addPool.count()) {
-            await addPool.click();
-            await expect(page.getByText("已加入").first()).toBeVisible({ timeout: UI_TIMEOUT });
-        }
-        // 等待分配行出现后再填满，避免加入状态尚未渲染导致空分配提交。
-        const fillLine = page.getByRole("button", { name: "填满" }).first();
-        await expect(fillLine).toBeVisible({ timeout: UI_TIMEOUT });
-        await fillLine.click();
-        await page.locator("#customer-receivables-session-bank-reference").fill(`RC${stamp}`);
-        await page.locator("#customer-receivables-session-submit").click();
-        await confirmFormal(page, /提交回款|确认提交/, "确认提交");
-        // 提交成功后嵌入式会话立即关闭回到票款页（结果标题不渲染）；用票款页恢复验证提交成功。
-        // 分配此时为待过账冻结状态，过账核销在财务总监审批通过后发生，下游已关闭/已结清断言覆盖。
-        await expect(
-            page.getByRole("heading", { name: "本单回款与开票" }),
-        ).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(
-            page.locator("#sales-orders-detail-receivable-register-receipt"),
-        ).toBeVisible({ timeout: UI_TIMEOUT });
 
         page = await switchTo("caiwu");
         await openWorkspaceTask(page, "回款复核", customerName, "approval");
@@ -685,7 +674,17 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(page.getByText("已结清").first()).toBeVisible({ timeout: UI_TIMEOUT });
         await expect(page.getByText(/未开|部分开票/).first()).toBeVisible();
 
-        // 10) 开票人 W01 登记销项发票并核销；开票不阻塞关闭
+        // 10) 销售提交开票申请，财务审批后开票人 W01 登记销项发票；开票不阻塞关闭
+        await submitSalesInvoiceRequest(page, {
+            salesOrderId,
+            amount: "2576.00",
+            taxNumber: creditCode,
+            title: customerName,
+        });
+        page = await switchTo("caiwu");
+        await openWorkspaceTask(page, "开票申请审批", customerName, "approval");
+        await approveCurrentDocument(page);
+
         page = await switchTo("kaipiao");
         await openWorkspaceTask(page, "销项开票处理", salesOrderNo, "finance");
         await expect(page.getByRole("heading", { name: `核销 · ${customerName}` })).toBeVisible({
@@ -705,7 +704,12 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(fillInvoice).toBeVisible({ timeout: UI_TIMEOUT });
         await fillInvoice.click();
         await page.locator("#customer-receivables-session-submit").click();
-        await confirmFormal(page, "确认登记销项发票并分配", "确认提交");
+        await expect(
+            page.getByRole("heading", { name: "确认登记销项发票并分配" }),
+        ).toBeVisible({ timeout: UI_TIMEOUT });
+        await page
+            .locator("#customer-receivables-session-invoice-confirm-dialog-confirm")
+            .click({ force: true });
         // 工作台提交后任务完成、会话面板随之卸载（结果标题不渲染）；任务消失证明提交成功，
         // 发票登记即时生效，下游已开齐断言覆盖正确性。
         await expect(workspaceTaskUnion(page, "销项开票处理", salesOrderNo)).toHaveCount(0, {

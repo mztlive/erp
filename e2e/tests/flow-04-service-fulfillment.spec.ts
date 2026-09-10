@@ -18,6 +18,8 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { ACCOUNTS } from '../helpers/accounts'
 import { headedContextOptions } from '../helpers/headed'
 import { loginViaUi, newLoggedInContext } from '../helpers/login'
+import { expandSourcingEditor } from "../helpers/sourcing"
+import { openFulfillmentWorkspaceForm, readHeaderDocumentNumber, selectWorkspaceFamily } from "../helpers/ui"
 
 const PASSWORD = '123456'
 const TIMEOUT = 20_000
@@ -225,10 +227,15 @@ async function refreshWorkspace(page: Page) {
 
 async function clearWorkspaceSearch(page: Page) {
   const search = page.locator('#workspace-queue-toolbar-search-input')
-  // 服务履约任务挂在采购单上，来源销售单号不能作为当前任务接口的关键字筛选。
-  await search.fill('')
-  await search.press('Enter')
-  await page.getByRole('button', { name: '刷新', exact: true }).click()
+  // 工作台筛选栏当前暂停展示；无搜索框时只刷新队列。
+  if (await search.isVisible().catch(() => false)) {
+    await search.fill('')
+    await search.press('Enter')
+  }
+  const refresh = page.locator('#workspace-home-refresh').or(page.getByRole('button', { name: '刷新', exact: true }))
+  if (await refresh.first().isVisible().catch(() => false)) {
+    await refresh.first().click()
+  }
 }
 
 async function openInboxTask(
@@ -239,13 +246,11 @@ async function openInboxTask(
 ) {
   await refreshWorkspace(page)
   await page.locator('#workspace-queue-scope-inbox').click()
-  await page.locator(`#workspace-family-nav-${family}`).click()
+  await selectWorkspaceFamily(page, family)
   if (query) await clearWorkspaceSearch(page)
   const task = page.getByRole('button', { name }).first()
   if ((await task.count()) === 0 && query) {
-    const search = page.locator('#workspace-queue-toolbar-search-input')
-    await search.fill('')
-    await search.press('Enter')
+    await clearWorkspaceSearch(page)
   }
   await expect(page.getByRole('button', { name }).first()).toBeVisible({ timeout: TIMEOUT })
   await page.getByRole('button', { name }).first().click()
@@ -255,7 +260,7 @@ async function approveCurrentTask(page: Page, nodeHint?: string | RegExp) {
   if (nodeHint) {
     await expect(page.getByText(nodeHint).first()).toBeVisible({ timeout: TIMEOUT })
   }
-  await page.getByRole('button', { name: '通过', exact: true }).click()
+  await page.getByRole('button', { name: /^(通过|同意审批)$/ }).click()
   await expect(page.getByRole('heading', { name: '确认通过' })).toBeVisible({ timeout: TIMEOUT })
   await page.getByRole('button', { name: '确认通过' }).click()
   await expect(page.getByRole('heading', { name: '确认通过' })).toBeHidden({ timeout: TIMEOUT })
@@ -426,28 +431,28 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     const salesOrderUrl = sales.page.url()
     const salesOrderId = salesOrderUrl.match(/\/sales\/orders\/([^/?]+)/)?.[1] ?? ''
     expect(salesOrderId).toBeTruthy()
-    const orderNo = (await sales.page.locator('span.num.text-foreground').first().innerText()).trim()
+    const orderNo = await readHeaderDocumentNumber(sales.page)
     expect(orderNo.length).toBeGreaterThan(2)
 
     // 负向：提交人不得审批自己的销售单
     await refreshWorkspace(sales.page)
     await sales.page.locator('#workspace-queue-scope-started').click()
     await clearWorkspaceSearch(sales.page)
-    await expect(sales.page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
+    await expect(sales.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
 
     // 负向：采购确认通过前不得履约、不得供给分配、不得关闭
     await refreshWorkspace(procurement.page)
-    await procurement.page.locator('#workspace-family-nav-fulfillment').click()
+    await selectWorkspaceFamily(procurement.page, "fulfillment")
     await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /履约处理|客户验收登记/ })).toHaveCount(0)
-    await procurement.page.locator('#workspace-family-nav-procurement').click()
+    await selectWorkspaceFamily(procurement.page, "procurement")
     await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /待供给分配/ })).toHaveCount(0)
 
     // 5. 采购在 W01 原地通过销售单审批（采购确认节点不选供给、不录入成本）
     await openInboxTask(procurement.page, 'approval', /销售单审批/, orderNo)
     await expect(procurement.page.getByText('采购确认').first()).toBeVisible({ timeout: TIMEOUT })
-    await expect(procurement.page.getByRole('button', { name: '通过', exact: true })).toBeVisible({ timeout: TIMEOUT })
+    await expect(procurement.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toBeVisible({ timeout: TIMEOUT })
     await expect(procurement.page.getByTestId('purchase-create-preview')).toHaveCount(0)
     await approveCurrentTask(procurement.page, '采购确认')
 
@@ -471,7 +476,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
 
     // 负向：销售单刚生效时不得履约（须先完成供给分配且采购单生效）
     await refreshWorkspace(procurement.page)
-    await procurement.page.locator('#workspace-family-nav-fulfillment').click()
+    await selectWorkspaceFamily(procurement.page, "fulfillment")
     await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /履约处理/ })).toHaveCount(0)
 
@@ -485,8 +490,11 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await expect(procurement.page.getByText('将建立库存预留').locator('xpath=..')).toContainText('0 条')
     await expect(procurement.page.getByText('将创建采购单').locator('xpath=..')).toContainText('1 张')
     await expect(procurement.page.getByText('现货')).toHaveCount(0)
-    await expect(procurement.page.getByText(/线下服务/).first()).toBeVisible({ timeout: TIMEOUT })
-    await expect(procurement.page.getByText('不适用').first()).toBeVisible()
+    await expandSourcingEditor(procurement.page, SERVICE_SKU_NAME)
+    await expect(
+      procurement.page.getByText('线下服务').filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: TIMEOUT })
+    await expect(procurement.page.locator('[id$="-warehouse"]')).toHaveCount(0)
 
     const deliveryPicker = procurement.page.getByLabel('预计交付日')
     if ((await deliveryPicker.count()) > 0) {
@@ -499,48 +507,21 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
 
     await procurement.page.locator('#procurement-orders-create-preview').click()
     await expect(procurement.page.getByRole('heading', { name: '预览供给分配' })).toBeVisible({ timeout: TIMEOUT })
-    await expect(procurement.page.getByText('本次不占用现有库存')).toBeVisible({ timeout: TIMEOUT })
+    await expect(
+      procurement.page.getByText(/本次不占用现有库存|将为供给缺口创建|张采购单提交审批/),
+    ).toBeVisible({ timeout: TIMEOUT })
     await expect(procurement.page.getByText('现有库存分配')).toHaveCount(0)
     await expect(procurement.page.getByText('本次全部由现有库存满足，不会创建采购单。')).toHaveCount(0)
     // 预览确认按钮同样可能因重渲染不稳定：跳过稳定帧直接强制点击。
+    const waiting = procurement.page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/admin/purchase-orders/from-sourcing'),
+      { timeout: TIMEOUT },
+    )
     await procurement.page.locator('#procurement-orders-create-preview-confirm').click({ force: true })
-    await expect(procurement.page.getByRole('heading', { name: '确认供给分配' })).toBeVisible({ timeout: TIMEOUT })
-    // 预览框与确认框同时开着且文案相近：限定在确认框内断言。
-    const confirmBox = procurement.page.getByRole('alertdialog', { name: '确认供给分配' })
-    await expect(confirmBox.getByText(/创建 1 张采购单提交审批/)).toBeVisible({ timeout: TIMEOUT })
-    // 点按后对话框关闭即提交成功：按钮随对话框卸载会导致 click 报超时，先短点再以关闭为准。
-    // 成功 toast 仅展示 4 秒且可能没等到断言就消失：以创建接口的网络响应为准，不再猜 toast。
-    // 确认按钮可能因弹层动画/轮询重渲染长期处于不稳定状态：普通点击等不到稳定帧，改走强制点击。
-    // 工作台后台刷新还可能把确认框直接卸载（无提交）：此时需重走预览再提交，最多 3 轮。
-    let submitResponse: import('@playwright/test').Response | undefined | { ok: () => boolean } | null = null
-    for (let round = 0; round < 3 && !submitResponse?.ok(); round += 1) {
-      if ((await confirmBox.isVisible().catch(() => false)) === false) {
-        await procurement.page.locator('#procurement-orders-create-preview').click()
-        await expect(procurement.page.getByRole('heading', { name: '预览供给分配' })).toBeVisible({
-          timeout: TIMEOUT,
-        })
-        await procurement.page.locator('#procurement-orders-create-preview-confirm').click({ force: true })
-        await expect(procurement.page.getByRole('heading', { name: '确认供给分配' })).toBeVisible({
-          timeout: TIMEOUT,
-        })
-        await expect(confirmBox.getByText(/创建 1 张采购单提交审批/)).toBeVisible({ timeout: TIMEOUT })
-      }
-      const waiting = procurement.page
-        .waitForResponse(
-          (response) =>
-            response.request().method() === 'POST' &&
-            response.url().includes('/admin/purchase-orders/from-sourcing'),
-          { timeout: TIMEOUT },
-        )
-        .catch(() => undefined)
-      await procurement.page
-        .locator('#procurement-orders-create-confirm')
-        .click({ force: true, timeout: 5_000 })
-        .catch(() => undefined)
-      submitResponse = await waiting
-    }
-    expect(submitResponse?.ok()).toBe(true)
-    await expect(confirmBox).toBeHidden({ timeout: TIMEOUT })
+    const submitResponse = await waiting
+    expect(submitResponse.ok()).toBe(true)
     await expect(procurement.page.getByText('已创建 1 张采购单并提交审批。')).toBeVisible({ timeout: TIMEOUT })
 
     // 负向：不得留下未提交草稿；不得零张采购单
@@ -553,7 +534,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
 
     // 负向：采购单生效前仍不得服务履约
     await refreshWorkspace(procurement.page)
-    await procurement.page.locator('#workspace-family-nav-fulfillment').click()
+    await selectWorkspaceFamily(procurement.page, "fulfillment")
     await clearWorkspaceSearch(procurement.page)
     await expect(procurement.page.getByRole('button', { name: /履约处理/ })).toHaveCount(0)
 
@@ -573,20 +554,21 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 工作台轮询可能在填写期间把任务面板刷掉（family 切回全部、表单卸载）：整个填写包三轮重试，
     // 每轮先确保面板打开再重填（覆盖写等幂，草稿存在也不怕）。
     for (let attempt = 0; ; attempt += 1) {
-      if ((await procurement.page.getByLabel('线下服务表单').count()) === 0) {
-        await procurement.page.locator('#workspace-family-nav-fulfillment').click()
+      if ((await procurement.page.locator('[aria-label="线下服务表单"]').count()) === 0) {
+        await selectWorkspaceFamily(procurement.page, "fulfillment")
         await clearWorkspaceSearch(procurement.page)
         await expect(procurement.page.getByRole('button', { name: /履约处理/ }).first()).toBeVisible({
           timeout: TIMEOUT,
         })
         await procurement.page.getByRole('button', { name: /履约处理/ }).first().click()
+        await openFulfillmentWorkspaceForm(procurement.page)
         // 任务标题使用采购单身份，实际履约表单必须为线下服务。
-        await expect(procurement.page.getByLabel('线下服务表单')).toBeVisible({
+        await expect(procurement.page.locator('[aria-label="线下服务表单"]')).toBeVisible({
           timeout: TIMEOUT,
         })
       }
       try {
-        await expect(procurement.page.getByLabel('线下服务表单')).toBeVisible({ timeout: 10_000 })
+        await expect(procurement.page.locator('[aria-label="线下服务表单"]')).toBeVisible({ timeout: 10_000 })
         await procurement.page.getByLabel('本次完成数量').fill('2')
         await chooseOption(procurement.page, '履约结果', '成功')
         // 服务时间是 DateTimeRangeLocalPicker：触发按钮的 aria-label 是占位文案而非「服务时间」，
@@ -623,7 +605,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         if (attempt >= 2) throw error
       }
     }
-    await expect(procurement.page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
+    await expect(procurement.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
     await expect(procurement.page.getByRole('button', { name: '驳回', exact: true })).toHaveCount(0)
     await expect(procurement.page.getByText('审批摘要')).toHaveCount(0)
     await procurement.page.locator('#fulfillment-operations-work-surface-confirm').click()
@@ -632,13 +614,13 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await expect(procurement.page.getByRole('heading', { name: '确认服务完成？' })).toBeHidden({
       timeout: TIMEOUT,
     })
-    await expect(procurement.page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
+    await expect(procurement.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
     await expect(procurement.page.getByText('当前节点')).toHaveCount(0)
 
     // 9. 销售在 W01 登记客户验收（NO_APPROVAL）
     await openInboxTask(sales.page, 'fulfillment', /客户验收登记/, orderNo)
     await expect(sales.page.getByRole('button', { name: '登记客户验收' })).toBeVisible({ timeout: TIMEOUT })
-    await expect(sales.page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
+    await expect(sales.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
     await sales.page.locator('#sales-orders-acceptance-register-open').click()
     await expect(sales.page.getByRole('heading', { name: '登记客户验收' })).toBeVisible({ timeout: TIMEOUT })
     await expect(sales.page.getByText('服务履约').first()).toBeVisible({ timeout: TIMEOUT })
@@ -647,7 +629,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await sales.page.locator('#sales-orders-acceptance-confirm-confirm').click()
     await expectToast(sales.page, '客户验收已登记')
     await expect(sales.page.getByRole('heading', { name: '登记客户验收' })).toBeHidden({ timeout: TIMEOUT })
-    await expect(sales.page.getByRole('button', { name: '通过', exact: true })).toHaveCount(0)
+    await expect(sales.page.getByRole('button', { name: /^(通过|同意审批)$/ })).toHaveCount(0)
 
     // 10. 里程碑：履约完成但应收未结清，销售单不得关闭；本流程未开变更单
     await sales.page.goto(`/sales/orders/${salesOrderId}`)
