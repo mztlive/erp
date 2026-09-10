@@ -28,5 +28,6 @@ pub(crate) fn payment_term(raw: &str) -> Result<PaymentTermFact> {
             _ => None,
         },
         days_after_delivery,
+        calendar_due: None,
     })
 }

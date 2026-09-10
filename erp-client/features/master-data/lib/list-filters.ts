@@ -77,6 +77,7 @@ const SUPPLIER_QUALIFICATION_HEALTH_OPTIONS = [
     { value: "expiring_30", label: "30 天内到期" },
     { value: "expired", label: "已过期" },
     { value: "not_registered", label: "未登记" },
+    { value: "unverified", label: "有效期未核实" },
 ] as const
 
 /** 读取 URL 中逗号分隔的多选条件，去空、去重并固定排序。 */

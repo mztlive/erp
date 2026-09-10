@@ -9,5 +9,6 @@ pub(super) fn payment_term_fact(
         prepay_gate: term.prepay_gate(),
         prepay_minimum_ratio: term.prepay_minimum_ratio(),
         days_after_delivery: term.days_after_delivery(),
+        calendar_due: term.calendar_due(),
     })
 }

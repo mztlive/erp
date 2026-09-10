@@ -280,7 +280,7 @@ export const masterDataCopy = {
     fBankName: "开户银行",
     fBankAccount: "银行账号",
     fInvoiceType: "发票类型",
-    fInvoiceTaxRate: "发票税点",
+    fInvoiceTaxRate: "常用进项税率",
     fInitialScore: "合作期初评分",
     fSupplierRating: "供应商评级",
     fCurrentScore: "合作中评分",

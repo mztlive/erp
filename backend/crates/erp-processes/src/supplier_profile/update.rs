@@ -150,6 +150,7 @@ impl SupplierProfileService {
                 business_category: req.business_category.clone(),
                 invoice_type: req.invoice_type,
                 invoice_tax_rate: req.invoice_tax_rate,
+                invoice_tax_rates: req.invoice_tax_rates.clone(),
                 signing_entity_party_id: req.signing_entity_party_id.clone(),
                 payment_entity_party_id: req.payment_entity_party_id.clone(),
                 change_reason: req.change_reason.clone(),
@@ -589,7 +590,7 @@ impl SupplierProfileService {
                     SupplierQualificationUpdate {
                         issuer: FieldUpdate::Unchanged,
                         attachment_id: FieldUpdate::Unchanged,
-                        valid_from: None,
+                        valid_from: FieldUpdate::Unchanged,
                         valid_to: FieldUpdate::Unchanged,
                         status: Some(QualificationStatus::Disabled),
                     },

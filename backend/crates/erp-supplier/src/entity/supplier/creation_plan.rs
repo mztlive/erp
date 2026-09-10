@@ -74,7 +74,7 @@ pub struct SupplierCreationQualificationInput {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效日。
-    pub valid_from: BusinessDate,
+    pub valid_from: Option<BusinessDate>,
     /// 失效日。
     pub valid_to: Option<BusinessDate>,
     /// 附件 ID。
@@ -127,7 +127,9 @@ pub struct SupplierCreationInputs {
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。
-    pub invoice_tax_rate: Rate,
+    pub invoice_tax_rate: Option<Rate>,
+    /// 常用进项税率；None 读取旧单值，Some([]) 明确表示未登记。
+    pub invoice_tax_rates: Option<Vec<Rate>>,
     /// 签约主体。
     pub signing_entity_party_id: PartyId,
     /// 付款主体。
@@ -269,6 +271,7 @@ pub fn plan_supplier_creation(
             business_category: inputs.business_category,
             invoice_type: inputs.invoice_type,
             invoice_tax_rate: inputs.invoice_tax_rate,
+            invoice_tax_rates: inputs.invoice_tax_rates.clone(),
             signing_entity_party_id: inputs.signing_entity_party_id,
             payment_entity_party_id: inputs.payment_entity_party_id,
             change_reason: inputs.change_reason.clone(),
@@ -374,7 +377,8 @@ mod tests {
             payment_term_snapshot: "PREPAY_30".to_string(),
             business_category: None,
             invoice_type: InvoiceType::VatSpecial,
-            invoice_tax_rate: Rate::from_str("0.13").unwrap(),
+            invoice_tax_rate: Some(Rate::from_str("0.13").unwrap()),
+            invoice_tax_rates: None,
             signing_entity_party_id: PartyId::new("party-sign"),
             payment_entity_party_id: PartyId::new("party-pay"),
             capability_codes: vec![CapabilityCode::Physical],
@@ -382,7 +386,7 @@ mod tests {
                 qualification_type: QualificationType::FoodLicense,
                 certificate_no: "FOOD-1".to_string(),
                 issuer: None,
-                valid_from: BusinessDate::from_ymd(2026, 8, 31).unwrap(),
+                valid_from: Some(BusinessDate::from_ymd(2026, 8, 31).unwrap()),
                 valid_to: None,
                 attachment_id: None,
                 capability_codes: vec![CapabilityCode::Physical],

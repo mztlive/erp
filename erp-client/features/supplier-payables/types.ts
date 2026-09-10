@@ -375,6 +375,8 @@ export type AllocationSessionView = Readonly<{
 }>
 
 type AllocationTargetInput = {
+    /** 多目标进项发票的本目标分配税额。 */
+    taxAmount?: string
     payableAccountId: string
     payableEntryId?: string
     amount: string

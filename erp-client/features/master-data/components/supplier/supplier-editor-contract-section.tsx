@@ -38,8 +38,18 @@ export function SupplierEditorContractSection({
             <div className="space-y-5">
                 <CredentialGroup
                     title="采购合同"
-                    description="维护当前合作合同的编号、有效期与电子附件。"
+                    description="维护合同编号、有效期与附件。未知日期可留空；起止日期不完整时标记为有效期未核实，不能作为有效合同用于采购或供给。"
                 >
+                    {(values.contractNo || values.contractFile) &&
+                        (!values.contractValidFrom ||
+                            !values.contractValidTo) && (
+                            <p
+                                role="status"
+                                className="mb-4 text-sm text-amber-700 dark:text-amber-400"
+                            >
+                                有效期未核实：请核实并补齐合同起止日期。
+                            </p>
+                        )}
                     <div className="grid gap-5 lg:grid-cols-2">
                         <div className="space-y-4">
                             <FieldShell>

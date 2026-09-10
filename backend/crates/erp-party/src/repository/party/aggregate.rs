@@ -259,6 +259,46 @@ impl<'a> PartyDomainRepository<'a> {
         Ok(party_ids)
     }
 
+    /// 精确匹配当前法定名称，兼容空白及全半角括号。
+    ///
+    /// # Errors
+    /// 名称查询或主体读取失败时返回仓储错误。
+    pub async fn exact_current_party_ids_by_name(
+        &self,
+        name: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyId>> {
+        let parts = name
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .map(|c| match c {
+                '(' | '（' => "[(（]".to_string(),
+                ')' | '）' => "[)）]".to_string(),
+                c => regex::escape(&c.to_string()),
+            })
+            .collect::<Vec<_>>();
+        if parts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let pattern = format!(r"^\s*{}\s*$", parts.join(r"\s*"));
+        let revisions = PartyRevisionRepository::new(self.db, PARTY_REVISIONS)
+            .find_many(
+                doc! { "legal_name": { "$regex": pattern, "$options": "i" } },
+                executor,
+            )
+            .await?;
+        let ids = revisions.into_iter().map(|r| r.base.id).collect::<Vec<_>>();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(PartyRepository::new(self.db, PARTIES)
+            .find_many(doc! { "current_revision_id": { "$in": ids } }, executor)
+            .await?
+            .into_iter()
+            .map(|p| PartyId::new(p.base.id))
+            .collect())
+    }
+
     /// 按主体 ID 批量读取当前修订的法定名称。
     ///
     /// 只返回未删除主体、其当前修订指针仍指向同主体未删除修订时形成的

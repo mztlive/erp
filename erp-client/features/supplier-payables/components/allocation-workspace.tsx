@@ -1,5 +1,7 @@
 "use client"
 
+import { InvoiceAllocationTaxes } from "./invoice-allocation-taxes"
+
 import { ShieldAlertIcon } from "lucide-react"
 
 import { FormalActionConfirmDialog, MoneyValue } from "@/components/business"
@@ -147,21 +149,31 @@ export function SupplierAllocationWorkspace({
                                 : "gap-4 lg:grid-cols-2",
                         )}
                     >
-                        {embedded && track === "payment" ? null : (
-                            <AllocationPoolCard
-                                supplierId={session.supplierId}
-                                supplierName={session.supplierName}
-                                pool={pool}
-                                track={track}
-                                selected={selected}
-                                amounts={amounts}
-                                disabled={Boolean(result)}
-                                onToggleItem={toggleItem}
-                                onAmountChange={setAmountFor}
-                                onToggleSelectAll={toggleSelectAll}
-                                onFillAllSelected={fillAllSelected}
-                            />
-                        )}
+                        <div className="space-y-4">
+                            {embedded && track === "payment" ? null : (
+                                <AllocationPoolCard
+                                    supplierId={session.supplierId}
+                                    supplierName={session.supplierName}
+                                    pool={pool}
+                                    track={track}
+                                    selected={selected}
+                                    amounts={amounts}
+                                    disabled={Boolean(result)}
+                                    onToggleItem={toggleItem}
+                                    onAmountChange={setAmountFor}
+                                    onToggleSelectAll={toggleSelectAll}
+                                    onFillAllSelected={fillAllSelected}
+                                />
+                            )}
+                            {track === "purchase_invoice" && (
+                                <InvoiceAllocationTaxes
+                                    form={invoiceForm}
+                                    pool={pool}
+                                    selected={selected}
+                                    disabled={isSubmitting || Boolean(result)}
+                                />
+                            )}
+                        </div>
                         <AllocationFactFormCard
                             track={track}
                             existingInvoiceId={session.existingInvoiceId}

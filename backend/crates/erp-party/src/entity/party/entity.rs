@@ -140,6 +140,9 @@ pub struct Party {
     pub party_no: String,
     /// 主体类型（创建后不可修改）。
     pub party_kind: PartyKind,
+    /// 我方公司角色；历史及外部企业主体缺省为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub company_profile: Option<super::company::CompanyProfile>,
     /// 统一社会信用代码；允许历史数据为空，非空值规范化（大写）后全局唯一。
     pub unified_credit_code: Option<String>,
 }
@@ -154,6 +157,7 @@ impl PartialEq for Party {
             && self.stable.updated_by == other.stable.updated_by
             && self.party_no == other.party_no
             && self.party_kind == other.party_kind
+            && self.company_profile == other.company_profile
             && self.unified_credit_code == other.unified_credit_code
     }
 }
@@ -190,6 +194,7 @@ impl Party {
             stable: StableBase::new(data.status, created_by),
             party_no,
             party_kind: data.party_kind,
+            company_profile: None,
             unified_credit_code,
         })
     }

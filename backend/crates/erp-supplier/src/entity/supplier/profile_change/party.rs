@@ -21,7 +21,9 @@ pub struct PlanCommercialProfileRevisionParams<'a> {
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。
-    pub invoice_tax_rate: erp_core::money::Rate,
+    pub invoice_tax_rate: Option<erp_core::money::Rate>,
+    /// 常用进项税率；None 读取旧单值，Some([]) 明确表示未登记。
+    pub invoice_tax_rates: Option<Vec<erp_core::money::Rate>>,
     /// 签约主体。
     pub signing_entity_party_id: PartyId,
     /// 付款主体。
@@ -60,6 +62,7 @@ pub fn plan_commercial_profile_revision(
         business_category,
         invoice_type,
         invoice_tax_rate,
+        invoice_tax_rates,
         signing_entity_party_id,
         payment_entity_party_id,
         change_reason,
@@ -78,6 +81,7 @@ pub fn plan_commercial_profile_revision(
             business_category,
             invoice_type,
             invoice_tax_rate,
+            invoice_tax_rates,
             signing_entity_party_id,
             payment_entity_party_id,
             change_reason,

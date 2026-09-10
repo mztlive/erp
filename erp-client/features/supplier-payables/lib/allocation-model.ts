@@ -72,6 +72,7 @@ export const paymentSchema = z
 
 export const invoiceSchema = z
     .object({
+        allocationTaxes: z.record(z.string(), z.string()),
         invoiceCode: z.string(),
         invoiceNo: z.string().trim().min(1, "请填写发票号码"),
         invoiceDate: z.string().min(1, "请填写开票日期"),

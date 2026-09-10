@@ -1,7 +1,9 @@
 "use client"
 
+import { useState } from "react"
+import { SupplierImportDialog } from "@/features/master-data/components/supplier/supplier-import-dialog"
 import { useRouter } from "next/navigation"
-import { DownloadIcon, PlusIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
 import {
@@ -26,6 +28,7 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SuppliersListPage() {
     const router = useRouter()
+    const [importOpen, setImportOpen] = useState(false)
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSupplierListState(searchInputRef)
@@ -63,6 +66,18 @@ export function SuppliersListPage() {
             description="查看供应商资料、资质与供货能力。"
             exportMeta={state.exportMeta}
             actions={[
+                {
+                    id: "master-data-suppliers-list-import",
+                    actionKey: "import",
+                    label: "导入",
+                    icon: UploadIcon,
+                    variant: "outline",
+                    disabled: !state.canCreate,
+                    title: !state.canCreate
+                        ? state.createBlockedReason
+                        : undefined,
+                    onClick: () => setImportOpen(true),
+                },
                 {
                     id: "master-data-suppliers-list-export",
                     actionKey: "export",
@@ -214,6 +229,9 @@ export function SuppliersListPage() {
                     />
                 }
             />
+            {importOpen && (
+                <SupplierImportDialog onClose={() => setImportOpen(false)} />
+            )}
             <SupplierDisableDialog
                 open={state.disableTarget != null}
                 onOpenChange={(open) => {

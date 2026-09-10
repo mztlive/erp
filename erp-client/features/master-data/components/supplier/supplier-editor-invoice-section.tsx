@@ -119,16 +119,14 @@ export function SupplierEditorInvoiceSection({
                         <InputGroupInput
                             id="master-data-supplier-invoice-tax-rate"
                             value={values.invoiceTaxRate}
-                            inputMode="numeric"
+                            inputMode="text"
                             onChange={(event) =>
                                 setFieldValue(
                                     "invoiceTaxRate",
-                                    event.target.value
-                                        .replace(/\D/g, "")
-                                        .slice(0, 2),
+                                    event.target.value,
                                 )
                             }
-                            placeholder="如：13"
+                            placeholder="如：9、13；未登记可留空"
                             disabled={!canEdit}
                         />
                         <InputGroupAddon align="inline-end">

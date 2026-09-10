@@ -1,5 +1,7 @@
 "use client"
 
+import { SupplierTaxRateField } from "../supplier-tax-rate-field"
+
 import * as React from "react"
 
 import { useAppForm } from "@/components/form"
@@ -150,11 +152,15 @@ export function ReviseOfferingDialog({
                                     </form.AppField>
                                     <form.AppField name="inputTaxPercentage">
                                         {(field) => (
-                                            <field.TextField
+                                            <SupplierTaxRateField
                                                 id="supplier-offerings-dialog-revise-input-tax-percentage"
-                                                label="进项税率（%）"
-                                                required
-                                                description="例如 13 表示 13%"
+                                                supplierId={
+                                                    offering.supplier_id
+                                                }
+                                                value={field.state.value}
+                                                onChange={field.handleChange}
+                                                onBlur={field.handleBlur}
+                                                errors={field.state.meta.errors}
                                             />
                                         )}
                                     </form.AppField>

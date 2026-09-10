@@ -1,3 +1,4 @@
+import { supplierTaxPercentages } from "@/lib/supplier-tax-rates"
 /** 供应商对象中心：聚合 Party / 联系人 / 银行 / 税号 / 能力 / 资质 / 评分。 */
 
 import { apiGet } from "@/lib/api"
@@ -18,7 +19,6 @@ import {
     pickDefaultOrFirst,
     ratingLabel,
     settlementLabel,
-    taxRatePercent,
     tsToIso,
 } from "@/features/master-data/api/presentation"
 import type {
@@ -64,7 +64,10 @@ export async function centerSupplier(
     const initialRating = [...sortedRatings]
         .reverse()
         .find((item) => item.initial_score != null)
-    const invoiceTaxRatePercent = taxRatePercent(profile?.invoice_tax_rate)
+    const invoiceTaxRatePercent = supplierTaxPercentages(
+        profile?.invoice_tax_rates,
+        profile?.invoice_tax_rate,
+    )
 
     const capabilityLabels = capabilities
         .map((c) => capabilityLabel(c.capability_code))
@@ -148,7 +151,7 @@ export async function centerSupplier(
                 : null,
         ),
         fact("发票类型", invoiceLabel(profile?.invoice_type)),
-        fact("发票税点", invoiceTaxRatePercent),
+        fact("常用进项税率", invoiceTaxRatePercent),
         fact("能力", capabilityLabels),
         fact("经营类目", businessCategory || null),
         fact("公司签约主体", profile?.signing_entity_party_id),
@@ -156,6 +159,15 @@ export async function centerSupplier(
         // 标签必须与 masterDataCopy / RESOURCE_FIELDS.suppliers 完全一致
         fact("资质附件", qualFileNames("certificate") || null),
         fact("合同编号", contractQual?.certificate_no),
+        fact(
+            "合同有效期核实",
+            contractQual
+                ? (contractQual.validity_verified ??
+                  Boolean(contractQual.valid_from && contractQual.valid_to))
+                    ? "已核实"
+                    : "有效期未核实"
+                : undefined,
+        ),
         fact("合同有效期起", contractQual?.valid_from),
         fact("合同有效期止", contractQual?.valid_to),
         fact("合同文件", qualFileNames("contract") || null),
@@ -201,7 +213,7 @@ export async function centerSupplier(
             value: invoiceLabel(profile?.invoice_type) || "—",
         },
         {
-            label: "发票税点",
+            label: "常用进项税率",
             value: invoiceTaxRatePercent ? `${invoiceTaxRatePercent}%` : "—",
         },
         { label: "能力", value: capabilityLabels || "—" },

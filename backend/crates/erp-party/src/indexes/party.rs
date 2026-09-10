@@ -76,6 +76,20 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 fn party_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_parties_id", doc! { "id": 1 }),
+        partial_unique_index(
+            "uk_company_names",
+            doc! { "company_profile.names": 1 },
+            doc! { "company_profile.names": { "$type": "array" } },
+        ),
+        IndexModel::builder()
+            .keys(doc! { "status": 1, "party_no": 1, "id": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_company_status".to_string())
+                    .partial_filter_expression(doc! { "company_profile": { "$type": "object" } })
+                    .build(),
+            )
+            .build(),
         unique_index("uk_parties_party_no", doc! { "party_no": 1 }),
         partial_unique_index(
             "uk_parties_credit_code",

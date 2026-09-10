@@ -1,3 +1,5 @@
+import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
+import { reconciliationCycle } from "@/lib/supplier-payment-terms"
 /** 供应商的创建 / 修订 / 停用命令（走 supplier-profiles 根命令）。 */
 
 import { apiPost, apiPut } from "@/lib/api"
@@ -11,7 +13,6 @@ import {
     invoiceToBackend,
     paymentTermSnapshotOf,
     isoNow,
-    normalizeTaxRate,
     parseScore100,
     ratingToBackend,
     settlementToBackend,
@@ -36,14 +37,14 @@ type SupplierProfileQualificationInput = {
     qualification_type: string
     certificate_no: string
     issuer: null
-    valid_from: string
+    valid_from: string | null
     valid_to: string | null
     attachment_id: string | null
     capability_codes: string[]
 }
 
 /** 将页面文件字段转换为根级供应商资料命令中的结构化资质集合。 */
-const buildSupplierProfileQualifications = (
+export const buildSupplierProfileQualifications = (
     fields: SupplierFields,
     effectiveFrom: string,
     capabilityCodes: string[],
@@ -53,7 +54,7 @@ const buildSupplierProfileQualifications = (
         qualificationType: string,
         names: string[],
         assetIds: Readonly<Record<string, string>> | undefined,
-        validFrom: string,
+        validFrom: string | null,
         validTo?: string,
         certificateNo?: string,
     ) => {
@@ -91,10 +92,29 @@ const buildSupplierProfileQualifications = (
         "contract",
         parseMediaList(fields.contractFile).slice(0, 1),
         fields.contractFileAssetIds,
-        fields.contractValidFrom || effectiveFrom,
+        fields.contractValidFrom?.trim() || null,
         fields.contractValidTo,
         fields.contractNo?.trim() || "CONTRACT",
     )
+    if (
+        fields.contractNo?.trim() &&
+        !result.some((item) => item.qualification_type === "contract")
+    ) {
+        const certificateNo = fields.contractNo.trim()
+        result.push({
+            qualification_type: "contract",
+            certificate_no: certificateNo,
+            issuer: null,
+            valid_from: fields.contractValidFrom?.trim() || null,
+            valid_to: fields.contractValidTo?.trim() || null,
+            attachment_id: null,
+            capability_codes:
+                fields.qualificationCapabilityCodes?.[
+                    `contract::${certificateNo}`
+                ]?.filter((code) => capabilityCodes.includes(code)) ??
+                capabilityCodes,
+        })
+    }
     pushFiles(
         "authorization",
         parseMediaList(fields.authorizationFile),
@@ -174,11 +194,13 @@ export async function createSupplier(
                     : null,
             clear_bank_account: false,
             settlement_mode: settlementToBackend(fields.settlement),
-            reconciliation_cycle: "monthly",
+            reconciliation_cycle: reconciliationCycle(fields.settlement ?? ""),
             payment_term_snapshot: paymentTermSnapshotOf(fields.paymentTerm),
             business_category: fields.businessCategory?.trim() || null,
             invoice_type: invoiceToBackend(fields.invoiceType),
-            invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
+            invoice_tax_rates: parseSupplierTaxRates(
+                fields.invoiceTaxRate ?? "",
+            ),
             signing_entity_party_id: fields.signingEntity.trim(),
             payment_entity_party_id: fields.paymentEntity.trim(),
             capability_codes: capabilityCodes,
@@ -288,11 +310,13 @@ export async function updateSupplierRevision(
                     : null,
             clear_bank_account: fields.clearBankAccount === true,
             settlement_mode: settlementToBackend(fields.settlement),
-            reconciliation_cycle: "monthly",
+            reconciliation_cycle: reconciliationCycle(fields.settlement ?? ""),
             payment_term_snapshot: paymentTermSnapshotOf(fields.paymentTerm),
             business_category: fields.businessCategory?.trim() || null,
             invoice_type: invoiceToBackend(fields.invoiceType),
-            invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
+            invoice_tax_rates: parseSupplierTaxRates(
+                fields.invoiceTaxRate ?? "",
+            ),
             signing_entity_party_id: fields.signingEntity.trim(),
             payment_entity_party_id: fields.paymentEntity.trim(),
             capability_codes: capabilityCodes,

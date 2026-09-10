@@ -68,6 +68,7 @@ fn qualification_constraint_kind_covers_all_branches() {
     for health in [
         SupplierQualificationHealthFilter::Valid,
         SupplierQualificationHealthFilter::Expiring30,
+        SupplierQualificationHealthFilter::Unverified,
         SupplierQualificationHealthFilter::Expired,
     ] {
         assert_eq!(

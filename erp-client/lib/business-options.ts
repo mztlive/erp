@@ -1,3 +1,8 @@
+import {
+    parsePeriodicTerm,
+    periodicPaymentTerm,
+    periodicSettlement,
+} from "@/lib/supplier-payment-terms"
 /**
  * 跨工作面复用的码表选项。
  * 业务页用 OptionCombobox 消费；组件本身不取数。
@@ -84,6 +89,8 @@ export const CARRIER_OPTIONS: readonly ComboboxOption[] = [
 export function paymentTermCode(value: string): string | undefined {
     const trimmed = value.trim()
     if (!trimmed) return undefined
+    const periodic = parsePeriodicTerm(trimmed)
+    if (periodic) return periodic.code
     const option = [
         ...SUPPLIER_PAYMENT_TERM_OPTIONS,
         ...PAYMENT_TERM_OPTIONS,
@@ -112,6 +119,7 @@ export function paymentTermCode(value: string): string | undefined {
 
 /** 判断代码是否属于可形成采购计划付款日的供应商付款条件。 */
 export function isSupplierPaymentTermCode(value: string): boolean {
+    if (parsePeriodicTerm(value)) return true
     const code = paymentTermCode(value)
     return SUPPLIER_PAYMENT_TERM_OPTIONS.some((option) => option.value === code)
 }
@@ -120,6 +128,14 @@ export function isSupplierPaymentTermCode(value: string): boolean {
 export function supplierPaymentTermOptionsFor(
     settlementMode: string,
 ): readonly ComboboxOption[] {
+    const cycle = periodicSettlement(settlementMode)
+    if (cycle)
+        return [
+            {
+                value: periodicPaymentTerm(cycle.value),
+                label: `${cycle.label}，期末后 15 天付款`,
+            },
+        ]
     const normalized = settlementMode.trim()
     if (["prepayment", "预付款"].includes(normalized)) {
         return PREPAY_PAYMENT_TERM_OPTIONS
@@ -140,6 +156,8 @@ export function paymentTermMatchesSettlement(
     paymentTerm: string,
     settlementMode: string,
 ): boolean {
+    const cycle = parsePeriodicTerm(paymentTerm)
+    if (cycle) return cycle.value === periodicSettlement(settlementMode)?.value
     const code = paymentTermCode(paymentTerm)
     return supplierPaymentTermOptionsFor(settlementMode).some(
         (option) => option.value === code,
@@ -148,6 +166,8 @@ export function paymentTermMatchesSettlement(
 
 /** 付款条件代码或历史别名转中文名称。 */
 export function paymentTermLabel(code: string): string {
+    const cycle = parsePeriodicTerm(code)
+    if (cycle) return `${cycle.label}，期末后 ${cycle.days} 天付款`
     const normalized = paymentTermCode(code)
     return (
         [...SUPPLIER_PAYMENT_TERM_OPTIONS, ...PAYMENT_TERM_OPTIONS].find(

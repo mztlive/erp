@@ -30,6 +30,13 @@ pub struct SupplierQualificationFilter {
     pub sort_ascending: bool,
 }
 
+/// 可核实日期的资质；合同不能把未知截止日期当作长期有效。
+fn verified_window_filter() -> Document {
+    doc! { "valid_from": { "$type": "string" }, "$or": [
+        { "qualification_type": { "$ne": "contract" } }, { "valid_to": { "$type": "string" } }
+    ] }
+}
+
 impl QueryFilter for SupplierQualificationFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -128,6 +135,7 @@ impl<'a> SupplierQualificationRepository<'a> {
     ) -> Result<Vec<SupplierAccountId>> {
         let mut filter = qualification_type_filter(qualification_types);
         filter.insert("status", QualificationStatus::Active.as_str());
+        filter.insert("$and", vec![verified_window_filter()]);
         filter.insert("valid_from", doc! { "$lte": as_of });
         filter.insert(
             "$or",
@@ -158,6 +166,7 @@ impl<'a> SupplierQualificationRepository<'a> {
     ) -> Result<Vec<SupplierAccountId>> {
         let mut filter = qualification_type_filter(qualification_types);
         filter.insert("status", QualificationStatus::Active.as_str());
+        filter.insert("$and", vec![verified_window_filter()]);
         filter.insert("valid_from", doc! { "$lte": as_of });
         filter.insert("valid_to", doc! { "$gte": as_of, "$lte": expires_by });
         super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
@@ -182,6 +191,7 @@ impl<'a> SupplierQualificationRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierAccountId>> {
         let mut filter = qualification_type_filter(qualification_types);
+        filter.insert("$and", vec![verified_window_filter()]);
         filter.insert(
             "$or",
             vec![
@@ -193,6 +203,34 @@ impl<'a> SupplierQualificationRepository<'a> {
             ],
         );
         super::find_supplier_ids(self.collection().clone_with_type(), filter, executor).await
+    }
+}
+
+impl SupplierQualificationRepository<'_> {
+    /// 读取指定供应商能力已经关联的合同，沿用调用方执行器。
+    ///
+    /// # Errors
+    /// 关联或资质读取失败时返回错误，不将读取失败当作没有合同。
+    pub async fn linked_contracts(
+        &self,
+        supplier_id: &SupplierAccountId,
+        capability_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualification>> {
+        use crate::repository::SupplierExt;
+        let links = self
+            .database()
+            .supplier_qualification_capabilities()
+            .find_many(doc! { "capability_id": capability_id }, executor)
+            .await?;
+        let ids: Vec<String> = links
+            .into_iter()
+            .map(|link| link.qualification_id.to_string())
+            .collect();
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        self.find_many(doc! { "id": { "$in": ids }, "supplier_id": supplier_id.to_string(), "qualification_type": "contract" }, executor).await
     }
 }
 
@@ -234,6 +272,23 @@ fn qualification_type_filter(qualification_types: &[QualificationType]) -> Docum
 }
 
 impl<'a> SupplierRepository<'a> {
+    /// 查询已登记但日期不完整的合同所属供应商。
+    ///
+    /// # Errors
+    /// 数据库读取失败时返回错误；不与未登记资质混淆。
+    pub async fn list_supplier_ids_by_unverified_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        if !qualification_types.is_empty() && !qualification_types.contains(&QualificationType::Contract) {
+            return Ok(vec![]);
+        }
+        let filter =
+            doc! { "qualification_type": "contract", "$or": [{ "valid_from": null }, { "valid_to": null }] };
+        super::find_supplier_ids(self.db.collection(SUPPLIER_QUALIFICATIONS), filter, executor).await
+    }
+
     /// 查询已登记任一指定资质类型的供应商角色 ID。
     ///
     /// # 参数

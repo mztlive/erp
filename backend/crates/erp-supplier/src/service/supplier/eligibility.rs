@@ -23,8 +23,7 @@ use crate::error::{Error, Result};
 /// 承载；本函数仅加载供应商、能力及修订事实并将领域违例映射为服务层
 /// 业务错误，保持既有 API 文案不变。
 ///
-/// 注意：资质适用性校验（`ensure_linked_qualification`）已被人为刻意临时
-/// 关闭，恢复资质数据后应解除注释恢复校验。
+/// 已关联合同必须通过有效期校验；无资质记录时保留当前阶段临时放行政策。
 ///
 /// # 参数
 /// * `db` - 数据库实例（调用方执行器，本函数不开启事务）
@@ -96,6 +95,12 @@ pub async fn ensure_offering_capability_qualified(
 }
 #[async_trait]
 trait QualificationFactsPort: Sync {
+    async fn linked_contracts(
+        &self,
+        supplier_id: &SupplierAccountId,
+        capability_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<crate::SupplierQualification>>;
     async fn supplier(
         &self,
         id: &SupplierAccountId,
@@ -118,6 +123,18 @@ struct MongoQualificationFacts<'a> {
 }
 #[async_trait]
 impl QualificationFactsPort for MongoQualificationFacts<'_> {
+    async fn linked_contracts(
+        &self,
+        supplier_id: &SupplierAccountId,
+        capability_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<crate::SupplierQualification>> {
+        Ok(self
+            .db
+            .supplier_qualifications()
+            .linked_contracts(supplier_id, capability_id, executor)
+            .await?)
+    }
     async fn supplier(
         &self,
         id: &SupplierAccountId,
@@ -195,14 +212,11 @@ async fn ensure_qualified_with_port<P: QualificationFactsPort>(
         },
     )?;
 
-    // =========================================================================
-    // 【人为刻意临时关闭】资质适用性校验（ensure_linked_qualification）：
-    // 业务原因：当前阶段供应商资质数据尚未完整维护，导致供给登记被误拦截
-    // （422「供应商该项能力没有适用且有效的资质，不能用于供给或采购」）。
-    // 恢复策略：供应商资质数据完善后，移除此注释并恢复下述调用。
-    // =========================================================================
-    // ensure_linked_qualification(db, &capability.base.id, on_date).await
-    Ok(())
+    let contracts = port
+        .linked_contracts(supplier_id, &capability.base.id, executor)
+        .await?;
+    crate::entity::supplier::eligibility::ensure_linked_contracts_qualified(&contracts, on_date)
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 /// 加载能力修订。
 ///
@@ -248,6 +262,7 @@ mod provider_tests {
         disabled: bool,
         missing_pointer: bool,
         second_disabled: bool,
+        contracts: Vec<crate::SupplierQualification>,
     }
     impl Recorder {
         fn record(&self, step: &'static str, executor: &mut dyn Executor) -> Result<()> {
@@ -263,6 +278,17 @@ mod provider_tests {
     }
     #[async_trait]
     impl QualificationFactsPort for Recorder {
+        async fn linked_contracts(
+            &self,
+            supplier: &SupplierAccountId,
+            capability: &str,
+            executor: &mut dyn Executor,
+        ) -> Result<Vec<crate::SupplierQualification>> {
+            assert_eq!(supplier.as_ref(), "supplier-1");
+            assert_eq!(capability, "cap-1");
+            self.record("contracts", executor)?;
+            Ok(self.contracts.clone())
+        }
         async fn supplier(
             &self,
             id: &SupplierAccountId,
@@ -329,6 +355,7 @@ mod provider_tests {
             disabled,
             missing_pointer,
             second_disabled,
+            contracts: vec![],
         };
         let result = ensure_offering_with_port(
             &port,
@@ -342,17 +369,23 @@ mod provider_tests {
         (result, port.calls.into_inner().unwrap())
     }
     #[tokio::test]
-    async fn offering_qualification_preserves_four_supplier_reads_and_executor() {
+    async fn offering_qualification_checks_contracts_after_original_reads() {
         let (result, calls) = invoke(None, false, false, false).await;
         result.unwrap();
-        assert_eq!(calls, ["capability", "supplier", "revision", "capability"]);
+        assert_eq!(
+            calls,
+            ["capability", "supplier", "revision", "capability", "contracts"]
+        );
     }
     #[tokio::test]
     async fn offering_qualification_stops_on_every_provider_error() {
-        for i in 0..4 {
+        for i in 0..5 {
             let (result, calls) = invoke(Some(i), false, false, false).await;
             assert!(matches!(result,Err(Error::ConflictError(ref e)) if e==&format!("qualification {i}")));
-            assert_eq!(calls, ["capability", "supplier", "revision", "capability"][..=i]);
+            assert_eq!(
+                calls,
+                ["capability", "supplier", "revision", "capability", "contracts"][..=i]
+            );
         }
     }
     #[tokio::test]
@@ -374,6 +407,47 @@ mod provider_tests {
         );
         assert_eq!(calls.len(), 4);
     }
+    #[tokio::test]
+    async fn unverified_linked_contract_blocks_offering_through_real_orchestration() {
+        let mut executor = Marker(161);
+        let contract = crate::SupplierQualification::new(
+            erp_core::ids::SupplierQualificationId::new("contract"),
+            crate::SupplierQualificationData {
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                qualification_type: crate::QualificationType::Contract,
+                certificate_no: "CON-1".into(),
+                issuer: None,
+                valid_from: None,
+                valid_to: Some(BusinessDate::from_ymd(2027, 1, 1).unwrap()),
+                attachment_id: None,
+                status: crate::QualificationStatus::Active,
+            },
+            "actor",
+        )
+        .unwrap();
+        let port = Recorder {
+            pointer: &mut executor as *mut Marker as usize,
+            calls: Mutex::new(vec![]),
+            fail: None,
+            disabled: false,
+            missing_pointer: false,
+            second_disabled: false,
+            contracts: vec![contract],
+        };
+        let result = ensure_offering_with_port(
+            &port,
+            &SupplierAccountId::new("supplier-1"),
+            OfferingProductKind::Physical,
+            BusinessDate::from_ymd(2026, 6, 1).unwrap(),
+            &mut executor,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(Error::BusinessLogicError(message)) if message.contains("有效期未核实"))
+        );
+        assert_eq!(port.calls.into_inner().unwrap().last(), Some(&"contracts"));
+    }
+
     fn test_supplier(status: SupplierAccountStatus) -> SupplierAccount {
         SupplierAccount::new(
             SupplierAccountId::new("supplier-1"),

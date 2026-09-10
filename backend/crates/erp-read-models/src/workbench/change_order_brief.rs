@@ -605,7 +605,7 @@ fn push_line_difference_summary(
 fn purchase_payment_label(snapshot: &erp_procurement::entity::purchase_order::PaymentTermSnapshot) -> String {
     let label = erp_supplier::SupplierPaymentTerm::parse(&snapshot.payment_term_code)
         .map(erp_supplier::SupplierPaymentTerm::label)
-        .unwrap_or(snapshot.payment_term_code.as_str());
+        .unwrap_or_else(|_| snapshot.payment_term_code.clone());
     if snapshot.prepay_gate {
         format!("{label}（先款后货）")
     } else {

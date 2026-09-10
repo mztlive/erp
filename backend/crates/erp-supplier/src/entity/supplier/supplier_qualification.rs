@@ -83,6 +83,33 @@ impl QualificationType {
         }
     }
 
+    /// 校验日期窗口；只有合同允许缺少起始日期。
+    ///
+    /// # Errors
+    /// 非合同缺少开始日期，或已知结束日期不晚于开始日期时拒绝。
+    pub fn ensure_validity_window(
+        self,
+        start: Option<BusinessDate>,
+        end: Option<BusinessDate>,
+    ) -> Result<()> {
+        if self != Self::Contract && start.is_none() {
+            return Err(Error::from("资质生效开始日期不能为空"));
+        }
+        if let (Some(start), Some(end)) = (start, end) {
+            if end <= start {
+                return Err(Error::from("生效结束日期必须晚于生效开始日期"));
+            }
+        }
+        Ok(())
+    }
+
+    /// 判断日期资料是否足以核实有效期。
+    ///
+    /// 合同须有完整起止日期；其他资质保留已登记起始日、截止日为空表示长期有效的规则。
+    pub fn validity_verified(self, start: Option<BusinessDate>, end: Option<BusinessDate>) -> bool {
+        start.is_some() && (self != Self::Contract || end.is_some())
+    }
+
     /// 判断附件敏感级别是否满足该资质类型的最低要求。
     ///
     /// 法人身份证必须为高敏感；其他资质允许敏感或高敏感。
@@ -149,7 +176,7 @@ impl QualificationStatus {
     /// 供给关系时必须校验适用能力存在有效资质）。
     ///
     /// # 返回
-    /// 状态为 `Active` 时返回 `true`。
+    /// 状态为 `Active` 且日期已核实时返回 `true`；业务日范围另由 `is_valid_on` 校验。
     pub fn is_valid(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -178,8 +205,8 @@ pub struct SupplierQualificationData {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效、失效日期。
-    pub valid_from: BusinessDate,
-    /// 失效日期；`None` 表示长期有效。
+    pub valid_from: Option<BusinessDate>,
+    /// 失效日期；合同的 `None` 表示未核实，其他资质表示长期有效。
     pub valid_to: Option<BusinessDate>,
     /// 资质附件（受控下载，记录访问审计）。
     pub attachment_id: Option<FileAssetId>,
@@ -199,9 +226,9 @@ pub struct SupplierQualificationUpdate {
     /// 附件更新意图。
     #[serde(default, skip_serializing_if = "FieldUpdate::is_unchanged")]
     pub attachment_id: FieldUpdate<FileAssetId>,
-    /// 生效日期；`None` 表示不修改。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub valid_from: Option<BusinessDate>,
+    /// 生效日期更新意图；仅合同允许 `Clear`，表示尚未核实。
+    #[serde(default, skip_serializing_if = "FieldUpdate::is_unchanged")]
+    pub valid_from: FieldUpdate<BusinessDate>,
     /// 失效日期更新意图（`Set` 时校验晚于 `valid_from`）。
     #[serde(default, skip_serializing_if = "FieldUpdate::is_unchanged")]
     pub valid_to: FieldUpdate<BusinessDate>,
@@ -229,7 +256,7 @@ pub struct SupplierQualification {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效、失效日期。
-    pub valid_from: BusinessDate,
+    pub valid_from: Option<BusinessDate>,
     /// 失效日期。
     pub valid_to: Option<BusinessDate>,
     /// 资质附件。
@@ -284,7 +311,8 @@ impl SupplierQualification {
             "证书编号过长",
         )?;
         let issuer = normalize_optional_text(data.issuer, "发证机构", ISSUER_MAX_LEN)?;
-        ensure_window_valid(data.valid_from, data.valid_to)?;
+        data.qualification_type
+            .ensure_validity_window(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -343,12 +371,29 @@ impl SupplierQualification {
         Ok(())
     }
 
+    /// 判断日期资料是否已核实，不读取时钟。
+    ///
+    /// 返回合同起止日期是否完整；未知日期不会按登记日补齐。
+    pub fn validity_verified(&self) -> bool {
+        self.qualification_type
+            .validity_verified(self.valid_from, self.valid_to)
+    }
+
+    /// 按业务日判断资质是否可用。
+    ///
+    /// 返回启用、日期已核实且业务日落在有效期内的结果。
+    pub fn is_valid_on(&self, on_date: BusinessDate) -> bool {
+        self.is_valid()
+            && self.valid_from.is_some_and(|start| start <= on_date)
+            && self.valid_to.is_none_or(|end| on_date <= end)
+    }
+
     /// 判断资质当前是否有效（§6.2 业务校验用）。
     ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
     pub fn is_valid(&self) -> bool {
-        self.stable.status().is_valid()
+        self.stable.status().is_valid() && self.validity_verified()
     }
 
     /// 计算资质到期预警窗口的结束业务日。
@@ -396,12 +441,12 @@ impl SupplierQualification {
     pub fn matches_profile_fields(
         &self,
         issuer: Option<&str>,
-        valid_from: BusinessDate,
+        valid_from: Option<BusinessDate>,
         valid_to: Option<BusinessDate>,
         attachment_id: Option<&FileAssetId>,
     ) -> bool {
         let issuer = issuer.map(str::trim).filter(|value| !value.is_empty());
-        self.is_valid()
+        self.stable.status().is_valid()
             && self.issuer.as_deref() == issuer
             && self.valid_from == valid_from
             && self.valid_to == valid_to
@@ -444,16 +489,18 @@ impl SupplierQualification {
     /// 当失效日期不晚于生效日期时返回错误。
     fn apply_valid_window(
         &mut self,
-        valid_from: Option<BusinessDate>,
+        valid_from: FieldUpdate<BusinessDate>,
         valid_to: FieldUpdate<BusinessDate>,
     ) -> Result<()> {
-        let next_valid_from = valid_from.unwrap_or(self.valid_from);
+        let mut next_valid_from = self.valid_from;
+        valid_from.apply_to(&mut next_valid_from);
         let next_valid_to = match valid_to {
             FieldUpdate::Unchanged => self.valid_to,
             FieldUpdate::Clear => None,
             FieldUpdate::Set(value) => Some(value),
         };
-        ensure_window_valid(next_valid_from, next_valid_to)?;
+        self.qualification_type
+            .ensure_validity_window(next_valid_from, next_valid_to)?;
         self.valid_from = next_valid_from;
         self.valid_to = next_valid_to;
         Ok(())
@@ -522,26 +569,6 @@ pub fn qualification_identity_key(qualification_type: QualificationType, certifi
     format!("{}::{}", qualification_type.as_str(), certificate_no.trim())
 }
 
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to {
-        if valid_to <= valid_from {
-            return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -559,7 +586,7 @@ mod tests {
             qualification_type: QualificationType::Contract,
             certificate_no: " HT-2026-001 ".to_string(),
             issuer: Some(" 示例发证机构 ".to_string()),
-            valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+            valid_from: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
             valid_to: Some(BusinessDate::from_ymd(2026, 12, 31).unwrap()),
             attachment_id: Some(FileAssetId::new("file-1")),
             status: QualificationStatus::Active,
@@ -645,7 +672,7 @@ mod tests {
                 SupplierQualificationUpdate {
                     issuer: FieldUpdate::Unchanged,
                     attachment_id: FieldUpdate::Unchanged,
-                    valid_from: None,
+                    valid_from: FieldUpdate::Unchanged,
                     valid_to: FieldUpdate::Set(BusinessDate::from_ymd(2027, 12, 31).unwrap()),
                     status: Some(QualificationStatus::Active),
                 },
@@ -669,7 +696,7 @@ mod tests {
                 SupplierQualificationUpdate {
                     issuer: FieldUpdate::Clear,
                     attachment_id: FieldUpdate::Clear,
-                    valid_from: None,
+                    valid_from: FieldUpdate::Unchanged,
                     valid_to: FieldUpdate::Unchanged,
                     status: Some(QualificationStatus::Disabled),
                 },
@@ -696,14 +723,14 @@ mod tests {
         qualification
             .update(
                 SupplierQualificationUpdate {
-                    valid_from: Some(next_from),
+                    valid_from: FieldUpdate::Set(next_from),
                     valid_to: FieldUpdate::Clear,
                     ..SupplierQualificationUpdate::default()
                 },
                 "admin-2",
             )
             .unwrap();
-        assert_eq!(qualification.valid_from, next_from);
+        assert_eq!(qualification.valid_from, Some(next_from));
         assert_eq!(qualification.valid_to, None);
     }
 
@@ -824,5 +851,106 @@ mod tests {
         let roundtrip: SupplierQualification =
             serde_json::from_value(serde_json::to_value(&qualification).unwrap()).unwrap();
         assert_eq!(roundtrip, qualification);
+    }
+    #[test]
+    fn unknown_contract_dates_are_preserved_and_cannot_qualify_business() {
+        let as_of = BusinessDate::from_ymd(2026, 9, 10).unwrap();
+        for (start, end) in [
+            (None, None),
+            (None, Some(BusinessDate::from_ymd(2025, 1, 1).unwrap())),
+            (Some(as_of), None),
+        ] {
+            let data = SupplierQualificationData {
+                valid_from: start,
+                valid_to: end,
+                ..qualification_data()
+            };
+            let contract =
+                SupplierQualification::new(SupplierQualificationId::new("unknown"), data, "actor").unwrap();
+            assert_eq!(contract.valid_from, start);
+            assert_eq!(contract.valid_to, end);
+            assert!(!contract.validity_verified());
+            assert!(!contract.is_valid_on(as_of));
+            assert!(contract.matches_profile_fields(
+                contract.issuer.as_deref(),
+                start,
+                end,
+                contract.attachment_id.as_ref()
+            ));
+            let view = crate::dto::supplier::SupplierQualificationView::from(contract.clone());
+            assert!(!view.validity_verified);
+            let snapshot = contract
+                .snapshot_revision(erp_core::ids::SupplierQualificationRevisionId::new("rev"), 1)
+                .unwrap();
+            assert_eq!(snapshot.valid_from, start);
+        }
+        let license = SupplierQualificationData {
+            qualification_type: QualificationType::FoodLicense,
+            valid_from: None,
+            ..qualification_data()
+        };
+        assert!(
+            SupplierQualification::new(SupplierQualificationId::new("license"), license, "actor").is_err()
+        );
+    }
+
+    #[test]
+    fn clearing_and_restoring_contract_dates_changes_eligibility_without_changing_identity() {
+        let mut contract = SupplierQualification::new(
+            SupplierQualificationId::new("contract"),
+            qualification_data(),
+            "actor",
+        )
+        .unwrap();
+        let on_date = BusinessDate::from_ymd(2026, 6, 1).unwrap();
+        assert!(contract.is_valid_on(on_date));
+        contract
+            .update(
+                SupplierQualificationUpdate {
+                    valid_from: FieldUpdate::Clear,
+                    ..Default::default()
+                },
+                "actor",
+            )
+            .unwrap();
+        assert!(!contract.is_valid_on(on_date));
+        contract
+            .update(
+                SupplierQualificationUpdate {
+                    valid_from: FieldUpdate::Set(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
+                    ..Default::default()
+                },
+                "actor",
+            )
+            .unwrap();
+        assert!(contract.is_valid_on(on_date));
+        assert_eq!(contract.certificate_no, "HT-2026-001");
+    }
+
+    #[test]
+    fn linked_contract_gate_uses_verified_current_dates_and_preserves_missing_data_policy() {
+        use crate::entity::supplier::eligibility::ensure_linked_contracts_qualified;
+        let on_date = BusinessDate::from_ymd(2026, 6, 1).unwrap();
+        let valid = SupplierQualification::new(
+            SupplierQualificationId::new("valid"),
+            qualification_data(),
+            "actor",
+        )
+        .unwrap();
+        let unknown = SupplierQualification::new(
+            SupplierQualificationId::new("unknown"),
+            SupplierQualificationData {
+                valid_from: None,
+                ..qualification_data()
+            },
+            "actor",
+        )
+        .unwrap();
+        assert!(ensure_linked_contracts_qualified(&[], on_date).is_ok());
+        assert!(ensure_linked_contracts_qualified(std::slice::from_ref(&unknown), on_date).is_err());
+        assert!(ensure_linked_contracts_qualified(&[unknown, valid.clone()], on_date).is_ok());
+        assert!(
+            ensure_linked_contracts_qualified(&[valid], BusinessDate::from_ymd(2027, 1, 1).unwrap()).is_err()
+        );
     }
 }

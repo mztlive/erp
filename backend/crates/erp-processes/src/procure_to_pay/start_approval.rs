@@ -469,6 +469,7 @@ enum StartStep {
     Receipt,
     DocumentGuard,
     ProcurementGuard,
+    SupplierQualification,
     Submission,
     SupersededDraft,
     Runtime,
@@ -488,6 +489,7 @@ async fn execute_start_steps(steps: &mut impl StartSteps, executor: &mut dyn Exe
         Receipt,
         DocumentGuard,
         ProcurementGuard,
+        SupplierQualification,
         Submission,
         SupersededDraft,
         Runtime,
@@ -557,6 +559,17 @@ impl StartSteps for StartPosting<'_> {
                             erp_procurement::service::purchase_order::draft_edit::map_draft_edit_violation,
                         )?;
                 }
+            }
+            StartStep::SupplierQualification => {
+                use erp_procurement::ports::creation_basis::CreationBasisSupplierPort;
+                super::creation_basis::supplier::CreationBasisSupplierAdapter::new(self.db.clone())
+                    .ensure_qualified(
+                        &input.submission.supplier_id,
+                        input.submission.purchase_type,
+                        erp_core::common::time::BusinessDate::today(),
+                        executor,
+                    )
+                    .await?;
             }
             StartStep::Submission => {
                 erp_procurement::service::purchase_order::start_approval::persist_started_submission(
@@ -1019,6 +1032,7 @@ pub(crate) mod tests {
                 Receipt,
                 DocumentGuard,
                 ProcurementGuard,
+                SupplierQualification,
                 Submission,
                 SupersededDraft,
                 Runtime,
@@ -1035,6 +1049,7 @@ pub(crate) mod tests {
             Receipt,
             DocumentGuard,
             ProcurementGuard,
+            SupplierQualification,
             Submission,
             SupersededDraft,
             Runtime,

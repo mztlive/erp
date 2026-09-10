@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
-use erp_core::{Error, Result};
+use erp_core::Result;
 
 use super::supplier_qualification::{QualificationStatus, QualificationType};
 
@@ -36,8 +36,8 @@ pub struct SupplierQualificationRevisionData {
     /// 发证机构（快照）。
     pub issuer: Option<String>,
     /// 生效、失效日期（快照）。
-    pub valid_from: BusinessDate,
-    /// 失效日期（快照）；`None` 表示长期有效。
+    pub valid_from: Option<BusinessDate>,
+    /// 失效日期（快照）；合同的 `None` 表示未核实，其他资质表示长期有效。
     pub valid_to: Option<BusinessDate>,
     /// 资质附件（快照）。
     pub attachment_id: Option<FileAssetId>,
@@ -63,7 +63,7 @@ pub struct SupplierQualificationRevision {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效、失效日期。
-    pub valid_from: BusinessDate,
+    pub valid_from: Option<BusinessDate>,
     /// 失效日期。
     pub valid_to: Option<BusinessDate>,
     /// 资质附件。
@@ -95,7 +95,8 @@ impl SupplierQualificationRevision {
             "证书编号过长",
         )?;
         let issuer = normalize_optional_text(data.issuer, "发证机构", ISSUER_MAX_LEN)?;
-        ensure_window_valid(data.valid_from, data.valid_to)?;
+        data.qualification_type
+            .ensure_validity_window(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -112,26 +113,6 @@ impl SupplierQualificationRevision {
     }
 }
 
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to {
-        if valid_to <= valid_from {
-            return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{SupplierQualificationRevision, SupplierQualificationRevisionData};
@@ -145,7 +126,7 @@ mod tests {
             qualification_type: QualificationType::FoodLicense,
             certificate_no: " JY-2026-001 ".to_string(),
             issuer: Some(" 示例市场监管局 ".to_string()),
-            valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+            valid_from: Some(BusinessDate::from_ymd(2026, 1, 1).unwrap()),
             valid_to: Some(BusinessDate::from_ymd(2026, 12, 31).unwrap()),
             attachment_id: Some(FileAssetId::new("file-1")),
             status: QualificationStatus::Active,

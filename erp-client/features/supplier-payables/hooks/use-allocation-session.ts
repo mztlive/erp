@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { useStore } from "@tanstack/react-form"
 
+import { invoiceTaxAllocations } from "@/features/supplier-payables/lib/invoice-tax-allocation"
 import { useAppForm } from "@/components/form"
 import {
     useAllocationSessionQuery,
@@ -153,6 +154,7 @@ export function useAllocationSession(
 
     const invoiceForm = useAppForm({
         defaultValues: {
+            allocationTaxes: {} as Record<string, string>,
             invoiceCode: "",
             invoiceNo: "",
             invoiceDate: new Date().toISOString().slice(0, 10),
@@ -315,6 +317,26 @@ export function useAllocationSession(
         existingUnallocated: session?.existingUnallocated,
         existingAmount: session?.existingAmount,
     })
+
+    if (track === "purchase_invoice" && selected.size > 1) {
+        try {
+            invoiceTaxAllocations(
+                [...selected].map((id) => ({
+                    payableAccountId: id,
+                    amount: effectiveAmounts[id] ?? "0",
+                    taxAmount: invoiceValues.allocationTaxes[id],
+                })),
+                invoiceValues.taxAmount,
+            )
+        } catch (error) {
+            issues.push({
+                id: "invoice-allocation-tax",
+                label: "分配税额",
+                message:
+                    error instanceof Error ? error.message : "分配税额无效",
+            })
+        }
+    }
 
     const hasPaymentTask =
         track !== "payment" ||
@@ -552,7 +574,10 @@ export function useAllocationSession(
                 netAmount: v.netAmount,
                 taxAmount: v.taxAmount,
                 invoiceKind: "BLUE",
-                targets,
+                targets: targets.map((target) => ({
+                    ...target,
+                    taxAmount: v.allocationTaxes[target.payableAccountId],
+                })),
                 payablePriorityPolicyId: policy?.payablePriorityPolicyId,
                 payablePriorityPolicyVersion:
                     policy?.payablePriorityPolicyVersion,

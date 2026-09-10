@@ -12,7 +12,7 @@
 //! 零库存、每供应商稳定选一条）、事务编排与 View 映射。
 
 mod create;
-mod supplier;
+pub(super) mod supplier;
 pub use create::{persist_basis_draft, CreateBasisCommand, VerifiedBasisInput};
 pub use erp_procurement::service::purchase_order::creation_basis::validate_requested_quantities;
 pub use erp_read_models::purchase_center::repository::{

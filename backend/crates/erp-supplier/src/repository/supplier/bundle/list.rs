@@ -246,6 +246,13 @@ impl<'a> SupplierRepository<'a> {
                     ),
                     None,
                 )),
+                Some(SupplierQualificationHealthFilter::Unverified) => Ok((
+                    Some(
+                        self.list_supplier_ids_by_unverified_qualifications(qualification_types, executor)
+                            .await?,
+                    ),
+                    None,
+                )),
                 Some(SupplierQualificationHealthFilter::Valid) => Ok((
                     Some(
                         self.list_supplier_ids_by_valid_qualifications(qualification_types, as_of, executor)

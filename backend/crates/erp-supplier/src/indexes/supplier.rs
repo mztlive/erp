@@ -188,10 +188,20 @@ fn qualification_revision_indexes() -> Vec<IndexModel> {
 /// 资质 ↔ 能力是纯关联行（§6.2 明确适用能力），同一对关联重复写入属于
 /// 事实行重复，由唯一索引兜底拒绝。
 fn qualification_capability_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_qualification_capabilities_link",
-        doc! { "qualification_id": 1, "capability_id": 1 },
-    )]
+    vec![
+        unique_index(
+            "uk_supplier_qualification_capabilities_link",
+            doc! { "qualification_id": 1, "capability_id": 1 },
+        ),
+        IndexModel::builder()
+            .keys(doc! { "capability_id": 1, "qualification_id": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_supplier_capability_qualifications".to_string())
+                    .build(),
+            )
+            .build(),
+    ]
 }
 
 /// 返回 `supplier_rating_revision` 的版本唯一约束与历史查询索引。
@@ -337,6 +347,9 @@ mod tests {
             index.keys == doc! { "qualification_id": 1, "capability_id": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
+        assert!(links
+            .iter()
+            .any(|index| { index.keys == doc! { "capability_id": 1, "qualification_id": 1 } }));
 
         let ratings = rating_revision_indexes();
         assert!(ratings.iter().any(|index| {

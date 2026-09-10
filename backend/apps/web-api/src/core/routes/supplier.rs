@@ -25,6 +25,14 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-profiles/import",
+            with_permission(
+                post(supplier::import::supplier_import),
+                rbac,
+                supplier::import::supplier_import_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-profiles",
             with_permission(
                 post(supplier::supplier_profile_create),

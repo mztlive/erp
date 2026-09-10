@@ -111,6 +111,23 @@ pub fn ensure_capability_qualified(
     Ok(())
 }
 
+/// 已关联合同须至少有一份可用于当前业务日，未知日期不构成有效合同。
+///
+/// 没有已关联合同时保留当前阶段的临时放行政策，不推断必备资质。
+/// # Errors
+/// 已有关联合同但均未核实、停用、未生效或到期时拒绝。
+pub fn ensure_linked_contracts_qualified(
+    contracts: &[super::SupplierQualification],
+    on_date: BusinessDate,
+) -> erp_core::Result<()> {
+    if contracts.is_empty() || contracts.iter().any(|contract| contract.is_valid_on(on_date)) {
+        return Ok(());
+    }
+    Err(erp_core::Error::from(
+        "供应商该项能力的合同有效期未核实、未生效或已到期，请先维护有效合同",
+    ))
+}
+
 /// 供应商供给消费的公司商品类型事实；不依赖catalog实体。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfferingProductKind {

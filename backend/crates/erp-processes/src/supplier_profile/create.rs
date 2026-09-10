@@ -486,6 +486,7 @@ fn allocate_creation_plan(
         business_category: req.business_category.clone(),
         invoice_type: req.invoice_type,
         invoice_tax_rate: req.invoice_tax_rate,
+        invoice_tax_rates: req.invoice_tax_rates.clone(),
         signing_entity_party_id: req.signing_entity_party_id.clone(),
         payment_entity_party_id: req.payment_entity_party_id.clone(),
         capability_codes: req.capability_codes.clone(),

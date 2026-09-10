@@ -10,6 +10,8 @@ mod tests;
 mod update;
 mod validation;
 
+pub mod import;
+
 use std::sync::Arc;
 
 use erp_supplier::SupplierExt;

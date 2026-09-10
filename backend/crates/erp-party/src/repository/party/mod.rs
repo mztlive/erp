@@ -26,6 +26,8 @@ pub use record::PartyFilter;
 pub use revision::PartyRevisionFilter;
 pub use tax_profile::PartyTaxProfileFilter;
 
+pub mod company;
+
 use mongodb::Database;
 
 use super::extensions::PartyExt;

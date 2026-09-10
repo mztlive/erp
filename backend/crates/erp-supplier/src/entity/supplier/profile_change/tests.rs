@@ -20,6 +20,62 @@ fn business_date(y: i32, m: u32, d: u32) -> BusinessDate {
     BusinessDate::from_ymd(y, m, d).unwrap()
 }
 
+/// 根资料移除日期不完整的启用合同仍须停用；不能用采购资格替代生命周期。
+#[test]
+fn omitted_unverified_contracts_are_disabled_once() {
+    use super::SupplierProfileChangePlan;
+    use crate::entity::supplier::SupplierQualificationUpdate;
+    for start in [None, Some(business_date(2026, 1, 1))] {
+        let mut contract = SupplierQualification::new(
+            SupplierQualificationId::new("contract"),
+            SupplierQualificationData {
+                supplier_id: SupplierAccountId::new("supplier"),
+                qualification_type: QualificationType::Contract,
+                certificate_no: "HT-1".into(),
+                issuer: None,
+                valid_from: start,
+                valid_to: None,
+                attachment_id: None,
+                status: QualificationStatus::Active,
+            },
+            "actor",
+        )
+        .unwrap();
+        assert!(!contract.is_valid());
+        let plan = |contract: &SupplierQualification| {
+            SupplierProfileChangePlan::from_loaded(
+                &[],
+                std::slice::from_ref(contract),
+                &HashMap::new(),
+                &HashMap::new(),
+                &[],
+                &[],
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            plan(&contract).qualification_disables,
+            vec![contract.identity_key()]
+        );
+        contract
+            .update(
+                SupplierQualificationUpdate {
+                    status: Some(QualificationStatus::Disabled),
+                    ..Default::default()
+                },
+                "actor",
+            )
+            .unwrap();
+        let revision = contract
+            .snapshot_revision(SupplierQualificationRevisionId::new("disabled-revision"), 2)
+            .unwrap();
+        assert_eq!(revision.status, QualificationStatus::Disabled);
+        assert_eq!(revision.valid_from, start);
+        assert_eq!(revision.valid_to, None);
+        assert!(plan(&contract).qualification_disables.is_empty());
+    }
+}
+
 /// 覆盖商务资料修订：推进供应商当前指针。
 #[test]
 fn commercial_profile_revision_advances_pointer() {
@@ -42,7 +98,8 @@ fn commercial_profile_revision_advances_pointer() {
         payment_term_snapshot: "PREPAY_30".to_string(),
         business_category: None,
         invoice_type: InvoiceType::VatSpecial,
-        invoice_tax_rate: erp_core::money::Rate::from_str("0.13").unwrap(),
+        invoice_tax_rate: Some(erp_core::money::Rate::from_str("0.13").unwrap()),
+        invoice_tax_rates: None,
         signing_entity_party_id: PartyId::new("party-sign"),
         payment_entity_party_id: PartyId::new("party-pay"),
         change_reason: "首版".to_string(),
@@ -89,7 +146,7 @@ fn apply_qualification_input_reactivates_and_replaces_fields() {
             qualification_type: QualificationType::Contract,
             certificate_no: "C-001".to_string(),
             issuer: Some("旧机构".to_string()),
-            valid_from: business_date(2026, 1, 1),
+            valid_from: Some(business_date(2026, 1, 1)),
             valid_to: None,
             attachment_id: None,
             status: QualificationStatus::Active,
@@ -110,7 +167,7 @@ fn apply_qualification_input_reactivates_and_replaces_fields() {
     apply_qualification_input(
         &mut q,
         Some("新机构".to_string()),
-        business_date(2026, 8, 31),
+        Some(business_date(2026, 8, 31)),
         Some(business_date(2026, 12, 31)),
         None,
         "admin-3",
@@ -118,7 +175,7 @@ fn apply_qualification_input_reactivates_and_replaces_fields() {
     .unwrap();
     assert!(q.is_valid());
     assert_eq!(q.issuer.as_deref(), Some("新机构"));
-    assert_eq!(q.valid_from, business_date(2026, 8, 31));
+    assert_eq!(q.valid_from, Some(business_date(2026, 8, 31)));
 }
 
 /// 覆盖资质无变化：同样字段再次 apply 应保持幂等（不改变有效状态的重复更新不报错）。
@@ -131,7 +188,7 @@ fn apply_qualification_input_no_change_keeps_valid() {
             qualification_type: QualificationType::Contract,
             certificate_no: "C-002".to_string(),
             issuer: None,
-            valid_from: business_date(2026, 1, 1),
+            valid_from: Some(business_date(2026, 1, 1)),
             valid_to: None,
             attachment_id: None,
             status: QualificationStatus::Active,
@@ -140,9 +197,18 @@ fn apply_qualification_input_no_change_keeps_valid() {
     )
     .unwrap();
     let before = q.clone();
-    apply_qualification_input(&mut q, None, business_date(2026, 1, 1), None, None, "admin-2").unwrap();
+    apply_qualification_input(
+        &mut q,
+        None,
+        Some(business_date(2026, 1, 1)),
+        None,
+        None,
+        "admin-2",
+    )
+    .unwrap();
     assert_eq!(q.issuer, before.issuer);
-    assert!(q.is_valid());
+    assert!(!q.is_valid(), "起止日期不完整的合同不能自动变为有效");
+    assert!(q.matches_profile_fields(None, q.valid_from, None, None));
 }
 
 /// 覆盖重复能力：同一代码重复请求在 Service 层已由 `validate_profile_selection` 拒绝，领域层新建时依赖外部去重；此处验证新资质创建时未启用能力会失败。
@@ -155,7 +221,7 @@ fn new_qualification_fails_when_capability_missing() {
         qualification_type: QualificationType::Contract,
         certificate_no: "C-003".to_string(),
         issuer: None,
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: None,
         attachment_id: None,
         capability_codes: &[CapabilityCode::Api],
@@ -180,7 +246,7 @@ fn new_qualification_creates_with_links() {
         qualification_type: QualificationType::Contract,
         certificate_no: "C-004".to_string(),
         issuer: Some("机构".to_string()),
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: Some(business_date(2026, 12, 31)),
         attachment_id: None,
         capability_codes: &[CapabilityCode::Physical, CapabilityCode::Api],
@@ -208,7 +274,7 @@ fn new_qualification_rejects_mismatched_link_ids() {
         qualification_type: QualificationType::Contract,
         certificate_no: "C-005".to_string(),
         issuer: None,
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: None,
         attachment_id: None,
         capability_codes: &[CapabilityCode::Physical],
@@ -270,7 +336,7 @@ fn qualification_no_change_preserves_valid_and_matches_fields() {
         qualification_type: QualificationType::Certificate,
         certificate_no: "CERT-NC".to_string(),
         issuer: Some("机构".to_string()),
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: None,
         attachment_id: None,
         capability_codes: &[CapabilityCode::Physical],
@@ -282,12 +348,12 @@ fn qualification_no_change_preserves_valid_and_matches_fields() {
     })
     .unwrap();
     assert!(qual.is_valid());
-    assert!(qual.matches_profile_fields(Some("机构"), business_date(2026, 1, 1), None, None));
+    assert!(qual.matches_profile_fields(Some("机构"), Some(business_date(2026, 1, 1)), None, None));
     let before = qual.clone();
     apply_qualification_input(
         &mut qual,
         Some("机构".to_string()),
-        business_date(2026, 1, 1),
+        Some(business_date(2026, 1, 1)),
         None,
         None,
         "admin-2",
@@ -386,7 +452,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
         qualification_type: QualificationType::Contract,
         certificate_no: "MATCH-001".to_string(),
         issuer: Some("机构".to_string()),
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: None,
         attachment_id: None,
         capability_codes: &[CapabilityCode::Physical],
@@ -403,7 +469,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
         qualification_type: QualificationType::Certificate,
         certificate_no: "UPDATE-001".to_string(),
         issuer: Some("旧机构".to_string()),
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: None,
         attachment_id: None,
         capability_codes: &[CapabilityCode::Physical],
@@ -419,7 +485,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
         qualification_type: QualificationType::Authorization,
         certificate_no: "DISABLE-001".to_string(),
         issuer: None,
-        valid_from: business_date(2026, 1, 1),
+        valid_from: Some(business_date(2026, 1, 1)),
         valid_to: None,
         attachment_id: None,
         capability_codes: &[CapabilityCode::Physical],
@@ -456,7 +522,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
             qualification_type: QualificationType::Contract,
             certificate_no: "MATCH-001".to_string(),
             issuer: Some("机构".to_string()),
-            valid_from: business_date(2026, 1, 1),
+            valid_from: Some(business_date(2026, 1, 1)),
             valid_to: None,
             attachment_id: None,
             capability_codes: vec![CapabilityCode::Physical],
@@ -465,7 +531,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
             qualification_type: QualificationType::Certificate,
             certificate_no: "UPDATE-001".to_string(),
             issuer: Some("新机构".to_string()),
-            valid_from: business_date(2026, 1, 1),
+            valid_from: Some(business_date(2026, 1, 1)),
             valid_to: None,
             attachment_id: None,
             capability_codes: vec![CapabilityCode::Physical],
@@ -474,7 +540,7 @@ fn profile_change_plan_from_loaded_covers_full_matrix() {
             qualification_type: QualificationType::Contract,
             certificate_no: "NEW-001".to_string(),
             issuer: None,
-            valid_from: business_date(2026, 8, 31),
+            valid_from: Some(business_date(2026, 8, 31)),
             valid_to: None,
             attachment_id: None,
             capability_codes: vec![CapabilityCode::Physical],

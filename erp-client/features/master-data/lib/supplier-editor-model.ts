@@ -1,3 +1,4 @@
+import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
 import { currentResourceFieldValues } from "@/features/master-data/lib/resource-fields"
 import { settlementCode } from "@/features/master-data/api/presentation"
 import type { MasterDataCenterView } from "@/features/master-data/types"
@@ -100,9 +101,10 @@ export function validateSupplierEditorFields(
             return `${label}必须是 0–100 的整数`
         }
     }
-    const taxRate = values.invoiceTaxRate.trim()
-    if (taxRate && !/^(0|[1-9]\d?)$/.test(taxRate)) {
-        return "发票税点必须是 0–99 的整数"
+    try {
+        parseSupplierTaxRates(values.invoiceTaxRate)
+    } catch {
+        return "请输入有效的常用进项税率，如 9%、13%"
     }
     if (
         values.contractValidFrom &&

@@ -132,6 +132,7 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
+        "uk_company_names" => Some("公司全称、简称或导入别名已被其他公司使用"),
         "uk_parties_party_no" => Some("主体编号已存在"),
         "uk_parties_credit_code" => Some("统一社会信用代码已存在"),
         "uk_party_bank_accounts_bank_account_no" => Some("银行账户编号已存在"),

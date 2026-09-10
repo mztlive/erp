@@ -24,6 +24,8 @@ mod tests;
 /// `SupplierQualificationHealth` 一一对应。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupplierQualificationHealthFilter {
+    /// 合同有效期缺少起始日或截止日。
+    Unverified,
     /// 当前有效。
     Valid,
     /// 当前有效且 30 天内到期。

@@ -1,3 +1,5 @@
+import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
+import { periodicSettlement } from "@/lib/supplier-payment-terms"
 import {
     WAREHOUSE_WRITE_CODE,
     WAREHOUSE_WRITE_MESSAGE,
@@ -12,12 +14,7 @@ import type {
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import type { ApiError } from "@/lib/api/errors"
 import { paymentTermCode } from "@/lib/business-options"
-import {
-    compactFixed,
-    compareDecimal,
-    divideFixed,
-    multiplyFixed,
-} from "@/lib/fixed-decimal"
+import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 
 export const LIST_PAGE_SIZE = 100
 
@@ -78,11 +75,13 @@ export const productKindLabel = (kind: string | undefined): string => {
 }
 
 export const settlementLabel = (mode: string | undefined): string => {
+    const cycle = periodicSettlement(mode ?? "")
+    if (cycle) return cycle.label
     switch (mode) {
         case "prepayment":
             return "预付款"
         case "pay_after_use":
-            return "先用后付"
+            return "货到后付（历史）"
         case "cash_settlement":
             return "现结"
         default:
@@ -94,12 +93,15 @@ export const settlementLabel = (mode: string | undefined): string => {
 export const settlementCode = (
     value: string | undefined,
 ): string | undefined => {
+    const cycle = periodicSettlement(value ?? "")
+    if (cycle) return cycle.value
     switch (value?.trim()) {
         case "prepayment":
         case "预付款":
             return "prepayment"
         case "pay_after_use":
         case "先用后付":
+        case "货到后付（历史）":
             return "pay_after_use"
         case "cash_settlement":
         case "现结":
@@ -220,17 +222,10 @@ export const parseScore100 = (raw: string | undefined): number | undefined => {
 }
 
 /** 将用户输入的整数百分数转换为后端 [0, 1) 税率字符串。 */
-export const normalizeTaxRate = (raw: string | undefined): string => {
-    const text = (raw ?? "").trim().replace(/%$/, "")
-    if (!text) return "0.13"
-    if (!/^(0|[1-9]\d?)$/.test(text)) return "0.13"
-    return compactFixed(
-        divideFixed(text, "100", {
-            numeratorMaxScale: 0,
-            denominatorMaxScale: 0,
-            outputScale: 2,
-        }),
-    )
+export const normalizeTaxRate = (raw: string | undefined): string | null => {
+    const rates = parseSupplierTaxRates(raw ?? "")
+    if (rates.length > 1) throw new Error("多个税率须使用常用进项税率集合")
+    return rates[0] ?? null
 }
 
 /** 将后端 [0, 1) 税率转换为页面百分数输入值。 */

@@ -1,5 +1,7 @@
 "use client"
 
+import { SupplierTaxRateField } from "../supplier-tax-rate-field"
+
 import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
@@ -221,11 +223,15 @@ export function RegisterSupplyForSkuDialog({
                                                         field.state.value ||
                                                         undefined
                                                     }
-                                                    onValueChange={(value) =>
+                                                    onValueChange={(value) => {
                                                         field.handleChange(
                                                             value ?? "",
                                                         )
-                                                    }
+                                                        form.setFieldValue(
+                                                            "inputTaxPercentage",
+                                                            "",
+                                                        )
+                                                    }}
                                                     placeholder="选择已启用供应商"
                                                     className="w-full"
                                                 />
@@ -286,16 +292,39 @@ export function RegisterSupplyForSkuDialog({
                                                 />
                                             )}
                                         </form.AppField>
-                                        <form.AppField name="inputTaxPercentage">
-                                            {(field) => (
-                                                <field.TextField
-                                                    id="supplier-offerings-dialog-register-input-tax-percentage"
-                                                    label="进项税率（%）"
-                                                    required
-                                                    description="例如 13 表示 13%"
-                                                />
+                                        <form.Subscribe
+                                            selector={(state) =>
+                                                state.values.supplierId
+                                            }
+                                        >
+                                            {(supplierId) => (
+                                                <form.AppField name="inputTaxPercentage">
+                                                    {(field) => (
+                                                        <SupplierTaxRateField
+                                                            id="supplier-offerings-dialog-register-input-tax-percentage"
+                                                            supplierId={
+                                                                supplierId
+                                                            }
+                                                            prefill
+                                                            value={
+                                                                field.state
+                                                                    .value
+                                                            }
+                                                            onChange={
+                                                                field.handleChange
+                                                            }
+                                                            onBlur={
+                                                                field.handleBlur
+                                                            }
+                                                            errors={
+                                                                field.state.meta
+                                                                    .errors
+                                                            }
+                                                        />
+                                                    )}
+                                                </form.AppField>
                                             )}
-                                        </form.AppField>
+                                        </form.Subscribe>
                                     </div>
                                 </FieldSet>
 

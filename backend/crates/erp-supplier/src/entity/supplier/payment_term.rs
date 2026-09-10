@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use erp_core::common::calendar::CalendarPeriod;
 use erp_core::{Error, Result};
 
 /// 结算方式（§6.2：预付款、先用后付、现结等受控代码）。
@@ -12,6 +13,12 @@ pub enum SettlementMode {
     Prepayment,
     /// 先用后付。
     PayAfterUse,
+    /// 按自然周期结算。
+    Weekly,
+    Monthly,
+    Quarterly,
+    HalfYearly,
+    Yearly,
     /// 现结。
     CashSettlement,
 }
@@ -24,7 +31,12 @@ impl SettlementMode {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Prepayment => "预付款",
-            Self::PayAfterUse => "先用后付",
+            Self::PayAfterUse => "货到后付（历史）",
+            Self::Weekly => "周结",
+            Self::Monthly => "月结",
+            Self::Quarterly => "季结",
+            Self::HalfYearly => "半年结",
+            Self::Yearly => "年结",
             Self::CashSettlement => "现结",
         }
     }
@@ -37,6 +49,11 @@ impl SettlementMode {
         match self {
             Self::Prepayment => "prepayment",
             Self::PayAfterUse => "pay_after_use",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Quarterly => "quarterly",
+            Self::HalfYearly => "half_yearly",
+            Self::Yearly => "yearly",
             Self::CashSettlement => "cash_settlement",
         }
     }
@@ -57,6 +74,8 @@ pub enum SupplierPaymentTerm {
     PostpayNet15,
     /// 最晚预计交付日后 30 天形成计划付款日。
     PostpayNet30,
+    /// 最晚预计交付日所属自然周期末，再加指定自然日数。
+    Periodic { period: CalendarPeriod, days: u16 },
 }
 
 impl SupplierPaymentTerm {
@@ -75,6 +94,9 @@ impl SupplierPaymentTerm {
     /// 空值、合同自由文本或缺少具体账期的条件返回业务错误。
     pub fn parse(raw: &str) -> Result<Self> {
         let code = raw.trim().to_uppercase();
+        if code.starts_with("PERIOD_") {
+            return Self::parse_periodic(&code);
+        }
         match code.as_str() {
             "PREPAY_100" | "PREPAY-100" | "预付款" | "先款" => Ok(Self::Prepay100),
             "PREPAY_50" | "PREPAY-50" => Ok(Self::Prepay50),
@@ -92,7 +114,10 @@ impl SupplierPaymentTerm {
     ///
     /// # 返回
     /// 返回采购单、提交和供应商商务版本统一使用的代码。
-    pub fn code(self) -> &'static str {
+    pub fn code(self) -> String {
+        if let Self::Periodic { period, days } = self {
+            return format!("PERIOD_{}_{}", period_code(period), days);
+        }
         match self {
             Self::Prepay100 => "PREPAY_100",
             Self::Prepay50 => "PREPAY_50",
@@ -100,14 +125,19 @@ impl SupplierPaymentTerm {
             Self::CashOnApproval => "CASH_ON_APPROVAL",
             Self::PostpayNet15 => "POSTPAY_NET15",
             Self::PostpayNet30 => "POSTPAY_NET30",
+            Self::Periodic { .. } => unreachable!(),
         }
+        .to_string()
     }
 
     /// 返回面向采购与财务用户的付款条件名称。
     ///
     /// # 返回
     /// 返回与计划付款日规则一致的中文标签。
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
+        if let Self::Periodic { days, .. } = self {
+            return format!("{}，期末后 {} 天付款", self.settlement_mode().label(), days);
+        }
         match self {
             Self::Prepay100 => "先款 100%",
             Self::Prepay50 => "先款 50%",
@@ -115,7 +145,9 @@ impl SupplierPaymentTerm {
             Self::CashOnApproval => "现结（审批通过日）",
             Self::PostpayNet15 => "货到 15 天",
             Self::PostpayNet30 => "货到 30 天",
+            Self::Periodic { .. } => unreachable!(),
         }
+        .to_string()
     }
 
     /// 返回付款条件归属的结算方式。
@@ -127,7 +159,41 @@ impl SupplierPaymentTerm {
             Self::Prepay100 | Self::Prepay50 | Self::Prepay30 => SettlementMode::Prepayment,
             Self::CashOnApproval => SettlementMode::CashSettlement,
             Self::PostpayNet15 | Self::PostpayNet30 => SettlementMode::PayAfterUse,
+            Self::Periodic { period, .. } => match period {
+                CalendarPeriod::Week => SettlementMode::Weekly,
+                CalendarPeriod::Month => SettlementMode::Monthly,
+                CalendarPeriod::Quarter => SettlementMode::Quarterly,
+                CalendarPeriod::HalfYear => SettlementMode::HalfYearly,
+                CalendarPeriod::Year => SettlementMode::Yearly,
+            },
         }
+    }
+
+    /// 返回自然周期与期末后付款天数；旧规则保持为空。
+    pub fn calendar_due(self) -> Option<(CalendarPeriod, u16)> {
+        if let Self::Periodic { period, days } = self {
+            return Some((period, days));
+        }
+        None
+    }
+
+    /// 解析可持久化的自然周期规则；限制付款间隔并拒绝不完整代码。
+    fn parse_periodic(code: &str) -> Result<Self> {
+        let rest = code.strip_prefix("PERIOD_").ok_or("周期付款条件无效")?;
+        let (period, days) = rest.rsplit_once('_').ok_or("周期付款条件缺少付款天数")?;
+        let period = match period {
+            "WEEK" => CalendarPeriod::Week,
+            "MONTH" => CalendarPeriod::Month,
+            "QUARTER" => CalendarPeriod::Quarter,
+            "HALF_YEAR" => CalendarPeriod::HalfYear,
+            "YEAR" => CalendarPeriod::Year,
+            _ => return Err(Error::from("结算周期无效")),
+        };
+        let days: u16 = days.parse().map_err(|_| Error::from("付款天数必须是整数"))?;
+        if days > 366 {
+            return Err(Error::from("付款天数不能超过 366 天"));
+        }
+        Ok(Self::Periodic { period, days })
     }
 
     /// 判断付款条件是否启用先款后货门禁。
@@ -162,6 +228,17 @@ impl SupplierPaymentTerm {
             Self::PostpayNet30 => Some(30),
             _ => None,
         }
+    }
+}
+
+/// 自然周期对应付款条件的稳定代码片段。
+fn period_code(period: CalendarPeriod) -> &'static str {
+    match period {
+        CalendarPeriod::Week => "WEEK",
+        CalendarPeriod::Month => "MONTH",
+        CalendarPeriod::Quarter => "QUARTER",
+        CalendarPeriod::HalfYear => "HALF_YEAR",
+        CalendarPeriod::Year => "YEAR",
     }
 }
 
@@ -201,5 +278,38 @@ mod tests {
         assert!(SupplierPaymentTerm::parse("CONTRACT").is_err());
         assert!(SupplierPaymentTerm::parse("默认付款条件").is_err());
         assert!(SupplierPaymentTerm::parse(" ").is_err());
+    }
+    #[test]
+    fn periodic_terms_round_trip_without_changing_legacy_rules() {
+        for (period, mode) in [
+            ("WEEK", SettlementMode::Weekly),
+            ("MONTH", SettlementMode::Monthly),
+            ("QUARTER", SettlementMode::Quarterly),
+            ("HALF_YEAR", SettlementMode::HalfYearly),
+            ("YEAR", SettlementMode::Yearly),
+        ] {
+            for days in [0, 15, 366] {
+                let code = format!("PERIOD_{period}_{days}");
+                let term = SupplierPaymentTerm::parse(&code).unwrap();
+                assert_eq!(term.code(), code);
+                assert_eq!(term.settlement_mode(), mode);
+                assert_eq!(term.calendar_due().unwrap().1, days);
+                assert!(!term.prepay_gate());
+                assert_eq!(term.days_after_delivery(), None);
+            }
+        }
+        for invalid in [
+            "PERIOD_MONTH_",
+            "PERIOD_MONTH_-1",
+            "PERIOD_MONTH_1.5",
+            "PERIOD_MONTH_367",
+            "PERIOD_UNKNOWN_15",
+        ] {
+            assert!(SupplierPaymentTerm::parse(invalid).is_err());
+        }
+        assert!(SupplierPaymentTerm::parse("NET-30")
+            .unwrap()
+            .calendar_due()
+            .is_none());
     }
 }

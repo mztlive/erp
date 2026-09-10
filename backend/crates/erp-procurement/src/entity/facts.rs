@@ -333,6 +333,8 @@ pub struct PaymentTermFact {
     pub prepay_gate: bool,
     /// 以最晚预计交期为基准的天数；None 表示审批日付款。
     pub days_after_delivery: Option<u64>,
+    /// 自然周期及期末后付款天数；旧货到规则为空。
+    pub calendar_due: Option<(erp_core::common::calendar::CalendarPeriod, u16)>,
 }
 
 #[cfg(test)]

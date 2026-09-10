@@ -250,6 +250,8 @@ impl SupplierListParams {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SupplierQualificationHealth {
+    /// 合同有效期缺少起始日或截止日。
+    Unverified,
     /// 当前有效。
     Valid,
     /// 当前有效，且将在 30 天内到期。
@@ -328,6 +330,9 @@ pub struct CommercialProfileView {
     pub invoice_type: InvoiceType,
     /// 发票税点（详情返回，列表为 `None`）。
     pub invoice_tax_rate: Option<Rate>,
+    /// 常用进项税率；None 读取旧单值，Some([]) 明确表示未登记。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_tax_rates: Option<Vec<Rate>>,
     /// 签约主体（详情返回，列表为 `None`）。
     pub signing_entity_party_id: Option<String>,
     /// 签约主体当前法定名称。
@@ -358,7 +363,8 @@ impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
             payment_term_snapshot,
             business_category,
             invoice_type: revision.invoice_type,
-            invoice_tax_rate: Some(revision.invoice_tax_rate),
+            invoice_tax_rate: revision.invoice_tax_rate,
+            invoice_tax_rates: revision.invoice_tax_rates.clone(),
             signing_entity_party_id: Some(revision.signing_entity_party_id.to_string()),
             signing_entity_name: None,
             payment_entity_party_id: Some(revision.payment_entity_party_id.to_string()),
@@ -433,7 +439,7 @@ pub struct SupplierQualificationView {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效、失效日期。
-    pub valid_from: String,
+    pub valid_from: Option<String>,
     /// 失效日期。
     pub valid_to: Option<String>,
     /// 资质附件 ID。
@@ -446,18 +452,22 @@ pub struct SupplierQualificationView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 合同起止日期完整后才可认定有效期已核实。
+    pub validity_verified: bool,
 }
 
 impl From<SupplierQualification> for SupplierQualificationView {
     /// 从实体构造响应视图。
     fn from(qualification: SupplierQualification) -> Self {
+        let validity_verified = qualification.validity_verified();
         Self {
+            validity_verified,
             id: qualification.base.id,
             supplier_id: qualification.supplier_id.to_string(),
             qualification_type: qualification.qualification_type,
             certificate_no: qualification.certificate_no,
             issuer: qualification.issuer,
-            valid_from: qualification.valid_from.to_string(),
+            valid_from: qualification.valid_from.map(|date| date.to_string()),
             valid_to: qualification.valid_to.map(|date| date.to_string()),
             attachment_id: qualification.attachment_id.map(|id| id.to_string()),
             status: qualification.stable.status,
@@ -561,7 +571,7 @@ pub struct SupplierProfileQualificationInput {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效日期。
-    pub valid_from: BusinessDate,
+    pub valid_from: Option<BusinessDate>,
     /// 失效日期。
     pub valid_to: Option<BusinessDate>,
     /// 文件资产。
@@ -637,7 +647,10 @@ pub struct SaveSupplierProfileRequest {
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。
-    pub invoice_tax_rate: Rate,
+    pub invoice_tax_rate: Option<Rate>,
+    /// 常用进项税率；None 读取旧单值，Some([]) 明确表示未登记。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_tax_rates: Option<Vec<Rate>>,
     /// 签约主体。
     pub signing_entity_party_id: erp_core::ids::PartyId,
     /// 付款主体。
@@ -928,7 +941,8 @@ mod tests {
             payment_term_snapshot: "POSTPAY_NET30".to_string(),
             business_category: Some("办公用品".to_string()),
             invoice_type: InvoiceType::VatSpecial,
-            invoice_tax_rate: Rate::from_str("0.13").unwrap(),
+            invoice_tax_rate: Some(Rate::from_str("0.13").unwrap()),
+            invoice_tax_rates: None,
             signing_entity_party_id: PartyId::new("party-signing"),
             payment_entity_party_id: PartyId::new("party-payment"),
             capability_codes: vec![CapabilityCode::Physical],
@@ -936,7 +950,7 @@ mod tests {
                 qualification_type: QualificationType::Contract,
                 certificate_no: "CONTRACT-001".to_string(),
                 issuer: None,
-                valid_from: BusinessDate::from_ymd(2026, 8, 31).unwrap(),
+                valid_from: Some(BusinessDate::from_ymd(2026, 8, 31).unwrap()),
                 valid_to: None,
                 attachment_id: None,
                 capability_codes: vec![CapabilityCode::Physical],

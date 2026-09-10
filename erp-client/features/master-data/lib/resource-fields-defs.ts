@@ -1,3 +1,4 @@
+import { PERIODIC_SETTLEMENTS } from "@/lib/supplier-payment-terms"
 /**
  * W14 资源专属字段声明表 — 按资源强类型化。
  * 本文件为纯声明式配置表（资源 → 字段定义与选项常量），故允许保持较长；
@@ -21,7 +22,7 @@ const REGION_OPTIONS = [
 /** 供应商结算方式（稳定值对齐 supplier_commercial_profile_revision.settlement_mode）。 */
 export const SETTLEMENT_MODE_OPTIONS = [
     { value: "prepayment", label: "预付款" },
-    { value: "pay_after_use", label: "先用后付" },
+    ...PERIODIC_SETTLEMENTS,
     { value: "cash_settlement", label: "现结" },
 ] as const
 

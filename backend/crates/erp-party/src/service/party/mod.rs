@@ -6,6 +6,8 @@
 //!   `PartyDomainRepository::append_party_revision` 声明「必须收到事务执行器」；
 //! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
 
+pub mod company;
+
 use crate::entity::party::{
     Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
     PartyUpdate,
@@ -110,6 +112,16 @@ impl PartyService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - party_no 或统一社会信用代码与既有主体重复
     pub async fn create_party(&self, req: CreatePartyRequest, actor: &AuditActor) -> Result<PartyView> {
+        self.create_party_record(req, None, actor).await
+    }
+
+    /// 公司入口复用主体与首版名称事务。
+    async fn create_party_record(
+        &self,
+        req: CreatePartyRequest,
+        company: Option<crate::entity::party::company::CompanyProfile>,
+        actor: &AuditActor,
+    ) -> Result<PartyView> {
         req.validate()?;
         let party_id = PartyId::new(next_id());
         let revision_id = PartyRevisionId::new(next_id());
@@ -123,6 +135,7 @@ impl PartyService {
             },
             actor.id(),
         )?;
+        party.company_profile = company;
         self.ensure_party_identity_available(
             &party.party_no,
             party.unified_credit_code.as_deref(),
@@ -282,8 +295,25 @@ impl PartyService {
         req: UpdatePartyRequest,
         actor: &AuditActor,
     ) -> Result<PartyView> {
+        self.update_party_record(id, req, None, actor).await
+    }
+
+    /// 公司和名称修订在同一主体事务中更新。
+    async fn update_party_record(
+        &self,
+        id: &str,
+        req: UpdatePartyRequest,
+        company: Option<crate::entity::party::company::CompanyProfile>,
+        actor: &AuditActor,
+    ) -> Result<PartyView> {
         req.validate()?;
-        let party = self.load_party(id).await?;
+        let mut party = self.load_party(id).await?;
+        if party.company_profile.is_some() && company.is_none() {
+            return Err(Error::BusinessLogicError("请在公司主体维护中修改公司资料".into()));
+        }
+        if company.is_some() {
+            party.company_profile = company;
+        }
         ensure_outside_supplier_profile(self.supplier_roles.as_ref(), &PartyId::new(id)).await?;
         party
             .ensure_version(req.version)

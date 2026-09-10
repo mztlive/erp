@@ -79,17 +79,17 @@ pub fn new_capability(
 pub fn apply_qualification_input(
     qualification: &mut SupplierQualification,
     issuer: Option<String>,
-    valid_from: BusinessDate,
+    valid_from: Option<BusinessDate>,
     valid_to: Option<BusinessDate>,
     attachment_id: Option<erp_core::ids::FileAssetId>,
     actor_id: &str,
 ) -> erp_core::Result<()> {
-    let status = (!qualification.is_valid()).then_some(QualificationStatus::Active);
+    let status = (!qualification.stable.status.is_valid()).then_some(QualificationStatus::Active);
     qualification.update(
         SupplierQualificationUpdate {
             issuer: option_as_authoritative_update(issuer),
             attachment_id: option_as_authoritative_update(attachment_id),
-            valid_from: Some(valid_from),
+            valid_from: option_as_authoritative_update(valid_from),
             valid_to: option_as_authoritative_update(valid_to),
             status,
         },
@@ -110,7 +110,7 @@ pub struct NewQualificationParams<'a> {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效日。
-    pub valid_from: BusinessDate,
+    pub valid_from: Option<BusinessDate>,
     /// 失效日。
     pub valid_to: Option<BusinessDate>,
     /// 附件。

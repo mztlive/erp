@@ -38,6 +38,7 @@ export type ProductListingStatus = "LISTED" | "PARTIALLY_LISTED" | "UNLISTED"
 export type ProductListingFilter = "listed" | "partially_listed" | "unlisted"
 export type ProductSkuCoverageFilter = "complete" | "partial" | "none"
 export type SupplierQualificationHealth =
+    | "unverified"
     | "valid"
     | "expiring_30"
     | "expired"

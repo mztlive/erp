@@ -36,6 +36,8 @@ pub enum ReconciliationCycle {
     Quarterly,
     /// 年。
     Yearly,
+    /// 半年。
+    HalfYearly,
     /// 无需周期对账。
     None,
 }
@@ -52,6 +54,7 @@ impl ReconciliationCycle {
             Self::Monthly => "月",
             Self::Quarterly => "季",
             Self::Yearly => "年",
+            Self::HalfYearly => "半年",
             Self::None => "无需周期对账",
         }
     }
@@ -67,6 +70,7 @@ impl ReconciliationCycle {
             Self::Monthly => "monthly",
             Self::Quarterly => "quarterly",
             Self::Yearly => "yearly",
+            Self::HalfYearly => "half_yearly",
             Self::None => "none",
         }
     }
@@ -128,7 +132,10 @@ pub struct SupplierCommercialProfileRevisionData {
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点（如 `0.13` 表示 13%；定点类型，§4.2）。
-    pub invoice_tax_rate: Rate,
+    pub invoice_tax_rate: Option<Rate>,
+    /// 常用进项税率；None 读取旧单值，Some([]) 明确表示未登记。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_tax_rates: Option<Vec<Rate>>,
     /// 与我司签约的公司主体（内部 `party` 引用）。
     pub signing_entity_party_id: PartyId,
     /// 付款时的公司主体（内部 `party` 引用）。
@@ -158,7 +165,10 @@ pub struct SupplierCommercialProfileRevision {
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。
-    pub invoice_tax_rate: Rate,
+    pub invoice_tax_rate: Option<Rate>,
+    /// 常用进项税率；None 读取旧单值，Some([]) 明确表示未登记。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_tax_rates: Option<Vec<Rate>>,
     /// 签约主体。
     pub signing_entity_party_id: PartyId,
     /// 付款主体。
@@ -190,16 +200,15 @@ impl SupplierCommercialProfileRevision {
         let (payment_term_snapshot, business_category) =
             split_payment_term_fields(data.payment_term_snapshot, data.business_category)?;
         let payment_term = SupplierPaymentTerm::parse(&payment_term_snapshot)?;
-        if payment_term.settlement_mode() != data.settlement_mode {
-            return Err(Error::from("结算方式与付款条件不一致，请重新选择"));
-        }
+        ensure_settlement_rules(payment_term, data.settlement_mode, data.reconciliation_cycle)?;
         let change_reason = normalize_required_text(
             data.change_reason,
             "变更原因不能为空",
             CHANGE_REASON_MAX_LEN,
             "变更原因过长",
         )?;
-        ensure_tax_rate_valid(data.invoice_tax_rate)?;
+        let rates = normalize_invoice_tax_rates(data.invoice_tax_rates.as_deref(), data.invoice_tax_rate)?;
+        let legacy_rate = (rates.len() == 1).then(|| rates[0]);
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -207,14 +216,22 @@ impl SupplierCommercialProfileRevision {
             supplier_id: data.supplier_id,
             settlement_mode: data.settlement_mode,
             reconciliation_cycle: data.reconciliation_cycle,
-            payment_term_snapshot: payment_term.code().to_string(),
+            payment_term_snapshot: payment_term.code(),
             business_category,
             invoice_type: data.invoice_type,
-            invoice_tax_rate: data.invoice_tax_rate,
+            invoice_tax_rate: legacy_rate,
+            invoice_tax_rates: Some(rates),
             signing_entity_party_id: data.signing_entity_party_id,
             payment_entity_party_id: data.payment_entity_party_id,
             change_reason,
         })
+    }
+
+    /// 返回新集合或旧单值，保留明确未登记的空集合。
+    pub fn tax_rates(&self) -> Vec<Rate> {
+        self.invoice_tax_rates
+            .clone()
+            .unwrap_or_else(|| self.invoice_tax_rate.into_iter().collect())
     }
 
     /// 返回不含经营类目编码的付款条件代码。
@@ -286,6 +303,32 @@ fn split_payment_term_fields(
     Ok((payment_term_snapshot, explicit.or(encoded)))
 }
 
+/// 周期结算的付款规则与对账周期须一致；存量非周期资料维持原规则。
+fn ensure_settlement_rules(
+    term: SupplierPaymentTerm,
+    mode: SettlementMode,
+    cycle: ReconciliationCycle,
+) -> Result<()> {
+    if term.settlement_mode() != mode {
+        return Err(Error::from("结算方式与付款条件不一致，请重新选择"));
+    }
+    let Some((period, _)) = term.calendar_due() else {
+        return Ok(());
+    };
+    use erp_core::common::calendar::CalendarPeriod;
+    let expected = match period {
+        CalendarPeriod::Week => ReconciliationCycle::Weekly,
+        CalendarPeriod::Month => ReconciliationCycle::Monthly,
+        CalendarPeriod::Quarter => ReconciliationCycle::Quarterly,
+        CalendarPeriod::HalfYear => ReconciliationCycle::HalfYearly,
+        CalendarPeriod::Year => ReconciliationCycle::Yearly,
+    };
+    if cycle != expected {
+        return Err(Error::from("对账周期与自然结算周期不一致"));
+    }
+    Ok(())
+}
+
 /// 校验发票税点是否落在合法区间。
 ///
 /// # 参数
@@ -302,6 +345,28 @@ fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
         return Err(Error::from("发票税点必须在 [0, 1) 区间内（如 0.13 表示 13%）"));
     }
     Ok(())
+}
+
+/// 校验并去重常用税率，明确空集合不回退旧值。
+///
+/// # Errors
+/// 超过 32 项、税率非法或单双字段矛盾时返回错误。
+pub fn normalize_invoice_tax_rates(rates: Option<&[Rate]>, legacy: Option<Rate>) -> Result<Vec<Rate>> {
+    let mut values = rates
+        .map(<[Rate]>::to_vec)
+        .unwrap_or_else(|| legacy.into_iter().collect());
+    if values.len() > 32 {
+        return Err(Error::from("常用进项税率不能超过 32 项"));
+    }
+    for rate in &values {
+        ensure_tax_rate_valid(*rate)?;
+    }
+    values.sort_by_key(|rate| rate.to_decimal());
+    values.dedup();
+    if rates.is_some() && legacy.is_some_and(|rate| values != vec![rate]) {
+        return Err(Error::from("常用进项税率与旧税率字段不一致"));
+    }
+    Ok(values)
 }
 
 #[cfg(test)]
@@ -324,7 +389,8 @@ mod tests {
             payment_term_snapshot: " PREPAY_30 ".to_string(),
             business_category: None,
             invoice_type: InvoiceType::VatSpecial,
-            invoice_tax_rate: Rate::from_str("0.13").unwrap(),
+            invoice_tax_rate: Some(Rate::from_str("0.13").unwrap()),
+            invoice_tax_rates: None,
             signing_entity_party_id: PartyId::new("party-internal-1"),
             payment_entity_party_id: PartyId::new("party-internal-2"),
             change_reason: " 首次建档 ".to_string(),
@@ -372,7 +438,8 @@ mod tests {
         .is_err());
 
         let bad_rate = SupplierCommercialProfileRevisionData {
-            invoice_tax_rate: Rate::from_str("1.05").unwrap(),
+            invoice_tax_rate: Some(Rate::from_str("1.05").unwrap()),
+            invoice_tax_rates: None,
             ..profile_data()
         };
         assert!(SupplierCommercialProfileRevision::new(
@@ -416,13 +483,13 @@ mod tests {
         let (gross, net, tax) = line_amounts(
             UnitPrice::from_str("100.0000").unwrap(),
             Quantity::from_str("3.000000").unwrap(),
-            profile.invoice_tax_rate,
+            profile.invoice_tax_rate.unwrap(),
         );
         assert_eq!(
             gross.to_decimal(),
             net.to_decimal() + tax.to_decimal(),
             "gross = net + tax 对税点 {} 不成立",
-            profile.invoice_tax_rate
+            profile.invoice_tax_rate.unwrap()
         );
         assert_eq!(tax.to_decimal(), Amount::from_str("39.00").unwrap().to_decimal());
     }
@@ -513,5 +580,79 @@ mod tests {
         assert_eq!(SettlementMode::CashSettlement.label(), "现结");
         assert_eq!(ReconciliationCycle::None.label(), "无需周期对账");
         assert_eq!(InvoiceType::VatSpecial.label(), "增值税专用发票");
+    }
+    #[test]
+    fn multiple_tax_rates_do_not_select_a_default_and_old_documents_still_read() {
+        let old = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            profile_data(),
+        )
+        .unwrap();
+        let mut json = serde_json::to_value(&old).unwrap();
+        json.as_object_mut().unwrap().remove("invoice_tax_rates");
+        let legacy: SupplierCommercialProfileRevision = serde_json::from_value(json).unwrap();
+        assert_eq!(legacy.tax_rates(), vec![Rate::from_str("0.13").unwrap()]);
+        let data = SupplierCommercialProfileRevisionData {
+            invoice_tax_rate: None,
+            invoice_tax_rates: Some(vec![
+                Rate::from_str("0.13").unwrap(),
+                Rate::from_str("0.09").unwrap(),
+                Rate::from_str("0.13").unwrap(),
+            ]),
+            ..profile_data()
+        };
+        let profile =
+            SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), data)
+                .unwrap();
+        assert!(profile.invoice_tax_rate.is_none());
+        assert_eq!(
+            profile
+                .tax_rates()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            vec!["0.09", "0.13"]
+        );
+        let empty = SupplierCommercialProfileRevisionData {
+            invoice_tax_rate: None,
+            invoice_tax_rates: Some(vec![]),
+            ..profile_data()
+        };
+        let empty =
+            SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), empty)
+                .unwrap();
+        assert!(empty.tax_rates().is_empty());
+        let conflict = SupplierCommercialProfileRevisionData {
+            invoice_tax_rates: Some(vec![]),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            conflict
+        )
+        .is_err());
+    }
+    #[test]
+    fn periodic_settlement_requires_matching_reconciliation_cycle() {
+        let valid = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::Monthly,
+            reconciliation_cycle: ReconciliationCycle::Monthly,
+            payment_term_snapshot: "PERIOD_MONTH_15".into(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            valid.clone()
+        )
+        .is_ok());
+        let invalid = SupplierCommercialProfileRevisionData {
+            reconciliation_cycle: ReconciliationCycle::Weekly,
+            ..valid
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            invalid
+        )
+        .is_err());
     }
 }

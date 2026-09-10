@@ -966,6 +966,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "公司主体",
+        description: "我方公司及导入别名维护",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/companies",
+                description: "查询公司主体",
+                permission: {
+                    resource: "company",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/companies",
+                description: "新建公司主体",
+                permission: {
+                    resource: "company",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/companies/{id}",
+                description: "查看公司主体",
+                permission: {
+                    resource: "company",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/companies/{id}",
+                description: "维护公司主体",
+                permission: {
+                    resource: "company",
+                    action: "update",
+                },
+            },
+        ],
+    },
+    {
         name: "主体",
         description: "企业主体稳定身份与历史名称资料管理",
         permissions: [
@@ -1311,6 +1357,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         name: "供应商",
         description: "供应商角色、商务结算版本、能力与资质管理",
         permissions: [
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-profiles/import",
+                description: "导入供应商资料",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
             {
                 module: "admin",
                 method: "POST",

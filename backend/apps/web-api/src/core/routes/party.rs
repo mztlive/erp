@@ -25,6 +25,38 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/companies",
+            with_permission(
+                get(party::company::company_list),
+                rbac,
+                party::company::company_list_permission_key(),
+            ),
+        )
+        .route(
+            "/companies",
+            with_permission(
+                post(party::company::company_create),
+                rbac,
+                party::company::company_create_permission_key(),
+            ),
+        )
+        .route(
+            "/companies/{id}",
+            with_permission(
+                get(party::company::company_detail),
+                rbac,
+                party::company::company_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/companies/{id}",
+            with_permission(
+                put(party::company::company_update),
+                rbac,
+                party::company::company_update_permission_key(),
+            ),
+        )
+        .route(
             "/parties",
             with_permission(get(party::party_list), rbac, party::party_list_permission_key()),
         )

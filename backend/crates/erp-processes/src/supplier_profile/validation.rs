@@ -69,6 +69,11 @@ impl SupplierProfileService {
             .party(party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("签约或付款主体不存在".to_string()))?;
+        if party.company_profile.is_none() {
+            return Err(Error::ValidationError(
+                "签约和付款主体必须是已维护的公司主体".into(),
+            ));
+        }
         if !party.is_active() {
             return Err(Error::BusinessLogicError("签约或付款主体已停用".to_string()));
         }

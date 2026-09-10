@@ -141,6 +141,15 @@ impl PaymentTermSnapshot {
         resolve_term: impl FnOnce(&str) -> Result<PaymentTermFact>,
     ) -> Result<BusinessDate> {
         let payment_term = resolve_term(&self.payment_term_code)?;
+        if let Some((period, days)) = payment_term.calendar_due {
+            let base = period.end(expected_delivery_on.ok_or("周期结算缺少预计交付日")?)?;
+            let due = base
+                .as_naive_date()
+                .checked_add_days(Days::new(u64::from(days)))
+                .ok_or("计划付款日超出支持范围")?;
+            return BusinessDate::from_ymd(due.year(), due.month(), due.day())
+                .ok_or_else(|| Error::from("计划付款日无效"));
+        }
         let Some(days) = payment_term.days_after_delivery else {
             return Ok(approved_on);
         };
@@ -295,5 +304,37 @@ mod tests {
             crate::entity::test_support::payment_term
         )
         .is_err());
+    }
+    #[test]
+    fn periodic_due_dates_use_delivery_period_and_require_delivery() {
+        use crate::entity::facts::PaymentTermFact;
+        use erp_core::common::calendar::CalendarPeriod;
+        let approved = BusinessDate::from_ymd(2026, 8, 26).unwrap();
+        let delivery = BusinessDate::from_ymd(2026, 9, 10).unwrap();
+        for (period, expected) in [
+            (CalendarPeriod::Week, (2026, 9, 28)),
+            (CalendarPeriod::Month, (2026, 10, 15)),
+            (CalendarPeriod::Quarter, (2026, 10, 15)),
+            (CalendarPeriod::HalfYear, (2027, 1, 15)),
+            (CalendarPeriod::Year, (2027, 1, 15)),
+        ] {
+            let resolve = |_: &str| {
+                Ok(PaymentTermFact {
+                    canonical_code: "period".into(),
+                    prepay_gate: false,
+                    prepay_minimum_ratio: None,
+                    days_after_delivery: None,
+                    calendar_due: Some((period, 15)),
+                })
+            };
+            let snapshot = PaymentTermSnapshot::new("period".into(), false, None, None, resolve).unwrap();
+            assert_eq!(
+                snapshot
+                    .payable_due_date(approved, Some(delivery), resolve)
+                    .unwrap(),
+                BusinessDate::from_ymd(expected.0, expected.1, expected.2).unwrap()
+            );
+            assert!(snapshot.payable_due_date(approved, None, resolve).is_err());
+        }
     }
 }

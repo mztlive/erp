@@ -215,6 +215,7 @@ function masterDataPermissionsForHref(href: string): readonly string[] {
     if (href.includes("/master-data/voucher-categories")) {
         return ["voucher_category_profile:list"]
     }
+    if (href.includes("/master-data/companies")) return ["company:list"]
     if (href.includes("/master-data/suppliers")) return ["supplier:list"]
     if (href.includes("/master-data/warehouses")) return ["warehouse:list"]
     // 商品与 SKU
@@ -547,6 +548,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     href: "/master-data/voucher-categories",
                     label: "卡券类目",
                     icon: TicketIcon,
+                },
+                {
+                    routeId: "W14",
+                    label: "公司主体",
+                    icon: HandshakeIcon,
+                    href: "/master-data/companies",
                 },
                 {
                     routeId: "W14",

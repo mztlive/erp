@@ -228,6 +228,7 @@ export type CommercialProfileDto = {
     payment_term_snapshot: string
     business_category?: string | null
     invoice_type: string
+    invoice_tax_rates?: string[] | null
     invoice_tax_rate: string | null
     signing_entity_party_id: string | null
     signing_entity_name: string | null
@@ -279,9 +280,10 @@ export type SupplierQualificationDto = {
     qualification_type: string
     certificate_no: string
     issuer: string | null
-    valid_from: string
+    valid_from: string | null
     valid_to: string | null
     attachment_id: string | null
+    validity_verified?: boolean
     status: string
     capability_ids: string[]
     version: number

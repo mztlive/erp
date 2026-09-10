@@ -14,6 +14,7 @@
 //!   双字段，明文字段永远不进入 `Debug` 输出。
 
 mod close;
+pub mod company;
 mod content_match;
 mod entity;
 pub mod party_address;

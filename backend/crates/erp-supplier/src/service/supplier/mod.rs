@@ -45,6 +45,7 @@ fn supplier_list_search_input(
     type HealthFilter = crate::repository::SupplierQualificationHealthFilter;
     let qualification_health = match query.qualification_health {
         None => None,
+        Some(SupplierQualificationHealth::Unverified) => Some(HealthFilter::Unverified),
         Some(SupplierQualificationHealth::Valid) => Some(HealthFilter::Valid),
         Some(SupplierQualificationHealth::Expiring30) => Some(HealthFilter::Expiring30),
         Some(SupplierQualificationHealth::Expired) => Some(HealthFilter::Expired),

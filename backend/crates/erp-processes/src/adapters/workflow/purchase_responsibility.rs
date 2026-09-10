@@ -243,6 +243,7 @@ mod tests {
                     prepay_gate: false,
                     prepay_minimum_ratio: None,
                     days_after_delivery: Some(30),
+                    calendar_due: None,
                 })
             },
         )

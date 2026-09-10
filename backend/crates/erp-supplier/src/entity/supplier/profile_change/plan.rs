@@ -1,6 +1,6 @@
 use crate::entity::supplier::{
-    qualification_identity_key, CapabilityCode, CapabilityStatus, QualificationType, SupplierCapability,
-    SupplierQualification,
+    qualification_identity_key, CapabilityCode, CapabilityStatus, QualificationStatus, QualificationType,
+    SupplierCapability, SupplierQualification,
 };
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::SupplierCapabilityId;
@@ -32,7 +32,7 @@ pub struct PlannedQualificationInput {
     /// 发证机构。
     pub issuer: Option<String>,
     /// 生效日期。
-    pub valid_from: BusinessDate,
+    pub valid_from: Option<BusinessDate>,
     /// 失效日期。
     pub valid_to: Option<BusinessDate>,
     /// 资质附件 ID。
@@ -158,7 +158,7 @@ impl SupplierProfileChangePlan {
                     continue;
                 }
                 qualification_updates.push(key);
-            } else if qual.is_valid() {
+            } else if qual.stable.status == QualificationStatus::Active {
                 qualification_disables.push(key);
             }
         }

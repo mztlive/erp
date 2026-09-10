@@ -9,6 +9,7 @@ pub(crate) fn parse(code: &str) -> erp_core::Result<PaymentTermFact> {
         prepay_gate: term.prepay_gate(),
         prepay_minimum_ratio: term.prepay_minimum_ratio(),
         days_after_delivery: term.days_after_delivery(),
+        calendar_due: term.calendar_due(),
     })
 }
 /// 先分离历史快照附带的经营类目，再按提供方付款条件规则解析。

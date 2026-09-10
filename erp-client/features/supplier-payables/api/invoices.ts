@@ -1,3 +1,4 @@
+import { invoiceTaxAllocations } from "@/features/supplier-payables/lib/invoice-tax-allocation"
 /**
  * W12 供应商往来 · 进项发票相关请求（登记+分配提交、红票）。
  * 正式幂等只由服务端命令收据保证。
@@ -66,12 +67,7 @@ export async function submitInvoice(
             tax_amount: input.taxAmount,
             supplier_id: input.supplierId,
             idempotency_key: input.idempotencyKey,
-            allocations: targets.map((t) => ({
-                payable_account_id: t.payableAccountId,
-                allocated_gross_amount: t.amount,
-                allocated_net_amount: input.netAmount,
-                allocated_tax_amount: input.taxAmount,
-            })),
+            allocations: invoiceTaxAllocations(targets, input.taxAmount),
         })
 
         const result: FormalSubmitResult = {

@@ -99,6 +99,15 @@ mod tests {
     }
     #[async_trait]
     impl CreationBasisSupplierPort for SupplierPort {
+        async fn ensure_qualified(
+            &self,
+            _: &SupplierAccountId,
+            _: PurchaseType,
+            _: erp_core::common::time::BusinessDate,
+            _: &mut dyn Executor,
+        ) -> crate::Result<()> {
+            panic!("合同资格应由共用提交事务步骤校验，而非草稿快照构造")
+        }
         async fn supplier_role(
             &self,
             id: &SupplierAccountId,
@@ -132,6 +141,7 @@ mod tests {
                 prepay_gate: false,
                 prepay_minimum_ratio: None,
                 days_after_delivery: Some(30),
+                calendar_due: None,
             })
         }
         fn payment_snapshot(&self, code: &str) -> erp_core::Result<PaymentTermFact> {

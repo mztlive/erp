@@ -869,7 +869,7 @@ fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
     }
     let named = SupplierPaymentTerm::parse(&code)
         .map(SupplierPaymentTerm::label)
-        .unwrap_or(code.as_str());
+        .unwrap_or(code);
     if snapshot.prepay_gate && !named.contains("先款") {
         Some(format!("{named} · 先款后货"))
     } else {
@@ -930,6 +930,7 @@ mod tests {
             prepay_gate: term.prepay_gate(),
             prepay_minimum_ratio: term.prepay_minimum_ratio(),
             days_after_delivery: term.days_after_delivery(),
+            calendar_due: term.calendar_due(),
         })
     }
 
