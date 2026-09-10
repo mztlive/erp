@@ -1066,7 +1066,13 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             await page.locator("#supplier-payables-view-tabs-trigger-purchase-invoice").click();
             await page.locator("#supplier-payables-toolbar-search").fill(purchaseInvoiceNo);
             await page.locator("#supplier-payables-toolbar-search").press("Enter");
-            const purchaseRed = page.getByRole("button", { name: "红票" }).first();
+            const purchaseInvoiceRow = page
+                .getByRole("row")
+                .filter({ hasText: purchaseInvoiceNo })
+                .filter({ hasText: "蓝票" });
+            await expect(purchaseInvoiceRow).toBeVisible({ timeout: UI_TIMEOUT });
+            await purchaseInvoiceRow.click();
+            const purchaseRed = page.locator("#supplier-payables-preview-record-red-invoice");
             await expect(purchaseRed).toBeVisible({ timeout: UI_TIMEOUT });
             {
                 await purchaseRed.click();

@@ -96,14 +96,6 @@ prepare_env() {
     fi
 }
 
-playwright_args() {
-    local -a args=(--workers=1)
-    if [[ "${HEADED}" == "1" ]]; then
-        args+=(--headed)
-    fi
-    printf '%s\n' "${args[@]}"
-}
-
 run_one() {
     local spec_abs
     local spec_arg
@@ -112,8 +104,10 @@ run_one() {
     spec_abs="$(resolve_spec "$1")"
     spec_arg="$(spec_for_playwright "${spec_abs}")"
     name="$(basename "${spec_abs}")"
-    mapfile -t pw_args < <(playwright_args)
-    pw_args=("${spec_arg}" "${pw_args[@]}")
+    pw_args=("${spec_arg}" --workers=1)
+    if [[ "${HEADED}" == "1" ]]; then
+        pw_args+=(--headed)
+    fi
 
     echo ""
     echo "############################################################"
@@ -142,7 +136,10 @@ if [[ "${1:-}" == "all" ]]; then
     echo "# 全量流程：reset 一次后一次跑 Playwright"
     echo "############################################################"
     prepare_env
-    mapfile -t pw_args < <(playwright_args)
+    pw_args=(--workers=1)
+    if [[ "${HEADED}" == "1" ]]; then
+        pw_args+=(--headed)
+    fi
     if [[ -n "${SLOW_MO}" ]]; then
         echo "-- 慢动作: E2E_SLOW_MO=${SLOW_MO}ms（playwright.config launchOptions.slowMo） --"
         export E2E_SLOW_MO

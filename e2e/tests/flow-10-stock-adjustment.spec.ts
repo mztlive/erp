@@ -138,12 +138,7 @@ async function gotoInventory(page: Page): Promise<void> {
 }
 
 async function gotoWorkspace(page: Page): Promise<void> {
-    const nav = page.getByRole("link", { name: "我的工作台" })
-    if (await nav.isVisible().catch(() => false)) {
-        await nav.click()
-    } else {
-        await page.goto("/workspace")
-    }
+    await page.goto("/workspace")
     await expectHeading(page, "我的工作台")
 }
 
@@ -215,8 +210,15 @@ function escapeRe(value: string): string {
 async function searchWorkspaceTask(page: Page, documentNo: string): Promise<void> {
     await gotoWorkspace(page)
     // 后端工作台搜索不匹配单号，填单号会把列表滤空；直接在待办列表中匹配任务。
+    // 空队列不渲染待办列表，短暂延迟后硬刷新一次再等任务出现。
     const list = page.getByRole("list", { name: "待办列表" })
-    await expect(list).toBeVisible(VISIBLE)
+    try {
+        await expect(list).toBeVisible({ timeout: 8_000 })
+    } catch {
+        await page.reload()
+        await expectHeading(page, "我的工作台")
+        await expect(list).toBeVisible(VISIBLE)
+    }
     const task = list
         .getByRole("button", {
             name: new RegExp(

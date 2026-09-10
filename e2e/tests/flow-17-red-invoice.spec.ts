@@ -36,6 +36,7 @@ import { apiGet, apiLogin } from "../helpers/api"
 import { headedAwareViewport } from "../helpers/headed"
 import { submitSalesInvoiceRequest } from "../helpers/invoices"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
+import { expandSourcingEditor } from "../helpers/sourcing"
 import { expectToast, salesOrderAmountSummary, selectWorkspaceFamily } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
@@ -175,9 +176,11 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expect(kaipiao.page.getByText(salesRedNo).first()).toBeVisible({ timeout: LONG })
         await expect(kaipiao.page.getByText("已登记").first()).toBeVisible({ timeout: LONG })
 
-        await kaipiao.page.locator("#customer-receivables-view-receivable").click()
-        await kaipiao.page.locator("#customer-receivables-toolbar-search").fill(order.orderNo)
-        await kaipiao.page.locator("#customer-receivables-toolbar-search").press("Enter")
+        // 发票搜索会把 q 留在 URL；切应收 Tab 不会清关键词，必须硬导航。
+        await kaipiao.page.goto(
+            `/finance/customer-accounts?view=receivable&q=${encodeURIComponent(legalName)}`,
+        )
+        await waitHeading(kaipiao.page, "客户往来")
         const receivableRow = kaipiao.page.getByRole("row").filter({ hasText: order.orderNo })
         await expect(receivableRow).toBeVisible({ timeout: LONG })
         await expect(receivableRow.getByText(/0\.00/).first()).toBeVisible({ timeout: LONG })
@@ -202,8 +205,11 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         })
         await selectWorkspaceFamily(kaipiao.page, "finance")
         const reopenList = kaipiao.page.getByRole("list", { name: "待办列表" })
-        await expect(reopenList).toBeVisible({ timeout: LONG })
-        await expect(reopenList.getByRole("button", { name: /销项开票处理/ })).toHaveCount(0)
+        const emptyQueue = kaipiao.page.getByText(
+            /当前没有待处理事项|当前筛选没有待办|范围内没有待办/,
+        )
+        await expect(reopenList.or(emptyQueue).first()).toBeVisible({ timeout: LONG })
+        await expect(kaipiao.page.getByRole("button", { name: /销项开票处理/ })).toHaveCount(0)
         await expect(kaipiao.page.getByRole("button", { name: /发票审批|销项发票审批/ })).toHaveCount(0)
         await expect(kaipiao.page.getByRole("button", { name: /^(通过|同意审批)$/ })).toHaveCount(0)
         await expect(kaipiao.page.getByRole("button", { name: "驳回", exact: true })).toHaveCount(0)
@@ -689,14 +695,16 @@ async function allocateAndSubmitPurchaseOrder(page: Page, orderNo: string) {
     await task.first().click()
     await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({ timeout: LONG })
     await expect(page.getByText("将创建采购单")).toBeVisible({ timeout: TIMEOUT })
-    const warehouse = page.getByRole("combobox", { name: "仓库", exact: true })
-    if (await warehouse.count()) {
-        await warehouse.click()
-        await warehouse.fill("BJ-TZ-01")
-        const option = page.getByRole("option", { name: /BJ-TZ-01/ })
-        await expect(option).toBeVisible({ timeout: TIMEOUT })
-        await option.click()
-    }
+    await expandSourcingEditor(page)
+    const warehouse = page
+        .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]')
+        .first()
+    await expect(warehouse).toBeVisible({ timeout: TIMEOUT })
+    await warehouse.click()
+    await warehouse.fill("BJ-TZ-01")
+    const option = page.getByRole("option", { name: /BJ-TZ-01|北京通州/ }).first()
+    await expect(option).toBeVisible({ timeout: TIMEOUT })
+    await option.click({ force: true })
     await page.locator("#procurement-orders-create-preview").click()
     const preview = page.getByRole("dialog", { name: "预览供给分配" })
     await expect(preview).toBeVisible({ timeout: TIMEOUT })
@@ -917,11 +925,10 @@ async function issuePurchaseRedInvoice(
         hasText: "蓝票",
     })
     await expect(row).toBeVisible({ timeout: LONG })
-    const redButton = row.getByRole("button", { name: "红票" }).or(
-        page.locator('[id$="-red-invoice"]').filter({ hasText: "红票" }),
-    )
-    await expect(redButton.first()).toBeVisible({ timeout: LONG })
-    await redButton.first().click()
+    await row.click()
+    const redButton = page.locator("#supplier-payables-preview-record-red-invoice")
+    await expect(redButton).toBeVisible({ timeout: LONG })
+    await redButton.click()
 
     const dialog = page.getByRole("dialog").filter({ hasText: "进项红票" })
     await expect(dialog).toBeVisible({ timeout: TIMEOUT })

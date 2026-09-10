@@ -800,12 +800,23 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         page = await switchTo("caigou")
         await page.goto(purchaseHref)
         await expect(documentHeader(page).getByText("已生效").first()).toBeVisible(VISIBLE)
-        await expect(page.locator("#procurement-orders-detail-pay")).toBeVisible(VISIBLE)
+        // 付款走 W01 出纳任务，采购单详情页头没有独立付款按钮。
+        await expect(page.locator("#procurement-orders-detail-pay")).toHaveCount(0)
         await expect(page.locator("#procurement-orders-detail-change")).toBeVisible(VISIBLE)
         await expect(page.locator("#procurement-orders-detail-change")).toBeEnabled()
         await page.getByRole("tab", { name: /^票款/ }).click()
         await expect(page.getByText("应付未结")).toBeVisible(VISIBLE)
         await expect(page.getByText("尚未形成应付（需审批通过）。")).toHaveCount(0)
+
+        page = await switchTo("fukuan")
+        await page.goto("/workspace")
+        await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible(VISIBLE)
+        await selectWorkspaceFamily(page, "finance")
+        await expect(
+            page
+                .getByRole("list", { name: "待办列表" })
+                .getByRole("button", { name: /供应商付款处理/ }),
+        ).toBeVisible(VISIBLE)
 
         const effective = await fetchPurchaseCenter(caigouToken, snap.id)
         expect(String(effective.status)).toBe("EFFECTIVE")

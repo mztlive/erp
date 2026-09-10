@@ -74,16 +74,10 @@ export async function loginViaUi(
 const sessionPool = new WeakMap<Browser, Map<string, LoggedInSession>>()
 
 async function openWorkspace(page: Page): Promise<void> {
-    if (!page.url().includes("/workspace")) {
-        await page.goto("/workspace")
-    }
+    // 复用会话时页面可能已停在空工作台，必须硬导航才能重新拉待办。
+    await page.goto("/workspace")
     const workspace = page.getByRole("heading", { name: "我的工作台" })
-    try {
-        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
-    } catch {
-        await page.goto("/workspace")
-        await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
-    }
+    await expect(workspace).toBeVisible({ timeout: LOGIN_TIMEOUT })
 }
 
 /**

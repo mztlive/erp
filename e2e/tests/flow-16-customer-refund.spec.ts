@@ -29,6 +29,7 @@ import { ACCOUNTS } from "../helpers/accounts"
 import { headedAwareViewport } from "../helpers/headed"
 import { loginViaUi, newLoggedInContext } from "../helpers/login"
 import { expectReceiptPreview, submitCustomerRefundRequest } from "../helpers/receipts"
+import { expandSourcingEditor } from "../helpers/sourcing"
 import { salesOrderAmountSummary, selectWorkspaceFamily } from "../helpers/ui"
 
 // 两个退款用例各自创建业务数据；单 worker 顺序执行，前一个失败也必须执行后一个。
@@ -206,7 +207,9 @@ test.describe("flow-16 客户退款单", () => {
             // ── 8. 断言：退款已过账、应收恢复、原回款仍为已过账（不是冲正）──
             const fukuanPosted = await openRole(browser, extra, "fukuan")
             await assertCustomerRefundPreview(fukuanPosted.page, refundId, refundNo, "已过账")
-            await expect(fukuanPosted.page.getByText("已过账记录只读")).toBeVisible({
+            await expect(
+                fukuanPosted.page.getByText("已过账记录不可编辑或删除；纠错须追加反向记录。"),
+            ).toBeVisible({
                 timeout: TIMEOUT,
             })
             await fukuanPosted.page.locator("#customer-receivables-preview-close").click()
@@ -290,14 +293,18 @@ test.describe("flow-16 客户退款单", () => {
                 timeout: LONG,
             })
             await expect(caigou.page.getByText("将创建采购单")).toBeVisible({ timeout: TIMEOUT })
-            const warehouse = caigou.page.getByRole("combobox", { name: "仓库", exact: true })
-            if (await warehouse.count()) {
-                await warehouse.click()
-                await warehouse.fill("BJ-TZ-01")
-                const option = caigou.page.getByRole("option", { name: /BJ-TZ-01/ })
-                await expect(option).toBeVisible({ timeout: TIMEOUT })
-                await option.click()
-            }
+            await expandSourcingEditor(caigou.page)
+            const warehouse = caigou.page
+                .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]')
+                .first()
+            await expect(warehouse).toBeVisible({ timeout: TIMEOUT })
+            await warehouse.click()
+            await warehouse.fill("BJ-TZ-01")
+            const option = caigou.page
+                .getByRole("option", { name: /BJ-TZ-01|北京通州/ })
+                .first()
+            await expect(option).toBeVisible({ timeout: TIMEOUT })
+            await option.click({ force: true })
             await caigou.page.locator("#procurement-orders-create-preview").click()
             const preview = caigou.page.getByRole("dialog", { name: "预览供给分配" })
             await expect(preview).toBeVisible({ timeout: TIMEOUT })
@@ -425,14 +432,24 @@ test.describe("flow-16 客户退款单", () => {
             await fukuanAssert.page.locator("#supplier-payables-toolbar-search").press("Enter")
             const postedPayment = fukuanAssert.page
                 .getByRole("row")
-                .filter({ has: fukuanAssert.page.getByRole("button", { name: "退款" }) })
-            await expect(postedPayment.getByText("已过账", { exact: true })).toBeVisible({ timeout: LONG })
+                .filter({ hasText: "已过账" })
+                .first()
+            await expect(postedPayment.getByText("已过账", { exact: true })).toBeVisible({
+                timeout: LONG,
+            })
             await expect(postedPayment.getByText("已冲正")).toHaveCount(0)
+            await postedPayment.click()
+            await expect(
+                fukuanAssert.page.locator("#supplier-payables-preview-record-refund"),
+            ).toBeVisible({ timeout: LONG })
 
-            await fukuanAssert.page.locator("#supplier-payables-view-tabs-trigger-payable").click()
-            await expect(fukuanAssert.page).toHaveURL(/view=payable/, { timeout: LONG })
-            await fukuanAssert.page.locator("#supplier-payables-toolbar-search").fill(SUPPLIER_SHORT)
-            await fukuanAssert.page.locator("#supplier-payables-toolbar-search").press("Enter")
+            // 预览抽屉会挡住视图切换，改硬导航到应付台账。
+            await fukuanAssert.page.goto(
+                `/finance/supplier-accounts?view=payable&q=${encodeURIComponent(SUPPLIER_SHORT)}`,
+            )
+            await expect(fukuanAssert.page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
+                timeout: LONG,
+            })
             await expect(fukuanAssert.page.getByRole("row").filter({ hasText: /狮峰/ }).getByText("未结", { exact: true })).toBeVisible({ timeout: LONG })
             await fukuanAssert.context.close()
         } finally {
@@ -842,7 +859,8 @@ async function assertCustomerRefundPreview(
     await page.goto(
         `/finance/customer-accounts?view=receipt&previewKind=refund&previewId=${encodeURIComponent(refundId)}`,
     )
-    await expect(page.getByRole("heading", { name: refundNo })).toBeVisible({ timeout: LONG })
+    await expect(page.getByRole("heading", { name: "客户退款" })).toBeVisible({ timeout: LONG })
+    await expect(page.getByText(`退款单：${refundNo}`)).toBeVisible({ timeout: LONG })
     await expect(
         page.locator('[data-slot="quick-preview-summary"]').getByText(status, { exact: true }),
     ).toBeVisible({ timeout: LONG })
