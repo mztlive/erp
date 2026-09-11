@@ -47,6 +47,7 @@ interface BusinessObjectComboboxProps {
     value?: string
     onValueChange: (id?: string) => void
     onSearchChange?: (query: string) => void
+    onBlur?: () => void
     /** 服务端已完成搜索时关闭本地二次过滤。 */
     filterMode?: "local" | "remote"
     label: string
@@ -55,6 +56,7 @@ interface BusinessObjectComboboxProps {
     loading?: boolean
     disabled?: boolean
     required?: boolean
+    allowClear?: boolean
     id?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -66,6 +68,7 @@ function BusinessObjectCombobox({
     value,
     onValueChange,
     onSearchChange,
+    onBlur,
     filterMode = "local",
     label,
     placeholder = "搜索名称或编号",
@@ -73,6 +76,7 @@ function BusinessObjectCombobox({
     loading = false,
     disabled = false,
     required = false,
+    allowClear = true,
     id,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedBy,
@@ -127,7 +131,8 @@ function BusinessObjectCombobox({
                     aria-describedby={ariaDescribedBy}
                     aria-busy={loading}
                     placeholder={placeholder}
-                    showClear
+                    showClear={allowClear}
+                    onBlur={onBlur}
                     disabled={disabled}
                     className="w-full"
                 />

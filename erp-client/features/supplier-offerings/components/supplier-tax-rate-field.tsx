@@ -54,8 +54,10 @@ export const SupplierTaxRateField = ({
         if (!value && percentages.length === 1) onChange(percentages[0])
     }, [prefill, query.data, supplierId, value, percentages, onChange])
     return (
-        <div className="space-y-2">
-            <Label htmlFor={id}>进项税率（%）</Label>
+        <div className="flex min-w-0 flex-col gap-2">
+            <Label htmlFor={id} className="leading-snug">
+                进项税率（%）<span className="text-destructive">*</span>
+            </Label>
             <Input
                 id={id}
                 value={value}
@@ -64,7 +66,9 @@ export const SupplierTaxRateField = ({
                 list={`${id}-options`}
                 inputMode="decimal"
                 required
+                className="h-9"
                 aria-invalid={Boolean(errors?.length)}
+                aria-describedby={`${id}-description${errors?.length ? ` ${id}-error` : ""}`}
                 placeholder="选择或填写该商品税率"
             />
             <datalist id={`${id}-options`}>
@@ -78,17 +82,26 @@ export const SupplierTaxRateField = ({
                     </option>
                 ))}
             </datalist>
-            <p className="text-xs text-muted-foreground">
-                {query.isFetching
-                    ? "正在读取常用税率…"
-                    : query.isError
-                      ? "常用税率加载失败，可按商品实际税率填写。"
-                      : percentages.length
-                        ? `供应商常用：${percentages.map((rate) => `${rate}%`).join("、")}。请按本商品选择。`
-                        : "供应商未登记常用税率，请按本商品填写。"}
+            <p
+                id={`${id}-description`}
+                className="text-xs text-muted-foreground"
+            >
+                {!supplierId
+                    ? "选择供应商后显示常用税率。"
+                    : query.isFetching
+                      ? "正在读取常用税率…"
+                      : query.isError
+                        ? "常用税率加载失败，可按商品实际税率填写。"
+                        : percentages.length
+                          ? `供应商常用：${percentages.map((rate) => `${rate}%`).join("、")}。请按本商品选择。`
+                          : "供应商未登记常用税率，请按本商品填写。"}
             </p>
             {Boolean(errors?.length) && (
-                <p role="alert" className="text-xs text-destructive">
+                <p
+                    id={`${id}-error`}
+                    role="alert"
+                    className="text-xs text-destructive"
+                >
                     请输入 0–100 的有效税率。
                 </p>
             )}

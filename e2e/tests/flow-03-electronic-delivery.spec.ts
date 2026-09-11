@@ -387,6 +387,8 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         await dialog.locator('#supplier-offerings-dialog-register-minimum-quantity').fill('1')
         await dialog.locator('#supplier-offerings-dialog-register-input-tax-percentage').fill('6')
         await dialog.locator('#supplier-offerings-dialog-register-supply-region').fill('全国')
+        await dialog.locator('#supplier-offerings-dialog-register-supply-region').press('ArrowDown')
+        await page.getByRole('option', { name: '全国', exact: true }).click()
         await pickIsoDate(page, page.locator('#supplier-offerings-dialog-register-valid-from'), isoDate(0))
         await dialog.locator('#supplier-offerings-dialog-register-available-quantity').fill('1000')
         await dialog.locator('#supplier-offerings-dialog-register-submit').click()
@@ -397,6 +399,7 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         if (await page.getByText('已登记供给').count()) {
             // 409 本身证明供给已存在，直接复用，不依赖列表分页可见性。
             await dialog.getByRole('button', { name: '关闭' }).first().click()
+            await page.getByRole('alertdialog').getByRole('button', { name: '放弃更改' }).click()
             await expect(dialog).toBeHidden({ timeout: 20000 })
         } else {
             await expectToast(page, '供给已添加')
