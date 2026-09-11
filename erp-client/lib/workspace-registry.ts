@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
     BoxesIcon,
     ClipboardListIcon,
+    DownloadIcon,
     FileStackIcon,
     FileTextIcon,
     FolderTreeIcon,
@@ -625,6 +626,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W18",
                     icon: UploadIcon,
+                },
+                {
+                    routeId: "W18",
+                    href: "/governance/exports",
+                    label: "导出任务",
+                    icon: DownloadIcon,
+                    requiredPermissions: ["background_job:list"],
                 },
                 {
                     routeId: "W29",
