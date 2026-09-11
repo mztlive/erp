@@ -16,6 +16,7 @@
 mod attribute;
 mod category;
 mod dictionary;
+mod import_lookup;
 mod listing;
 mod parent_chain;
 mod product;

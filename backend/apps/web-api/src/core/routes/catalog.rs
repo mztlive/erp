@@ -246,6 +246,41 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/products/import",
+            with_permission(
+                upload::multipart_route(
+                    post(catalog::import::product_import_submit),
+                    upload::MAX_PRODUCT_IMPORT_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                catalog::import::product_import_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/products/import-jobs",
+            with_permission(
+                get(catalog::import::product_import_job_list),
+                rbac,
+                catalog::import::product_import_job_list_permission_key(),
+            ),
+        )
+        .route(
+            "/products/import-jobs/{id}",
+            with_permission(
+                get(catalog::import::product_import_job_detail),
+                rbac,
+                catalog::import::product_import_job_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/products/import-jobs/{id}/items",
+            with_permission(
+                get(catalog::import::product_import_job_items),
+                rbac,
+                catalog::import::product_import_job_items_permission_key(),
+            ),
+        )
+        .route(
             "/products/{id}",
             with_permission(
                 put(catalog::product::product_update),

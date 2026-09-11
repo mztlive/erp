@@ -154,6 +154,9 @@ aws-sdk-s3 = "1.143.0"
 aws-smithy-http-client = "1.4.0"
 tempfile = "3.27.0"
 
+# Excel 导入（xlsx 为 zip 包）
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
+
 # 日常 debug：压缩调试信息以加快 codegen 和链接。
 # 完整调试器用 `cargo build --profile debugging`。
 [profile.dev]

@@ -19,6 +19,7 @@ pub mod product;
 pub mod product_brand;
 pub mod product_category;
 pub mod product_category_attribute;
+pub mod product_import;
 pub mod product_kind;
 pub mod product_revision;
 pub mod product_revision_media;

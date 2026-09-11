@@ -137,6 +137,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 
     let outbox_worker = state.start_approval_outbox_worker();
     spawn_sales_selection_worker(state.clone());
+    spawn_product_import_worker(state.clone());
     let result = run_app(app_port, state).await;
     outbox_worker.stop().await;
     result
@@ -148,6 +149,28 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 ///
 /// # 错误
 /// 政策缺失或权限字符串无法解析时返回服务错误。
+/// 启动商品导入任务领取循环。进程退出时未完成任务可被下次启动恢复。
+///
+/// # 参数
+/// * `state` - 应用状态
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 任务失败记日志，不中断循环。
+fn spawn_product_import_worker(state: AppState) {
+    tokio::spawn(async move {
+        let process = state.product_import_process();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if let Err(error) = process.run_due_jobs().await {
+                tracing::error!(error = %error, "商品导入任务领取失败");
+            }
+        }
+    });
+}
+
 /// 启动选品准备任务领取循环。进程退出时任务可被下次启动恢复。
 ///
 /// # 参数

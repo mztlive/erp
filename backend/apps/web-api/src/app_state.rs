@@ -537,6 +537,21 @@ impl AppState {
         erp_processes::adapters::catalog_service(self.db())
     }
 
+    /// 产品报价表异步导入流程。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库、对象存储与内容指纹密钥的导入流程。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn product_import_process(&self) -> erp_processes::ProductImportProcess {
+        erp_processes::ProductImportProcess::new(
+            self.db(),
+            self.storage().clone(),
+            self.config_snapshot().app.secret.as_bytes(),
+        )
+    }
+
     /// Warehouse domain service with identity, audit and fingerprint adapters.
     pub fn warehouse_service(&self) -> erp_warehouse::WarehouseService {
         erp_processes::adapters::warehouse_service(self.db(), self.rbac())

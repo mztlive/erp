@@ -5,6 +5,7 @@
 //! 本文件覆盖商品分类/品牌/计量单位/规格属性/规格属性值五组字典接口；
 //! SPU/SKU 与卡券类目接口见同目录 `product.rs`。
 
+pub mod import;
 pub mod product;
 
 use application_core::AuditActor;

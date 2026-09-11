@@ -12,6 +12,7 @@ mod attribute;
 mod brand_unit;
 mod category;
 mod common;
+mod import;
 mod product;
 mod voucher;
 
@@ -30,6 +31,11 @@ pub use category::{
 };
 pub(crate) use common::validate_sales_price_range;
 pub use common::{PageView, SortDir};
+pub use import::{
+    ensure_product_import_headers, ProductImportItemListParams, ProductImportItemView,
+    ProductImportJobListParams, ProductImportJobView, PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN,
+    PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE, PRODUCT_IMPORT_UNIT_NAME,
+};
 pub use product::{
     CreateProductRequest, DisableProductRequest, ProductListParams, ProductListingView, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,

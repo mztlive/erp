@@ -328,6 +328,7 @@ impl BulkJobService {
         let filter = BackgroundJobFilter {
             job_no: query.job_no,
             job_type: query.job_type,
+            domain_job_type: query.domain_job_type,
             status: query.status,
             requested_by: query.requested_by,
             page: query.paging.page,
@@ -590,6 +591,8 @@ impl BulkJobService {
                 item_no: row.item_no,
                 object_type: row.object_type,
                 object_id: row.object_id,
+                worksheet_name: row.worksheet_name,
+                source_row_no: row.source_row_no,
                 status: row.status,
                 result_code: row.result_code,
                 result_summary: row.result_summary,

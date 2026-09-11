@@ -1,7 +1,8 @@
 "use client"
 
+import * as React from "react"
 import { useRouter } from "next/navigation"
-import { DownloadIcon, PlusIcon } from "lucide-react"
+import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
 import {
@@ -25,9 +26,13 @@ import { useProductListColumns } from "@/features/master-data/hooks/use-product-
 import { useProductListState } from "@/features/master-data/hooks/use-product-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
+import { ProductImportDialog } from "@/features/master-data/components/product/product-import-dialog"
+import { ProductImportQueue } from "@/features/master-data/components/product/product-import-queue"
 
 export function ProductsListPage() {
     const router = useRouter()
+    const [importOpen, setImportOpen] = React.useState(false)
+    const [sessionJobIds, setSessionJobIds] = React.useState<string[]>([])
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useProductListState(searchInputRef)
@@ -76,14 +81,37 @@ export function ProductsListPage() {
             title="商品列表"
             description="查看商品资料、上架状态与供应覆盖。"
             alerts={
-                state.listingError ? (
-                    <p className="text-sm text-destructive" role="alert">
-                        {state.listingError}
-                    </p>
-                ) : null
+                <>
+                    {state.listingError ? (
+                        <p className="text-sm text-destructive" role="alert">
+                            {state.listingError}
+                        </p>
+                    ) : null}
+                    <ProductImportQueue
+                        enabled
+                        sessionJobIds={sessionJobIds}
+                        onDismiss={(jobId) =>
+                            setSessionJobIds((ids) =>
+                                ids.filter((id) => id !== jobId),
+                            )
+                        }
+                    />
+                </>
             }
             exportMeta={state.exportMeta}
             actions={[
+                {
+                    id: "master-data-products-list-import",
+                    actionKey: "import",
+                    label: "导入",
+                    icon: UploadIcon,
+                    variant: "outline",
+                    disabled: !state.canCreate,
+                    title: !state.canCreate
+                        ? state.createBlockedReason
+                        : undefined,
+                    onClick: () => setImportOpen(true),
+                },
                 {
                     id: "master-data-products-list-export",
                     actionKey: "export",
@@ -305,6 +333,16 @@ export function ProductsListPage() {
                 target={state.disableTarget}
             />
             {state.listingConfirmationDialog}
+            {importOpen ? (
+                <ProductImportDialog
+                    onClose={() => setImportOpen(false)}
+                    onSubmitted={(job) =>
+                        setSessionJobIds((ids) =>
+                            ids.includes(job.id) ? ids : [job.id, ...ids],
+                        )
+                    }
+                />
+            ) : null}
         </ListPageFrame>
     )
 }

@@ -1725,6 +1725,46 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/products/import",
+                description: "导入商品报价表",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/import-jobs",
+                description: "查询商品导入任务",
+                permission: {
+                    resource: "product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/import-jobs/{id}",
+                description: "查询商品导入任务详情",
+                permission: {
+                    resource: "product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/import-jobs/{id}/items",
+                description: "查询商品导入逐项结果",
+                permission: {
+                    resource: "product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/products/{id}",
                 description: "规格编辑商品",

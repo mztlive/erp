@@ -25,13 +25,14 @@ pub use dto::source_registry::{
     ExternalIdentityMapView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
 };
 pub use entity::bulk_job::{
-    legacy_import_job_no, BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData,
-    BackgroundJobData, BackgroundJobId, BackgroundJobItem, BackgroundJobItemData, BackgroundJobItemDraft,
-    BackgroundJobItemId, BulkSelectionItem, BulkSelectionItemData, BulkSelectionItemDraft,
-    BulkSelectionSnapshot, BulkSelectionSnapshotAggregate, BulkSelectionSnapshotAggregateData,
-    BulkSelectionSnapshotData, BulkSelectionSnapshotId, ItemStatus, JobStatus, JobType, JobUpdate,
-    SelectionItemStatus, SelectionStatus, SelectionType, SupplierGovernanceJobKind,
-    SupplierGovernanceJobSpec, LEGACY_IMPORT_DOMAIN_JOB_TYPE, LEGACY_IMPORT_JOB_NO_PREFIX,
+    legacy_import_job_no, product_import_job_no, BackgroundJob, BackgroundJobAggregate,
+    BackgroundJobAggregateData, BackgroundJobData, BackgroundJobId, BackgroundJobItem, BackgroundJobItemData,
+    BackgroundJobItemDraft, BackgroundJobItemId, BulkSelectionItem, BulkSelectionItemData,
+    BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
+    BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotData, BulkSelectionSnapshotId, ItemStatus,
+    JobStatus, JobType, JobUpdate, SelectionItemStatus, SelectionStatus, SelectionType,
+    SupplierGovernanceJobKind, SupplierGovernanceJobSpec, LEGACY_IMPORT_DOMAIN_JOB_TYPE,
+    LEGACY_IMPORT_JOB_NO_PREFIX, PRODUCT_IMPORT_DOMAIN_JOB_TYPE, PRODUCT_IMPORT_JOB_NO_PREFIX,
     SUPPLIER_CATALOG_SYNC_JOB_TYPE, SUPPLIER_HEALTH_CHECK_JOB_TYPE,
 };
 pub use entity::file_asset::{
@@ -53,7 +54,7 @@ pub use ports::{
     BUSINESS_DOCUMENT_TYPE_CODES,
 };
 pub use repository::{
-    BackgroundJobFilter, BackgroundJobRegistration, BulkJobExt, BulkJobRepository,
+    BackgroundJobFilter, BackgroundJobItemRow, BackgroundJobRegistration, BulkJobExt, BulkJobRepository,
     BulkSelectionSnapshotFilter, DocumentAttachmentRepository, ExpireTargetsOutcome,
     ExternalIdentityMapFilter, ExternalIdentityMapRepository, ExternalIdentityTargetRepository, FileAssetExt,
     FileAssetFilter, FileAssetRepository, FileAssetRow, SourceRegistryExt, SourceRegistryRepository,

@@ -282,6 +282,8 @@ pub struct BackgroundJobFilter {
     pub job_no: Option<String>,
     /// 任务类型；`None` 表示不筛选。
     pub job_type: Option<JobType>,
+    /// 领域任务类型；`None` 表示不筛选。
+    pub domain_job_type: Option<String>,
     /// 任务状态；`None` 表示不筛选。
     pub status: Option<JobStatus>,
     /// 发起人；`None` 表示不筛选。
@@ -306,6 +308,9 @@ impl QueryFilter for BackgroundJobFilter {
         insert_literal_regex_filter(&mut filter, "job_no", self.job_no.as_deref());
         if let Some(job_type) = self.job_type {
             filter.insert("job_type", job_type.as_str());
+        }
+        if let Some(domain_job_type) = &self.domain_job_type {
+            filter.insert("domain_job_type", domain_job_type);
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -419,6 +424,10 @@ pub struct BackgroundJobItemRow {
     pub object_type: Option<String>,
     /// 已有对象 ID。
     pub object_id: Option<String>,
+    /// 导入工作表名。
+    pub worksheet_name: Option<String>,
+    /// 导入源行号。
+    pub source_row_no: Option<u32>,
     /// 逐项执行结果（未执行为 `None`）。
     pub status: Option<ItemStatus>,
     /// 脱敏原因代码。
@@ -701,6 +710,8 @@ fn job_item_projection() -> Document {
         "item_no": 1,
         "object_type": 1,
         "object_id": 1,
+        "worksheet_name": 1,
+        "source_row_no": 1,
         "status": 1,
         "result_code": 1,
         "result_summary": 1,
@@ -740,6 +751,7 @@ mod tests {
         let filter = BackgroundJobFilter {
             job_no: Some("job-001".to_string()),
             job_type: Some(JobType::Import),
+            domain_job_type: None,
             status: Some(JobStatus::Running),
             requested_by: None,
             page: 1,

@@ -3,6 +3,7 @@
 pub mod bulk_job;
 pub mod extensions;
 pub mod file_asset;
+mod import_jobs;
 pub mod owned;
 pub mod source_registry;
 

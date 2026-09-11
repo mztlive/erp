@@ -314,6 +314,8 @@ pub struct BackgroundJobListParams {
     pub job_no: Option<String>,
     /// 任务类型筛选。
     pub job_type: Option<JobType>,
+    /// 领域任务类型筛选。
+    pub domain_job_type: Option<String>,
     /// 任务状态筛选。
     pub status: Option<JobStatus>,
     /// 发起人筛选。
@@ -337,6 +339,8 @@ pub(crate) struct BackgroundJobListQuery {
     pub job_no: Option<String>,
     /// 任务类型筛选。
     pub job_type: Option<JobType>,
+    /// 领域任务类型筛选。
+    pub domain_job_type: Option<String>,
     /// 任务状态筛选。
     pub status: Option<JobStatus>,
     /// 发起人筛选。
@@ -360,6 +364,7 @@ impl BackgroundJobListParams {
         Ok(BackgroundJobListQuery {
             job_no: normalized_text(self.job_no.as_deref()),
             job_type: self.job_type,
+            domain_job_type: normalized_text(self.domain_job_type.as_deref()),
             status: self.status,
             requested_by: normalized_text(self.requested_by.as_deref()),
             paging: PageParams {
@@ -440,6 +445,10 @@ pub struct BackgroundJobItemView {
     pub object_type: Option<String>,
     /// 已有对象 ID。
     pub object_id: Option<String>,
+    /// 导入工作表名。
+    pub worksheet_name: Option<String>,
+    /// 导入源行号。
+    pub source_row_no: Option<u32>,
     /// 逐项执行结果（未执行为 `None`）。
     pub status: Option<ItemStatus>,
     /// 脱敏原因代码。
@@ -503,6 +512,7 @@ mod tests {
         let params = BackgroundJobListParams {
             job_no: Some(" JOB-1 ".to_string()),
             job_type: Some(JobType::Import),
+            domain_job_type: None,
             status: Some(JobStatus::Running),
             requested_by: None,
             page: None,
@@ -519,6 +529,7 @@ mod tests {
         let invalid = BackgroundJobListParams {
             job_no: None,
             job_type: None,
+            domain_job_type: None,
             status: None,
             requested_by: None,
             page: Some(0),
