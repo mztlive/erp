@@ -2,14 +2,16 @@
 
 use application_core::AuditActor;
 use axum::{
-    extract::{Multipart, Path, Query, State},
+    extract::{Json, Multipart, Path, Query, State},
     Extension,
 };
 use erp_catalog::{
-    PageView, ProductImportItemListParams, ProductImportItemView, ProductImportJobListParams,
-    ProductImportJobView,
+    PageView, ProductImportDirectUploadCompleteRequest, ProductImportDirectUploadInitRequest,
+    ProductImportDirectUploadInitView, ProductImportDirectUploadPartView, ProductImportItemListParams,
+    ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
 };
 use erp_support::{RetentionClass, SensitivityClass};
+use serde::Deserialize;
 
 use crate::{
     app_state::AppState,
@@ -160,6 +162,149 @@ pub async fn product_import_job_items(
         .job_items(&id, &params, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 分片地址查询（`object_key` 与 `request_id` 须绑定）。
+#[derive(Debug, Deserialize)]
+pub struct DirectUploadPartQuery {
+    object_key: String,
+    request_id: String,
+}
+
+/// 取消直传查询（`object_key` 须与 `request_id` 绑定）。
+#[derive(Debug, Deserialize)]
+pub struct DirectUploadAbortQuery {
+    object_key: String,
+    request_id: String,
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "初始化商品直传",
+    resource = "product",
+    action = "create"
+)]
+/// 初始化浏览器直传：在对象存储创建分片上传。
+///
+/// 大文件不再经网关上传：本接口只返回分片上传标识、对象键与分片口径，
+/// 浏览器凭分片地址直传对象存储，全程可在前端展示进度。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `req` - 文件名、总字节数与幂等请求身份
+///
+/// # 返回
+/// 返回分片上传标识、对象键与分片口径。
+///
+/// # 错误
+/// 文件名不是 `.xlsx` 或大小越限时返回错误。
+pub async fn product_import_direct_upload_init(
+    State(state): State<AppState>,
+    Json(req): Json<ProductImportDirectUploadInitRequest>,
+) -> Result<ProductImportDirectUploadInitView> {
+    let view = state.product_import_process().init_direct_upload(req).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "签发商品直传分片地址",
+    resource = "product",
+    action = "create"
+)]
+/// 为单个分片签发浏览器可直接 PUT 的预签名地址。
+///
+/// 地址按需获取：有效期约 2 小时，慢速网络可在上传该片前重新获取，
+/// 无需初始化时一次签发全部地址。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `upload_id` - 分片上传标识
+/// * `part_number` - 分片序号（1 起）
+/// * `params` - 对象键与请求身份（须绑定）
+///
+/// # 返回
+/// 返回预签名 PUT 地址。
+pub async fn product_import_direct_upload_part_url(
+    State(state): State<AppState>,
+    Path((upload_id, part_number)): Path<(String, i32)>,
+    Query(params): Query<DirectUploadPartQuery>,
+) -> Result<ProductImportDirectUploadPartView> {
+    let url = state
+        .product_import_process()
+        .direct_upload_part_url(&params.object_key, &upload_id, part_number, &params.request_id)
+        .await?;
+    Ok(ApiResponse::ok_with_data(ProductImportDirectUploadPartView {
+        url,
+        expires_in_secs: erp_catalog::PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS,
+    }))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "合并商品直传并登记导入任务",
+    resource = "product",
+    action = "create"
+)]
+/// 合并浏览器已直传的分片并登记异步导入任务。
+///
+/// 请求体为小 JSON（对象键、文件名、大小、请求身份与分片 ETag），
+/// 不再携带文件内容；合并后复用既有解析与落库链路，进度与结果仍在
+/// 「后台任务」查看。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 审计操作人
+/// * `upload_id` - 分片上传标识
+/// * `req` - 对象键、文件名、总字节数、请求身份与已上传分片
+///
+/// # 返回
+/// 返回导入任务进度视图。
+///
+/// # 错误
+/// 分片缺失、对象损坏或解析失败时返回错误。
+pub async fn product_import_direct_upload_complete(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(upload_id): Path<String>,
+    Json(req): Json<ProductImportDirectUploadCompleteRequest>,
+) -> Result<ProductImportJobView> {
+    let view = state
+        .product_import_process()
+        .submit_direct_upload(&upload_id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "取消商品直传",
+    resource = "product",
+    action = "create"
+)]
+/// 取消分片上传并清理对象存储侧已上传的分片。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `upload_id` - 分片上传标识
+/// * `params` - 对象键与请求身份（须绑定）
+///
+/// # 返回
+/// 成功无返回体；上传已不存在视为成功。
+pub async fn product_import_direct_upload_abort(
+    State(state): State<AppState>,
+    Path(upload_id): Path<String>,
+    Query(params): Query<DirectUploadAbortQuery>,
+) -> Result<()> {
+    state
+        .product_import_process()
+        .abort_direct_upload(&params.object_key, &upload_id, &params.request_id)
+        .await?;
+    Ok(ApiResponse::ok())
 }
 
 struct ExtractedImport {

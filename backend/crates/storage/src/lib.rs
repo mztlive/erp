@@ -5,4 +5,4 @@ mod path;
 mod s3;
 
 pub use error::{Error, Result};
-pub use s3::{S3Storage, S3StorageConfig};
+pub use s3::{S3Storage, S3StorageConfig, UploadedPart};

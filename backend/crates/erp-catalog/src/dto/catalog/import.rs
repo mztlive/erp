@@ -43,6 +43,15 @@ pub const PRODUCT_IMPORT_NAME_COLUMN: usize = 9;
 pub const PRODUCT_IMPORT_UNIT_CODE: &str = "JIAN";
 /// 默认基础单位名称。
 pub const PRODUCT_IMPORT_UNIT_NAME: &str = "件";
+/// 产品报价表 xlsx 内容类型（直传合并与提交校验共用）。
+pub const PRODUCT_IMPORT_XLSX_MIME: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+/// 产品报价表导入文件上限（含内嵌图片），与网关 multipart 上限保持一致。
+pub const MAX_PRODUCT_IMPORT_FILE_BYTES: u64 = 700 * 1024 * 1024;
+/// 浏览器直传分片大小；S3 要求除最后一片外每片不小于 5 MiB。
+pub const PRODUCT_IMPORT_DIRECT_PART_BYTES: u64 = 8 * 1024 * 1024;
+/// 分片预签名地址有效期（秒）；慢速网络下按需重新获取，无需一次签发全部。
+pub const PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS: u64 = 2 * 60 * 60;
 
 /// 导入任务列表查询。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -173,6 +182,79 @@ pub fn ensure_product_import_headers(headers: &[String]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// 浏览器直传初始化请求（HTTP 契约：`{ file_name, byte_size, request_id }`）。
+///
+/// 大文件不再经网关上传：服务端只初始化对象存储分片上传，
+/// 浏览器拿分片地址直传对象存储，最后调用合并接口登记导入任务。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ProductImportDirectUploadInitRequest {
+    /// 展示文件名（须为 `.xlsx`）。
+    #[validate(length(min = 1, max = 256, message = "文件名不能为空或过长"))]
+    pub file_name: String,
+    /// 文件总字节数（须大于 0 且不超过导入上限）。
+    #[validate(range(min = 1, message = "文件大小必须大于 0"))]
+    pub byte_size: u64,
+    /// 幂等请求身份（与导入任务编号绑定）。
+    #[validate(length(min = 1, max = 64, message = "请求身份不能为空或过长"))]
+    pub request_id: String,
+}
+
+/// 浏览器直传初始化视图。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProductImportDirectUploadInitView {
+    /// 对象存储分片上传标识。
+    pub upload_id: String,
+    /// 相对对象键（分片地址与合并接口共用）。
+    pub object_key: String,
+    /// 每片字节数（最后一片除外）。
+    pub part_size: u64,
+    /// 总分片数。
+    pub total_parts: u32,
+    /// 分片地址有效期（秒）；过期前按需重新获取。
+    pub part_url_ttl_secs: u64,
+}
+
+/// 分片预签名地址视图。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProductImportDirectUploadPartView {
+    /// 分片 PUT 预签名地址（不携带应用鉴权头）。
+    pub url: String,
+    /// 地址有效期（秒）。
+    pub expires_in_secs: u64,
+}
+
+/// 已直传分片（HTTP 契约：`{ part_number, etag }`）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq, Eq)]
+pub struct ProductImportDirectUploadedPart {
+    /// 分片序号（1 起）。
+    #[validate(range(min = 1, max = 10000, message = "分片序号必须在 1-10000 之间"))]
+    pub part_number: i32,
+    /// 分片 PUT 响应 `ETag` 头。
+    #[validate(length(min = 1, message = "分片 ETag 不能为空"))]
+    pub etag: String,
+}
+
+/// 浏览器直传合并请求（HTTP 契约：`{ object_key, file_name, byte_size, request_id, parts }`）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ProductImportDirectUploadCompleteRequest {
+    /// 相对对象键（须与请求身份绑定）。
+    #[validate(length(min = 1, message = "对象键不能为空"))]
+    pub object_key: String,
+    /// 展示文件名（须为 `.xlsx`）。
+    #[validate(length(min = 1, max = 256, message = "文件名不能为空或过长"))]
+    pub file_name: String,
+    /// 文件总字节数（须与对象实际大小一致）。
+    #[validate(range(min = 1, message = "文件大小必须大于 0"))]
+    pub byte_size: u64,
+    /// 幂等请求身份（与导入任务编号绑定）。
+    #[validate(length(min = 1, max = 64, message = "请求身份不能为空或过长"))]
+    pub request_id: String,
+    /// 已直传分片列表。
+    #[validate(length(min = 1, max = 10000, message = "分片列表不能为空或过多"))]
+    #[validate(nested)]
+    pub parts: Vec<ProductImportDirectUploadedPart>,
 }
 
 #[cfg(test)]

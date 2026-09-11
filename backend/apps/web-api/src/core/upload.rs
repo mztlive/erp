@@ -30,8 +30,8 @@ pub(crate) const MAX_CONTRACT_MULTIPART_REQUEST_BYTES: usize = MAX_CONTRACT_PDF_
 /// 多文件业务命令的累计请求上限；单文件仍受 5 MiB 限制。
 pub(crate) const MAX_BATCH_MULTIPART_REQUEST_BYTES: usize = 32 * 1024 * 1024;
 
-/// 产品报价表 xlsx 允许的最大字节数（含内嵌图片）。
-pub(crate) const MAX_PRODUCT_IMPORT_XLSX_BYTES: usize = 700 * 1024 * 1024;
+/// 产品报价表 xlsx 允许的最大字节数（含内嵌图片），以领域层常量为准。
+pub(crate) const MAX_PRODUCT_IMPORT_XLSX_BYTES: usize = erp_catalog::MAX_PRODUCT_IMPORT_FILE_BYTES as usize;
 
 /// 产品报价表 multipart 请求总上限。
 pub(crate) const MAX_PRODUCT_IMPORT_MULTIPART_REQUEST_BYTES: usize =

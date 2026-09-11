@@ -32,9 +32,13 @@ pub use category::{
 pub(crate) use common::validate_sales_price_range;
 pub use common::{PageView, SortDir};
 pub use import::{
-    ensure_product_import_headers, ProductImportItemListParams, ProductImportItemView,
-    ProductImportJobListParams, ProductImportJobView, PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_NAME_COLUMN,
-    PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE, PRODUCT_IMPORT_UNIT_NAME,
+    ensure_product_import_headers, ProductImportDirectUploadCompleteRequest,
+    ProductImportDirectUploadInitRequest, ProductImportDirectUploadInitView,
+    ProductImportDirectUploadPartView, ProductImportDirectUploadedPart, ProductImportItemListParams,
+    ProductImportItemView, ProductImportJobListParams, ProductImportJobView, MAX_PRODUCT_IMPORT_FILE_BYTES,
+    PRODUCT_IMPORT_DIRECT_PART_BYTES, PRODUCT_IMPORT_DIRECT_PART_URL_TTL_SECS, PRODUCT_IMPORT_HEADERS,
+    PRODUCT_IMPORT_NAME_COLUMN, PRODUCT_IMPORT_SHEET_NAME, PRODUCT_IMPORT_UNIT_CODE,
+    PRODUCT_IMPORT_UNIT_NAME, PRODUCT_IMPORT_XLSX_MIME,
 };
 pub use product::{
     CreateProductRequest, DisableProductRequest, ProductListParams, ProductListingView, ProductMediaInput,

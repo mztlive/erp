@@ -1745,6 +1745,46 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/products/import-uploads",
+                description: "初始化商品直传",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/import-uploads/{upload_id}/parts/{part_number}",
+                description: "签发商品直传分片地址",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/products/import-uploads/{upload_id}/complete",
+                description: "合并商品直传并登记导入任务",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/products/import-uploads/{upload_id}",
+                description: "取消商品直传",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/products/import-jobs",
                 description: "查询商品导入任务",

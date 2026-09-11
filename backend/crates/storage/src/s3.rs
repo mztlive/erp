@@ -1,10 +1,12 @@
 use std::path::Path;
+use std::time::Duration;
 
 use aws_sdk_s3::{
     config::{Credentials, Region},
     error::SdkError,
     operation::{get_object::GetObjectError, head_object::HeadObjectError},
     primitives::ByteStream,
+    types::{CompletedMultipartUpload, CompletedPart},
     Client,
 };
 use url::Url;
@@ -41,6 +43,15 @@ pub struct S3Storage {
     bucket: String,
     key_prefix: Option<String>,
     public_base_url: Url,
+}
+
+/// 已直传分片的序号与 ETag，用于合并分片上传。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadedPart {
+    /// 分片序号（1 起）。
+    pub part_number: i32,
+    /// 分片 PUT 响应 `ETag` 头（可带引号，合并时自动去除）。
+    pub etag: String,
 }
 
 impl S3Storage {
@@ -157,6 +168,148 @@ impl S3Storage {
             .map_err(get_error)?;
         let body = response.body.collect().await.map_err(s3_error)?;
         Ok(body.into_bytes().to_vec())
+    }
+
+    /// 为浏览器直传初始化 S3 分片上传。
+    ///
+    /// 大文件不再经过应用服务器内存：调用方把返回的分片地址直接交给浏览器，
+    /// 浏览器逐片 PUT 到对象存储，最后由服务端合并。
+    ///
+    /// # 参数
+    /// * `path` - 相对存储路径。
+    /// * `content_type` - 合并后对象的 HTTP Content-Type。
+    ///
+    /// # 返回
+    /// 返回 S3 分片上传标识。
+    ///
+    /// # 错误
+    /// 路径无效或 S3 `CreateMultipartUpload` 失败时返回错误。
+    pub async fn create_multipart_upload<P: AsRef<Path>>(
+        &self,
+        path: P,
+        content_type: Option<&str>,
+    ) -> Result<String> {
+        let key = self.object_key(path.as_ref())?;
+        let mut request = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.bucket)
+            .key(key);
+        if let Some(content_type) = content_type {
+            request = request.content_type(content_type);
+        }
+        let response = request.send().await.map_err(s3_error)?;
+        response
+            .upload_id()
+            .map(str::to_string)
+            .ok_or_else(|| Error::S3("对象存储未返回分片上传标识".to_string()))
+    }
+
+    /// 为单个分片签发浏览器可直接 PUT 的预签名地址。
+    ///
+    /// 地址内已包含签名，浏览器请求时不得再附加应用鉴权头；
+    /// 读取分片响应 `ETag` 头需要对象存储桶跨域配置暴露该头。
+    ///
+    /// # 参数
+    /// * `path` - 相对存储路径。
+    /// * `upload_id` - 分片上传标识。
+    /// * `part_number` - 分片序号（1 起）。
+    /// * `expires_in` - 地址有效期。
+    ///
+    /// # 返回
+    /// 返回预签名 PUT 地址。
+    ///
+    /// # 错误
+    /// 路径无效、分片序号非法或签名失败时返回错误。
+    pub async fn presign_upload_part<P: AsRef<Path>>(
+        &self,
+        path: P,
+        upload_id: &str,
+        part_number: i32,
+        expires_in: Duration,
+    ) -> Result<String> {
+        if !(1..=10_000).contains(&part_number) {
+            return Err(Error::S3("分片序号必须在 1-10000 之间".to_string()));
+        }
+        let key = self.object_key(path.as_ref())?;
+        let config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
+            .map_err(|error| Error::S3(format!("预签名有效期非法: {error}")))?;
+        let presigned = self
+            .client
+            .upload_part()
+            .bucket(&self.bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .part_number(part_number)
+            .body(ByteStream::from_static(b""))
+            .presigned(config)
+            .await
+            .map_err(s3_error)?;
+        Ok(presigned.uri().to_string())
+    }
+
+    /// 合并浏览器已直传的分片为完整对象。
+    ///
+    /// # 参数
+    /// * `path` - 相对存储路径。
+    /// * `upload_id` - 分片上传标识。
+    /// * `parts` - 分片序号与 ETag 列表。
+    ///
+    /// # 错误
+    /// 路径无效、分片列表为空或 S3 `CompleteMultipartUpload` 失败时返回错误。
+    pub async fn complete_multipart_upload<P: AsRef<Path>>(
+        &self,
+        path: P,
+        upload_id: &str,
+        parts: Vec<UploadedPart>,
+    ) -> Result<()> {
+        if parts.is_empty() {
+            return Err(Error::S3("分片列表不能为空".to_string()));
+        }
+        let key = self.object_key(path.as_ref())?;
+        let completed = parts
+            .into_iter()
+            .map(|part| {
+                CompletedPart::builder()
+                    .part_number(part.part_number)
+                    .e_tag(part.etag.trim_matches('"'))
+                    .build()
+            })
+            .collect::<Vec<_>>();
+        let upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(completed))
+            .build();
+        self.client
+            .complete_multipart_upload()
+            .bucket(&self.bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .multipart_upload(upload)
+            .send()
+            .await
+            .map_err(s3_error)?;
+        Ok(())
+    }
+
+    /// 取消分片上传并清理对象存储侧已上传的分片。
+    ///
+    /// # 参数
+    /// * `path` - 相对存储路径。
+    /// * `upload_id` - 分片上传标识。
+    ///
+    /// # 错误
+    /// 路径无效或 S3 `AbortMultipartUpload` 失败时返回错误。
+    pub async fn abort_multipart_upload<P: AsRef<Path>>(&self, path: P, upload_id: &str) -> Result<()> {
+        let key = self.object_key(path.as_ref())?;
+        self.client
+            .abort_multipart_upload()
+            .bucket(&self.bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .send()
+            .await
+            .map_err(s3_error)?;
+        Ok(())
     }
 
     /// 删除 S3 对象。
@@ -478,6 +631,194 @@ mod tests {
         });
 
         assert!(matches!(result, Err(Error::InvalidConfig(_))));
+    }
+
+    /// 分片上传初始化必须向同一 bucket 和键前缀发出 `CreateMultipartUpload`。
+    #[tokio::test]
+    async fn creates_multipart_upload_with_configured_prefix() -> Result<()> {
+        let (http_client, request_receiver) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .endpoint_url("https://s3.example.com")
+            .force_path_style(true)
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets",
+        )?;
+
+        let _ = storage
+            .create_multipart_upload("imports/req-1.xlsx", Some("application/octet-stream"))
+            .await;
+
+        let request = request_receiver.expect_request();
+        assert_eq!(request.method(), "POST");
+        assert!(request.uri().contains("tenant-a/uploads/imports/req-1.xlsx"));
+        assert!(request.uri().contains("uploads"));
+        Ok(())
+    }
+
+    /// 合并分片必须发出 `CompleteMultipartUpload` 并去除 ETag 引号。
+    #[tokio::test]
+    async fn completes_multipart_upload_without_etag_quotes() -> Result<()> {
+        let (http_client, request_receiver) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .endpoint_url("https://s3.example.com")
+            .force_path_style(true)
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets",
+        )?;
+
+        storage
+            .complete_multipart_upload(
+                "imports/req-1.xlsx",
+                "upload-id",
+                vec![super::UploadedPart {
+                    part_number: 1,
+                    etag: "\"etag-1\"".to_string(),
+                }],
+            )
+            .await
+            .ok();
+
+        let request = request_receiver.expect_request();
+        assert_eq!(request.method(), "POST");
+        let body = request
+            .body()
+            .bytes()
+            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+            .unwrap_or_default();
+        assert!(body.contains("<ETag>etag-1</ETag>"));
+        assert!(!body.contains("&quot;"));
+        Ok(())
+    }
+
+    /// 取消分片上传必须发出 `AbortMultipartUpload`。
+    #[tokio::test]
+    async fn aborts_multipart_upload() -> Result<()> {
+        let (http_client, request_receiver) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .endpoint_url("https://s3.example.com")
+            .force_path_style(true)
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets",
+        )?;
+
+        storage
+            .abort_multipart_upload("imports/req-1.xlsx", "upload-id")
+            .await?;
+
+        let request = request_receiver.expect_request();
+        assert_eq!(request.method(), "DELETE");
+        assert!(request.uri().contains("tenant-a/uploads/imports/req-1.xlsx"));
+        Ok(())
+    }
+
+    /// 分片预签名地址必须携带上传标识与分片序号且无需网络请求。
+    #[tokio::test]
+    async fn presigns_upload_part_without_network() -> Result<()> {
+        let (http_client, _) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .endpoint_url("https://s3.example.com")
+            .force_path_style(true)
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets",
+        )?;
+
+        let url = storage
+            .presign_upload_part(
+                "imports/req-1.xlsx",
+                "upload-id",
+                2,
+                std::time::Duration::from_secs(7200),
+            )
+            .await?;
+
+        assert!(url.contains("partNumber=2"));
+        assert!(url.contains("uploadId=upload-id"));
+        Ok(())
+    }
+
+    /// 空分片列表合并必须在请求发出前失败。
+    #[tokio::test]
+    async fn rejects_complete_with_empty_parts() -> Result<()> {
+        let (http_client, _) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            None,
+            "https://cdn.example.com",
+        )?;
+        let result = storage
+            .complete_multipart_upload("imports/req-1.xlsx", "upload-id", vec![])
+            .await;
+
+        assert!(matches!(result, Err(Error::S3(_))));
+        Ok(())
+    }
+
+    /// 非法分片序号预签名必须在请求发出前失败。
+    #[tokio::test]
+    async fn rejects_presign_with_invalid_part_number() -> Result<()> {
+        let (http_client, _) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            None,
+            "https://cdn.example.com",
+        )?;
+        let result = storage
+            .presign_upload_part(
+                "imports/req-1.xlsx",
+                "upload-id",
+                0,
+                std::time::Duration::from_secs(60),
+            )
+            .await;
+
+        assert!(matches!(result, Err(Error::S3(_))));
+        Ok(())
     }
 
     /// 返回仅用于捕获 SDK 请求的固定测试凭证。

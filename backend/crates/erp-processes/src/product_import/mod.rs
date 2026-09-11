@@ -2,6 +2,7 @@
 
 mod add_sku;
 mod backfill;
+mod direct_upload;
 mod execute;
 mod identity;
 mod images;

@@ -57,6 +57,10 @@ public_base_url = "https://assets.example.com"
 Web API 上传对象后返回 `public_base_url/key_prefix/object_key`。真实凭证只能写入已忽略的
 `config.toml` 或受控 Nacos 配置，不得提交到仓库。
 
+商品导入浏览器直传要求浏览器能直接访问 `endpoint`：对象存储桶须配置跨域
+（允许 Web 前端来源的 `PUT`，并暴露 `ETag` 响应头，前端靠它确认分片）。
+若存储内网地址浏览器不可达，直传会失败，前端会自动提供「改用普通上传」兜底。
+
 ```rust,no_run
 use config::SafeConfig;
 

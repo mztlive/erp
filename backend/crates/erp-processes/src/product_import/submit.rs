@@ -12,7 +12,7 @@ use erp_support::{
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 
-use super::parse::parse_product_quote_xlsx;
+use super::parse::{parse_product_quote_xlsx, ParsedProductSheet};
 use super::views::job_view;
 use super::ProductImportProcess;
 use crate::{Error, Result};
@@ -44,6 +44,29 @@ impl ProductImportProcess {
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".into()))??;
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
+        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor)
+            .await
+    }
+
+    /// 由已解析工作表创建导入任务（表单上传与浏览器直传共用）。
+    ///
+    /// # 参数
+    /// * `file_asset` - 已落对象存储的文件资产
+    /// * `parsed` - 已解析报价表
+    /// * `file_name` - 原始文件名
+    /// * `request_id` - 幂等请求身份
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回新建或幂等回放的导入任务。
+    pub(super) async fn create_job_from_parsed(
+        &self,
+        file_asset: FileAsset,
+        parsed: ParsedProductSheet,
+        file_name: String,
+        request_id: String,
+        actor: &AuditActor,
+    ) -> Result<ProductImportJobView> {
         let job_id = BackgroundJobId::new(next_id());
         let drafts = parsed
             .rows
@@ -90,7 +113,7 @@ impl ProductImportProcess {
         self.persist_job(file_asset, job, items, file_name).await
     }
 
-    async fn persist_job(
+    pub(super) async fn persist_job(
         &self,
         file_asset: FileAsset,
         job: BackgroundJob,
@@ -122,7 +145,7 @@ impl ProductImportProcess {
         }
     }
 
-    async fn replay_existing_job(&self, request_id: &str) -> Result<ProductImportJobView> {
+    pub(super) async fn replay_existing_job(&self, request_id: &str) -> Result<ProductImportJobView> {
         let existing = self
             .db
             .background_jobs()
