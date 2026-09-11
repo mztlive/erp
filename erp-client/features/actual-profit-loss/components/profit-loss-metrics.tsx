@@ -27,7 +27,7 @@ export function ProfitLossMetrics({ data }: { data: ProfitLossView }) {
                               )
                             : "无权限"
                     }
-                    detail="实际发生+冲减 · 不含税"
+                    detail="实际发生 · 冲减另行加回"
                 />
                 <MetricItem
                     label="实际履约费用"

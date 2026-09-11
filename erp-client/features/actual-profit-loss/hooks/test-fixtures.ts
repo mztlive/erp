@@ -1,6 +1,6 @@
 import type {
     CostEntryDetail,
-    ProfitLossExportJob,
+    ProfitLossExport,
     ProfitLossPeriodBasisConfig,
     ProfitLossQuery,
     ProfitLossRow,
@@ -15,7 +15,6 @@ export const fakeRow: ProfitLossRow = {
     customerId: "c-1",
     customerLabel: "示例客户",
     benefitScenarios: ["常规福利"],
-    fulfillmentModes: ["电子履约"],
     netSalesRevenue: "1000.00",
     actualProcurementCostNet: "400.00",
     actualFulfillmentCostNet: "100.00",
@@ -146,27 +145,11 @@ export const fakeCostEntries: CostEntryDetail[] = [
     },
 ]
 
-export const fakeExportJob: ProfitLossExportJob = {
-    jobId: "job-1",
-    status: "queued",
-    total: 1,
-    completed: 0,
-    createdAt: "2026-08-14T08:00:00.000Z",
-    watermark: {
-        periodFrom: "2026-08-01",
-        periodTo: "2026-08-14",
-        periodBasis: "sales_revenue_recognition_date",
-        formulaVersion: "v2",
-        coverage: "covered",
-        scopeId: "org-hq-finance",
-        scopeLabel: "总部财务",
-        permissionVersion: "v1",
-        projectedAt: "2026-08-14T08:00:00.000Z",
-        sourceWatermark: "2026-08-14T07:00:00.000Z",
-        amountBasis: "NET",
-        businessType: "GOODS_SERVICE",
-        rowCount: 1,
-    },
+export const fakeExportJob: ProfitLossExport = {
+    csvContent: '"对象","不含税收入"\r\n"SO-2026-0001","1000.00"',
+    fileName: "实际盈亏.csv",
+    rowCount: 1,
+    generatedAt: "2026-08-14T08:00:00.000Z",
 }
 
 export function makeQuery(

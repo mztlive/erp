@@ -22,6 +22,7 @@ describe("background job labels", () => {
         expect(isJobActive("pending")).toBe(true)
         expect(isJobActive("running")).toBe(true)
         expect(isJobActive("partially_succeeded")).toBe(true)
+        expect(isJobActive("partially_succeeded", 1700000000)).toBe(false)
         expect(isJobActive("succeeded")).toBe(false)
         expect(isJobActive("failed")).toBe(false)
         expect(isJobActive("cancelled")).toBe(false)
@@ -33,6 +34,9 @@ describe("background job labels", () => {
         )
         expect(backgroundJobDomainLabel("SALES_ORDER_EXPORT", "export")).toBe(
             "销售单导出",
+        )
+        expect(backgroundJobDomainLabel("SUPPLIER_IMPORT", "import")).toBe(
+            "供应商导入",
         )
         expect(backgroundJobDomainLabel(null, "export")).toBe("导出")
         expect(backgroundJobDomainLabel(null, null)).toBe("后台任务")

@@ -1,13 +1,11 @@
-import { BackgroundJobProgress } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
 import { getErrorMessage } from "@/lib/api/errors"
 import type {
-    ProfitLossExportJob,
+    ProfitLossExport,
     ProfitLossView,
 } from "@/features/actual-profit-loss/types"
-import { basisLabel } from "@/features/actual-profit-loss/lib/url-state"
 
 export function DataStatusAlerts({
     data,
@@ -23,7 +21,7 @@ export function DataStatusAlerts({
     exportFailed: string | null
     viewError: unknown
     isViewError: boolean
-    exportJob: ProfitLossExportJob | null
+    exportJob: ProfitLossExport | null
     onCloseExportJob: () => void
 }) {
     return (
@@ -88,50 +86,23 @@ export function DataStatusAlerts({
             ) : null}
 
             {exportJob ? (
-                <BackgroundJobProgress
-                    mode="all-or-nothing"
-                    status={
-                        exportJob.status === "queued"
-                            ? "queued"
-                            : exportJob.status === "running"
-                              ? "running"
-                              : exportJob.status === "succeeded"
-                                ? "succeeded"
-                                : "failed"
-                    }
-                    total={exportJob.total}
-                    completed={exportJob.completed}
-                    succeeded={
-                        exportJob.status === "succeeded"
-                            ? exportJob.total
-                            : undefined
-                    }
-                    label="实际经营盈亏导出"
-                    description={
-                        <>
-                            期间 {exportJob.watermark.periodFrom}~
-                            {exportJob.watermark.periodTo} · 归属口径{" "}
-                            {basisLabel(exportJob.watermark.periodBasis)} ·
-                            数据更新于 {exportJob.watermark.projectedAt}
-                            {exportJob.downloadLabel ? (
-                                <span className="mt-1 block font-medium">
-                                    可下载：{exportJob.downloadLabel}
-                                </span>
-                            ) : null}
-                        </>
-                    }
-                    action={
+                <Alert>
+                    <AlertTitle>导出完成</AlertTitle>
+                    <AlertDescription>
+                        已导出全部匹配结果 {exportJob.rowCount} 行，生成于{" "}
+                        {formatDateTime(exportJob.generatedAt, "full")}。
+                        导出使用生成时的最新数据与权限，可能与刷新前的页面结果不同。
                         <Button
                             id="actual-profit-loss-export-close"
                             type="button"
                             size="sm"
                             variant="ghost"
-                            onClick={() => onCloseExportJob()}
+                            onClick={onCloseExportJob}
                         >
                             关闭
                         </Button>
-                    }
-                />
+                    </AlertDescription>
+                </Alert>
             ) : null}
         </>
     )

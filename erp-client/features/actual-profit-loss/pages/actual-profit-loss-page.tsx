@@ -29,7 +29,10 @@ export function ActualProfitLossPage() {
     // —— 初载 / 配置加载 ——
     if (page.basisQuery.isPending) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
+            <PageScaffold
+                density="compact"
+                className={`${styles.page} gap-4 [&>*]:shrink-0`}
+            >
                 <ListWorkspaceHeader
                     eyebrow="分析"
                     title="实际经营盈亏"
@@ -48,7 +51,10 @@ export function ActualProfitLossPage() {
 
     if (page.basisQuery.isError || !page.basisConfig) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
+            <PageScaffold
+                density="compact"
+                className={`${styles.page} gap-4 [&>*]:shrink-0`}
+            >
                 <ListWorkspaceHeader
                     eyebrow="分析"
                     title="实际经营盈亏"
@@ -72,7 +78,10 @@ export function ActualProfitLossPage() {
     }
 
     return (
-        <PageScaffold density="compact" className={styles.page}>
+        <PageScaffold
+            density="compact"
+            className={`${styles.page} gap-4 [&>*]:shrink-0`}
+        >
             <ProfitLossPageHeader
                 hasData={page.data != null}
                 projectedAt={page.data?.freshness.projectedAt}
@@ -171,14 +180,9 @@ export function ActualProfitLossPage() {
                             onBenefitScenarioDraftChange={
                                 page.setBenefitScenarioDraft
                             }
-                            fulfillmentModesDraft={page.fulfillmentModesDraft}
-                            onFulfillmentModesDraftChange={
-                                page.setFulfillmentModesDraft
-                            }
                             costTypesDraft={page.costTypesDraft}
                             onCostTypesDraftChange={page.setCostTypesDraft}
                             benefitScenarioOptions={page.benefitScenarioOptions}
-                            fulfillmentModeOptions={page.fulfillmentModeOptions}
                             costTypeOptions={page.costTypeOptions}
                             pageRows={page.pageRows}
                             columns={page.columns}

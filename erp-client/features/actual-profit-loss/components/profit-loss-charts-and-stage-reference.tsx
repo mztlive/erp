@@ -102,7 +102,7 @@ export function ProfitLossChartsAndStageReference({
                         </CardTitle>
                         <CardDescription>
                             收入 / 实际成本 /
-                            实际盈亏。趋势为固定口径序列，不随期间与覆盖筛选变化；指标与明细已按当前筛选汇总。
+                            实际盈亏。按销售单生效月份展示当前筛选下的累计结果；利润仅包含成本完整订单。
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="pt-4">
@@ -231,7 +231,7 @@ export function ProfitLossChartsAndStageReference({
                             成本构成（{PROFIT_LOSS_SCOPE_LABEL}）
                         </CardTitle>
                         <CardDescription>
-                            仅统计实际成本与冲减；返点等冲减显示为负值贡献。构成与图表为固定口径序列，不随覆盖筛选变化。
+                            仅统计实际成本与冲减；返点等冲减显示为负值贡献。费用构成随当前筛选变化，采用已分配到所选销售单的金额。
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="pt-4">

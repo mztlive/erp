@@ -19,10 +19,7 @@ import type {
     ProfitLossPeriodBasisConfig,
     ProfitLossQuery,
 } from "@/features/actual-profit-loss/types"
-import {
-    COST_TYPE_CHIP_PREFIX,
-    FULFILLMENT_MODE_CHIP_PREFIX,
-} from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
+import { COST_TYPE_CHIP_PREFIX } from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 
 export type ProfitLossUrlPatch = Record<string, string | null | undefined>
@@ -52,18 +49,13 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     const pageSize = parsePageSize(searchParams.get("pageSize"))
     const benefitScenario =
         searchParams.get("benefitScenario")?.trim() || undefined
-    const fulfillmentModesParam = searchParams.get("fulfillmentMode")
     const costTypesParam = searchParams.get("costType")
-    const fulfillmentModes = React.useMemo(
-        () => parseCsvValues(fulfillmentModesParam),
-        [fulfillmentModesParam],
-    )
     const costTypes = React.useMemo(
         () => parseCsvValues(costTypesParam),
         [costTypesParam],
     )
     const hasStructuredFilters = Boolean(
-        benefitScenario || fulfillmentModes.length > 0 || costTypes.length > 0,
+        benefitScenario || costTypes.length > 0,
     )
 
     const [searchInput, setSearchInput] = React.useState(qParam)
@@ -71,9 +63,6 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     const [benefitScenarioDraft, setBenefitScenarioDraft] = React.useState(
         benefitScenario ?? "",
     )
-    const [fulfillmentModesDraft, setFulfillmentModesDraft] = React.useState<
-        string[]
-    >(() => [...fulfillmentModes])
     const [costTypesDraft, setCostTypesDraft] = React.useState<string[]>(() => [
         ...costTypes,
     ])
@@ -112,6 +101,25 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         to,
     ])
 
+    React.useEffect(() => {
+        const retiredDimension = searchParams.get("dimension")
+        if (
+            searchParams.has("fulfillmentMode") ||
+            retiredDimension === "fulfillment" ||
+            retiredDimension === "cost_type"
+        ) {
+            patchUrl({
+                fulfillmentMode: null,
+                dimension:
+                    retiredDimension === "fulfillment" ||
+                    retiredDimension === "cost_type"
+                        ? null
+                        : retiredDimension,
+                page: null,
+            })
+        }
+    }, [searchParams, patchUrl])
+
     const allowedCodes = React.useMemo(
         () =>
             new Set(
@@ -137,8 +145,6 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
               customerId,
               salesOrderId,
               benefitScenario,
-              fulfillmentModes:
-                  fulfillmentModes.length > 0 ? fulfillmentModes : undefined,
               costTypes: costTypes.length > 0 ? costTypes : undefined,
               dimension,
               q: qParam || undefined,
@@ -153,9 +159,8 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     }, [qParam])
     React.useEffect(() => {
         setBenefitScenarioDraft(benefitScenario ?? "")
-        setFulfillmentModesDraft([...fulfillmentModes])
         setCostTypesDraft([...costTypes])
-    }, [benefitScenario, costTypes, fulfillmentModes])
+    }, [benefitScenario, costTypes])
     React.useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (
@@ -213,22 +218,14 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         patchUrl({
             q: searchInput.trim() || null,
             benefitScenario: benefitScenarioDraft.trim() || null,
-            fulfillmentMode: serializeCsvValues(fulfillmentModesDraft) || null,
             costType: serializeCsvValues(costTypesDraft) || null,
             page: null,
         })
         setFilterPanelOpen(false)
-    }, [
-        benefitScenarioDraft,
-        costTypesDraft,
-        fulfillmentModesDraft,
-        patchUrl,
-        searchInput,
-    ])
+    }, [benefitScenarioDraft, costTypesDraft, patchUrl, searchInput])
     const clearAllFilters = React.useCallback(() => {
         setSearchInput("")
         setBenefitScenarioDraft("")
-        setFulfillmentModesDraft([])
         setCostTypesDraft([])
         setFilterPanelOpen(false)
         patchUrl({
@@ -244,15 +241,12 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     }, [patchUrl])
     const resetMoreFilters = React.useCallback(() => {
         setBenefitScenarioDraft("")
-        setFulfillmentModesDraft([])
         setCostTypesDraft([])
     }, [])
 
     const hasPendingChanges =
         searchInput.trim() !== qParam.trim() ||
         benefitScenarioDraft.trim() !== (benefitScenario ?? "") ||
-        serializeCsvValues(fulfillmentModesDraft) !==
-            serializeCsvValues(fulfillmentModes) ||
         serializeCsvValues(costTypesDraft) !== serializeCsvValues(costTypes)
     const removeFilter = React.useCallback(
         (key: string) => {
@@ -268,18 +262,6 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
             } else if (key === "benefitScenario") {
                 setBenefitScenarioDraft("")
                 patchUrl({ benefitScenario: null, page: null })
-            } else if (key.startsWith(FULFILLMENT_MODE_CHIP_PREFIX)) {
-                const value = key.slice(FULFILLMENT_MODE_CHIP_PREFIX.length)
-                setFulfillmentModesDraft((current) =>
-                    current.filter((item) => item !== value),
-                )
-                patchUrl({
-                    fulfillmentMode:
-                        serializeCsvValues(
-                            fulfillmentModes.filter((item) => item !== value),
-                        ) || null,
-                    page: null,
-                })
             } else if (key.startsWith(COST_TYPE_CHIP_PREFIX)) {
                 const value = key.slice(COST_TYPE_CHIP_PREFIX.length)
                 setCostTypesDraft((current) =>
@@ -294,7 +276,7 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
                 })
             }
         },
-        [costTypes, fulfillmentModes, patchUrl],
+        [costTypes, patchUrl],
     )
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -334,7 +316,6 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         salesOrderId,
         qParam,
         benefitScenario,
-        fulfillmentModes,
         costTypes,
         analysisBlocked,
         analysisReady,
@@ -343,8 +324,6 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
         searchInputRef,
         benefitScenarioDraft,
         setBenefitScenarioDraft,
-        fulfillmentModesDraft,
-        setFulfillmentModesDraft,
         costTypesDraft,
         setCostTypesDraft,
         filterPanelOpen,

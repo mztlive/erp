@@ -209,6 +209,7 @@ pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter>
     params.validate()?;
     let query = params.normalized()?;
     Ok(ProductFilter {
+        ids: None,
         product_no: query.product_no,
         keyword: query.keyword,
         product_kind: query.product_kind,

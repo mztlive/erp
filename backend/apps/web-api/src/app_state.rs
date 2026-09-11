@@ -532,6 +532,13 @@ impl AppState {
         erp_processes::SupplierProfileService::new(self.db(), self.sensitive_data())
     }
 
+    /// 绑定供应商后台导入所需数据库、对象存储和密文编解码器。
+    ///
+    /// 返回导入流程；不执行 I/O，不产生错误。
+    pub fn supplier_import_process(&self) -> erp_processes::SupplierImportProcess {
+        erp_processes::SupplierImportProcess::new(self.db(), self.storage().clone(), self.sensitive_data())
+    }
+
     /// Catalog domain service with audit and file-asset adapters.
     pub fn catalog_service(&self) -> erp_catalog::CatalogService {
         erp_processes::adapters::catalog_service(self.db())

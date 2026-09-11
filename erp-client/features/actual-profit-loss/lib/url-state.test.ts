@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
+    resolvePeriod,
     parsePage,
     parsePageSize,
 } from "@/features/actual-profit-loss/lib/url-state"
@@ -17,4 +18,18 @@ describe("actual profit-loss pagination URL contract", () => {
         expect(parsePageSize("100")).toBe(100)
         expect(parsePageSize("25")).toBe(20)
     })
+})
+
+it("uses the Shanghai business day near UTC midnight", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-31T16:30:00Z"))
+    expect(resolvePeriod("month-to-date")).toEqual({
+        from: "2026-09-01",
+        to: "2026-09-01",
+    })
+    expect(resolvePeriod("last-month")).toEqual({
+        from: "2026-08-01",
+        to: "2026-08-31",
+    })
+    vi.useRealTimers()
 })

@@ -12,6 +12,7 @@ import type {
     SkuRevisionDto,
     UnitOfMeasureDto,
 } from "@/features/master-data/api/contracts"
+import { apiGet } from "@/lib/api"
 import {
     mapProductRow,
     isFutureDate,
@@ -46,13 +47,26 @@ export function parseSpecificationSignature(
 export async function centerProduct(
     stableId: string,
 ): Promise<MasterDataCenterView | null> {
-    const products = await fetchAllPages<ProductDto>("/admin/products", {})
-    const product = products.find((p) => p.id === stableId)
+    const encodedId = encodeURIComponent(stableId)
+    let product: ProductDto | null
+    try {
+        product = await apiGet<ProductDto>(`/admin/products/${encodedId}`)
+    } catch (error) {
+        if (
+            typeof error === "object" &&
+            error !== null &&
+            "status" in error &&
+            (error as { status?: unknown }).status === 404
+        ) {
+            return null
+        }
+        throw error
+    }
     if (!product) return null
 
     const revisions = await fetchAllPages<ProductRevisionDto>(
-        "/admin/product-revisions",
-        { product_id: stableId, sort_by: "revision_no", sort_dir: "desc" },
+        `/admin/products/${encodedId}/revisions`,
+        {},
     )
     const currentRev = product.current_revision_id
         ? revisions.find(
@@ -64,24 +78,24 @@ export async function centerProduct(
             "商品当前修订不存在或已漂移，禁止以历史修订回填编辑表单",
         )
     }
-    const skus = await fetchAllPages<SkuDto>("/admin/skus", {
-        product_id: stableId,
-    })
+    const skus = await fetchAllPages<SkuDto>(
+        `/admin/products/${encodedId}/skus`,
+        {},
+    )
 
-    // Units / categories / brands for labels
-    const units = await fetchAllPages<UnitOfMeasureDto>(
-        "/admin/unit-of-measures",
-        {},
-    )
+    // Units / categories / brands for labels；只读角色可能没有字典 list 权限，缺失时降级为空（名称回落显示 ID）。
+    const [units, categories, brands] = await Promise.all([
+        fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}).catch(
+            () => [] as UnitOfMeasureDto[],
+        ),
+        fetchAllPages<ProductCategoryDto>("/admin/product-categories", {}).catch(
+            () => [] as ProductCategoryDto[],
+        ),
+        fetchAllPages<ProductBrandDto>("/admin/product-brands", {}).catch(
+            () => [] as ProductBrandDto[],
+        ),
+    ])
     const unitById = new Map(units.map((u) => [u.id, u]))
-    const categories = await fetchAllPages<ProductCategoryDto>(
-        "/admin/product-categories",
-        {},
-    )
-    const brands = await fetchAllPages<ProductBrandDto>(
-        "/admin/product-brands",
-        {},
-    )
 
     // SPU 媒体与 SKU 主图按 file_asset 引用解析为可访问地址。
     const carouselMedia = (currentRev?.media ?? [])
@@ -141,11 +155,18 @@ export async function centerProduct(
             ),
         ],
     }))
+    const allSkuRevisions = await fetchAllPages<SkuRevisionDto>(
+        `/admin/products/${encodedId}/sku-revisions`,
+        {},
+    ).catch(() => [] as SkuRevisionDto[])
+    const revisionsBySku = new Map<string, SkuRevisionDto[]>()
+    for (const revision of allSkuRevisions) {
+        const rows = revisionsBySku.get(revision.sku_id) ?? []
+        rows.push(revision)
+        revisionsBySku.set(revision.sku_id, rows)
+    }
     for (const sku of skus) {
-        const skuRevisions = await fetchAllPages<SkuRevisionDto>(
-            "/admin/sku-revisions",
-            { sku_id: sku.id, sort_by: "revision_no", sort_dir: "desc" },
-        ).catch(() => [] as SkuRevisionDto[])
+        const skuRevisions = revisionsBySku.get(sku.id) ?? []
         const rev = sku.current_revision_id
             ? skuRevisions.find(
                   (revision) => revision.id === sku.current_revision_id,

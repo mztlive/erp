@@ -132,6 +132,7 @@ const SALES_PERMISSIONS: &[&str] = &[
     "sales_change_order:submit",
     "sales_change_order:delete",
     "customer_acceptance:*",
+    "product:detail",
     "sellable_sku:list",
     "sales_selection_booklet:list",
     "sales_selection_booklet:get",
@@ -195,6 +196,7 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "cost_entry:list",
     "cost_entry:detail",
     "cost_allocation:list",
+    "product:detail",
     "background_job:*",
     "background_job_item:list",
 ];
@@ -334,6 +336,7 @@ const OPERATIONS_PERMISSIONS: &[&str] = &[
     "business_document:detail",
     "product_category:list",
     "product:list",
+    "product:detail",
     "product_revision:list",
     "sku:list",
     "sku_revision:list",
@@ -385,6 +388,7 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
     "stock_reservation:list",
     "stock_adjustment:*",
     "product:list",
+    "product:detail",
     "sku:list",
     "sellable_sku:list",
     "background_job:*",
@@ -470,6 +474,7 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "receipt_reversal:*",
     "payment_reversal:*",
     "supplier_offering:list",
+    "product:detail",
     "background_job:*",
     "background_job_item:list",
 ];
@@ -480,6 +485,7 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "finance_responsibility:list",
     "admin:list",
     "product_category:list",
+    "product:detail",
     "sku:list",
     "work_item:list",
     "work_item:detail",
@@ -547,6 +553,7 @@ const SYSADMIN_PERMISSIONS: &[&str] = &[
     "finance_responsibility:manage",
     "admin:list",
     "product_category:list",
+    "product:detail",
     "sku:list",
     "work_item:list",
     "work_item:detail",
@@ -1737,6 +1744,40 @@ mod tests {
                 !permissions.iter().any(|p| p.covers(&required)),
                 "系统管理员预定义角色不得覆盖 {forbidden}"
             );
+        }
+    }
+
+    #[test]
+    fn product_detail_is_read_only_split_without_granting_list() {
+        // 详情只读拆分：除采购外的新补角色拥有 detail 且不拥有 list；
+        // 运营/仓储保留 list 以便走新高效接口；采购靠通配覆盖。
+        let detail_only = [
+            "role-sales",
+            "role-sales-leader",
+            "role-finance",
+            "role-management",
+            "role-sysadmin",
+        ];
+        let detail_with_list = ["role-operations", "role-warehouse"];
+        let detail = Permission::parse("product:detail").unwrap();
+        let list = Permission::parse("product:list").unwrap();
+        for role in PREDEFINED_ROLES {
+            let permissions = parse_permissions(role.permissions).unwrap();
+            let covers_detail = permissions.iter().any(|seeded| seeded.covers(&detail));
+            let covers_list = permissions.iter().any(|seeded| seeded.covers(&list));
+            if role.id == "role-procurement" {
+                assert!(covers_detail, "采购应靠 product:* 覆盖 detail");
+                assert!(
+                    !role.permissions.contains(&"product:detail"),
+                    "采购不得重复添加 product:detail"
+                );
+            } else if detail_only.contains(&role.id) {
+                assert!(covers_detail, "{} 应拥有 product:detail", role.id);
+                assert!(!covers_list, "{} 不应拥有 product:list", role.id);
+            } else if detail_with_list.contains(&role.id) {
+                assert!(covers_detail, "{} 应拥有 product:detail", role.id);
+                assert!(covers_list, "{} 应保留 product:list", role.id);
+            }
         }
     }
 }

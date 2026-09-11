@@ -25,6 +25,23 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-profiles/import/jobs",
+            with_permission(
+                post(supplier::import::supplier_import_submit)
+                    .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+                rbac,
+                supplier::import::supplier_import_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-profiles/import/jobs/{id}/failures",
+            with_permission(
+                get(supplier::import::supplier_import_failures),
+                rbac,
+                supplier::import::supplier_import_failures_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-profiles/import",
             with_permission(
                 post(supplier::import::supplier_import),

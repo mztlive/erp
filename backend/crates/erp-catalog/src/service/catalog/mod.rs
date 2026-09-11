@@ -27,6 +27,7 @@ mod attribute;
 mod brand;
 mod category;
 mod listing;
+mod product_detail;
 mod product_query;
 mod product_workflow;
 mod sellable;

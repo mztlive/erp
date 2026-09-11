@@ -24,13 +24,14 @@ export function buildProfitLossColumns(options: {
         {
             id: "identityLabel",
             accessorFn: (r) => r.identityLabel,
-            header: "销售单号",
-            meta: { label: "销售单号", width: "default" as const },
+            header: "业务对象",
+            meta: { label: "业务对象", width: "default" as const },
             cell: ({ row }) => {
                 const r = row.original
-                const href = r.objectId
-                    ? `/sales/orders/${encodeURIComponent(r.objectId)}`
-                    : undefined
+                const href =
+                    r.objectId && r.objectType === "sales_order"
+                        ? `/sales/orders/${encodeURIComponent(r.objectId)}`
+                        : undefined
                 return (
                     <div className="flex flex-col gap-0.5">
                         {href ? (
@@ -58,23 +59,13 @@ export function buildProfitLossColumns(options: {
         },
         {
             id: "benefitScenarios",
+            enableSorting: false,
             accessorFn: (r) => r.benefitScenarios?.join("、") ?? "",
             header: "福利场景",
             meta: { label: "福利场景" },
             cell: ({ row }) => (
                 <span className="text-sm text-muted-foreground">
                     {row.original.benefitScenarios?.join("、") || "—"}
-                </span>
-            ),
-        },
-        {
-            id: "fulfillmentModes",
-            accessorFn: (r) => r.fulfillmentModes?.join("、") ?? "",
-            header: "履约方式",
-            meta: { label: "履约方式" },
-            cell: ({ row }) => (
-                <span className="text-sm">
-                    {row.original.fulfillmentModes?.join("、") || "—"}
                 </span>
             ),
         },
@@ -174,7 +165,7 @@ export function buildProfitLossColumns(options: {
         {
             id: "reductionsNet",
             accessorFn: (r) => r.reductionsNet ?? "",
-            header: "成本冲减（负值＝冲减）",
+            header: "成本冲减（加回）",
             meta: {
                 label: "成本冲减",
                 numeric: true,
@@ -215,9 +206,10 @@ export function buildProfitLossColumns(options: {
                         </span>
                     )
                 }
-                const href = r.objectId
-                    ? `/sales/orders/${encodeURIComponent(r.objectId)}`
-                    : undefined
+                const href =
+                    r.objectId && r.objectType === "sales_order"
+                        ? `/sales/orders/${encodeURIComponent(r.objectId)}`
+                        : undefined
                 return (
                     <MoneyCell
                         id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-profit-loss`}
@@ -274,6 +266,7 @@ export function buildProfitLossColumns(options: {
         },
         {
             id: "latestCostOccurredAt",
+            enableSorting: false,
             accessorFn: (r) => r.latestCostOccurredAt ?? "",
             header: "最近成本发生",
             meta: { label: "最近成本发生" },

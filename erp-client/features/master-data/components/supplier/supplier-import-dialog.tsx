@@ -1,5 +1,8 @@
 "use client"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { backgroundJobKeys } from "@/features/background-jobs/queries"
+import type { BackgroundJobView } from "@/features/background-jobs/api"
 import Link from "next/link"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
@@ -15,21 +18,14 @@ import { apiPost } from "@/lib/api"
 import { getErrorMessage, ApiErrorException } from "@/lib/api/errors"
 import {
     readSupplierFile,
-    downloadSupplierFailures,
     type SupplierImportRow,
-    type SupplierImportResult,
 } from "@/features/master-data/lib/supplier-import"
 
-const STATUS_LABELS = {
-    succeeded: "导入成功",
-    skipped: "重复跳过",
-    failed: "导入失败",
-    uncertain: "结果待确认",
-}
-
+/** 读取模板并提交后台任务；响应未知时保留原内容和提交身份供核对。 */
 export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
     const [rows, setRows] = useState<SupplierImportRow[]>([])
-    const [results, setResults] = useState<SupplierImportResult[]>([])
+    const [requestId, setRequestId] = useState("")
+    const router = useRouter()
     const [fileName, setFileName] = useState("")
     const [error, setError] = useState("")
     const [reading, setReading] = useState(false)
@@ -37,20 +33,22 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
     const client = useQueryClient()
     const mutation = useMutation({
         mutationFn: (rows: SupplierImportRow[]) =>
-            apiPost<SupplierImportResult[]>(
-                "/admin/supplier-profiles/import",
-                { rows },
+            apiPost<BackgroundJobView>(
+                "/admin/supplier-profiles/import/jobs",
+                { rows, request_id: requestId, file_name: fileName },
                 { timeoutMs: 120_000 },
             ),
         retry: false,
     })
     const locked = reading || mutation.isPending || uncertain
+    // 选择新文件时分配一次提交身份，重试时保留。
     const read = async (file?: File) => {
         if (!file) return
         setReading(true)
         setError("")
         setRows([])
-        setResults([])
+        setRequestId(crypto.randomUUID())
+        setUncertain(false)
         setFileName(file.name)
         try {
             setRows(await readSupplierFile(file))
@@ -60,13 +58,14 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
             setReading(false)
         }
     }
+    // 仅登记任务；登记成功后进入统一后台任务页。
     const submit = async () => {
         setError("")
         try {
-            const result = await mutation.mutateAsync(rows)
-            setResults(result)
-            setUncertain(result.some((row) => row.status === "uncertain"))
-            await client.invalidateQueries({ queryKey: ["master-data"] })
+            await mutation.mutateAsync(rows)
+            void client.invalidateQueries({ queryKey: backgroundJobKeys.all })
+            onClose()
+            router.push("/governance/background-jobs")
         } catch (err) {
             setUncertain(
                 !(
@@ -82,14 +81,7 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
             )
         }
     }
-    const summary = results.length
-        ? Object.entries(STATUS_LABELS)
-              .map(
-                  ([status, label]) =>
-                      `${label} ${results.filter((r) => r.status === status).length} 行`,
-              )
-              .join("，")
-        : `已读取 ${rows.length} 行，提交后逐行校验并返回结果。`
+    const summary = `已读取 ${rows.length} 行，提交后后台逐行导入。`
     return (
         <Dialog
             open
@@ -105,7 +97,7 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
                 <DialogHeader>
                     <DialogTitle>导入供应商</DialogTitle>
                     <DialogDescription>
-                        使用供应商信息录入模板。资料不完整的行不写入；重复供应商跳过，其余行独立导入。
+                        使用供应商信息录入模板。提交后可关闭窗口，进度、逐行结果和待处理行下载在「后台任务」查看。资料不完整的行不写入，重复供应商跳过。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -152,11 +144,6 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
                                 </thead>
                                 <tbody>
                                     {rows.map((row) => {
-                                        const result = results.find(
-                                            (result) =>
-                                                result.row_number ===
-                                                row.row_number,
-                                        )
                                         return (
                                             <tr
                                                 key={row.row_number}
@@ -169,20 +156,14 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
                                                     {row.cells[1] || "未填写"}
                                                 </td>
                                                 <td className="whitespace-nowrap p-3">
-                                                    {result
-                                                        ? STATUS_LABELS[
-                                                              result.status
-                                                          ]
-                                                        : row.parse_errors
-                                                                .length
-                                                          ? "读取失败"
-                                                          : "待导入"}
+                                                    {row.parse_errors.length
+                                                        ? "读取失败"
+                                                        : "待导入"}
                                                 </td>
                                                 <td className="min-w-56 p-3">
                                                     {row.parse_errors.join(
                                                         "；",
                                                     ) ||
-                                                        result?.message ||
                                                         "提交时核对必填数据、公司主体及重复记录"}
                                                 </td>
                                             </tr>
@@ -193,27 +174,6 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
                         </div>
                     )}
                     <div className="flex flex-wrap justify-end gap-2">
-                        {results.some((row) => row.status === "failed") && (
-                            <Button
-                                id="supplier-import-download-failures"
-                                variant="outline"
-                                onClick={() =>
-                                    void downloadSupplierFailures(
-                                        rows,
-                                        results,
-                                    ).catch((err) =>
-                                        setError(
-                                            getErrorMessage(
-                                                err,
-                                                "失败清单下载失败",
-                                            ),
-                                        ),
-                                    )
-                                }
-                            >
-                                下载失败行
-                            </Button>
-                        )}
                         <Button
                             id="supplier-import-close"
                             variant="outline"
@@ -225,18 +185,15 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
                         <Button
                             id="supplier-import-submit"
                             disabled={
-                                !rows.length ||
-                                reading ||
-                                mutation.isPending ||
-                                (results.length > 0 && !uncertain)
+                                !rows.length || reading || mutation.isPending
                             }
                             onClick={() => void submit()}
                         >
                             {mutation.isPending
-                                ? "导入中…"
+                                ? "提交中…"
                                 : uncertain
                                   ? "重试核对"
-                                  : "开始导入"}
+                                  : "提交后台导入"}
                         </Button>
                     </div>
                 </div>

@@ -12,7 +12,7 @@ import { apiGet, apiPost } from "@/lib/api"
 import type {
     CostEntryDetail,
     CostStage,
-    ProfitLossExportJob,
+    ProfitLossExport,
     ProfitLossPeriodBasisConfig,
     ProfitLossQuery,
     ProfitLossView,
@@ -64,17 +64,16 @@ type ProfitLossViewDto = ProfitLossView & {
     projected_at?: string
 }
 
-type ExportJobDto = {
-    job_id?: string
-    jobId?: string
-    id?: string
-    status?: ProfitLossExportJob["status"]
-    total?: number
-    completed?: number
-    created_at?: string
-    createdAt?: string
-    download_label?: string
-    watermark?: ProfitLossExportJob["watermark"]
+const COST_TYPE_LABEL: Record<string, string> = {
+    product: "商品",
+    logistics: "物流",
+    printing: "印刷",
+    storage: "仓储",
+    delivery: "配送",
+    platform_tech: "平台技术",
+    offline_service: "线下服务",
+    rebate: "返点",
+    other: "其他",
 }
 
 const COST_STAGE_LABEL: Record<string, string> = {
@@ -98,11 +97,13 @@ function mapCostEntry(dto: CostEntryDto): CostEntryDetail {
     return {
         costEntryId: dto.id,
         costType: dto.cost_type,
-        costTypeLabel: dto.cost_type,
-        stage: dto.cost_stage as CostStage,
-        stageLabel: COST_STAGE_LABEL[dto.cost_stage] ?? dto.cost_stage,
-        costScope: dto.cost_scope as CostEntryDetail["costScope"],
-        costScopeLabel: COST_SCOPE_LABEL[dto.cost_scope] ?? dto.cost_scope,
+        costTypeLabel: COST_TYPE_LABEL[dto.cost_type] ?? dto.cost_type,
+        stage: dto.cost_stage.toUpperCase() as CostStage,
+        stageLabel:
+            COST_STAGE_LABEL[dto.cost_stage.toUpperCase()] ?? dto.cost_stage,
+        costScope: dto.cost_scope.toUpperCase() as CostEntryDetail["costScope"],
+        costScopeLabel:
+            COST_SCOPE_LABEL[dto.cost_scope.toUpperCase()] ?? dto.cost_scope,
         supplierId: dto.supplier_id ?? undefined,
         amountGross: String(dto.gross_amount),
         taxRate: String(dto.input_tax_rate),
@@ -131,7 +132,6 @@ function queryToParams(query: ProfitLossQuery): Record<string, unknown> {
         customer_id: query.customerId,
         sales_order_id: query.salesOrderId,
         benefit_scenario: query.benefitScenario,
-        fulfillment_modes: query.fulfillmentModes?.join(","),
         cost_types: query.costTypes?.join(","),
         dimension: query.dimension,
         q: query.q,
@@ -204,72 +204,12 @@ export async function fetchCostEntriesForRow(
     return Promise.all(costEntryIds.map(fetchCostEntryDetail))
 }
 
+/** 导出重新读取全部匹配数据；客户端只提交筛选，不能提供金额或权限。 */
 export async function startProfitLossExport(input: {
     query: ProfitLossQuery
-    view: Pick<
-        ProfitLossView,
-        | "period"
-        | "scope"
-        | "formulaVersion"
-        | "freshness"
-        | "rows"
-        | "fieldPermissions"
-    >
-    coverage: ProfitLossQuery["coverage"]
-}): Promise<ProfitLossExportJob> {
-    if (!input.view.fieldPermissions.canExport) {
-        const err = {
-            kind: "Validation" as const,
-            message: "当前权限不允许导出",
-            status: 403,
-        }
-        throw err
-    }
-    if (!input.query.periodBasis) {
-        const err = {
-            kind: "Validation" as const,
-            message: "periodBasis 未明确，已阻断导出",
-            status: 400,
-        }
-        throw err
-    }
-
-    const dto = await apiPost<ExportJobDto>(
+}): Promise<ProfitLossExport> {
+    return apiPost<ProfitLossExport>(
         "/admin/actual-profit-loss/exports",
-        {
-            from: input.view.period.from,
-            to: input.view.period.to,
-            period_basis: input.view.period.basis,
-            coverage: input.coverage,
-            scope_id: input.view.scope.id,
-            formula_version: input.view.formulaVersion,
-            projection_watermark: input.view.freshness.sourceWatermark,
-            projected_at: input.view.freshness.projectedAt,
-            row_count: input.view.rows.total,
-        },
+        queryToParams(input.query),
     )
-
-    return {
-        jobId: dto.jobId ?? dto.job_id ?? dto.id ?? "",
-        status: dto.status ?? "queued",
-        total: dto.total ?? input.view.rows.total,
-        completed: dto.completed ?? 0,
-        createdAt: dto.createdAt ?? dto.created_at ?? "",
-        downloadLabel: dto.download_label,
-        watermark: dto.watermark ?? {
-            periodFrom: input.view.period.from,
-            periodTo: input.view.period.to,
-            periodBasis: input.view.period.basis,
-            formulaVersion: input.view.formulaVersion,
-            coverage: input.coverage,
-            scopeId: input.view.scope.id,
-            scopeLabel: input.view.scope.label,
-            permissionVersion: input.view.scope.permissionVersion,
-            projectedAt: input.view.freshness.projectedAt,
-            sourceWatermark: input.view.freshness.sourceWatermark,
-            amountBasis: "NET",
-            businessType: "GOODS_SERVICE",
-            rowCount: input.view.rows.total,
-        },
-    }
 }

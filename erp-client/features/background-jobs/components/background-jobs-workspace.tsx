@@ -66,6 +66,8 @@ import {
     useCancelBackgroundJobMutation,
 } from "@/features/background-jobs/queries"
 
+import { SupplierImportFailures } from "./supplier-import-failures"
+
 const ID_PREFIX = "governance-background-jobs"
 
 const STATUS_FILTER_OPTIONS = [
@@ -105,6 +107,7 @@ export function BackgroundJobsWorkspace() {
     const [scopeDraft, setScopeDraft] = React.useState<ScopeFilter>("all")
     const [appliedScope, setAppliedScope] = React.useState<ScopeFilter>("all")
     const [page, setPage] = React.useState(1)
+    const [itemsPage, setItemsPage] = React.useState(1)
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [cancelId, setCancelId] = React.useState<string | null>(null)
     const [cancelError, setCancelError] = React.useState<string | null>(null)
@@ -142,7 +145,15 @@ export function BackgroundJobsWorkspace() {
     )
     const jobsQuery = useBackgroundJobsQuery(listParams)
     const detailQuery = useBackgroundJobDetailQuery(previewId)
-    const itemsQuery = useBackgroundJobItemsQuery(previewId)
+    const itemsQuery = useBackgroundJobItemsQuery(
+        previewId,
+        itemsPage,
+        Boolean(
+            detailQuery.data &&
+            detailQuery.data.finished_at === null &&
+            isJobActive(detailQuery.data.status),
+        ),
+    )
     const cancelMutation = useCancelBackgroundJobMutation()
     const cancelAllMutation = useCancelAllBackgroundJobsMutation()
 
@@ -189,6 +200,7 @@ export function BackgroundJobsWorkspace() {
     )
 
     const openPreview = React.useCallback((job: BackgroundJobView) => {
+        setItemsPage(1)
         lastFocusedRowId.current = job.id
         setPreviewId(job.id)
     }, [])
@@ -631,7 +643,11 @@ export function BackgroundJobsWorkspace() {
                             >
                                 关闭
                             </Button>
-                            {previewJob && isJobActive(previewJob.status) ? (
+                            {previewJob &&
+                            isJobActive(
+                                previewJob.status,
+                                previewJob.finished_at,
+                            ) ? (
                                 <Button
                                     id={`${ID_PREFIX}-preview-cancel`}
                                     type="button"
@@ -722,6 +738,53 @@ export function BackgroundJobsWorkspace() {
                         </section>
                         <section className="space-y-3">
                             <h3 className="font-medium">逐项结果</h3>
+                            {(itemsQuery.data?.total ?? 0) > 100 && (
+                                <div className="mt-3 flex items-center justify-end gap-3">
+                                    <Button
+                                        id={`${ID_PREFIX}-items-prev`}
+                                        variant="outline"
+                                        disabled={itemsPage === 1}
+                                        onClick={() =>
+                                            setItemsPage((page) => page - 1)
+                                        }
+                                    >
+                                        上一页
+                                    </Button>
+                                    <span className="text-sm">
+                                        第 {itemsPage} 页，共{" "}
+                                        {Math.ceil(
+                                            (itemsQuery.data?.total ?? 0) / 100,
+                                        )}{" "}
+                                        页
+                                    </span>
+                                    <Button
+                                        id={`${ID_PREFIX}-items-next`}
+                                        variant="outline"
+                                        disabled={
+                                            itemsPage * 100 >=
+                                            (itemsQuery.data?.total ?? 0)
+                                        }
+                                        onClick={() =>
+                                            setItemsPage((page) => page + 1)
+                                        }
+                                    >
+                                        下一页
+                                    </Button>
+                                </div>
+                            )}
+                            {previewJob.domain_job_type === "SUPPLIER_IMPORT" &&
+                                previewJob.finished_at !== null &&
+                                previewJob.requested_by === currentUserId &&
+                                (previewJob.failed_count > 0 ||
+                                    previewJob.processed_count <
+                                        previewJob.total_count) && (
+                                    <div className="mt-4">
+                                        <SupplierImportFailures
+                                            key={previewJob.id}
+                                            jobId={previewJob.id}
+                                        />
+                                    </div>
+                                )}
                             {itemsQuery.isPending ? (
                                 <p className="text-muted-foreground">
                                     正在加载逐项结果…
@@ -739,20 +802,52 @@ export function BackgroundJobsWorkspace() {
                                         >
                                             <div className="flex items-center justify-between gap-2">
                                                 <span className="num text-xs text-muted-foreground">
-                                                    第 {item.item_no} 项
+                                                    {item.source_row_no
+                                                        ? `Excel 第 ${item.source_row_no} 行`
+                                                        : `第 ${item.item_no} 项`}
                                                 </span>
                                                 <span className="text-xs">
-                                                    {item.status ?? "待执行"}
+                                                    {item.result_code ===
+                                                    "outcome_unknown"
+                                                        ? "结果待确认"
+                                                        : ({
+                                                              success: "成功",
+                                                              skipped: "跳过",
+                                                              failed: "执行失败",
+                                                          }[
+                                                              item.status ?? ""
+                                                          ] ?? "待执行")}
                                                 </span>
                                             </div>
+                                            {item.object_type ===
+                                                "supplier_import_row" && (
+                                                <p className="mt-1 font-medium">
+                                                    {item.object_id}
+                                                </p>
+                                            )}
                                             <p className="mt-1 text-[13px]">
                                                 {item.result_summary ||
-                                                    item.object_type ||
                                                     "排队执行中"}
                                             </p>
                                         </li>
                                     ))}
                                 </ul>
+                            )}
+                            {itemsQuery.isError && (
+                                <BusinessFailureState
+                                    error={itemsQuery.error}
+                                    action={
+                                        <Button
+                                            id={`${ID_PREFIX}-items-retry`}
+                                            variant="outline"
+                                            onClick={() =>
+                                                void itemsQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
+                                    }
+                                />
                             )}
                         </section>
                     </div>

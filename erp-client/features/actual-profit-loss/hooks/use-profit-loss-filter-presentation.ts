@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { WELFARE_SCENARIO_OPTIONS } from "@/lib/business-options"
 
 import type { ComboboxOption } from "@/components/business/option-combobox"
 import {
     COST_TYPE_CHIP_PREFIX,
-    FULFILLMENT_MODE_CHIP_PREFIX,
     type ProfitLossAppliedChip,
 } from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import {
@@ -21,7 +21,6 @@ type Options = Readonly<{
     customerId: string | undefined
     salesOrderId: string | undefined
     benefitScenario: string | undefined
-    fulfillmentModes: readonly string[]
     costTypes: readonly string[]
 }>
 
@@ -33,7 +32,6 @@ export function useProfitLossFilterPresentation({
     customerId,
     salesOrderId,
     benefitScenario,
-    fulfillmentModes,
     costTypes,
 }: Options) {
     const selectedCustomerLabel = React.useMemo(
@@ -87,12 +85,6 @@ export function useProfitLossFilterPresentation({
                 label: `福利场景：${benefitScenario}`,
             })
         }
-        for (const value of fulfillmentModes) {
-            chips.push({
-                key: `${FULFILLMENT_MODE_CHIP_PREFIX}${value}`,
-                label: `履约方式：${value}`,
-            })
-        }
         for (const value of costTypes) {
             chips.push({
                 key: `${COST_TYPE_CHIP_PREFIX}${value}`,
@@ -106,7 +98,6 @@ export function useProfitLossFilterPresentation({
         costTypes,
         coverage,
         customerId,
-        fulfillmentModes,
         qParam,
         salesOrderId,
         selectedCustomerLabel,
@@ -116,41 +107,13 @@ export function useProfitLossFilterPresentation({
     const benefitScenarioOptions = React.useMemo<
         readonly ComboboxOption[]
     >(() => {
-        const seen = new Set<string>()
-        const options: ComboboxOption[] = []
-        for (const row of data?.rows.items ?? []) {
-            for (const value of row.benefitScenarios ?? []) {
-                if (value && !seen.has(value)) {
-                    seen.add(value)
-                    options.push({ value, label: value })
-                }
-            }
-        }
-        if (benefitScenario && !seen.has(benefitScenario)) {
-            options.push({ value: benefitScenario, label: benefitScenario })
-        }
-        return options
-    }, [benefitScenario, data?.rows.items])
-    const fulfillmentModeOptions = React.useMemo<
-        readonly ComboboxOption[]
-    >(() => {
-        const seen = new Set<string>()
-        const options: ComboboxOption[] = []
-        for (const row of data?.rows.items ?? []) {
-            for (const value of row.fulfillmentModes ?? []) {
-                if (value && !seen.has(value)) {
-                    seen.add(value)
-                    options.push({ value, label: value })
-                }
-            }
-        }
-        for (const value of fulfillmentModes) {
-            if (!seen.has(value)) {
-                options.push({ value, label: value })
-            }
-        }
-        return options
-    }, [data?.rows.items, fulfillmentModes])
+        const labels = new Set([
+            ...WELFARE_SCENARIO_OPTIONS.map((option) => option.label),
+            "未标注",
+        ])
+        if (benefitScenario) labels.add(benefitScenario)
+        return [...labels].map((label) => ({ value: label, label }))
+    }, [benefitScenario])
     const costTypeOptions = React.useMemo<readonly ComboboxOption[]>(() => {
         const seen = new Set<string>()
         const options: ComboboxOption[] = []
@@ -177,7 +140,6 @@ export function useProfitLossFilterPresentation({
     return {
         appliedChips,
         benefitScenarioOptions,
-        fulfillmentModeOptions,
         costTypeOptions,
     }
 }

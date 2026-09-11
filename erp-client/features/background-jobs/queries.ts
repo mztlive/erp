@@ -17,7 +17,8 @@ export const backgroundJobKeys = {
     list: (params: BackgroundJobListParams) =>
         [...backgroundJobKeys.all, "list", params] as const,
     detail: (id: string) => [...backgroundJobKeys.all, "detail", id] as const,
-    items: (id: string) => [...backgroundJobKeys.all, "items", id] as const,
+    items: (id: string, page = 1) =>
+        [...backgroundJobKeys.all, "items", id, page] as const,
 }
 
 export function useBackgroundJobsQuery(params: BackgroundJobListParams) {
@@ -27,7 +28,7 @@ export function useBackgroundJobsQuery(params: BackgroundJobListParams) {
         placeholderData: (previous) => previous,
         refetchInterval: (current) => {
             const active = current.state.data?.items.some((job) =>
-                isJobActive(job.status),
+                isJobActive(job.status, job.finished_at),
             )
             return active ? 2000 : false
         },
@@ -39,18 +40,27 @@ export function useBackgroundJobDetailQuery(id: string | null) {
         queryKey: backgroundJobKeys.detail(id ?? ""),
         queryFn: () => fetchBackgroundJobDetail(id ?? ""),
         enabled: Boolean(id),
-        placeholderData: (previous) => previous,
         refetchInterval: (current) => {
             const status = current.state.data?.status
-            return status && isJobActive(status) ? 2000 : false
+            return status &&
+                isJobActive(status, current.state.data?.finished_at)
+                ? 2000
+                : false
         },
     })
 }
 
-export function useBackgroundJobItemsQuery(id: string | null) {
+export function useBackgroundJobItemsQuery(
+    id: string | null,
+    page = 1,
+    active = false,
+) {
     return useQuery({
-        queryKey: backgroundJobKeys.items(id ?? ""),
-        queryFn: () => fetchBackgroundJobItems(id ?? ""),
+        queryKey: [...backgroundJobKeys.items(id ?? "", page), active],
+        queryFn: () => fetchBackgroundJobItems(id ?? "", page),
+        placeholderData: (previous, query) =>
+            query?.queryKey[2] === id ? previous : undefined,
+        refetchInterval: active ? 2000 : false,
         enabled: Boolean(id),
     })
 }

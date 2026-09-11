@@ -8,7 +8,7 @@ import type {
 
 const PERIOD_BASIS_LABEL: Record<string, string> = {
     sales_revenue_recognition_date: "销售收入确认日",
-    sales_order_effective_date: "销售单生效日",
+    sales_order_effective_date: "销售单生效日（累计实际成本）",
     fulfillment_complete_date: "履约完成日",
     cost_occurred_date: "成本发生日",
 }
@@ -23,13 +23,7 @@ export function parseCoverage(raw: string | null): ProfitLossCoverage {
 }
 
 export function parseDimension(raw: string | null): ProfitLossDimension {
-    if (
-        raw === "customer" ||
-        raw === "scenario" ||
-        raw === "fulfillment" ||
-        raw === "cost_type" ||
-        raw === "sales_order"
-    ) {
+    if (raw === "customer" || raw === "scenario" || raw === "sales_order") {
         return raw
     }
     return "sales_order"
@@ -89,7 +83,15 @@ export function resolvePeriod(preset: PeriodPreset): {
     from: string
     to: string
 } {
-    const now = new Date()
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(new Date())
+    const value = (type: string) =>
+        Number(parts.find((part) => part.type === type)?.value)
+    const now = new Date(value("year"), value("month") - 1, value("day"), 12)
     const today = toISODate(now)
     if (preset === "last-month") {
         const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -147,4 +149,4 @@ export function coveragePercentNumber(rate: string): number {
 }
 
 export const W16_FORMULA_HINT =
-    "实际经营盈亏（不含税）= 非卡券不含税销售收入 − 非卡券不含税实际采购成本 − 非卡券不含税实际履约费用"
+    "实际经营盈亏（不含税）= 非卡券不含税销售收入 − 非卡券不含税实际采购成本 − 非卡券不含税实际履约费用 + 不含税成本冲减"

@@ -319,6 +319,7 @@ mod tests {
     #[test]
     fn product_list_pipeline_applies_keyword_and_sku_coverage_filters() {
         let filter = ProductFilter {
+            ids: None,
             product_no: None,
             keyword: Some("礼盒.*".to_string()),
             product_kind: Some(ProductKind::Physical),

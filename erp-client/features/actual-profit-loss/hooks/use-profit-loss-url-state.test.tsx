@@ -88,4 +88,18 @@ describe("useProfitLossUrlState", () => {
             )
         })
     })
+    it("clears retired fulfillment filters and grouping from bookmarked URLs", () => {
+        navigation.searchParams = new URLSearchParams(
+            "periodBasis=recognized_at&fulfillmentMode=direct&dimension=cost_type&page=3",
+        )
+        const { result } = renderHook(() =>
+            useProfitLossUrlState({ basisConfig, basisResolved: true }),
+        )
+        expect(result.current.query?.dimension).toBe("sales_order")
+        expect(result.current.query).not.toHaveProperty("fulfillmentModes")
+        expect(navigation.replace).toHaveBeenCalledWith(
+            "/finance/actual-profit-loss?periodBasis=recognized_at",
+            { scroll: false },
+        )
+    })
 })

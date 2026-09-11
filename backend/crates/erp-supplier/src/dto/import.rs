@@ -20,7 +20,7 @@ pub struct SupplierImportRequest {
 }
 
 /// 保留原 Excel 行号；业务编号采用现有生成规则，与表内旧编号分离。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SupplierImportRow {
     pub row_number: u32,

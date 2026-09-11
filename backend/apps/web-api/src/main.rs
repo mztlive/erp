@@ -5,7 +5,9 @@
 mod indexes;
 
 use config::{Config, S3Config, SafeConfig};
-use erp_processes::background::{BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter};
+use erp_processes::background::{
+    BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter, SupplierImportTaskAdapter,
+};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage::{S3Storage, S3StorageConfig};
@@ -158,6 +160,7 @@ fn spawn_background_runner(state: AppState) {
     let runner = Arc::new(
         BackgroundRunner::new(std::time::Duration::from_secs(2))
             .register(ProductImportTaskAdapter::new(state.product_import_process()))
+            .register(SupplierImportTaskAdapter::new(state.supplier_import_process()))
             .register(SalesSelectionTaskAdapter::new(
                 erp_processes::sales_selection::SalesSelectionProcess::new(
                     state.db(),

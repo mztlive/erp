@@ -12,11 +12,10 @@ import {
 } from "@/features/actual-profit-loss/hooks/queries"
 import { useProfitLossFilterPresentation } from "@/features/actual-profit-loss/hooks/use-profit-loss-filter-presentation"
 import { useProfitLossUrlState } from "@/features/actual-profit-loss/hooks/use-profit-loss-url-state"
-import { buildProfitLossCsv } from "@/features/actual-profit-loss/lib/csv"
 import { mapFreshnessState } from "@/features/actual-profit-loss/lib/url-state"
 import type {
     CostEntryDetail,
-    ProfitLossExportJob,
+    ProfitLossExport,
     ProfitLossRow,
 } from "@/features/actual-profit-loss/types"
 
@@ -46,8 +45,9 @@ export function useActualProfitLossPage() {
     const [selectedCostEntryId, setSelectedCostEntryId] = React.useState<
         string | null
     >(null)
-    const [exportJob, setExportJob] =
-        React.useState<ProfitLossExportJob | null>(null)
+    const [exportJob, setExportJob] = React.useState<ProfitLossExport | null>(
+        null,
+    )
     const [exportFailed, setExportFailed] = React.useState<string | null>(null)
     const [refreshFailed, setRefreshFailed] = React.useState<string | null>(
         null,
@@ -65,7 +65,6 @@ export function useActualProfitLossPage() {
         customerId: urlState.customerId,
         salesOrderId: urlState.salesOrderId,
         benefitScenario: urlState.benefitScenario,
-        fulfillmentModes: urlState.fulfillmentModes,
         costTypes: urlState.costTypes,
     })
 
@@ -139,24 +138,17 @@ export function useActualProfitLossPage() {
         try {
             const job = await exportMutation.mutateAsync({
                 query: urlState.query,
-                view: data,
-                coverage: urlState.coverage,
             })
             setExportJob(job)
 
-            const csv = buildProfitLossCsv(
-                data,
-                job.watermark,
-                urlState.coverage,
-            )
             const url = URL.createObjectURL(
-                new Blob(["\uFEFF", csv], {
+                new Blob(["\uFEFF", job.csvContent], {
                     type: "text/csv;charset=utf-8",
                 }),
             )
             const anchor = document.createElement("a")
             anchor.href = url
-            anchor.download = `实际盈亏-非卡券不含税-${job.watermark.periodFrom}_${job.watermark.periodTo}.csv`
+            anchor.download = job.fileName
             anchor.click()
             URL.revokeObjectURL(url)
         } catch (error) {

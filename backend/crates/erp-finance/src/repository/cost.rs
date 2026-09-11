@@ -9,6 +9,8 @@
 //! 筛选/行类型定义在本文件，经 `CostExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+pub mod profit_loss;
+
 use crate::entity::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
 use crate::repository::owned::{CostAllocationRepository, CostEntryRepository};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;

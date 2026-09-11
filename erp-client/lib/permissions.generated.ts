@@ -1370,6 +1370,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/supplier-profiles/import/jobs",
+                description: "提交供应商导入任务",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-profiles/import/jobs/{id}/failures",
+                description: "下载供应商导入待处理行",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/supplier-profiles/import",
                 description: "导入供应商资料",
                 permission: {
@@ -1821,6 +1841,46 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "product",
                     action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/{id}",
+                description: "查询商品详情",
+                permission: {
+                    resource: "product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/{id}/revisions",
+                description: "查询商品修订详情",
+                permission: {
+                    resource: "product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/{id}/skus",
+                description: "查询商品SKU详情",
+                permission: {
+                    resource: "product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products/{id}/sku-revisions",
+                description: "查询商品SKU修订详情",
+                permission: {
+                    resource: "product",
+                    action: "detail",
                 },
             },
             {
@@ -3469,6 +3529,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         name: "实际经营盈亏",
         description: "成本事实与成本分配管理（W16）",
         permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/actual-profit-loss",
+                description: "查询成本事实列表",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/actual-profit-loss/period-basis",
+                description: "查询成本事实列表",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/actual-profit-loss/exports",
+                description: "查询成本事实列表",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
+                },
+            },
             {
                 module: "admin",
                 method: "GET",

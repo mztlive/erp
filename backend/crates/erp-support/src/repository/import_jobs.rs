@@ -31,6 +31,7 @@ impl<'a> BackgroundJobRepository<'a> {
     ) -> Result<Vec<BackgroundJob>> {
         let filter = doc! {
             "domain_job_type": domain_job_type,
+            "finished_at": mongodb::bson::Bson::Null,
             "status": {
                 "$in": [
                     JobStatus::Pending.as_str(),

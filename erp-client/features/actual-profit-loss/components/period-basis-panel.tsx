@@ -45,8 +45,8 @@ export function PeriodBasisPanel({
                     查询与导出仅按此处明确的期间与归属口径执行。
                 </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
-                <div className="space-y-1.5">
+            <CardContent className="grid grid-cols-2 gap-3 pt-4 sm:flex sm:flex-wrap sm:items-end">
+                <div className="col-span-2 space-y-1.5">
                     <Label htmlFor="actual-profit-loss-period-preset">
                         期间快捷
                     </Label>
@@ -81,7 +81,8 @@ export function PeriodBasisPanel({
                     <Label htmlFor="actual-profit-loss-period-from">从</Label>
                     <DatePicker
                         id="actual-profit-loss-period-from"
-                        className="w-[10.5rem]"
+                        className="w-full sm:w-44"
+                        clearable={false}
                         value={from || undefined}
                         onValueChange={(next) => {
                             patchUrl({
@@ -96,7 +97,8 @@ export function PeriodBasisPanel({
                     <Label htmlFor="actual-profit-loss-period-to">至</Label>
                     <DatePicker
                         id="actual-profit-loss-period-to"
-                        className="w-[10.5rem]"
+                        className="w-full sm:w-44"
+                        clearable={false}
                         value={to || undefined}
                         onValueChange={(next) => {
                             patchUrl({
@@ -107,13 +109,13 @@ export function PeriodBasisPanel({
                         }}
                     />
                 </div>
-                <div className="space-y-1.5">
-                    <Label>已解析期间</Label>
+                <div className="col-span-2 space-y-1.5">
+                    <Label>所选期间</Label>
                     <p className="num text-sm font-medium">
                         {from} ~ {to}
                     </p>
                 </div>
-                <div className="min-w-[16rem] flex-1 space-y-1.5">
+                <div className="col-span-2 min-w-0 flex-1 space-y-1.5">
                     <Label htmlFor="actual-profit-loss-period-basis">
                         期间归属口径
                     </Label>
@@ -128,7 +130,7 @@ export function PeriodBasisPanel({
                                 value: "",
                                 label: basisConfig.configuredPeriodBasis
                                     ? "请确认归属口径"
-                                    : "请显式选择归属口径（未配置）",
+                                    : "请选择统计口径",
                             },
                             ...basisConfig.allowedPeriodBases.map((opt) => ({
                                 value: opt.code,
@@ -140,7 +142,7 @@ export function PeriodBasisPanel({
                                         : ""),
                             })),
                         ]}
-                        className="w-full min-w-[16rem]"
+                        className="w-full sm:min-w-64"
                         size="sm"
                         allowClear={false}
                         aria-label="期间归属口径"
@@ -148,11 +150,9 @@ export function PeriodBasisPanel({
                     />
                 </div>
                 {periodBasisValid ? (
-                    <Badge variant="secondary">
-                        口径已明确 · {basisConfig.configurationVersion}
-                    </Badge>
+                    <Badge variant="secondary">口径已选择</Badge>
                 ) : (
-                    <Badge variant="destructive">分析与导出已阻断</Badge>
+                    <Badge variant="secondary">选择口径后查看结果</Badge>
                 )}
             </CardContent>
         </Card>

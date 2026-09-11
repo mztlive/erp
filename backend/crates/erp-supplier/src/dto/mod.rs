@@ -3,3 +3,4 @@
 pub mod supplier;
 
 pub mod import;
+pub mod import_job;

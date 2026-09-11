@@ -24,6 +24,30 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/actual-profit-loss",
+            with_permission(
+                get(cost::profit_loss::view),
+                rbac,
+                cost::profit_loss::view_permission_key(),
+            ),
+        )
+        .route(
+            "/actual-profit-loss/period-basis",
+            with_permission(
+                get(cost::profit_loss::period_basis),
+                rbac,
+                cost::profit_loss::period_basis_permission_key(),
+            ),
+        )
+        .route(
+            "/actual-profit-loss/exports",
+            with_permission(
+                post(cost::profit_loss::export),
+                rbac,
+                cost::profit_loss::export_permission_key(),
+            ),
+        )
+        .route(
             "/cost-entries",
             with_permission(
                 get(cost::cost_entry_list),

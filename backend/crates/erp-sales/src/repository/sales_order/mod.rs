@@ -14,6 +14,7 @@
 //! 两者都必须收到事务执行器（P2 §2.1）。
 
 mod order;
+pub mod profit_loss;
 mod revision;
 mod submission;
 mod working_copy;

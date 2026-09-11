@@ -27,10 +27,7 @@ import {
 import type { ComboboxOption } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-    COST_TYPE_CHIP_PREFIX,
-    FULFILLMENT_MODE_CHIP_PREFIX,
-} from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
+import { COST_TYPE_CHIP_PREFIX } from "@/features/actual-profit-loss/hooks/profit-loss-filter-contract"
 import type { ProfitLossAppliedChip } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
 import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 import {
@@ -75,12 +72,9 @@ export type ProfitLossRowsPanelProps = {
     onDimensionChange: (value: string) => void
     benefitScenarioDraft: string
     onBenefitScenarioDraftChange: SetState<string>
-    fulfillmentModesDraft: readonly string[]
-    onFulfillmentModesDraftChange: (value: string[]) => void
     costTypesDraft: readonly string[]
     onCostTypesDraftChange: (value: string[]) => void
     benefitScenarioOptions: readonly ComboboxOption[]
-    fulfillmentModeOptions: readonly ComboboxOption[]
     costTypeOptions: readonly ComboboxOption[]
     pageRows: ProfitLossRow[]
     columns: ColumnDef<ProfitLossRow>[]
@@ -117,12 +111,9 @@ export function ProfitLossRowsPanel({
     onDimensionChange,
     benefitScenarioDraft,
     onBenefitScenarioDraftChange,
-    fulfillmentModesDraft,
-    onFulfillmentModesDraftChange,
     costTypesDraft,
     onCostTypesDraftChange,
     benefitScenarioOptions,
-    fulfillmentModeOptions,
     costTypeOptions,
     pageRows,
     columns,
@@ -137,9 +128,7 @@ export function ProfitLossRowsPanel({
 }: ProfitLossRowsPanelProps) {
     const moreCount = appliedChips.filter(
         ({ key }) =>
-            key === "benefitScenario" ||
-            key.startsWith(FULFILLMENT_MODE_CHIP_PREFIX) ||
-            key.startsWith(COST_TYPE_CHIP_PREFIX),
+            key === "benefitScenario" || key.startsWith(COST_TYPE_CHIP_PREFIX),
     ).length
     const listLoadFailed = isError && !data
 
@@ -227,22 +216,6 @@ export function ProfitLossRowsPanel({
                                 />
                             </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
-                                htmlFor="actual-profit-loss-filter-fulfillment-modes"
-                                label="履约方式"
-                            >
-                                <MultiOptionCombobox
-                                    id="actual-profit-loss-filter-fulfillment-modes"
-                                    className="w-full"
-                                    value={fulfillmentModesDraft}
-                                    aria-label="履约方式"
-                                    onValueChange={
-                                        onFulfillmentModesDraftChange
-                                    }
-                                    options={fulfillmentModeOptions}
-                                    placeholder="全部履约方式"
-                                />
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
                                 htmlFor="actual-profit-loss-filter-cost-types"
                                 label="成本类型"
                             >
@@ -270,7 +243,7 @@ export function ProfitLossRowsPanel({
                     onClearAll={onClearAllFilters}
                     hasPendingChanges={hasPendingChanges}
                     pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-                    idleHint="导出与当前查询结果一致"
+                    idleHint="导出全部匹配行，采用生成时的最新数据"
                 />
             }
             table={

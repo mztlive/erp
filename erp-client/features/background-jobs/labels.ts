@@ -23,6 +23,7 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
 /** 业务类型（后端 `domain_job_type`）中文映射。 */
 export const JOB_DOMAIN_LABELS: Record<string, string> = {
     PRODUCT_IMPORT: "商品导入",
+    SUPPLIER_IMPORT: "供应商导入",
     SALES_ORDER_EXPORT: "销售单导出",
     INVENTORY_LEDGER_EXPORT: "库存台账导出",
     supplier_fulfillment_order_export: "供应商订单导出",
@@ -82,7 +83,12 @@ export function jobProgressStatus(status: JobStatus): BackgroundJobStatus {
     }
 }
 
-export function isJobActive(status: JobStatus): boolean {
+/** 已完成的部分成功任务不再轮询或提供取消操作。 */
+export function isJobActive(
+    status: JobStatus,
+    finishedAt: number | null = null,
+): boolean {
+    if (finishedAt !== null) return false
     return (
         status === "pending" ||
         status === "running" ||

@@ -4,12 +4,7 @@ import type { StatusTone } from "@/components/ui/status-badge"
 
 export type ProfitLossCoverage = "covered" | "uncovered" | "all"
 
-export type ProfitLossDimension =
-    | "sales_order"
-    | "customer"
-    | "scenario"
-    | "fulfillment"
-    | "cost_type"
+export type ProfitLossDimension = "sales_order" | "customer" | "scenario"
 
 export type CostStage = "EXPECTED" | "CONFIRMED" | "ACTUAL" | "REDUCTION"
 type CostScope = "NON_VOUCHER_FULFILLMENT"
@@ -46,7 +41,6 @@ export type ProfitLossQuery = Readonly<{
     customerId?: string
     salesOrderId?: string
     benefitScenario?: string
-    fulfillmentModes?: readonly string[]
     costTypes?: readonly string[]
     dimension: ProfitLossDimension
     q?: string
@@ -68,7 +62,6 @@ export type ProfitLossRow = Readonly<{
     customerId?: string
     customerLabel?: string
     benefitScenarios?: readonly string[]
-    fulfillmentModes?: readonly string[]
     netSalesRevenue: string
     actualProcurementCostNet?: string
     actualFulfillmentCostNet?: string
@@ -202,29 +195,11 @@ export type CostEntryDetail = Readonly<{
     correctionLabel?: string
 }>
 
-export type ProfitLossExportJob = Readonly<{
-    jobId: string
-    status: "queued" | "running" | "succeeded" | "failed"
-    total: number
-    completed: number
-    createdAt: string
-    downloadLabel?: string
-    /** 导出水印/冻结元数据 */
-    watermark: {
-        periodFrom: string
-        periodTo: string
-        periodBasis: string
-        formulaVersion: string
-        coverage: ProfitLossCoverage
-        scopeId: string
-        scopeLabel: string
-        permissionVersion: string
-        projectedAt: string
-        sourceWatermark: string
-        amountBasis: "NET"
-        businessType: "GOODS_SERVICE"
-        rowCount: number
-    }
+export type ProfitLossExport = Readonly<{
+    csvContent: string
+    fileName: string
+    rowCount: number
+    generatedAt: string
 }>
 
 export type PeriodPreset = "month-to-date" | "last-month" | "quarter-to-date"
@@ -233,8 +208,6 @@ export const DIMENSION_LABEL: Record<ProfitLossDimension, string> = {
     sales_order: "销售单",
     customer: "客户",
     scenario: "福利场景",
-    fulfillment: "履约方式",
-    cost_type: "成本类型",
 }
 
 export const COVERAGE_FILTER_LABEL: Record<ProfitLossCoverage, string> = {

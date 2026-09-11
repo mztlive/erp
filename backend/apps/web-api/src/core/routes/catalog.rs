@@ -321,6 +321,38 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/products/{id}",
+            with_permission(
+                get(catalog::product::product_detail),
+                rbac,
+                catalog::product::product_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/revisions",
+            with_permission(
+                get(catalog::product::product_detail_revisions),
+                rbac,
+                catalog::product::product_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/skus",
+            with_permission(
+                get(catalog::product::product_detail_skus),
+                rbac,
+                catalog::product::product_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/sku-revisions",
+            with_permission(
+                get(catalog::product::product_detail_sku_revisions),
+                rbac,
+                catalog::product::product_detail_permission_key(),
+            ),
+        )
+        .route(
             "/products/{id}/with-assets",
             with_permission(
                 upload::multipart_route(

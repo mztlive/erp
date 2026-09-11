@@ -4,6 +4,8 @@
 
 mod adapter;
 mod product_import_adapter;
+mod supplier_import_adapter;
+pub use supplier_import_adapter::SupplierImportTaskAdapter;
 mod runner;
 mod sales_selection_adapter;
 

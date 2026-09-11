@@ -20,10 +20,12 @@ export function AnalysisBlockedPanel({
 }) {
     return (
         <>
-            <Alert variant="destructive">
-                <AlertTitle>期间归属口径尚未配置</AlertTitle>
+            <Alert>
+                <AlertTitle>请选择统计口径</AlertTitle>
                 <AlertDescription className="space-y-3">
-                    <p>尚未设置默认归属口径，请选择上方任一口径后开始分析。</p>
+                    <p>
+                        选择销售单生效日口径后开始分析；收入和成本采用查询时点的累计记录。
+                    </p>
                     <p className="text-xs text-muted-foreground">
                         公式说明：{W16_FORMULA_HINT}
                     </p>
@@ -50,7 +52,7 @@ export function AnalysisBlockedPanel({
 
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
-                    <CardTitle>公式与边界（查询阻断中）</CardTitle>
+                    <CardTitle>计算范围</CardTitle>
                     <CardDescription>选定口径后加载数据。</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">

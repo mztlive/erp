@@ -17,6 +17,7 @@ use erp_catalog::{
     VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
 use erp_support::SensitivityClass;
+use serde::Deserialize;
 
 use crate::{
     app_state::AppState,
@@ -439,4 +440,109 @@ pub async fn voucher_category_update(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 商品详情 SKU 修订查询参数（可选过滤到单个 SKU）。
+#[derive(Debug, Deserialize)]
+pub struct ProductDetailSkuRevisionQuery {
+    /// 稳定 SKU ID；缺省返回该商品下全部 SKU 的修订。
+    pub sku_id: Option<String>,
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询商品详情",
+    resource = "product",
+    action = "detail"
+)]
+/// 按稳定 ID 查询单个商品，与列表共用同一聚合计数口径。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 商品稳定 ID
+///
+/// # 返回
+/// 返回与列表同构的单个商品视图。
+pub async fn product_detail(State(state): State<AppState>, Path(id): Path<String>) -> Result<ProductView> {
+    let view = state.catalog_center().product_detail(&id).await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询商品修订详情",
+    resource = "product",
+    action = "detail"
+)]
+/// 查询指定商品的全部修订（强制路径商品过滤）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 路径商品稳定 ID
+///
+/// # 返回
+/// 返回该商品全部修订分页视图。
+pub async fn product_detail_revisions(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<PageView<ProductRevisionView>> {
+    let page = state.catalog_service().product_detail_revisions(&id).await?;
+
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询商品SKU详情",
+    resource = "product",
+    action = "detail"
+)]
+/// 查询指定商品的全部 SKU（强制路径商品过滤）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 路径商品稳定 ID
+///
+/// # 返回
+/// 返回该商品全部 SKU 分页视图。
+pub async fn product_detail_skus(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<PageView<SkuView>> {
+    let page = state.catalog_service().product_detail_skus(&id).await?;
+
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询商品SKU修订详情",
+    resource = "product",
+    action = "detail"
+)]
+/// 查询指定商品下的 SKU 修订（可选过滤到单个 SKU）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 路径商品稳定 ID
+/// * `query` - 可选 SKU 过滤
+///
+/// # 返回
+/// 返回该商品下 SKU 修订分页视图。
+pub async fn product_detail_sku_revisions(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<ProductDetailSkuRevisionQuery>,
+) -> Result<PageView<SkuRevisionView>> {
+    let page = state
+        .catalog_service()
+        .product_detail_sku_revisions(&id, query.sku_id.as_deref())
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(page))
 }

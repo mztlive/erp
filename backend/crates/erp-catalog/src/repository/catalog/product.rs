@@ -65,6 +65,8 @@ pub struct ProductRow {
 /// 商品列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ProductFilter {
+    /// 稳定主键集合（`$in` 精确匹配）；`None` 表示不筛选。
+    pub ids: Option<Vec<String>>,
     /// 商品编号字面量正则（忽略大小写）；`None` 表示不筛选。
     pub product_no: Option<String>,
     /// 商品与 SKU 统一关键字；`None` 表示不筛选。
@@ -104,6 +106,9 @@ impl QueryFilter for ProductFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(ids) = &self.ids {
+            filter.extend(in_filter("id", ids.iter().cloned()));
+        }
         insert_literal_regex_filter(&mut filter, "product_no", self.product_no.as_deref());
         if let Some(product_kind) = self.product_kind {
             filter.insert("product_kind", product_kind.as_str());
