@@ -1,5 +1,5 @@
 /**
- * 选品册详情页：对象页头 + 概览分区 + 陈列预览。
+ * 选品册详情页：对象页头 + 流程向导 + 双栏作业工作台（左侧陈列预览画廊 + 右侧档案指标侧边栏）。
  * 发布固定已确认批次，不回传浏览器明细替代后端快照。
  */
 
@@ -10,7 +10,6 @@ import Link from "next/link"
 
 import {
     BusinessFailureState,
-    DocumentSection,
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
@@ -18,7 +17,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { BookDetailHeader } from "@/features/sales-selection/components/book-detail-header"
-import { BookDetailOverview } from "@/features/sales-selection/components/book-detail-overview"
+import { BookDetailSidebar } from "@/features/sales-selection/components/book-detail-sidebar"
+import { BookWorkflowBanner } from "@/features/sales-selection/components/book-workflow-banner"
 import { PreviewGrid } from "@/features/sales-selection/components/preview-grid"
 import { ReprepareDialog } from "@/features/sales-selection/components/reprepare-dialog"
 import {
@@ -26,6 +26,7 @@ import {
     useBookOperations,
 } from "@/features/sales-selection/hooks/queries"
 import { bookIdentity } from "@/features/sales-selection/lib/presentation"
+import { createIdempotencyKey } from "@/features/sales-selection/lib/validation"
 import { cn } from "@/lib/utils"
 
 /**
@@ -55,8 +56,11 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 <PageHeader title="选品册" description="正在加载选品册…" />
                 <div className="space-y-3" aria-busy="true" aria-label="加载中">
                     <Skeleton className="h-16 w-full rounded-lg" />
-                    <Skeleton className="h-24 w-full rounded-xl" />
-                    <Skeleton className="h-64 w-full rounded-xl" />
+                    <Skeleton className="h-20 w-full rounded-xl" />
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+                        <Skeleton className="h-96 w-full rounded-xl" />
+                        <Skeleton className="h-96 w-full rounded-xl" />
+                    </div>
                 </div>
             </PageScaffold>
         )
@@ -90,6 +94,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
     }
 
     const visibleItems = detail.items.filter((item) => !item.removed)
+    const activeBookId = bookIdentity(detail) || bookId
 
     return (
         <PageScaffold density="compact">
@@ -108,25 +113,39 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 />
             ) : null}
 
-            <div
-                className={cn(
-                    surfacePanelClassName,
-                    "min-w-0 overflow-hidden px-5 pt-2",
-                )}
-            >
-                <BookDetailOverview
-                    detail={detail}
-                    pending={pending}
-                    operations={operations}
-                />
-                <DocumentSection
-                    title={`陈列预览（${visibleItems.length} 项）`}
-                    description={
-                        detail.status === "PENDING_PUBLISH"
-                            ? "待发布时可删除不需要的陈列项，发布后将冻结。"
-                            : "陈列内容来自最近一次准备结果。"
-                    }
+            {/* 流程推进向导横幅 */}
+            <BookWorkflowBanner
+                detail={detail}
+                pending={pending}
+                operations={operations}
+                onEdit={() => setEditing(true)}
+            />
+
+            {/* 双栏工作台：左侧陈列预览与核对 + 右侧档案与控制侧边栏 */}
+            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+                {/* 左侧主要工作面：商品与套餐陈列预览 */}
+                <div
+                    className={cn(
+                        surfacePanelClassName,
+                        "min-w-0 overflow-hidden rounded-xl border border-border p-5",
+                    )}
                 >
+                    <div className="mb-4">
+                        <div className="flex items-baseline justify-between gap-2">
+                            <h2 className="text-sm font-semibold text-foreground">
+                                陈列预览
+                                <span className="ml-2 font-normal text-xs text-muted-foreground">
+                                    （共 {visibleItems.length} 项）
+                                </span>
+                            </h2>
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            {detail.status === "PENDING_PUBLISH"
+                                ? "待发布时可剔除不需要的陈列项；套餐可单档重生成。发布后陈列将正式冻结。"
+                                : "陈列内容来自最近一次准备结果。"}
+                        </p>
+                    </div>
+
                     <PreviewGrid
                         items={visibleItems.map((item) => ({
                             ...item,
@@ -135,19 +154,40 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                             price_gross: item.price_gross || item.price || "0",
                         }))}
                         selectionForm={detail.selection_form}
+                        tiers={detail.tiers}
+                        onRegenerateTier={
+                            detail.status === "PENDING_PUBLISH"
+                                ? (tierId) =>
+                                      void operations.regenerate.mutateAsync({
+                                          bookId: activeBookId,
+                                          tier_ids: [tierId],
+                                          expected_version: detail.version,
+                                          idempotency_key:
+                                              createIdempotencyKey(),
+                                      })
+                                : undefined
+                        }
                         onDelete={
                             detail.status === "PENDING_PUBLISH"
                                 ? (itemId) =>
                                       void operations.deleteItem.mutateAsync({
-                                          bookId:
-                                              bookIdentity(detail) || bookId,
+                                          bookId: activeBookId,
                                           itemId,
                                           expected_version: detail.version,
                                       })
                                 : undefined
                         }
                     />
-                </DocumentSection>
+                </div>
+
+                {/* 右侧吸顶控制台与档案侧边栏 */}
+                <div className="min-w-0 xl:sticky xl:top-4">
+                    <BookDetailSidebar
+                        detail={detail}
+                        pending={pending}
+                        operations={operations}
+                    />
+                </div>
             </div>
         </PageScaffold>
     )
