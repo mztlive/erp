@@ -279,7 +279,7 @@ fn read_zip_bytes(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Result
 /// # 错误
 /// 无。
 fn parse_merge_ranges(xml: &str) -> Vec<(u32, u32, u32, u32)> {
-    let re = Regex::new(r#"ref="([A-Z]+)(\d+):([A-Z]+)(\d+)""#).expect("merge regex");
+    let re = Regex::new(r#"<mergeCell[^>]*\bref="([A-Z]+)(\d+):([A-Z]+)(\d+)""#).expect("merge regex");
     re.captures_iter(xml)
         .filter_map(|cap| {
             Some((
@@ -390,6 +390,24 @@ mod tests {
         let row3 = rows.iter().find(|row| row.row_number == 3).unwrap();
         assert_eq!(row2.cells[0], "FSY-1");
         assert_eq!(row3.cells[0], "FSY-1");
+        assert_eq!(row3.cells[8], "名称B");
+    }
+
+    #[test]
+    fn non_merge_refs_do_not_fill_empty_cells() {
+        let shared = vec!["产品编码".into(), "名称A".into(), "名称B".into()];
+        let xml = r#"<worksheet><dimension ref="A1:X3"/>
+        <sheetData>
+            <c r="A1" t="s"><v>0</v></c>
+            <c r="I2" t="s"><v>1</v></c>
+            <c r="I3" t="s"><v>2</v></c>
+            <c r="M1"><f t="shared" ref="M1:M2">ROUNDUP(K1/0.97,0)</f><v>68</v></c>
+        </sheetData>
+        <autoFilter ref="A1:X2"/>
+        <conditionalFormatting sqref="I1:J1"></conditionalFormatting></worksheet>"#;
+        let rows = parse_sheet_rows(xml, &shared).unwrap();
+        let row3 = rows.iter().find(|row| row.row_number == 3).unwrap();
+        assert_eq!(row3.cells[0], "");
         assert_eq!(row3.cells[8], "名称B");
     }
 }
