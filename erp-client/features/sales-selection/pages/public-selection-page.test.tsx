@@ -180,3 +180,29 @@ it("失效链接显示结束说明，网络故障提供重试", () => {
     view.rerender(<PublicSelectionPage token="offline" />)
     expect(screen.getByRole("button", { name: "重新打开" })).toBeTruthy()
 })
+it("在核对中心移除单项不返回上一页，自动保存并可直接提交", async () => {
+    mocks.save.mockImplementation(async (_token, input) => ({
+        ...page,
+        session_version: input.expectedSessionVersion + 1,
+        choices: input.choices,
+        total_amount: "20.00",
+    }))
+    mocks.submit.mockResolvedValue({ ...page, kind: "ENDED" })
+    mount()
+    fireEvent.click(screen.getByRole("checkbox", { name: /商品A/ }))
+    fireEvent.click(screen.getByRole("checkbox", { name: /商品B/ }))
+    click("核对并提交")
+    await screen.findByRole("button", { name: "确认并提交选品" })
+    const removeButtons = screen.getAllByRole("button", { name: "移除" })
+    expect(removeButtons.length).toBeGreaterThan(0)
+    fireEvent.click(removeButtons[0])
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2))
+    expect(
+        screen.getByRole("button", { name: "确认并提交选品" }),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "确认并提交选品" }))
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1))
+    expect(mocks.save.mock.calls[1][1].choices).toEqual([
+        { item_id: "B", quantity: 1 },
+    ])
+})

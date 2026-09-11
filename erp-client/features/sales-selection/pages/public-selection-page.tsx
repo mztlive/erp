@@ -335,6 +335,23 @@ const SelectionReviewCenter = ({
     const [searchQuery, setSearchQuery] = React.useState("")
     const [activeCategory, setActiveCategory] = React.useState<string>("ALL")
     const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({})
+    const [removingId, setRemovingId] = React.useState<string | null>(null)
+    const [optimisticRemoved, setOptimisticRemoved] = React.useState<
+        Set<string>
+    >(() => new Set())
+
+    // 当底层数据刷新时清空乐观移除暂存
+    React.useEffect(() => {
+        setOptimisticRemoved(new Set())
+        setRemovingId(null)
+    }, [page])
+
+    const handleRemove = (itemId: string) => {
+        if (locked || conflict) return
+        setRemovingId(itemId)
+        setOptimisticRemoved((prev) => new Set(prev).add(itemId))
+        onRemoveItem(itemId)
+    }
 
     // 按品类/档位归类已选商品并计算小计
     const groupedChoices = React.useMemo(() => {
@@ -351,6 +368,7 @@ const SelectionReviewCenter = ({
         >()
 
         for (const choice of page.choices) {
+            if (optimisticRemoved.has(choice.item_id)) continue
             const item = page.items.find((i) => i.item_id === choice.item_id)
             const cat = item ? inferItemCategory(item) : "精选好物"
             const entry = map.get(cat) ?? {
@@ -370,7 +388,7 @@ const SelectionReviewCenter = ({
         }
 
         return Array.from(map.values())
-    }, [page.choices, page.items])
+    }, [page.choices, page.items, optimisticRemoved])
 
     // 计算总件数/份数
     const totalPieces = React.useMemo(() => {
@@ -750,14 +768,23 @@ const SelectionReviewCenter = ({
                                                                 )}
                                                                 <button
                                                                     type="button"
+                                                                    disabled={
+                                                                        locked ||
+                                                                        conflict ||
+                                                                        removingId ===
+                                                                            item.item_id
+                                                                    }
                                                                     onClick={() =>
-                                                                        onRemoveItem(
+                                                                        handleRemove(
                                                                             item.item_id,
                                                                         )
                                                                     }
-                                                                    className="mt-1 text-[10px] text-slate-400 hover:text-rose-600 transition-colors border-0 bg-transparent p-0 cursor-pointer block ml-auto"
+                                                                    className="mt-1 text-[10px] text-slate-400 hover:text-rose-600 disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer block ml-auto"
                                                                 >
-                                                                    移除
+                                                                    {removingId ===
+                                                                    item.item_id
+                                                                        ? "移除中…"
+                                                                        : "移除"}
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1127,6 +1154,50 @@ const SelectionForm = ({
             input: {
                 idempotencyKey: crypto.randomUUID(),
                 expectedSessionVersion: version,
+                choices,
+            },
+        }
+        keepRequest(next)
+        mutation.mutate(next)
+    }
+
+    const removeItemInReview = (itemId: string) => {
+        if (locked || conflict) return
+        const updatedPicks = {
+            ...picks,
+            [itemId]: {
+                ...(picks[itemId] ?? { quantity: "1" }),
+                selected: false,
+            },
+        }
+        form.setFieldValue("picks", updatedPicks)
+
+        const choices: { item_id: string; quantity?: number }[] = []
+        for (const item of page.items) {
+            if (item.item_id === itemId) continue
+            const pick = updatedPicks[item.item_id]
+            if (!pick?.selected) continue
+            choices.push({
+                item_id: item.item_id,
+                ...(mall
+                    ? {}
+                    : { quantity: Number.parseInt(pick.quantity, 10) }),
+            })
+        }
+
+        if (choices.length === 0) {
+            setConfirmed(null)
+            setDirty(true)
+            setMessage("已移除全部商品，请重新挑选。")
+            return
+        }
+
+        const next: PendingSelectionRequest = {
+            kind: "save",
+            confirm: true,
+            input: {
+                idempotencyKey: crypto.randomUUID(),
+                expectedSessionVersion: confirmed?.session_version ?? version,
                 choices,
             },
         }
@@ -1718,9 +1789,7 @@ const SelectionForm = ({
                     dirty={dirty}
                     onBack={() => setConfirmed(null)}
                     onSubmit={submit}
-                    onRemoveItem={(itemId) => {
-                        change(itemId, { selected: false })
-                    }}
+                    onRemoveItem={removeItemInReview}
                 />
             )}
 
