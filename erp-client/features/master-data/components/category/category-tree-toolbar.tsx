@@ -1,21 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { SearchIcon, XIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
-import { FixedOptionRadioFilter } from "@/components/business"
-import {
-    ListSearchField,
-    ListWorkspaceFilterBar,
-    listWorkspaceFilterStatusText,
-} from "@/components/business/list-workspace"
-import { masterDataCopy } from "@/features/master-data/lib/copy"
-import { LIFECYCLE_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
-import type {
-    CategoryTreeAppliedChip,
-    CategoryTreeFilterKey,
-} from "@/features/master-data/hooks/use-master-data-category-tree"
-
-/** 分类树筛选条：搜索、启停常用筛选与已生效 chip。 */
+/** 分类导航专用查询条；搜索提交与状态切换均保持可见反馈。 */
 export function CategoryTreeToolbar({
     idPrefix,
     searchInputRef,
@@ -24,75 +14,124 @@ export function CategoryTreeToolbar({
     applyTreeFilters,
     lifecycleStatus,
     onLifecycleStatusChange,
-    appliedChips,
-    removeFilter,
     clearFilters,
+    clearSearch,
+    filterActive,
     hasPendingChanges,
-    resultCount,
     loading,
-    failed,
 }: {
-    idPrefix?: string
+    idPrefix: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: (value: string) => void
     applyTreeFilters: () => void
     lifecycleStatus: "enabled" | "disabled" | "all"
     onLifecycleStatusChange: (value: "enabled" | "disabled" | "all") => void
-    appliedChips: readonly CategoryTreeAppliedChip[]
-    removeFilter: (key: CategoryTreeFilterKey) => void
+    clearSearch: () => void
     clearFilters: () => void
+    filterActive: boolean
     hasPendingChanges: boolean
-    resultCount?: number
     loading: boolean
-    failed: boolean
 }) {
-    const prefix = idPrefix ?? "master-data-category-tree-toolbar"
-
     return (
-        <div className="border-b border-grid px-3 py-2.5">
-            <ListWorkspaceFilterBar
-                idPrefix={prefix}
-                formAriaLabel="分类树查询"
-                onSubmit={applyTreeFilters}
-                search={
-                    <ListSearchField
-                        id={`${prefix}-search`}
-                        searchInputRef={searchInputRef}
-                        value={searchDraft}
-                        onChange={setSearchDraft}
-                        placeholder={masterDataCopy.categoryTreeSearch}
-                        aria-label={masterDataCopy.categoryTreeSearch}
-                    />
-                }
-                clearButtonId={`${prefix}-clear-all`}
-                commonFilters={
-                    <FixedOptionRadioFilter
-                        id={`${prefix}-lifecycle`}
-                        label="启停"
-                        variant="quiet"
-                        value={lifecycleStatus}
-                        onValueChange={onLifecycleStatusChange}
-                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                        aria-label="生命周期筛选"
-                    />
-                }
-                resultStatus={listWorkspaceFilterStatusText({
-                    loading,
-                    failed,
-                    resultCount,
-                    noun: "项",
-                    loadingLabel: "正在加载分类…",
-                })}
-                chips={appliedChips}
-                onClearChip={(key) =>
-                    removeFilter(key as CategoryTreeFilterKey)
-                }
-                onClearAll={clearFilters}
-                hasPendingChanges={hasPendingChanges}
-                pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-                idleHint="导出与当前查询结果一致"
-            />
+        <div className="space-y-3 pb-4">
+            <form
+                role="search"
+                aria-label="搜索商品分类"
+                className="relative flex gap-1.5"
+                onSubmit={(event) => {
+                    event.preventDefault()
+                    applyTreeFilters()
+                }}
+            >
+                <Input
+                    id={`${idPrefix}-search`}
+                    ref={searchInputRef}
+                    value={searchDraft}
+                    onChange={(event) => setSearchDraft(event.target.value)}
+                    placeholder="搜索名称或代码"
+                    aria-label="搜索分类名称或代码"
+                    className="min-w-0 pr-8"
+                />
+                {searchDraft ? (
+                    <Button
+                        id={`${idPrefix}-clear`}
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="absolute top-1 right-11"
+                        aria-label="清除搜索"
+                        onClick={clearSearch}
+                    >
+                        <XIcon className="size-3.5" />
+                    </Button>
+                ) : null}
+                <Button
+                    id={`${idPrefix}-query`}
+                    type="submit"
+                    variant="outline"
+                    size="icon"
+                    aria-label="查询分类"
+                >
+                    <SearchIcon className="size-4" />
+                </Button>
+            </form>
+            <div
+                role="group"
+                aria-label="分类状态"
+                className="grid grid-cols-3 rounded-lg bg-muted/60 p-1"
+            >
+                {(
+                    [
+                        ["all", "全部"],
+                        ["enabled", "启用"],
+                        ["disabled", "停用"],
+                    ] as const
+                ).map(([value, label]) => (
+                    <Button
+                        id={`${idPrefix}-status-${value}`}
+                        key={value}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-pressed={lifecycleStatus === value}
+                        className={
+                            lifecycleStatus === value
+                                ? "h-7 bg-background shadow-xs"
+                                : "h-7 text-muted-foreground"
+                        }
+                        onClick={() => onLifecycleStatusChange(value)}
+                    >
+                        {label}
+                    </Button>
+                ))}
+            </div>
+            {filterActive || hasPendingChanges || loading ? (
+                <div
+                    className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+                    role="status"
+                >
+                    <span>
+                        {loading
+                            ? "正在查询…"
+                            : hasPendingChanges
+                              ? "按回车应用搜索"
+                              : "保留上级路径以便定位"}
+                    </span>
+                    {filterActive ? (
+                        <Button
+                            id={`${idPrefix}-reset`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto px-1 py-0 text-xs"
+                            onClick={clearFilters}
+                        >
+                            重置
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
         </div>
     )
 }

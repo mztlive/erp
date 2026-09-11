@@ -5,7 +5,9 @@
 mod indexes;
 
 use config::{Config, S3Config, SafeConfig};
+use erp_processes::background::{BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
 use web_api::app_state::AppState;
@@ -136,11 +138,35 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     );
 
     let outbox_worker = state.start_approval_outbox_worker();
-    spawn_sales_selection_worker(state.clone());
-    spawn_product_import_worker(state.clone());
+    spawn_background_runner(state.clone());
     let result = run_app(app_port, state).await;
     outbox_worker.stop().await;
     result
+}
+
+/// 启动统一后台任务执行器。进程退出时未完成任务可被下次启动恢复。
+///
+/// 单循环按顺序执行商品导入、选品准备等适配器；轮次之间不重叠，新增任务只需注册新适配器。
+/// 前台只投递任务，不直接执行，认领冲突视为已被接管而跳过。
+///
+/// # 参数
+/// * `state` - 应用状态
+///
+/// # 返回
+/// 无；后台循环独立运行，失败只记日志，不中断进程。
+fn spawn_background_runner(state: AppState) {
+    let runner = Arc::new(
+        BackgroundRunner::new(std::time::Duration::from_secs(2))
+            .register(ProductImportTaskAdapter::new(state.product_import_process()))
+            .register(SalesSelectionTaskAdapter::new(
+                erp_processes::sales_selection::SalesSelectionProcess::new(
+                    state.db(),
+                    state.storage().clone(),
+                    state.config_snapshot().app.secret.as_bytes(),
+                ),
+            )),
+    );
+    runner.spawn();
 }
 
 /// 启动前穷尽校验全部固定单据类型政策。
@@ -149,54 +175,6 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 ///
 /// # 错误
 /// 政策缺失或权限字符串无法解析时返回服务错误。
-/// 启动商品导入任务领取循环。进程退出时未完成任务可被下次启动恢复。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 任务失败记日志，不中断循环。
-fn spawn_product_import_worker(state: AppState) {
-    tokio::spawn(async move {
-        let process = state.product_import_process();
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            if let Err(error) = process.run_due_jobs().await {
-                tracing::error!(error = %error, "商品导入任务领取失败");
-            }
-        }
-    });
-}
-
-/// 启动选品准备任务领取循环。进程退出时任务可被下次启动恢复。
-///
-/// # 参数
-/// * `state` - 应用状态
-///
-/// # 返回
-/// 无。
-///
-/// # 错误
-/// 任务失败记日志，不中断循环。
-fn spawn_sales_selection_worker(state: AppState) {
-    tokio::spawn(async move {
-        let process = erp_processes::sales_selection::SalesSelectionProcess::new(
-            state.db(),
-            state.storage().clone(),
-            state.config_snapshot().app.secret.as_bytes(),
-        );
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            if let Err(error) = process.run_due_prepare_tasks().await {
-                tracing::error!(error = %error, "选品准备任务领取失败");
-            }
-        }
-    });
-}
-
 fn ensure_registered_approval_policies() -> erp_workflow::Result<()> {
     for document_type in erp_workflow::service::approval::policy::ALL_DOCUMENT_TYPES {
         erp_workflow::service::approval::policy::policy_of(document_type)?;

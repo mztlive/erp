@@ -4,10 +4,13 @@ use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
 use erp_core::AccountKind;
-use erp_support::{BulkJobExt, FileAssetExt, ItemStatus, JobStatus, PRODUCT_IMPORT_DOMAIN_JOB_TYPE};
+use erp_support::{
+    BackgroundJob, BackgroundJobItem, BulkJobExt, FileAssetExt, ItemStatus, JobStatus,
+    PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
+};
 use persistence_core::{NoTransaction, Transactional};
 
-use super::parse::parse_product_quote_xlsx;
+use super::parse::{parse_product_quote_xlsx, ParsedProductSheet};
 use super::resolve::ImportDictionaryCache;
 use super::ProductImportProcess;
 use crate::{Error, Result};
@@ -15,11 +18,14 @@ use crate::{Error, Result};
 impl ProductImportProcess {
     /// 领取待处理的商品导入任务并逐行执行。
     ///
+    /// 仅由统一后台执行器调用；前台提交只投递任务，不直接执行。
+    /// 并发认领冲突视为已被其他执行器接管，记 info 后跳过，不记为任务失败。
+    ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 返回本轮处理的任务数。
+    /// 返回本轮认领的任务数。
     ///
     /// # 错误
     /// 查询失败时返回错误；单个任务失败记日志后继续。
@@ -32,6 +38,10 @@ impl ProductImportProcess {
         let count = jobs.len();
         for job in jobs {
             if let Err(error) = self.execute_job(&job.base.id).await {
+                if is_concurrent_claim(&error) {
+                    tracing::info!(job_id = %job.base.id, "商品导入任务已被其他执行器认领，跳过");
+                    continue;
+                }
                 tracing::error!(job_id = %job.base.id, error = %error, "商品导入任务执行失败");
             }
         }
@@ -40,11 +50,13 @@ impl ProductImportProcess {
 
     /// 执行单个导入任务中尚未完成的行。
     ///
+    /// 认领阶段通过乐观锁保证单执行器推进；`Pending` 转 `Running` 冲突时返回 `Ok` 表示已被接管。
+    ///
     /// # 参数
     /// * `job_id` - 后台任务 ID
     ///
     /// # 返回
-    /// 无。
+    /// 无；被其他执行器认领时直接返回，不视为错误。
     ///
     /// # 错误
     /// 源文件不存在、解析失败或状态迁移失败时返回错误。
@@ -60,10 +72,17 @@ impl ProductImportProcess {
         }
         if job.status == JobStatus::Pending {
             job.start(Instant::now())?;
-            self.db
+            if let Err(error) = self
+                .db
                 .background_jobs()
                 .update(&mut job, &mut NoTransaction)
-                .await?;
+                .await
+            {
+                if matches!(error, persistence_core::Error::OptimisticLockingError) {
+                    return Ok(());
+                }
+                return Err(error.into());
+            }
         }
         if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
             return Ok(());
@@ -121,15 +140,27 @@ impl ProductImportProcess {
             let skipped = u64::from(recorded.status == ItemStatus::Skipped);
             let failed = u64::from(recorded.status == ItemStatus::Failed);
             job.record_import_result_batch(success, skipped, failed, done == remaining, Instant::now())?;
-            self.persist_progress(&mut job, item).await?;
+            if let Err(error) = self.persist_progress(&mut job, item).await {
+                if is_concurrent_claim(&error) {
+                    return Ok(());
+                }
+                return Err(error);
+            }
         }
         Ok(())
     }
 
-    async fn load_source(
-        &self,
-        job: &erp_support::BackgroundJob,
-    ) -> Result<(Vec<u8>, super::parse::ParsedProductSheet)> {
+    /// 加载任务源文件并解析报价表。
+    ///
+    /// # 参数
+    /// * `job` - 后台任务实体
+    ///
+    /// # 返回
+    /// 返回源文件字节与解析后的工作表。
+    ///
+    /// # 错误
+    /// 源文件缺失、读取失败或解析失败时返回错误。
+    async fn load_source(&self, job: &BackgroundJob) -> Result<(Vec<u8>, ParsedProductSheet)> {
         let file_id = job
             .input_file_asset_id
             .as_ref()
@@ -152,11 +183,18 @@ impl ProductImportProcess {
         Ok((bytes, parsed))
     }
 
-    async fn persist_progress(
-        &self,
-        job: &mut erp_support::BackgroundJob,
-        mut item: erp_support::BackgroundJobItem,
-    ) -> Result<()> {
+    /// 在同一事务内保存明细与任务进度，成功后回读最新任务版本。
+    ///
+    /// # 参数
+    /// * `job` - 本轮持有并持续推进的任务实体
+    /// * `item` - 已记录结果的明细实体
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 并发写入冲突或底层写入失败时返回错误；并发冲突由调用方转为跳过。
+    async fn persist_progress(&self, job: &mut BackgroundJob, mut item: BackgroundJobItem) -> Result<()> {
         let db = self.db.clone();
         let client = db.client().clone();
         let mut job_for_tx = job.clone();
@@ -188,6 +226,27 @@ struct RecordedOutcome {
     object_id: Option<String>,
 }
 
+/// 并发认领冲突的稳定文案，与持久层乐观锁映射保持一致。
+const CONCURRENT_CLAIM_MESSAGE: &str = "数据已被其他请求修改，请刷新后重试";
+
+/// 判断是否为并发认领冲突。
+///
+/// # 参数
+/// * `error` - 待判断的流程错误
+///
+/// # 返回
+/// 乐观锁冲突时返回 `true`，其余错误返回 `false`。
+fn is_concurrent_claim(error: &Error) -> bool {
+    matches!(error, Error::ConflictError(message) if message == CONCURRENT_CLAIM_MESSAGE)
+}
+
+/// 把单行导入结果转为可持久化的明细结果。
+///
+/// # 参数
+/// * `outcome` - 单行导入的业务结果
+///
+/// # 返回
+/// 返回明细状态、原因码与结果对象。
 fn record_row_outcome(outcome: Result<super::row::RowImportOutcome>) -> RecordedOutcome {
     match outcome {
         Ok(result) if result.skipped => {
@@ -198,6 +257,16 @@ fn record_row_outcome(outcome: Result<super::row::RowImportOutcome>) -> Recorded
     }
 }
 
+/// 组装明细结果记录。
+///
+/// # 参数
+/// * `status` - 明细状态
+/// * `code` - 失败原因码，成功或跳过时为空
+/// * `summary` - 结果说明
+/// * `product_id` - 成功或跳过时关联的商品 ID
+///
+/// # 返回
+/// 返回可写入明细实体的结果。
 fn recorded(
     status: ItemStatus,
     code: Option<&str>,

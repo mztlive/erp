@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { CategoryDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { CategoryReviseDialog } from "@/features/master-data/components/category/category-form-dialogs"
@@ -22,7 +22,12 @@ export function CategoryObjectPage({
     const query = useMasterDataCenterQuery("categories", stableId)
     const [reviseOpen, setReviseOpen] = React.useState(false)
     const [disableOpen, setDisableOpen] = React.useState(false)
-    const listHref = "/master-data/categories"
+    const returnTo = useSearchParams().get("returnTo")
+    const listHref =
+        returnTo === "/master-data/categories" ||
+        returnTo?.startsWith("/master-data/categories?")
+            ? returnTo
+            : "/master-data/categories"
 
     if (query.isPending || query.isError || !query.data) {
         return (

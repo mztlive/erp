@@ -31,10 +31,12 @@ export function CategoryCreateDialog({
     open,
     onOpenChange,
     defaultParentId,
+    onCreated,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     defaultParentId?: string
+    onCreated?: (id: string) => void
 }) {
     const mutation = useCreateMasterDataMutation()
     const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
@@ -62,6 +64,7 @@ export function CategoryCreateDialog({
             if (response.outcome === "succeeded") {
                 notifySuccess(masterDataCopy.createSuccessTitle, response)
                 reset()
+                onCreated?.(response.stableId)
                 onOpenChange(false)
                 return
             }
@@ -84,6 +87,7 @@ export function CategoryCreateDialog({
             description={masterDataCopy.createDesc}
             form={form as never}
             result={result}
+            error={mutation.error}
             pending={mutation.isPending}
             submitLabel={masterDataCopy.createSubmit}
             onReset={reset}
@@ -95,10 +99,12 @@ export function CategoryReviseDialog({
     open,
     onOpenChange,
     target,
+    mode = "edit",
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     target: RevisionTarget | null
+    mode?: "edit" | "move"
 }) {
     const mutation = useCreateRevisionMutation()
     const ids = revisionTargetIds(target)
@@ -108,8 +114,16 @@ export function CategoryReviseDialog({
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
+    const values = target ? currentResourceFieldValues(target) : {}
+    const initialValues = {
+        name: target?.name ?? "",
+        code: values.code ?? "",
+        parentId: values.parentId ?? "",
+        productKind: values.productKind ?? "",
+        changeReason: "",
+    }
     const form = useAppForm({
-        defaultValues: emptyCategoryForm(),
+        defaultValues: initialValues,
         validators: { onChange: categoryFormSchema },
         onSubmit: async ({ value }) => {
             if (!ids.stableId || !ids.baseRevisionId) return
@@ -123,7 +137,7 @@ export function CategoryReviseDialog({
                 changeReason: value.changeReason.trim(),
                 fields: {
                     code: value.code.trim(),
-                    parentId: value.parentId.trim() || undefined,
+                    parentId: value.parentId.trim(),
                     productKind: value.productKind.trim() || undefined,
                 },
                 idempotencyKey,
@@ -140,11 +154,13 @@ export function CategoryReviseDialog({
     React.useEffect(() => {
         if (!open || !target) return
         const values = currentResourceFieldValues(target)
-        form.setFieldValue("name", target.name)
-        form.setFieldValue("code", values.code ?? "")
-        form.setFieldValue("parentId", values.parentId ?? "")
-        form.setFieldValue("productKind", values.productKind ?? "")
-        form.setFieldValue("changeReason", "")
+        form.reset({
+            name: target.name,
+            code: values.code ?? "",
+            parentId: values.parentId ?? "",
+            productKind: values.productKind ?? "",
+            changeReason: "",
+        })
         setResult(null)
         setIdempotencyKey(newIdempotencyKey("revise-category"))
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,26 +168,25 @@ export function CategoryReviseDialog({
 
     return (
         <CategoryFormDialogFrame
-            idPrefix="master-data-category-revise-dialog"
+            idPrefix={
+                mode === "move"
+                    ? "master-data-category-move-dialog"
+                    : "master-data-category-revise-dialog"
+            }
+            mode={mode}
             open={open}
             onOpenChange={onOpenChange}
-            title={masterDataCopy.reviseTitle}
+            title={mode === "move" ? "调整上级分类" : "编辑分类"}
             description={
-                <>
-                    {masterDataCopy.reviseDesc}
-                    {target ? (
-                        <>
-                            {" "}
-                            资料编号{" "}
-                            <span className="num">{target.stableNo}</span>
-                        </>
-                    ) : null}
-                </>
+                mode === "move"
+                    ? `为“${target?.name ?? ""}”选择新的上级，下级分类随当前分类一起移动。`
+                    : `维护“${target?.name ?? ""}”的名称、归属和适用商品类型。`
             }
             form={form as never}
             result={result}
+            error={mutation.error}
             pending={mutation.isPending || !target}
-            submitLabel={masterDataCopy.reviseSubmit}
+            submitLabel={mode === "move" ? "保存上级调整" : "保存修改"}
             excludeStableId={ids.stableId || undefined}
         />
     )

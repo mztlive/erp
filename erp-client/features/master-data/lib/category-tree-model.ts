@@ -20,6 +20,19 @@ function categoryCodeOf(item: MasterDataListItem): string {
     )
 }
 
+/** 保留命中节点及其祖先；沿用完整树中的深度与路径，不把子分类提升为根。 */
+export function filterCategoryForest(
+    forest: readonly CategoryTreeNode[],
+    matchedIds: ReadonlySet<string>,
+): CategoryTreeNode[] {
+    return forest.flatMap((node) => {
+        const children = filterCategoryForest(node.children, matchedIds)
+        return matchedIds.has(node.item.stableId) || children.length > 0
+            ? [{ ...node, children }]
+            : []
+    })
+}
+
 /** 扁平列表 → 森林（多根）；同级按名称排序。 */
 export function buildCategoryForest(
     rows: readonly MasterDataListItem[],

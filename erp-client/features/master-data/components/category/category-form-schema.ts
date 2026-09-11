@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 export const categoryFormSchema = z.object({
-    name: z.string().trim().min(2, "请填写名称"),
+    name: z.string().trim().min(1, "请填写名称"),
     code: z.string().trim().min(1, "请填写分类代码"),
     parentId: z.string(),
     productKind: z.string(),

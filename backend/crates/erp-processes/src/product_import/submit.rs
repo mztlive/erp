@@ -1,11 +1,13 @@
 //! 登记导入文件资产并创建后台任务。
 
 use application_core::AuditActor;
+use erp_catalog::entity::catalog::product_import::{collapse_import_text, truncate_import_text};
 use erp_catalog::{ProductImportJobView, PRODUCT_IMPORT_SHEET_NAME};
 use erp_support::{
-    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
-    BackgroundJobItemDraft, BackgroundJobItemId, BackgroundJobRegistration, BulkJobExt, FileAsset,
-    FileAssetExt, FileAssetId, RegisterFileAssetRequest,
+    product_import_job_no, BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData,
+    BackgroundJobId, BackgroundJobItem, BackgroundJobItemDraft, BackgroundJobItemId,
+    BackgroundJobRegistration, BulkJobExt, FileAsset, FileAssetExt, FileAssetId, JobType,
+    RegisterFileAssetRequest, PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
 };
 use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
@@ -48,11 +50,11 @@ impl ProductImportProcess {
             .iter()
             .map(|row| {
                 let name = row.cells.get(8).and_then(|value| {
-                    let text = erp_catalog::entity::catalog::product_import::collapse_import_text(value);
+                    let text = collapse_import_text(value);
                     if text.is_empty() {
                         None
                     } else {
-                        Some(erp_catalog::entity::catalog::product_import::truncate_import_text(&text, 128))
+                        Some(truncate_import_text(&text, 128))
                     }
                 });
                 BackgroundJobItemDraft {
@@ -71,9 +73,9 @@ impl ProductImportProcess {
         let aggregate = BackgroundJobAggregate::new(
             job_id,
             BackgroundJobAggregateData {
-                job_no: erp_support::product_import_job_no(&request_id),
-                job_type: erp_support::JobType::Import,
-                domain_job_type: Some(erp_support::PRODUCT_IMPORT_DOMAIN_JOB_TYPE.to_string()),
+                job_no: product_import_job_no(&request_id),
+                job_type: JobType::Import,
+                domain_job_type: Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE.to_string()),
                 domain_job_id: Some(file_asset.base.id.clone()),
                 selection_snapshot_id: None,
                 requested_by: actor.id().to_string(),
@@ -92,7 +94,7 @@ impl ProductImportProcess {
         &self,
         file_asset: FileAsset,
         job: BackgroundJob,
-        items: Vec<erp_support::BackgroundJobItem>,
+        items: Vec<BackgroundJobItem>,
         file_name: String,
     ) -> Result<ProductImportJobView> {
         let db = self.db.clone();

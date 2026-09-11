@@ -10,7 +10,6 @@ use erp_catalog::{
     ProductImportJobView,
 };
 use erp_support::{RetentionClass, SensitivityClass};
-use tracing::error;
 
 use crate::{
     app_state::AppState,
@@ -31,13 +30,15 @@ use crate::{
 )]
 /// 上传产品报价表并登记异步导入任务。
 ///
+/// 前台只做任务投递，不直接执行；执行统一由后台任务执行器认领，避免与轮询器并发写入同一任务。
+///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 审计操作人
 /// * `multipart` - 含 `file` 与可选 `request_id` 的表单
 ///
 /// # 返回
-/// 返回导入任务进度视图。
+/// 返回导入任务进度视图，可轮询任务详情与逐项结果查看执行进度。
 ///
 /// # 错误
 /// 文件不是原模板、超过大小上限或解析失败时返回错误。
@@ -66,16 +67,7 @@ pub async fn product_import_submit(
         )
         .await;
     match result {
-        Ok(view) => {
-            let job_id = view.id.clone();
-            let worker = state.product_import_process();
-            tokio::spawn(async move {
-                if let Err(error) = worker.execute_job(&job_id).await {
-                    error!(job_id = %job_id, error = %error, "商品导入任务启动失败");
-                }
-            });
-            Ok(ApiResponse::ok_with_data(view))
-        }
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
         Err(error) => {
             delete_pending_asset_objects(
                 &state,

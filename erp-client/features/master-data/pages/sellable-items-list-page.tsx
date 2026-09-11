@@ -260,7 +260,7 @@ export function SellableItemsListPage() {
                         failed={state.listQuery.isError}
                         idleHint={
                             sourceKind === "SELECTION"
-                                ? `导出与发起选品均按已勾选 ${selection.selectedCount} 件`
+                                ? `已勾选 ${selection.selectedCount} 件`
                                 : isGallery
                                   ? "未勾选时发起选品按当前筛选；导出需先勾选"
                                   : "导出与发起选品均按当前筛选"

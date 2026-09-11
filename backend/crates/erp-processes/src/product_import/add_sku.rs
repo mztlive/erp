@@ -4,14 +4,14 @@ use std::collections::HashSet;
 
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_revision_media::MediaRole;
-use erp_catalog::entity::catalog::{compute_specification_signature, Product, SpecSignatureEntry};
+use erp_catalog::entity::catalog::{compute_specification_signature, Product, Sku, SpecSignatureEntry};
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, UpdateProductRequest};
 use erp_core::ids::ProductId;
 use persistence_core::NoTransaction;
 
 use super::backfill::sku_inputs_with_main_image;
 use super::identity::{next_sku_no, NormalizedImportRow};
-use super::images::upload_row_images;
+use super::images::{upload_row_images, RowMedia};
 use super::parse::ParsedProductSheet;
 use super::row::RowImportOutcome;
 use super::ProductImportProcess;
@@ -108,8 +108,8 @@ impl ProductImportProcess {
         &self,
         product: &Product,
         row: &NormalizedImportRow,
-        skus: &[erp_catalog::entity::catalog::Sku],
-        media: super::images::RowMedia,
+        skus: &[Sku],
+        media: RowMedia,
     ) -> Result<UpdateProductRequest> {
         let snapshot = self
             .db

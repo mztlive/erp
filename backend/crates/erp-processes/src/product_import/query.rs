@@ -6,7 +6,9 @@ use erp_catalog::{
     ProductImportItemListParams, ProductImportItemView, ProductImportJobListParams, ProductImportJobView,
 };
 use erp_core::ids::BackgroundJobId;
-use erp_support::{BackgroundJobFilter, BulkJobExt, FileAssetExt, JobType, PRODUCT_IMPORT_DOMAIN_JOB_TYPE};
+use erp_support::{
+    BackgroundJob, BackgroundJobFilter, BulkJobExt, FileAssetExt, JobType, PRODUCT_IMPORT_DOMAIN_JOB_TYPE,
+};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
@@ -141,7 +143,7 @@ impl ProductImportProcess {
         })
     }
 
-    async fn load_owned_job(&self, id: &str, actor: &AuditActor) -> Result<erp_support::BackgroundJob> {
+    async fn load_owned_job(&self, id: &str, actor: &AuditActor) -> Result<BackgroundJob> {
         let job = self
             .db
             .background_jobs()

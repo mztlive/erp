@@ -343,6 +343,7 @@ fn unescape_xml(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{cell_text, column_index, parse_sheet_rows};
+    use erp_catalog::entity::catalog::product_import::dispimg_id;
 
     #[test]
     fn column_index_matches_excel() {
@@ -371,10 +372,7 @@ mod tests {
         let inner = r#"<f>_xlfn.DISPIMG(&quot;ID_DC3C0313483242B2B7BF94A18EC5BDA4&quot;,1)</f><v>=DISPIMG(&quot;ID_DC3C0313483242B2B7BF94A18EC5BDA4&quot;,1)</v>"#;
         let text = cell_text(r#" t="str""#, inner, &shared);
         assert!(text.contains("ID_DC3C0313483242B2B7BF94A18EC5BDA4"));
-        assert_eq!(
-            erp_catalog::entity::catalog::product_import::dispimg_id(&text),
-            Some("ID_DC3C0313483242B2B7BF94A18EC5BDA4")
-        );
+        assert_eq!(dispimg_id(&text), Some("ID_DC3C0313483242B2B7BF94A18EC5BDA4"));
     }
 
     #[test]

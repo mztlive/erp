@@ -1,20 +1,19 @@
 "use client"
 
 import * as React from "react"
-
 import {
     useListUrl,
     useSearchDraft,
 } from "@/features/master-data/hooks/use-list-url"
 import { useMasterDataListQuery } from "@/features/master-data/hooks/queries"
+import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useSlashSearchHotkey } from "@/features/master-data/hooks/use-slash-search-hotkey"
 import {
     buildCategoryForest,
+    filterCategoryForest,
     flattenCategoryForest,
     type CategoryTreeNode,
 } from "@/features/master-data/lib/category-tree-model"
-import { lifecycleFilterLabel } from "@/features/master-data/lib/copy"
-import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { parseLifecycleStatus } from "@/features/master-data/lib/list-filters"
 import {
     buildMasterDataExportCsv,
@@ -22,15 +21,55 @@ import {
 } from "@/features/master-data/lib/export-csv"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
-/** 分类树可被单独移除的已生效条件。 */
-export type CategoryTreeFilterKey = "q" | "lifecycleStatus"
+const EXPANDED_STORAGE_KEY = "category-tree-expanded"
 
-export type CategoryTreeAppliedChip = Readonly<{
-    key: CategoryTreeFilterKey
-    label: string
-}>
+function readStoredExpanded(): Set<string> | null {
+    try {
+        const saved: unknown = JSON.parse(
+            sessionStorage.getItem(EXPANDED_STORAGE_KEY) ?? "null",
+        )
+        if (Array.isArray(saved) && saved.every((id) => typeof id === "string"))
+            return new Set(saved)
+    } catch {
+        /* 本地偏好不可用时采用默认展开。 */
+    }
+    return null
+}
 
-/** W14 商品分类树页状态：URL 搜索/启停筛选、展开/选中与写操作弹窗。 */
+function writeStoredExpanded(ids: ReadonlySet<string>) {
+    try {
+        sessionStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify([...ids]))
+    } catch {
+        /* 不影响分类维护。 */
+    }
+}
+
+function toggleExpandedId(ids: ReadonlySet<string>, id: string): Set<string> {
+    return ids.has(id)
+        ? new Set([...ids].filter((item) => item !== id))
+        : new Set([...ids, id])
+}
+
+function ancestorIds(
+    flat: readonly CategoryTreeNode[],
+    startId: string | null | undefined,
+    includeSelf: boolean,
+): string[] {
+    const ids: string[] = []
+    let node = flat.find((entry) => entry.item.stableId === startId)
+    if (!node) return ids
+    if (includeSelf) ids.push(node.item.stableId)
+    while (node.item.parentStableId) {
+        ids.push(node.item.parentStableId)
+        node = flat.find(
+            (entry) => entry.item.stableId === node?.item.parentStableId,
+        )
+        if (!node) break
+    }
+    return ids
+}
+
+/** 分类导航：后端负责匹配，完整树负责祖先路径；选中与筛选互相独立。 */
 export function useMasterDataCategoryTree(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
@@ -39,194 +78,190 @@ export function useMasterDataCategoryTree(
         searchParams.get("lifecycleStatus"),
     )
     const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
-    const [selectedId, setSelectedId] = React.useState<string | null>(null)
-    const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
+    const selectedId = searchParams.get("category")
+    const [expandedState, setExpanded] =
+        React.useState<ReadonlySet<string> | null>(null)
+    const [filterExpansion, setFilterExpansion] = React.useState<{
+        key: string
+        ids: ReadonlySet<string>
+    } | null>(null)
     const [createOpen, setCreateOpen] = React.useState(false)
     const [createParentId, setCreateParentId] = React.useState<
         string | undefined
     >()
     const [reviseTarget, setReviseTarget] =
         React.useState<MasterDataListItem | null>(null)
+    const [moveTarget, setMoveTarget] =
+        React.useState<MasterDataListItem | null>(null)
     const [disableTarget, setDisableTarget] =
         React.useState<MasterDataListItem | null>(null)
-    const [exportMeta, setExportMeta] = React.useState<{
-        jobId: string
-        rowCount: number
-    } | null>(null)
-
+    const { canCreate, createBlockedReason } = useCreatePermission(
+        "product_category:create",
+    )
     useSlashSearchHotkey(searchInputRef)
 
+    const fullQuery = useMasterDataListQuery({
+        resource: "categories",
+        lifecycleStatus: "all",
+        revisionTiming: "all",
+    })
     const listQuery = useMasterDataListQuery({
         resource: "categories",
         q: q.trim() || undefined,
         lifecycleStatus,
         revisionTiming: "all",
     })
-
     const rows = React.useMemo(
-        () => listQuery.data?.rows ?? [],
-        [listQuery.data?.rows],
+        () => fullQuery.data?.rows ?? [],
+        [fullQuery.data],
     )
-    const forest = React.useMemo(() => buildCategoryForest(rows), [rows])
-    const flat = React.useMemo(() => flattenCategoryForest(forest), [forest])
+    const matchedRows = React.useMemo(
+        () => (listQuery.isPlaceholderData ? [] : (listQuery.data?.rows ?? [])),
+        [listQuery.data, listQuery.isPlaceholderData],
+    )
+    const fullForest = React.useMemo(() => buildCategoryForest(rows), [rows])
+    const flat = React.useMemo(
+        () => flattenCategoryForest(fullForest),
+        [fullForest],
+    )
+    const matchedIds = React.useMemo(
+        () => new Set(matchedRows.map((row) => row.stableId)),
+        [matchedRows],
+    )
+    const filterActive = Boolean(q.trim()) || lifecycleStatus !== "all"
+    const forest = React.useMemo(
+        () =>
+            filterActive
+                ? filterCategoryForest(fullForest, matchedIds)
+                : fullForest,
+        [filterActive, fullForest, matchedIds],
+    )
+    const filterKey = `${q}:${lifecycleStatus}`
+    const unfilteredDefaultExpanded = React.useMemo(
+        () => new Set(fullForest.map((node) => node.item.stableId)),
+        [fullForest],
+    )
+    const filteredDefaultExpanded = React.useMemo(
+        () =>
+            new Set(
+                flattenCategoryForest(forest).map((node) => node.item.stableId),
+            ),
+        [forest],
+    )
+    const expanded = filterActive
+        ? filterExpansion?.key === filterKey
+            ? filterExpansion.ids
+            : filteredDefaultExpanded
+        : (expandedState ?? unfilteredDefaultExpanded)
 
-    // 首次加载默认展开全部根
     React.useEffect(() => {
-        if (expanded.size > 0 || forest.length === 0) return
-        setExpanded(new Set(forest.map((n) => n.item.stableId)))
-    }, [forest, expanded.size])
-
-    const selected =
-        rows.find((r) => r.stableId === selectedId) ??
-        flat.find((n) => n.item.stableId === selectedId)?.item ??
-        null
-
-    const selectedPath =
-        flat.find((n) => n.item.stableId === selectedId)?.pathLabel ??
-        selected?.name
-
-    /** 可见节点数：根节点 + 展开父级下的所有后代（与界面实际渲染一致）。 */
-    const visibleCount = React.useMemo(() => {
-        return forest.reduce((count, node) => {
-            let total = 1
-            const walk = (n: CategoryTreeNode): void => {
-                if (!expanded.has(n.item.stableId)) return
-                for (const child of n.children) {
-                    total += 1
-                    walk(child)
-                }
-            }
-            walk(node)
-            return count + total
-        }, 0)
-    }, [forest, expanded])
-
-    /** 搜索/启停筛选是否生效：空态与「系统从未建分类」区分。 */
-    const filterActive = q.trim() !== "" || lifecycleStatus !== "all"
-    const hasPendingChanges = searchDraft.trim() !== q.trim()
-
-    /** 所有已生效条件均可从 chip 单独撤销。 */
-    const appliedChips = React.useMemo<
-        readonly CategoryTreeAppliedChip[]
-    >(() => {
-        const chips: CategoryTreeAppliedChip[] = []
-        if (q.trim()) {
-            chips.push({ key: "q", label: `搜索：${q.trim()}` })
-        }
-        if (lifecycleStatus !== "all") {
-            chips.push({
-                key: "lifecycleStatus",
-                label: `启停：${lifecycleFilterLabel(lifecycleStatus)}`,
-            })
-        }
-        return chips
-    }, [lifecycleStatus, q])
-
-    const toggle = React.useCallback((id: string) => {
-        setExpanded((prev) => {
-            const next = new Set(prev)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            return next
-        })
+        const saved = readStoredExpanded()
+        if (saved) setExpanded(saved)
     }, [])
-
-    const expandAll = () => {
-        setExpanded(new Set(flat.map((n) => n.item.stableId)))
+    const changeExpanded = (ids: ReadonlySet<string>) => {
+        if (filterActive) setFilterExpansion({ key: filterKey, ids })
+        else {
+            setExpanded(ids)
+            writeStoredExpanded(ids)
+        }
     }
-
-    const collapseAll = () => {
-        setExpanded(new Set())
+    const toggle = (id: string) => {
+        changeExpanded(toggleExpandedId(expanded, id))
     }
-
-    /** 表单内 Enter：把搜索草稿写入 URL。 */
-    const applyTreeFilters = React.useCallback(() => {
-        const next = searchDraft.trim()
-        if (next === q.trim()) return
-        patchUrl({ q: next || null })
-    }, [patchUrl, q, searchDraft])
-
-    /** 启停是快捷筛选：直接写入 Applied URL。 */
-    const setLifecycleStatus = React.useCallback(
-        (next: "enabled" | "disabled" | "all") => {
-            if (next === lifecycleStatus) return
-            patchUrl({ lifecycleStatus: next === "all" ? null : next })
-        },
-        [lifecycleStatus, patchUrl],
-    )
-
-    /** 移除单个已生效条件。 */
-    const removeFilter = React.useCallback(
-        (key: CategoryTreeFilterKey) => {
-            if (key === "q") setSearchDraft("")
-            patchUrl({ [key]: null })
-        },
-        [patchUrl, setSearchDraft],
-    )
-
-    const clearFilters = React.useCallback(() => {
+    const setSelectedId = (id: string | null) => {
+        const parents = ancestorIds(flat, id, false)
+        if (parents.some((parentId) => !expanded.has(parentId)))
+            changeExpanded(new Set([...expanded, ...parents]))
+        patchUrl({ category: id })
+    }
+    const selectedNode = flat.find((node) => node.item.stableId === selectedId)
+    const selected = selectedNode?.item ?? null
+    const applyTreeFilters = () => {
+        setFilterExpansion(null)
+        patchUrl({ q: searchDraft.trim() || null })
+    }
+    const clearFilters = () => {
         setSearchDraft("")
+        setFilterExpansion(null)
         patchUrl({ q: null, lifecycleStatus: null })
-    }, [patchUrl, setSearchDraft])
-
-    const openCreateRoot = () => {
-        setCreateParentId(undefined)
-        setCreateOpen(true)
     }
-
-    const openCreateChild = (parent: MasterDataListItem) => {
-        setCreateParentId(parent.stableId)
-        setCreateOpen(true)
+    const onCreated = (id: string) => {
+        if (createParentId) {
+            const next = new Set([
+                ...(expandedState ?? unfilteredDefaultExpanded),
+                ...ancestorIds(flat, createParentId, true),
+            ])
+            setExpanded(next)
+            writeStoredExpanded(next)
+        }
+        setSearchDraft("")
+        patchUrl({ category: id, q: null, lifecycleStatus: null })
     }
-
-    const onExport = () => {
-        if (rows.length === 0) return
-        const csv = buildMasterDataExportCsv(
-            rows,
-            `分类=${masterDataCopy.categoryTreeTitle}`,
-        )
-        downloadCsv(csv, `基础资料-商品分类`)
-        const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "")
-        setExportMeta({
-            jobId: `导出-${datePart}-${String(Date.now() % 100000).padStart(5, "0")}`,
-            rowCount: rows.length,
-        })
-    }
-
     return {
         searchDraft,
         setSearchDraft,
-        lifecycleStatus,
-        setLifecycleStatus,
-        hasPendingChanges,
-        appliedChips,
-        removeFilter,
+        q,
         applyTreeFilters,
+        lifecycleStatus,
+        setLifecycleStatus: (value: "enabled" | "disabled" | "all") => {
+            setFilterExpansion(null)
+            patchUrl({ lifecycleStatus: value === "all" ? null : value })
+        },
+        clearSearch: () => {
+            setSearchDraft("")
+            patchUrl({ q: null })
+        },
+        hasPendingChanges: searchDraft.trim() !== q.trim(),
         selectedId,
         setSelectedId,
+        selected,
+        selectedNode,
         expanded,
         createOpen,
         setCreateOpen,
         createParentId,
+        onCreated,
         reviseTarget,
         setReviseTarget,
+        moveTarget,
+        setMoveTarget,
         disableTarget,
         setDisableTarget,
-        exportMeta,
         listQuery,
+        fullQuery,
         rows,
+        matchedRows,
+        matchedIds,
         forest,
+        fullForest,
         flat,
-        selected,
-        selectedPath,
-        visibleCount,
         filterActive,
+        canCreate,
+        createBlockedReason,
         toggle,
-        expandAll,
-        collapseAll,
+        expandAll: () =>
+            changeExpanded(
+                new Set(
+                    flattenCategoryForest(forest).map(
+                        (node) => node.item.stableId,
+                    ),
+                ),
+            ),
+        collapseAll: () => changeExpanded(new Set()),
         clearFilters,
-        openCreateRoot,
-        openCreateChild,
-        onExport,
+        openCreateRoot: () => {
+            setCreateParentId(undefined)
+            setCreateOpen(true)
+        },
+        openCreateChild: (item: MasterDataListItem) => {
+            setCreateParentId(item.stableId)
+            setCreateOpen(true)
+        },
+        onExport: () =>
+            downloadCsv(
+                buildMasterDataExportCsv(matchedRows, "分类=商品分类"),
+                "基础资料-商品分类",
+            ),
+        returnTo: `/master-data/categories${searchParams.size ? `?${searchParams}` : ""}`,
     }
 }

@@ -215,6 +215,7 @@ fn parse_optional_amount(value: &str, column: &str) -> Result<Option<Amount>> {
 mod tests {
     use super::{next_sku_no, normalize_import_row, stable_code};
     use erp_catalog::PRODUCT_IMPORT_HEADERS;
+    use std::collections::HashSet;
 
     #[test]
     fn stable_code_is_deterministic() {
@@ -255,7 +256,7 @@ mod tests {
 
     #[test]
     fn next_sku_no_skips_taken_codes() {
-        let taken = std::collections::HashSet::from(["FSY-1-01".into()]);
+        let taken = HashSet::from(["FSY-1-01".into()]);
         assert_eq!(next_sku_no("FSY-1", &taken), "FSY-1-02");
     }
 }

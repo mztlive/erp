@@ -1,9 +1,11 @@
 //! 给已导入但缺图的商品补齐轮播图与 SKU 主图。
 
+use std::collections::HashMap;
+
 use application_core::AuditActor;
-use erp_catalog::entity::catalog::{parse_specification_signature, EnableStatus, Product};
+use erp_catalog::entity::catalog::{parse_specification_signature, EnableStatus, Product, Sku, SkuRevision};
 use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SpecEntryInput, UpdateProductRequest};
-use erp_core::ids::{ProductId, SkuRevisionId};
+use erp_core::ids::{FileAssetId, ProductId, SkuId, SkuRevisionId};
 use persistence_core::NoTransaction;
 
 use super::images::{upload_row_images, RowMedia};
@@ -160,9 +162,9 @@ fn already_imported(product_id: String) -> RowImportOutcome {
 /// # 错误
 /// 规格签名无法解析或没有启用 SKU 时返回错误。
 pub(super) fn sku_inputs_with_main_image(
-    skus: &[erp_catalog::entity::catalog::Sku],
-    revisions: &std::collections::HashMap<String, erp_catalog::entity::catalog::SkuRevision>,
-    main_image: Option<erp_core::ids::FileAssetId>,
+    skus: &[Sku],
+    revisions: &HashMap<String, SkuRevision>,
+    main_image: Option<FileAssetId>,
 ) -> Result<Vec<ProductSkuInput>> {
     let mut inputs = Vec::new();
     let mut assigned_main = false;
@@ -190,7 +192,7 @@ pub(super) fn sku_inputs_with_main_image(
                 .or_else(|| revision.source_main_image_asset_id.clone())
         };
         inputs.push(ProductSkuInput {
-            sku_id: Some(erp_core::ids::SkuId::new(sku.base.id.clone())),
+            sku_id: Some(SkuId::new(sku.base.id.clone())),
             expected_sku_revision_id: Some(SkuRevisionId::new(
                 sku.stable
                     .current_revision_id
