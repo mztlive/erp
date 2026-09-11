@@ -84,7 +84,7 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
     if (!page)
         return (
             <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center text-sm text-slate-500">
-                <RefreshCw className="mb-3 h-6 w-6 animate-spin text-rose-500" />
+                <RefreshCw className="mb-3 h-6 w-6 animate-spin text-blue-600" />
                 正在打开选品页…
             </main>
         )
@@ -145,7 +145,7 @@ const Receipt = ({ page }: { page: PublicPageView }) => {
 
             <div className="space-y-3">
                 <div className="flex items-center gap-2 px-1">
-                    <FileCheck className="h-4 w-4 text-rose-600" />
+                    <FileCheck className="h-4 w-4 text-blue-600" />
                     <h2 className="text-sm font-semibold text-slate-900">
                         确认选品清单
                     </h2>
@@ -194,7 +194,7 @@ const ChoiceSummary = ({
                                     : ""}
                             </p>
                             {choice.line_amount != null && (
-                                <p className="font-semibold text-rose-600 text-sm shrink-0">
+                                <p className="font-semibold text-blue-600 text-sm shrink-0">
                                     ¥ {choice.line_amount}
                                 </p>
                             )}
@@ -241,7 +241,7 @@ const ChoiceSummary = ({
                     <span className="text-xs font-medium text-slate-500">
                         方案合计金额（含税）
                     </span>
-                    <p className="font-bold text-base text-rose-600">
+                    <p className="font-bold text-base text-blue-600">
                         合计 ¥ {total}
                     </p>
                 </div>
@@ -445,7 +445,7 @@ const SelectionReviewCenter = ({
                     <button
                         type="button"
                         onClick={onBack}
-                        className="flex items-center gap-1 text-slate-700 hover:text-rose-600 text-xs font-semibold py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors border-0 bg-transparent cursor-pointer"
+                        className="flex items-center gap-1 text-slate-700 hover:text-blue-600 text-xs font-semibold py-1 px-2 rounded-lg hover:bg-slate-100 transition-colors border-0 bg-transparent cursor-pointer"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         <span>返回选品</span>
@@ -460,7 +460,7 @@ const SelectionReviewCenter = ({
                     </div>
                     <Badge
                         variant="outline"
-                        className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700 font-medium px-2 py-0.5"
+                        className="text-[10px] border-blue-200 bg-blue-50 text-blue-700 font-medium px-2 py-0.5"
                     >
                         核对中
                     </Badge>
@@ -472,7 +472,7 @@ const SelectionReviewCenter = ({
                     <div className="rounded-2xl bg-white p-3.5 border border-slate-200/80 shadow-2xs space-y-3">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                                     <CheckCircle2 className="h-4 w-4" />
                                 </div>
                                 <div>
@@ -484,7 +484,7 @@ const SelectionReviewCenter = ({
                                     </p>
                                 </div>
                             </div>
-                            <span className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                            <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
                                 {mall ? "商城意向可选" : "批量采购方案"}
                             </span>
                         </div>
@@ -512,11 +512,11 @@ const SelectionReviewCenter = ({
                                     </span>
                                 </p>
                             </div>
-                            <div className="rounded-xl bg-rose-50/60 p-2 border border-rose-100">
-                                <p className="text-[10px] text-rose-500">
+                            <div className="rounded-xl bg-blue-50/60 p-2 border border-blue-100">
+                                <p className="text-[10px] text-blue-600 font-medium">
                                     {mall ? "模式" : "方案总金额"}
                                 </p>
-                                <p className="text-sm font-bold text-rose-600 mt-0.5 truncate">
+                                <p className="text-sm font-bold text-blue-600 mt-0.5 truncate">
                                     {page.total_amount
                                         ? `¥ ${page.total_amount}`
                                         : "意向库"}
@@ -534,7 +534,7 @@ const SelectionReviewCenter = ({
                                 placeholder="在已选商品中检索名称或规格..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="h-8.5 w-full rounded-full bg-white pl-8.5 pr-8 text-xs placeholder:text-slate-400 border border-slate-200 shadow-2xs focus-visible:ring-1 focus-visible:ring-rose-500"
+                                className="h-8.5 w-full rounded-full bg-white pl-8.5 pr-8 text-xs placeholder:text-slate-400 border border-slate-200 shadow-2xs focus-visible:ring-1 focus-visible:ring-blue-500"
                             />
                             {searchQuery && (
                                 <button
@@ -585,7 +585,7 @@ const SelectionReviewCenter = ({
                                 <button
                                     type="button"
                                     onClick={expandAll}
-                                    className="hover:text-rose-600 px-1 border-0 bg-transparent cursor-pointer font-medium"
+                                    className="hover:text-blue-600 px-1 border-0 bg-transparent cursor-pointer font-medium"
                                 >
                                     全部展开
                                 </button>
@@ -593,7 +593,7 @@ const SelectionReviewCenter = ({
                                 <button
                                     type="button"
                                     onClick={collapseAll}
-                                    className="hover:text-rose-600 px-1 border-0 bg-transparent cursor-pointer font-medium"
+                                    className="hover:text-blue-600 px-1 border-0 bg-transparent cursor-pointer font-medium"
                                 >
                                     全部收起
                                 </button>
@@ -636,7 +636,7 @@ const SelectionReviewCenter = ({
                                             </span>
                                         </div>
                                         {!mall && group.subtotalCents > 0 && (
-                                            <span className="text-xs font-semibold text-rose-600">
+                                            <span className="text-xs font-semibold text-blue-600">
                                                 小计 ¥ {groupSubtotal}
                                             </span>
                                         )}
@@ -759,7 +759,7 @@ const SelectionReviewCenter = ({
                                                                 )}
                                                                 {choice.line_amount !=
                                                                     null && (
-                                                                    <p className="mt-0.5 text-xs font-bold text-rose-600">
+                                                                    <p className="mt-0.5 text-xs font-bold text-blue-600">
                                                                         ¥{" "}
                                                                         {
                                                                             choice.line_amount
@@ -779,7 +779,7 @@ const SelectionReviewCenter = ({
                                                                             item.item_id,
                                                                         )
                                                                     }
-                                                                    className="mt-1 text-[10px] text-slate-400 hover:text-rose-600 disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer block ml-auto"
+                                                                    className="mt-1 text-[10px] text-slate-400 hover:text-blue-600 disabled:opacity-40 transition-colors border-0 bg-transparent p-0 cursor-pointer block ml-auto"
                                                                 >
                                                                     {removingId ===
                                                                     item.item_id
@@ -835,7 +835,7 @@ const SelectionReviewCenter = ({
                                     : "方案总计金额（含税）"}
                             </p>
                             {page.total_amount != null && !mall ? (
-                                <div className="flex items-baseline text-rose-600 font-bold">
+                                <div className="flex items-baseline text-blue-600 font-bold">
                                     <span className="text-xs mr-0.5 font-bold">
                                         ¥
                                     </span>
@@ -844,7 +844,7 @@ const SelectionReviewCenter = ({
                                     </span>
                                 </div>
                             ) : (
-                                <p className="text-base font-bold text-rose-600">
+                                <p className="text-base font-bold text-blue-600">
                                     已选 {page.choices.length} 款
                                 </p>
                             )}
@@ -1232,7 +1232,7 @@ const SelectionForm = ({
                 className={cn(
                     "group relative flex gap-2.5 rounded-2xl bg-white p-2.5 border transition-all shadow-2xs hover:shadow-xs",
                     isSelected
-                        ? "border-rose-500/80 ring-1 ring-rose-500/15"
+                        ? "border-blue-500/80 ring-1 ring-blue-500/15"
                         : "border-slate-200/80 hover:border-slate-300",
                 )}
             >
@@ -1253,8 +1253,8 @@ const SelectionForm = ({
                             referrerPolicy="no-referrer"
                         />
                     ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-rose-50/40 via-slate-50 to-amber-50/30 p-2 text-center">
-                            <Gift className="h-6 w-6 stroke-[1.5] text-rose-400" />
+                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-blue-50/40 via-slate-50 to-indigo-50/30 p-2 text-center">
+                            <Gift className="h-6 w-6 stroke-[1.5] text-blue-400" />
                             <span className="mt-1 text-[9px] font-semibold text-slate-400">
                                 严选好物
                             </span>
@@ -1278,7 +1278,7 @@ const SelectionForm = ({
 
                     {/* 选中打勾标记 */}
                     {isSelected && (
-                        <div className="absolute right-1 top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs ring-1 ring-white">
+                        <div className="absolute right-1 top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs ring-1 ring-white">
                             <Check className="h-2.5 w-2.5 stroke-[3]" />
                         </div>
                     )}
@@ -1290,7 +1290,7 @@ const SelectionForm = ({
                         <button
                             type="button"
                             onClick={() => setDetailItem(item)}
-                            className="text-left w-full text-xs sm:text-sm font-medium text-slate-900 leading-snug line-clamp-2 hover:text-rose-600 transition-colors p-0 border-0 bg-transparent"
+                            className="text-left w-full text-xs sm:text-sm font-medium text-slate-900 leading-snug line-clamp-2 hover:text-blue-600 transition-colors p-0 border-0 bg-transparent"
                         >
                             {item.name}
                         </button>
@@ -1313,7 +1313,7 @@ const SelectionForm = ({
                     {/* 价格与操作 */}
                     <div className="mt-1 flex items-end justify-between gap-1 pt-1 border-t border-slate-100/60">
                         <div>
-                            <div className="flex items-baseline text-rose-600 font-semibold">
+                            <div className="flex items-baseline text-blue-600 font-semibold">
                                 <span className="text-[11px] mr-0.5 font-bold">
                                     ¥
                                 </span>
@@ -1407,8 +1407,8 @@ const SelectionForm = ({
                                 className={cn(
                                     "flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none shadow-2xs active:scale-95",
                                     isSelected
-                                        ? "bg-rose-600 text-white"
-                                        : "bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white",
+                                        ? "bg-blue-600 text-white shadow-blue-500/20"
+                                        : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white",
                                 )}
                             >
                                 <input
@@ -1446,7 +1446,7 @@ const SelectionForm = ({
                 <header className="shrink-0 bg-white border-b border-slate-200/80 px-3.5 py-2 z-20">
                     <div className="flex items-center justify-between gap-2.5">
                         <div className="flex items-center gap-2 min-w-0">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-rose-500 via-rose-600 to-amber-500 text-white shadow-xs">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 text-white shadow-xs">
                                 <Store className="h-4.5 w-4.5" />
                             </div>
                             <div className="min-w-0">
@@ -1465,7 +1465,7 @@ const SelectionForm = ({
                         </div>
                         <Badge
                             variant="outline"
-                            className="shrink-0 text-[11px] border-rose-200 bg-rose-50 text-rose-600 font-medium px-2 py-0.5"
+                            className="shrink-0 text-[11px] border-blue-200 bg-blue-50 text-blue-700 font-medium px-2 py-0.5"
                         >
                             {mall ? "意向可选库" : "批量采购"}
                         </Badge>
@@ -1479,7 +1479,7 @@ const SelectionForm = ({
                             placeholder="搜索几百款商品、规格或名称..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-8 w-full rounded-full bg-slate-100 pl-8.5 pr-8 text-xs placeholder:text-slate-400 border-0 shadow-none focus-visible:ring-1 focus-visible:ring-rose-500"
+                            className="h-8 w-full rounded-full bg-slate-100 pl-8.5 pr-8 text-xs placeholder:text-slate-400 border-0 shadow-none focus-visible:ring-1 focus-visible:ring-blue-600"
                         />
                         {searchQuery && (
                             <button
@@ -1612,26 +1612,26 @@ const SelectionForm = ({
                                     type="button"
                                     onClick={() => scrollToSection(section.id)}
                                     className={cn(
-                                        "relative flex w-full flex-col items-center justify-center py-3.5 px-1 text-center transition-all border-0",
-                                        isActive
-                                            ? "bg-white text-rose-600 font-bold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-rose-600 shadow-2xs"
-                                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium bg-transparent",
-                                    )}
-                                >
-                                    <span className="text-[11px] sm:text-xs line-clamp-2 leading-tight">
-                                        {section.name}
-                                    </span>
-                                    <span
-                                        className={cn(
-                                            "mt-1 rounded-full px-1.5 py-0.2 text-[9px] font-bold",
-                                            isActive
-                                                ? "bg-rose-100 text-rose-600"
-                                                : "bg-slate-200/70 text-slate-500",
-                                        )}
-                                    >
-                                        {section.items.length}
-                                    </span>
-                                </button>
+                                         "relative flex w-full flex-col items-center justify-center py-3.5 px-1 text-center transition-all border-0",
+                                         isActive
+                                             ? "bg-white text-blue-700 font-bold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-blue-600 shadow-2xs"
+                                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium bg-transparent",
+                                     )}
+                                 >
+                                     <span className="text-[11px] sm:text-xs line-clamp-2 leading-tight">
+                                         {section.name}
+                                     </span>
+                                     <span
+                                         className={cn(
+                                             "mt-1 rounded-full px-1.5 py-0.2 text-[9px] font-bold",
+                                             isActive
+                                                 ? "bg-blue-100 text-blue-700"
+                                                 : "bg-slate-200/70 text-slate-500",
+                                         )}
+                                     >
+                                         {section.items.length}
+                                     </span>
+                                 </button>
                             )
                         })}
                     </aside>
@@ -1658,7 +1658,7 @@ const SelectionForm = ({
                                     <div className="flex items-center justify-between pb-1 border-b border-slate-100">
                                         <span className="text-xs font-bold text-slate-800">
                                             搜索结果 &quot;{searchQuery}&quot; (
-                                            {searchResults.length})
+                                             {searchResults.length})
                                         </span>
                                     </div>
                                     {searchResults.map(renderCard)}
@@ -1682,7 +1682,7 @@ const SelectionForm = ({
                                         {/* 品类楼层吸顶标题 */}
                                         <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs py-1.5 flex items-center justify-between border-b border-slate-100">
                                             <h2 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                                                <span className="h-3 w-1 rounded-full bg-rose-600" />
+                                                <span className="h-3 w-1 rounded-full bg-blue-600" />
                                                 {section.name} (
                                                 {section.items.length})
                                             </h2>
@@ -1712,7 +1712,7 @@ const SelectionForm = ({
                             className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
                             onClick={() => setCartDrawerOpen(true)}
                         >
-                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white shadow-md active:scale-95 transition-transform">
+                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md active:scale-95 transition-transform">
                                 <ShoppingBag className="h-5 w-5" />
                                 {selectedCount > 0 && (
                                     <span className="absolute -right-1.5 -top-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-950 shadow-sm animate-in zoom-in">
@@ -1725,7 +1725,7 @@ const SelectionForm = ({
                                     <div>
                                         <p className="text-xs sm:text-sm font-bold text-slate-900">
                                             已选{" "}
-                                            <span className="text-rose-600">
+                                            <span className="text-blue-700">
                                                 {selectedCount}
                                             </span>{" "}
                                             款
@@ -1738,7 +1738,7 @@ const SelectionForm = ({
                                     </div>
                                 ) : (
                                     <div>
-                                        <p className="text-sm sm:text-base font-bold text-rose-600 leading-none">
+                                        <p className="text-sm sm:text-base font-bold text-blue-700 leading-none">
                                             已选 {selectedCount} 项
                                         </p>
                                         <p className="text-[10px] text-slate-500 mt-0.5">
@@ -1767,7 +1767,7 @@ const SelectionForm = ({
                                 <Button
                                     id="sales-selection-public-review"
                                     size="sm"
-                                    className="rounded-full bg-gradient-to-r from-rose-500 via-rose-600 to-red-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-8.5 active:scale-95 transition-all"
+                                    className="rounded-full bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-8.5 active:scale-95 transition-all"
                                     disabled={locked || conflict}
                                     onClick={() => persist(true)}
                                 >
@@ -1833,7 +1833,7 @@ const SelectionForm = ({
 
                             {/* 价格与信息 */}
                             <div className="flex items-baseline justify-between">
-                                <div className="flex items-baseline text-rose-600 font-bold">
+                                <div className="flex items-baseline text-blue-700 font-bold">
                                     <span className="text-xs mr-0.5">¥</span>
                                     <span className="text-2xl">
                                         {detailItem.price}
@@ -1846,7 +1846,7 @@ const SelectionForm = ({
                                 </div>
                                 {detailItem.tier_name && (
                                     <Badge className="bg-slate-900 text-white">
-                                        {detailItem.tier_name}
+                                         {detailItem.tier_name}
                                     </Badge>
                                 )}
                             </div>
@@ -1874,9 +1874,9 @@ const SelectionForm = ({
 
                             {/* 套餐明细清单 */}
                             {detailItem.members.length > 0 && (
-                                <div className="rounded-2xl bg-rose-50/40 p-3 text-xs space-y-2 border border-rose-100">
-                                    <p className="font-bold text-rose-950 flex items-center gap-1.5">
-                                        <Layers className="h-4 w-4 text-rose-600" />
+                                <div className="rounded-2xl bg-blue-50/40 p-3 text-xs space-y-2 border border-blue-100">
+                                    <p className="font-bold text-blue-950 flex items-center gap-1.5">
+                                        <Layers className="h-4 w-4 text-blue-600" />
                                         套餐包含 {detailItem.members.length}{" "}
                                         款组合商品
                                     </p>
@@ -1884,7 +1884,7 @@ const SelectionForm = ({
                                         {detailItem.members.map((m, idx) => (
                                             <div
                                                 key={idx}
-                                                className="flex items-center justify-between text-slate-700 border-b border-rose-100/60 pb-1 last:border-0 last:pb-0"
+                                                className="flex items-center justify-between text-slate-700 border-b border-blue-100/60 pb-1 last:border-0 last:pb-0"
                                             >
                                                 <span className="font-medium">
                                                     {m.name}
@@ -1903,7 +1903,7 @@ const SelectionForm = ({
 
                             <div className="pt-2">
                                 <Button
-                                    className="w-full rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold h-11"
+                                    className="w-full rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold h-11 shadow-sm"
                                     onClick={() => {
                                         change(detailItem.item_id, {
                                             selected:
@@ -1928,7 +1928,7 @@ const SelectionForm = ({
                 <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                            <ShoppingBag className="h-5 w-5 text-rose-600" />
+                            <ShoppingBag className="h-5 w-5 text-blue-600" />
                             已选商品清单 ({selectedCount} 款)
                         </DialogTitle>
                     </DialogHeader>
@@ -1947,7 +1947,7 @@ const SelectionForm = ({
                                             <p className="font-medium text-xs sm:text-sm text-slate-900 truncate">
                                                 {item.name}
                                             </p>
-                                            <p className="text-xs font-bold text-rose-600 mt-0.5">
+                                            <p className="text-xs font-bold text-blue-700 mt-0.5">
                                                 ¥ {item.price}
                                             </p>
                                         </div>
@@ -1960,7 +1960,7 @@ const SelectionForm = ({
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-7 text-xs text-rose-600 hover:bg-rose-50 px-2"
+                                                className="h-7 text-xs text-blue-600 hover:bg-blue-50 px-2"
                                                 onClick={() =>
                                                     change(item.item_id, {
                                                         selected: false,
