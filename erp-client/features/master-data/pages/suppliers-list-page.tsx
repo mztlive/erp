@@ -20,7 +20,6 @@ import { LifecycleMetricStrip } from "@/features/master-data/components/list/lif
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { SupplierListToolbar } from "@/features/master-data/components/list/supplier-list-toolbar"
 import { suppliersListStyles } from "./suppliers-list-styles"
-import { SupplierDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
 import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-list-state"
@@ -50,12 +49,7 @@ export function SuppliersListPage() {
         lastFocusedRowId.current = stableId
         router.push(`/master-data/suppliers/${stableId}?section=overview`)
     }
-    const columns = useSupplierListColumns({
-        lastFocusedRowId,
-        rows: state.rows,
-        onOpen: (item) => openDetail(item.stableId),
-        onDisableTarget: state.setDisableTarget,
-    })
+    const columns = useSupplierListColumns()
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredSupplierFilters
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
@@ -141,7 +135,8 @@ export function SuppliersListPage() {
                         columns={columns}
                         defaultColumnVisibility={{
                             revisionNo: false,
-                            blocker: false,
+                            invoice: false,
+                            businessCategory: false,
                         }}
                         getRowId={(row) => row.stableId}
                         rowCount={state.rows.length}
@@ -151,7 +146,6 @@ export function SuppliersListPage() {
                         layout="flush"
                         defaultColumnPinning={{
                             left: ["name"],
-                            right: ["actions"],
                         }}
                         errorState={
                             listLoadFailed ? (
@@ -232,13 +226,6 @@ export function SuppliersListPage() {
             {importOpen && (
                 <SupplierImportDialog onClose={() => setImportOpen(false)} />
             )}
-            <SupplierDisableDialog
-                open={state.disableTarget != null}
-                onOpenChange={(open) => {
-                    if (!open) state.setDisableTarget(null)
-                }}
-                target={state.disableTarget}
-            />
         </ListPageFrame>
     )
 }

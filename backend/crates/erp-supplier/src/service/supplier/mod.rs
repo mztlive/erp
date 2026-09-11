@@ -5,67 +5,26 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::entity::supplier::{SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision};
-use crate::ports::{
-    select_current_default, PartyFactsPort, PartyListFact, PartyRevisionFact, SensitiveFieldKindFact,
-    SensitiveTokenPort,
-};
-use crate::repository::{SupplierAccountRow, SupplierExt, SupplierListSearchInput};
+use crate::entity::supplier::{SupplierAccount, SupplierAccountId};
+use crate::ports::{select_current_default, PartyFactsPort, SensitiveFieldKindFact, SensitiveTokenPort};
+use crate::repository::{SupplierAccountRow, SupplierExt};
 use erp_core::common::time::BusinessDate;
+use list_view::{assemble_supplier_views, SupplierViewAssembleInput};
 use mongodb::Database;
 use persistence_core::NoTransaction;
-use validator::Validate;
 
 use crate::dto::supplier::{
-    CommercialProfileView, PageView, SortDir, SupplierCapabilityView, SupplierDetailView, SupplierListParams,
-    SupplierListQuery, SupplierQualificationHealth, SupplierQualificationView, SupplierSensitiveFieldView,
-    SupplierView,
+    CommercialProfileView, SupplierCapabilityView, SupplierDetailView, SupplierQualificationView,
+    SupplierSensitiveFieldView,
 };
 use crate::error::{Error, Result};
 
 pub mod eligibility;
+mod list;
+mod list_view;
 mod profile;
 
 pub use profile::command_view;
-
-/// 供应商列表业务查询参数的仓储搜索输入组织（保留在 Service）。
-///
-/// # 参数
-/// * `query` - 已校验的供应商列表业务筛选条件
-/// * `as_of` - 当前业务日字符串
-/// * `keyword_party_ids` - 关键词命中的主体 ID，由 PartyFactsPort 预先解析
-///
-/// # 返回
-/// 返回仓储侧列表事实束搜索输入。
-fn supplier_list_search_input(
-    query: &SupplierListQuery,
-    as_of: String,
-    keyword_party_ids: Option<Vec<erp_core::ids::PartyId>>,
-) -> SupplierListSearchInput {
-    type HealthFilter = crate::repository::SupplierQualificationHealthFilter;
-    let qualification_health = match query.qualification_health {
-        None => None,
-        Some(SupplierQualificationHealth::Unverified) => Some(HealthFilter::Unverified),
-        Some(SupplierQualificationHealth::Valid) => Some(HealthFilter::Valid),
-        Some(SupplierQualificationHealth::Expiring30) => Some(HealthFilter::Expiring30),
-        Some(SupplierQualificationHealth::Expired) => Some(HealthFilter::Expired),
-        Some(SupplierQualificationHealth::NotRegistered) => Some(HealthFilter::NotRegistered),
-    };
-    SupplierListSearchInput {
-        keyword: query.keyword.clone(),
-        party_id: query.party_id.clone(),
-        keyword_party_ids,
-        status: query.status,
-        capability_codes: query.capability_codes.clone(),
-        qualification_types: query.qualification_types.clone(),
-        qualification_health,
-        as_of,
-        page: query.paging.page,
-        page_size: query.paging.page_size,
-        sort_by: Some(query.paging.sort_by.to_string()),
-        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-    }
-}
 
 /// 供应商服务。
 ///
@@ -104,51 +63,6 @@ impl SupplierService {
             party,
             sensitive_data: Some(sensitive_data),
         }
-    }
-
-    /// 分页查询供应商角色列表。
-    ///
-    /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    pub async fn supplier_list(&self, params: &SupplierListParams) -> Result<PageView<SupplierView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let as_of = BusinessDate::today().to_string();
-        let keyword_party_ids = match query.keyword.as_deref() {
-            Some(keyword) => Some(
-                self.party
-                    .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
-                    .await?,
-            ),
-            None => None,
-        };
-        let input = supplier_list_search_input(&query, as_of, keyword_party_ids);
-        let bundle = self
-            .db
-            .supplier()
-            .load_supplier_list_bundle(&input, &mut NoTransaction)
-            .await?;
-        let total = bundle.page.total;
-        let (parties, revisions) = self
-            .party
-            .list_with_current_revisions(&bundle.party_ids, &mut NoTransaction)
-            .await?;
-        let items = assemble_supplier_views(bundle.page.items, parties, revisions, bundle.profiles);
-
-        Ok(PageView {
-            items,
-            total,
-            page: input.page,
-            page_size: input.page_size,
-        })
     }
 
     /// 查询供应商角色详情（供应商 + 当前商务结算版本 + 主体编号）。
@@ -209,26 +123,31 @@ impl SupplierService {
             created_at: bundle.supplier.base.created_at,
         };
         let party_for_view = party.clone();
-        let mut account = assemble_supplier_views(
-            vec![row],
-            vec![party],
-            party_revision.into_iter().collect(),
-            bundle
-                .commercial_profiles
-                .iter()
-                .find(|profile| {
-                    Some(profile.base.id.as_str())
-                        == bundle
-                            .supplier
-                            .current_commercial_profile_revision_id
-                            .as_ref()
-                            .map(ToString::to_string)
-                            .as_deref()
-                })
-                .cloned()
-                .into_iter()
-                .collect(),
-        )
+        let current_profiles = bundle
+            .commercial_profiles
+            .iter()
+            .find(|profile| {
+                Some(profile.base.id.as_str())
+                    == bundle
+                        .supplier
+                        .current_commercial_profile_revision_id
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .as_deref()
+            })
+            .cloned()
+            .into_iter()
+            .collect();
+        let mut account = assemble_supplier_views(SupplierViewAssembleInput {
+            rows: vec![row],
+            parties: vec![party],
+            revisions: party_revision.into_iter().collect(),
+            profiles: current_profiles,
+            capabilities: bundle.capabilities.clone(),
+            qualifications: bundle.qualifications.clone(),
+            entity_names: commercial_party_names.clone(),
+            as_of: BusinessDate::today(),
+        })
         .into_iter()
         .next()
         .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
@@ -371,57 +290,6 @@ fn assemble_qualification_views(
             let mut view: SupplierQualificationView = qualification.into();
             view.capability_ids = links_by_qualification.remove(&id).unwrap_or_default();
             view
-        })
-        .collect()
-}
-
-/// 将批量读取结果按稳定 ID 装配为供应商列表/详情统一视图。
-fn assemble_supplier_views(
-    rows: Vec<SupplierAccountRow>,
-    parties: Vec<PartyListFact>,
-    revisions: Vec<PartyRevisionFact>,
-    profiles: Vec<SupplierCommercialProfileRevision>,
-) -> Vec<SupplierView> {
-    let parties: HashMap<String, PartyListFact> = parties
-        .into_iter()
-        .map(|party| (party.id.clone(), party))
-        .collect();
-    let revisions: HashMap<String, PartyRevisionFact> = revisions
-        .into_iter()
-        .map(|revision| (revision.id.clone(), revision))
-        .collect();
-    let profiles: HashMap<String, SupplierCommercialProfileRevision> = profiles
-        .into_iter()
-        .map(|profile| (profile.base.id.clone(), profile))
-        .collect();
-
-    rows.into_iter()
-        .map(|row| {
-            let party = parties.get(&row.party_id);
-            let revision = party
-                .and_then(|party| party.current_revision_id.as_ref())
-                .and_then(|id| revisions.get(id));
-            let current_profile = row
-                .current_commercial_profile_revision_id
-                .as_ref()
-                .and_then(|id| profiles.get(id))
-                .cloned()
-                .map(Into::into);
-            SupplierView {
-                id: row.id,
-                party_id: row.party_id,
-                party_no: party.map(|party| party.party_no.clone()),
-                legal_name: revision.map(|revision| revision.legal_name.clone()),
-                short_name: revision.and_then(|revision| revision.short_name.clone()),
-                party_version: party.map(|party| party.version),
-                supplier_no: row.supplier_no,
-                default_payment_term_id: row.default_payment_term_id,
-                current_commercial_profile_revision_id: row.current_commercial_profile_revision_id,
-                status: row.status,
-                version: row.version,
-                created_at: row.created_at,
-                current_profile,
-            }
         })
         .collect()
 }

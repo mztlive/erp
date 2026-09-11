@@ -14,6 +14,7 @@ import type {
 } from "@/features/master-data/api/contracts"
 import {
     asLifecycle,
+    capabilityLabel,
     commonActions,
     invoiceLabel,
     lifecycleLabel,
@@ -26,8 +27,14 @@ import {
 import type {
     MasterDataListItem,
     ProductListingStatus,
+    SupplierQualificationHealth,
 } from "@/features/master-data/types"
 import { paymentTermLabel } from "@/lib/business-options"
+import { supplierTaxPercentages } from "@/lib/supplier-tax-rates"
+import {
+    qualificationHealthLabel,
+    SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
+} from "@/features/master-data/lib/list-filters"
 
 export function isFutureDate(date: string | undefined): boolean {
     if (!date) return false
@@ -350,6 +357,7 @@ export function mapSupplierRow(
     profile: CommercialProfileDto | null = supplier.current_profile,
 ): MasterDataListItem {
     const lifecycle = asLifecycle(supplier.status)
+    const supplierList = mapSupplierListFacts(supplier, profile)
     return {
         objectType: "suppliers",
         stableId: supplier.id,
@@ -368,26 +376,103 @@ export function mapSupplierRow(
         effectiveFrom: tsToIso(
             profile?.created_at ?? supplier.created_at,
         ).slice(0, 10),
-        keyFacts: [
-            {
-                label: "结算方式",
-                value: settlementLabel(profile?.settlement_mode) || "—",
-            },
-            {
-                label: "付款条件",
-                value: profile?.payment_term_snapshot
-                    ? paymentTermLabel(profile.payment_term_snapshot)
-                    : "—",
-            },
-            {
-                label: "发票类型",
-                value: invoiceLabel(profile?.invoice_type) || "—",
-            },
-        ],
+        keyFacts: supplierListKeyFacts(supplierList),
+        supplierList,
         primaryBlocker: lifecycle === "DISABLED" ? "已停用" : undefined,
         selectorEligibility: [],
         ...commonActions("suppliers", lifecycle),
         lockVersion: supplier.version,
         metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
     }
+}
+
+/** 把列表 API 的能力、资质与商务资料折成扫表投影。 */
+function mapSupplierListFacts(
+    supplier: SupplierDto,
+    profile: CommercialProfileDto | null,
+): NonNullable<MasterDataListItem["supplierList"]> {
+    const taxRates = supplierTaxPercentages(
+        profile?.invoice_tax_rates,
+        profile?.invoice_tax_rate,
+    )
+    const qualificationHealth = isSupplierQualificationHealth(
+        supplier.qualification_health,
+    )
+        ? supplier.qualification_health
+        : undefined
+    return {
+        capabilityCodes: supplier.capability_codes ?? [],
+        qualificationHealth,
+        qualificationTypes: supplier.qualification_types ?? [],
+        settlementLabel: settlementLabel(profile?.settlement_mode) || "—",
+        paymentTermLabel: profile?.payment_term_snapshot
+            ? paymentTermLabel(profile.payment_term_snapshot)
+            : "—",
+        signingEntityName: profile?.signing_entity_name?.trim() || undefined,
+        paymentEntityName: profile?.payment_entity_name?.trim() || undefined,
+        invoiceTypeLabel: invoiceLabel(profile?.invoice_type) || "—",
+        invoiceTaxRatesLabel: taxRates
+            ? taxRates
+                  .split("、")
+                  .filter(Boolean)
+                  .map((rate) => `${rate}%`)
+                  .join("、")
+            : undefined,
+        businessCategory: profile?.business_category?.trim() || undefined,
+    }
+}
+
+/** 导出与预览仍使用标签袋，顺序与列表列一致。 */
+function supplierListKeyFacts(
+    facts: NonNullable<MasterDataListItem["supplierList"]>,
+): MasterDataListItem["keyFacts"] {
+    const capabilityValue = facts.capabilityCodes
+        .map((code) => capabilityLabel(code))
+        .filter(Boolean)
+        .join("、")
+    const typeValue = facts.qualificationTypes
+        .map(
+            (code) =>
+                SUPPLIER_QUALIFICATION_TYPE_OPTIONS.find(
+                    (option) => option.value === code,
+                )?.label ?? code,
+        )
+        .join("、")
+    return [
+        {
+            label: "供应能力",
+            value: capabilityValue || "—",
+        },
+        {
+            label: "资质状态",
+            value: facts.qualificationHealth
+                ? qualificationHealthLabel(facts.qualificationHealth)
+                : "—",
+        },
+        { label: "资质类型", value: typeValue || "—" },
+        { label: "结算方式", value: facts.settlementLabel },
+        { label: "付款条件", value: facts.paymentTermLabel },
+        { label: "签约主体", value: facts.signingEntityName || "—" },
+        { label: "付款主体", value: facts.paymentEntityName || "—" },
+        { label: "发票类型", value: facts.invoiceTypeLabel },
+        ...(facts.invoiceTaxRatesLabel
+            ? [{ label: "进项税率", value: facts.invoiceTaxRatesLabel }]
+            : []),
+        ...(facts.businessCategory
+            ? [{ label: "经营类目", value: facts.businessCategory }]
+            : []),
+    ]
+}
+
+/** 仅接受后端已声明的资质健康状态。 */
+function isSupplierQualificationHealth(
+    value: string | null | undefined,
+): value is SupplierQualificationHealth {
+    return (
+        value === "unverified" ||
+        value === "valid" ||
+        value === "expiring_30" ||
+        value === "expired" ||
+        value === "not_registered"
+    )
 }

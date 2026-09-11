@@ -22,6 +22,7 @@ pub mod receivable;
 pub mod returns;
 pub mod sales_order;
 pub mod sales_review;
+pub mod sales_selection;
 pub mod source_registry;
 pub mod supplier;
 pub mod supplier_api;

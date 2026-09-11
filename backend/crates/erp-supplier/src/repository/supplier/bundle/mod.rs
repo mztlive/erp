@@ -95,6 +95,10 @@ pub struct SupplierListBundle {
     pub party_ids: Vec<PartyId>,
     /// 命中的商务资料版本集合。
     pub profiles: Vec<SupplierCommercialProfileRevision>,
+    /// 当前页供应商的能力集合，供列表折叠有效能力代码。
+    pub capabilities: Vec<SupplierCapability>,
+    /// 当前页供应商的资质集合，供列表折叠健康状态与类型摘要。
+    pub qualifications: Vec<SupplierQualification>,
 }
 
 /// 供应商详情事实束。

@@ -57,6 +57,21 @@ export type MasterDataListItem = Readonly<{
     }>
     metricTags: readonly string[]
     /**
+     * 供应商列表专用投影：能力、资质与商务主体，供扫表列使用。
+     */
+    supplierList?: Readonly<{
+        capabilityCodes: readonly string[]
+        qualificationHealth?: SupplierQualificationHealth
+        qualificationTypes: readonly string[]
+        settlementLabel: string
+        paymentTermLabel: string
+        signingEntityName?: string
+        paymentEntityName?: string
+        invoiceTypeLabel: string
+        invoiceTaxRatesLabel?: string
+        businessCategory?: string
+    }>
+    /**
      * 字典稳定代码（分类代码 / 品牌代码等）。
      * 列表与 Combobox 共用，避免只从 keyFacts 反解析。
      */

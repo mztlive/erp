@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 /// 调用方可选的业务筛选。供应商身份仅用于筛选匹配，不会写入投影行。
 #[derive(Debug, Clone)]
 pub struct SellableSkuFilter {
+    /// 额外要求区域并集包含全国，不替代已有区域条件。
+    pub nationwide_only: bool,
     /// SKU 编号、SKU 名称、商品编号、商品名称、规格或条码关键字；`None` 表示不筛选。
     pub keyword: Option<String>,
     /// 商品业务类型；`None` 表示不筛选。
@@ -49,6 +51,7 @@ impl SellableSkuFilter {
     /// 无。
     pub fn as_of(eligibility_as_of: BusinessDate) -> Self {
         Self {
+            nationwide_only: false,
             keyword: None,
             product_kind: None,
             category_id: None,
@@ -104,6 +107,9 @@ pub struct SellableSkuRow {
     pub market_price: Option<Amount>,
     /// SKU 主图文件 ID。
     pub main_image_asset_id: Option<String>,
+    /// 当前商品分类；未分类为 `None`。
+    #[serde(default)]
+    pub category_id: Option<String>,
     /// 当前 SKU 修订生效开始日。
     pub effective_from: BusinessDate,
     /// 当前 SKU 修订生效结束日；空表示长期。

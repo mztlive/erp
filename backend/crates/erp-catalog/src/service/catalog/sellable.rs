@@ -176,6 +176,7 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
     let page_size = params.page_size.unwrap_or(20);
     let eligibility_as_of = params.eligibility_as_of.unwrap_or_else(BusinessDate::today);
     Ok(SellableSkuFilter {
+        nationwide_only: false,
         keyword: normalized_text(params.q.as_deref()),
         product_kind: params.product_kind,
         category_id: normalized_text(params.category_id.as_deref()),

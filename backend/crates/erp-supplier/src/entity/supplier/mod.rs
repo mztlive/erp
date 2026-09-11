@@ -18,6 +18,7 @@ pub mod creation_plan;
 pub mod eligibility;
 pub mod payment_term;
 pub mod profile_change;
+pub mod qualification_health;
 pub mod supplier_account;
 pub mod supplier_capability;
 pub mod supplier_capability_revision;
@@ -47,6 +48,7 @@ pub use profile_change::{
     CapabilityToggle, NewQualificationParams, PlanCommercialProfileRevisionParams, PlannedQualificationInput,
     SupplierProfileChangePlan,
 };
+pub use qualification_health::QualificationHealth;
 pub use supplier_account::{
     SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierAccountUpdate,
     SupplierProfileUpdateViolation,

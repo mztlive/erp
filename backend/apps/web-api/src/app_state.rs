@@ -111,6 +111,80 @@ pub struct ApprovalOutboxWorker {
     join: JoinHandle<()>,
 }
 
+/// 销售选品服务装配句柄（域层 Service 就绪前的组合根占位）。
+///
+/// TODO(erp-sales-domain): `erp-sales` 选品 Service 落地后删除本句柄，
+/// `selection_service()` 直接返回域层 Service。
+#[derive(Clone)]
+pub struct SelectionServiceHandle {
+    /// 业务数据库。
+    db: Database,
+    /// 商品池供给查询端口（组合层装配的同一实现）。
+    catalog_supply_query: Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort>,
+    /// 受管对象存储客户端。
+    storage: Arc<S3Storage>,
+    /// 敏感数据编解码器（启动密钥派生，只驻留内存）。
+    sensitive_data: Arc<SensitiveDataCodec>,
+}
+
+impl SelectionServiceHandle {
+    /// 返回业务数据库。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回数据库实例的克隆。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn db(&self) -> Database {
+        self.db.clone()
+    }
+
+    /// 返回商品池供给查询端口。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回组合层装配的查询端口。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn catalog_supply_query(&self) -> Arc<dyn erp_catalog::ports::supply::CatalogSupplyQueryPort> {
+        Arc::clone(&self.catalog_supply_query)
+    }
+
+    /// 返回受管对象存储客户端。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回共享存储客户端引用。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn storage(&self) -> &S3Storage {
+        self.storage.as_ref()
+    }
+
+    /// 返回敏感数据编解码器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回进程内单例编解码器。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn sensitive_data(&self) -> Arc<SensitiveDataCodec> {
+        Arc::clone(&self.sensitive_data)
+    }
+}
+
 impl ApprovalOutboxWorker {
     /// 停止领取新租约并等待当前批次结束。
     ///
@@ -382,6 +456,30 @@ impl AppState {
     /// 返回敏感资料 Service 共享的进程内单例；启动密钥变化后必须先迁移既有密文。
     pub fn sensitive_data(&self) -> Arc<SensitiveDataCodec> {
         Arc::clone(&self.sensitive_data)
+    }
+
+    /// 返回销售选品服务装配句柄。
+    ///
+    /// 选品链接令牌只存哈希与经服务端密钥加密的密文，禁止明文落库；
+    /// 加密密钥由启动配置派生、只驻留内存，不得与令牌密文同库保存。
+    /// 公开限流器另经 `OnceLock` 常驻并由公开路由以 `Extension` 注入。
+    /// TODO(erp-sales-domain): 域层 Service 就绪后改返域层 Service。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回持有数据库、供给查询端口、存储与敏感编解码器的句柄。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn selection_service(&self) -> SelectionServiceHandle {
+        SelectionServiceHandle {
+            db: self.db.clone(),
+            catalog_supply_query: Arc::clone(&self.catalog_supply_query),
+            storage: Arc::clone(&self.storage),
+            sensitive_data: Arc::clone(&self.sensitive_data),
+        }
     }
 
     /// Party identity service with audit and supplier-role adapters.

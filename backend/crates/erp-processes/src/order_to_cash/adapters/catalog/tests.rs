@@ -65,6 +65,14 @@ impl CatalogSupplyQueryPort for RecordingQuery {
             })
             .collect())
     }
+    async fn find_sellable_skus_by_ids(
+        &self,
+        _: &[String],
+        _: BusinessDate,
+        _: &mut dyn Executor,
+    ) -> persistence_core::Result<Vec<SellableSkuRow>> {
+        panic!("sales qualification must use the exact-reference query")
+    }
 }
 
 #[tokio::test]

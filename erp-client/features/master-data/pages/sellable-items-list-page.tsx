@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { CircleHelpIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 import type { SortingState } from "@tanstack/react-table"
@@ -33,6 +34,7 @@ import { SellableItemsGallery } from "@/features/master-data/components/list/sel
 import { SellableListStatusActions } from "@/features/master-data/components/list/sellable-layout-toggle"
 import { SellablePreviewDialog } from "@/features/master-data/components/list/sellable-preview-dialog"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
+import { BookCreateDialog } from "@/features/sales-selection/components/book-create-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSellableExcelExport } from "@/features/master-data/hooks/use-sellable-excel-export"
 import { useSellableGallerySelection } from "@/features/master-data/hooks/use-sellable-gallery-selection"
@@ -49,6 +51,7 @@ const supplyViews = [
 ] as const
 
 export function SellableItemsListPage() {
+    const router = useRouter()
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSellableListState(searchInputRef)
@@ -85,6 +88,7 @@ export function SellableItemsListPage() {
         : exportPending || state.rows.length === 0
 
     const [exportConfirmOpen, setExportConfirmOpen] = React.useState(false)
+    const [selectionLaunchOpen, setSelectionLaunchOpen] = React.useState(false)
 
     const changeLayout = React.useCallback(
         (next: SellableListLayout) => {
@@ -232,22 +236,36 @@ export function SellableItemsListPage() {
                                 : "导出与当前查询结果一致"
                         }
                         statusActions={
-                            <SellableListStatusActions
-                                layout={layout}
-                                onLayoutChange={changeLayout}
-                                exportPending={exportPending}
-                                exportDisabled={exportDisabled}
-                                exportLabel={
-                                    exportPending
-                                        ? "导出中…"
-                                        : isGallery
-                                          ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
-                                          : "导出当前结果"
-                                }
-                                onExport={
-                                    isGallery ? onGalleryExport : state.onExport
-                                }
-                            />
+                            <div className="flex items-center">
+                                <Button
+                                    id="master-data-sellable-items-launch-selection"
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    className="h-auto rounded-none px-1 text-xs font-normal text-foreground shadow-none hover:bg-transparent"
+                                    onClick={() => setSelectionLaunchOpen(true)}
+                                >
+                                    发起选品
+                                </Button>
+                                <SellableListStatusActions
+                                    layout={layout}
+                                    onLayoutChange={changeLayout}
+                                    exportPending={exportPending}
+                                    exportDisabled={exportDisabled}
+                                    exportLabel={
+                                        exportPending
+                                            ? "导出中…"
+                                            : isGallery
+                                              ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
+                                              : "导出当前结果"
+                                    }
+                                    onExport={
+                                        isGallery
+                                            ? onGalleryExport
+                                            : state.onExport
+                                    }
+                                />
+                            </div>
                         }
                     />
                 }
@@ -387,6 +405,31 @@ export function SellableItemsListPage() {
                 onOpenChange={setExportConfirmOpen}
                 onRemove={(id) => selection.toggle(id, false)}
                 onConfirm={onConfirmGalleryExport}
+            />
+
+            <BookCreateDialog
+                open={selectionLaunchOpen}
+                onOpenChange={setSelectionLaunchOpen}
+                initialFilterQ={filters.q.trim()}
+                initialFilter={{
+                    max_supplier_count:
+                        filters.supplyPreset === "single-supplier"
+                            ? 1
+                            : undefined,
+                    nationwide_only: filters.supplyPreset === "nationwide",
+                    q: filters.q.trim() || undefined,
+                    product_kind: filters.productKind,
+                    category_id: filters.productCategoryId,
+                    brand_id: filters.productBrandId,
+                    supplier_id: filters.productSupplierId,
+                    supply_region: filters.supplyRegion,
+                    sales_price_min: filters.productSalesPriceMin,
+                    sales_price_max: filters.productSalesPriceMax,
+                }}
+                initialSkuIds={isGallery ? [...selection.selectedIds] : []}
+                onCreated={(bookId) =>
+                    router.push(`/sales/selection/${bookId}`)
+                }
             />
 
             {isGallery ? (

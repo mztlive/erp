@@ -5,9 +5,10 @@
 //! 金额/税率按 P0 约定序列化为字符串（`invoice_tax_rate` 为 `Rate` 定点小数）。
 
 use crate::entity::supplier::{
-    CapabilityCode, CapabilityStatus, InvoiceType, QualificationStatus, QualificationType,
-    ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountStatus, SupplierCapability,
-    SupplierCommercialProfileRevision, SupplierQualification, SupplierRating, SupplierRatingRevision,
+    CapabilityCode, CapabilityStatus, InvoiceType, QualificationHealth, QualificationStatus,
+    QualificationType, ReconciliationCycle, SettlementMode, SupplierAccount, SupplierAccountStatus,
+    SupplierCapability, SupplierCommercialProfileRevision, SupplierQualification, SupplierRating,
+    SupplierRatingRevision,
 };
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{FileAssetId, SupplierCapabilityId};
@@ -87,6 +88,15 @@ pub struct SupplierView {
     pub created_at: u64,
     /// 当前商务资料；列表由服务端批量投影填充。
     pub current_profile: Option<CommercialProfileView>,
+    /// 当前有效供应能力代码；未水合时为空。
+    #[serde(default)]
+    pub capability_codes: Vec<CapabilityCode>,
+    /// 列表折叠后的资质健康状态；未水合时为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qualification_health: Option<SupplierQualificationHealth>,
+    /// 已登记资质类型；未水合时为空。
+    #[serde(default)]
+    pub qualification_types: Vec<QualificationType>,
 }
 
 impl From<SupplierAccount> for SupplierView {
@@ -108,6 +118,9 @@ impl From<SupplierAccount> for SupplierView {
             version: account.base.version,
             created_at: account.base.created_at,
             current_profile: None,
+            capability_codes: Vec::new(),
+            qualification_health: None,
+            qualification_types: Vec::new(),
         }
     }
 }
@@ -262,6 +275,25 @@ pub enum SupplierQualificationHealth {
     NotRegistered,
 }
 
+impl From<QualificationHealth> for SupplierQualificationHealth {
+    /// 将实体折叠结果映射为列表响应枚举。
+    ///
+    /// # 参数
+    /// * `health` - 实体层资质健康状态
+    ///
+    /// # 返回
+    /// 返回同名的 HTTP 契约枚举值。
+    fn from(health: QualificationHealth) -> Self {
+        match health {
+            QualificationHealth::Unverified => Self::Unverified,
+            QualificationHealth::Valid => Self::Valid,
+            QualificationHealth::Expiring30 => Self::Expiring30,
+            QualificationHealth::Expired => Self::Expired,
+            QualificationHealth::NotRegistered => Self::NotRegistered,
+        }
+    }
+}
+
 /// 归一化逗号分隔的供应能力代码。
 fn normalize_capability_codes(value: Option<&str>) -> Result<Vec<CapabilityCode>> {
     normalize_code_list(value, "供应能力", |code| match code {
@@ -307,9 +339,8 @@ fn normalize_code_list<T: Copy + Eq>(
 
 /// 商务结算版本响应视图（契约形状对齐投影行）。
 ///
-/// `invoice_tax_rate`/`signing_entity_party_id`/`payment_entity_party_id` 不在
-/// 仓储投影列中（列表接口返回 `None`），仅详情（实体构造）填充；差异列入
-/// P3 报告「契约变更」。
+/// 列表与详情均由当前商务资料实体映射；签约/付款主体名称由 Service 按主体
+/// ID 批量回填，缺失当前名称时保持 `None`。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CommercialProfileView {
     /// 实体主键。

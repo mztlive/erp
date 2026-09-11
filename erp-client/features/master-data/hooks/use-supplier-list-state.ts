@@ -20,7 +20,6 @@ import {
     SUPPLIER_QUALIFICATION_TYPE_OPTIONS,
 } from "@/features/master-data/lib/list-filters"
 import { resourceLabel } from "@/features/master-data/lib/data"
-import type { MasterDataListItem } from "@/features/master-data/types"
 
 export type SupplierAppliedChip = Readonly<{
     key: SupplierFilterKey
@@ -42,8 +41,6 @@ export function useSupplierListState(
         supplierQualificationHealth: filters.supplierQualificationHealth,
     })
     const { exportMeta, handleExport } = useMasterDataListExport()
-    const [disableTarget, setDisableTarget] =
-        React.useState<MasterDataListItem | null>(null)
 
     const rows = React.useMemo(
         () => listQuery.data?.rows ?? [],
@@ -161,8 +158,6 @@ export function useSupplierListState(
         exportMeta,
         canCreate,
         createBlockedReason,
-        disableTarget,
-        setDisableTarget,
         rows,
         pageRows,
         appliedChips,

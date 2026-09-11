@@ -15,7 +15,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Sales order and revision errors.
+/// Sales order, revision and selection errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -32,6 +32,21 @@ pub enum Error {
 
     #[error("数据冲突: {0}")]
     ConflictError(String),
+
+    #[error("选品冲突: {0}")]
+    SelectionConflict(String),
+
+    #[error("选品已结束: {0}")]
+    SelectionEnded(String),
+
+    #[error("选品超限: {0}")]
+    SelectionLimitExceeded(String),
+
+    #[error("选品准备失败: {0}")]
+    SelectionPrepareFailed(String),
+
+    #[error("选品提交结果待核对: {0}")]
+    SelectionPendingCheck(String),
 
     #[error("数据冲突: 数据已存在，请勿重复提交")]
     ReceiptDuplicate(#[source] persistence_core::Error),
@@ -60,15 +75,74 @@ impl Error {
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
-            Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
-                ErrorClass::Conflict
-            }
-            Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
-                ErrorClass::BusinessRule
-            }
+            Self::ConflictError(_)
+            | Self::ReceiptDuplicate(_)
+            | Self::TransientTransaction(_)
+            | Self::SelectionConflict(_) => ErrorClass::Conflict,
+            Self::BusinessLogicError(_)
+            | Self::ValidationError(_)
+            | Self::NotFound(_)
+            | Self::SelectionEnded(_)
+            | Self::SelectionLimitExceeded(_)
+            | Self::SelectionPrepareFailed(_) => ErrorClass::BusinessRule,
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
-            Self::OutcomeUnknown(_) => ErrorClass::Internal,
+            Self::OutcomeUnknown(_) | Self::SelectionPendingCheck(_) => ErrorClass::Internal,
         }
+    }
+
+    /// 选品版本冲突。
+    ///
+    /// # 参数
+    /// * `message` - 冲突说明
+    ///
+    /// # 返回
+    /// 返回选品冲突错误。
+    pub fn selection_conflict(message: impl Into<String>) -> Self {
+        Self::SelectionConflict(message.into())
+    }
+
+    /// 选品结束态。
+    ///
+    /// # 参数
+    /// * `message` - 结束说明
+    ///
+    /// # 返回
+    /// 返回选品结束错误。
+    pub fn selection_ended(message: impl Into<String>) -> Self {
+        Self::SelectionEnded(message.into())
+    }
+
+    /// 选品超限。
+    ///
+    /// # 参数
+    /// * `message` - 超限说明
+    ///
+    /// # 返回
+    /// 返回选品超限错误。
+    pub fn selection_limit(message: impl Into<String>) -> Self {
+        Self::SelectionLimitExceeded(message.into())
+    }
+
+    /// 选品准备失败。
+    ///
+    /// # 参数
+    /// * `message` - 失败说明
+    ///
+    /// # 返回
+    /// 返回准备失败错误。
+    pub fn selection_prepare_failed(message: impl Into<String>) -> Self {
+        Self::SelectionPrepareFailed(message.into())
+    }
+
+    /// 选品提交结果待核对。
+    ///
+    /// # 参数
+    /// * `message` - 待核对说明
+    ///
+    /// # 返回
+    /// 返回待核对错误。
+    pub fn selection_pending(message: impl Into<String>) -> Self {
+        Self::SelectionPendingCheck(message.into())
     }
 }
 
@@ -102,8 +176,15 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 /// 将销售域唯一索引名称映射为面向用户的冲突提示。
 ///
 /// 销售订单、工作副本与变更唯一索引均保持原通用冲突文案。
-fn duplicate_index_conflict_message(_index_name: Option<&str>) -> String {
-    "数据已存在，请勿重复提交".to_string()
+/// 选品唯一索引映射为明确的选品冲突语义，不得用通用操作失败覆盖。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
+        Some("uk_sales_selection_proposals_book") => "一本选品册只能关联一份销售方案".to_string(),
+        Some("uk_sales_selection_proposals_no") => "销售方案编号已存在".to_string(),
+        Some("uk_sales_selection_idempotency_key") => "相同幂等键的请求载荷不一致".to_string(),
+        Some("uk_sales_selection_display_book_combo") => "同一组合已存在，不得重复陈列".to_string(),
+        _ => "数据已存在，请勿重复提交".to_string(),
+    }
 }
 
 impl From<validator::ValidationErrors> for Error {
@@ -146,5 +227,29 @@ mod tests {
         let error = Error::from(persistence_core::Error::OptimisticLockingError);
         assert_eq!(error.class(), ErrorClass::Conflict);
         assert_eq!(error.to_string(), "数据冲突: 数据已被其他请求修改，请刷新后重试");
+    }
+
+    #[test]
+    fn selection_errors_keep_distinct_classes() {
+        assert_eq!(Error::selection_conflict("c").class(), ErrorClass::Conflict);
+        assert_eq!(Error::selection_ended("e").class(), ErrorClass::BusinessRule);
+        assert_eq!(Error::selection_limit("l").class(), ErrorClass::BusinessRule);
+        assert_eq!(
+            Error::selection_prepare_failed("f").class(),
+            ErrorClass::BusinessRule
+        );
+        assert_eq!(Error::selection_pending("p").class(), ErrorClass::Internal);
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_sales_selection_proposals_book")),
+            "一本选品册只能关联一份销售方案"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_sales_selection_proposals_no")),
+            "销售方案编号已存在"
+        );
+        assert_eq!(
+            super::duplicate_index_conflict_message(Some("uk_sales_selection_idempotency_key")),
+            "相同幂等键的请求载荷不一致"
+        );
     }
 }

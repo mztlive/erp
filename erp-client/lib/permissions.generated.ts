@@ -2154,6 +2154,362 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "销售选品",
+        description: "选品册与销售方案",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books/{id}/images",
+                description: "查询选品册详情",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-proposals",
+                description: "查询销售方案列表",
+                permission: {
+                    resource: "sales_selection_proposal",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-proposals/{id}",
+                description: "查询销售方案详情",
+                permission: {
+                    resource: "sales_selection_proposal",
+                    action: "get",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books",
+                description: "查询选品册列表",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books",
+                description: "创建选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-booklets",
+                description: "查询选品册列表",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets",
+                description: "创建选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books/{id}",
+                description: "查询选品册详情",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/prepare",
+                description: "准备及重生成选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "prepare",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/sales-selection-books/{id}/display-items/{item_id}",
+                description: "维护选品册陈列",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/display-items/{item_id}/delete",
+                description: "维护选品册陈列",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/publish",
+                description: "发布选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "publish",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books/{id}/link",
+                description: "复制选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "copy_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/copy-link",
+                description: "复制选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "copy_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/replace-link",
+                description: "更换选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "rotate_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/rotate-link",
+                description: "更换选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "rotate_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/close",
+                description: "关闭或撤销选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "close",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/revoke-link",
+                description: "关闭或撤销选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/revoke",
+                description: "关闭或撤销选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/void",
+                description: "发布前作废选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "void",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books/{id}/session",
+                description: "查询选品册详情",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-booklets/{id}",
+                description: "查询选品册详情",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/prepare",
+                description: "准备及重生成选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "prepare",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/sales-selection-booklets/{id}/display-items/{item_id}",
+                description: "维护选品册陈列",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/display-items/{item_id}/delete",
+                description: "维护选品册陈列",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/publish",
+                description: "发布选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "publish",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-booklets/{id}/link",
+                description: "复制选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "copy_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/copy-link",
+                description: "复制选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "copy_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/replace-link",
+                description: "更换选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "rotate_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/rotate-link",
+                description: "更换选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "rotate_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/close",
+                description: "关闭或撤销选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "close",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/revoke-link",
+                description: "关闭或撤销选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/revoke",
+                description: "关闭或撤销选品链接",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/void",
+                description: "发布前作废选品册",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "void",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-booklets/{id}/session",
+                description: "查询选品册详情",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
+        ],
+    },
+    {
         name: "采购单",
         description: "采购单、采购提交与采购变更管理",
         permissions: [

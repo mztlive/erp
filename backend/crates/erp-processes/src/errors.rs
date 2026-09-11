@@ -97,13 +97,39 @@ from_domain!(erp_warehouse);
 from_domain!(erp_contract);
 from_domain!(erp_inventory);
 from_domain!(erp_finance);
-from_domain!(erp_sales);
 from_domain!(erp_integration);
 from_domain!(erp_supply);
 from_domain!(erp_returns);
 from_domain!(erp_fulfillment);
 from_domain!(erp_procurement);
 from_domain!(erp_import);
+
+impl From<erp_sales::Error> for Error {
+    /// 将销售领域错误映射为流程边界错误。
+    ///
+    /// 选品专用变体落到已有冲突/业务/内部分类。
+    fn from(error: erp_sales::Error) -> Self {
+        match error {
+            erp_sales::Error::Internal(payload) => Self::Internal(payload),
+            erp_sales::Error::NotFound(payload) => Self::NotFound(payload),
+            erp_sales::Error::ValidationError(payload) => Self::ValidationError(payload),
+            erp_sales::Error::BusinessLogicError(payload) => Self::BusinessLogicError(payload),
+            erp_sales::Error::ConflictError(payload) => Self::ConflictError(payload),
+            erp_sales::Error::SelectionConflict(payload) => Self::ConflictError(payload),
+            erp_sales::Error::SelectionEnded(payload) => Self::BusinessLogicError(payload),
+            erp_sales::Error::SelectionLimitExceeded(payload) => Self::BusinessLogicError(payload),
+            erp_sales::Error::SelectionPrepareFailed(payload) => Self::BusinessLogicError(payload),
+            erp_sales::Error::SelectionPendingCheck(payload) => Self::Internal(payload),
+            erp_sales::Error::ReceiptDuplicate(payload) => Self::ReceiptDuplicate(payload),
+            erp_sales::Error::TransientTransaction(payload) => Self::TransientTransaction(payload),
+            erp_sales::Error::Forbidden(payload) => Self::Forbidden(payload),
+            erp_sales::Error::Unauthenticated(payload) => Self::Unauthenticated(payload),
+            erp_sales::Error::Logic(payload) => Self::Logic(payload),
+            erp_sales::Error::OutcomeUnknown(payload) => Self::OutcomeUnknown(payload),
+            erp_sales::Error::RepositoryError(payload) => Self::RepositoryError(payload),
+        }
+    }
+}
 
 impl From<persistence_core::Error> for Error {
     /// 保留持久化分类和原错误；仅归档索引交 HTTP 的兼容分支最终形成文案。

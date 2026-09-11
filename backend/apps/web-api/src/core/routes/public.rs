@@ -20,10 +20,13 @@ const MAX_LOGIN_REQUEST_BYTES: usize = 4 * 1024;
 /// # 返回
 /// 返回 `Router<AppState>` 结果。
 pub fn routes(app_state: AppState) -> Router<AppState> {
-    Router::new()
+    let login = Router::new()
         .route("/login", post(auth::login::login))
         .layer(Extension(login_limiter()))
-        .layer(login_body_limit())
+        .layer(login_body_limit());
+    Router::new()
+        .merge(login)
+        .merge(super::sales_selection::public_routes())
         .with_state(app_state)
 }
 

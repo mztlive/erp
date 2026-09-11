@@ -4,8 +4,9 @@ pub mod extensions;
 pub mod owned;
 pub mod sales_order;
 pub mod sales_review;
+pub mod sales_selection;
 
-pub use extensions::{SalesOrderExt, SalesReviewExt};
+pub use extensions::{SalesOrderExt, SalesReviewExt, SalesSelectionExt};
 
 #[cfg(test)]
 mod serialization_contract;

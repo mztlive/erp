@@ -1,5 +1,8 @@
 import type { Page } from "@/lib/api/paging"
-import type { ProductKind } from "@/features/master-data/types"
+import type {
+    ProductKind,
+    SupplierQualificationHealth,
+} from "@/features/master-data/api/types-core"
 
 export type EnableStatus = "active" | "disabled"
 
@@ -217,6 +220,9 @@ export type SupplierDto = {
     version: number
     created_at: number
     current_profile: CommercialProfileDto | null
+    capability_codes?: string[]
+    qualification_health?: SupplierQualificationHealth | null
+    qualification_types?: string[]
 }
 
 export type CommercialProfileDto = {

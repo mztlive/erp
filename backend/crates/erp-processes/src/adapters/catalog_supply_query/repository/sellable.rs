@@ -97,6 +97,34 @@ impl CatalogSupplyRepository<'_> {
         Ok(self.aggregate_sellable_skus(pipeline, executor).await?.items)
     }
 
+    /// 按稳定 SKU 身份取出当前可售修订。
+    ///
+    /// # 参数
+    /// * `sku_ids` - 稳定 SKU 身份
+    /// * `eligibility_as_of` - 资格业务日期
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回仍具备资格的行；缺失项不出现在结果中。
+    ///
+    /// # 错误
+    /// 聚合失败。
+    pub async fn find_sellable_skus_by_ids(
+        &self,
+        sku_ids: &[String],
+        eligibility_as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SellableSkuRow>> {
+        if sku_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut match_doc = sellable_sku_match(None, None, &[]);
+        match_doc.insert("id", doc! { "$in": sku_ids });
+        let filter = SellableSkuFilter::as_of(eligibility_as_of);
+        let pipeline = sellable_sku_pipeline(match_doc, &filter, None);
+        Ok(self.aggregate_sellable_skus(pipeline, executor).await?.items)
+    }
+
     /// 执行公司商品池类型化聚合并收集唯一的 facet 结果。
     async fn aggregate_sellable_skus(
         &self,
@@ -230,6 +258,9 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
     {
         pipeline.push(doc! { "$match": { "supply_regions": region } });
     }
+    if filter.nationwide_only {
+        pipeline.push(doc! { "$match": { "supply_regions": "全国" } });
+    }
     if let Some(max_supplier_count) = filter.max_supplier_count {
         pipeline.push(doc! {
             "$match": {
@@ -328,6 +359,7 @@ fn sellable_sku_pipeline(
             "sales_visible_price_gross": "$sku_revision.sales_visible_price_gross",
             "market_price": "$sku_revision.market_price",
             "main_image_asset_id": "$sku_revision.source_main_image_asset_id",
+            "category_id": "$product_revision.category_id",
             "effective_from": "$sku_revision.effective_from",
             "effective_to": "$sku_revision.effective_to",
             "supplier_count": { "$size": "$supplier_ids" },
@@ -502,6 +534,7 @@ mod tests {
     fn sellable_sku_pipeline_is_fail_closed_and_cost_safe() {
         let date = BusinessDate::from_ymd(2026, 8, 8).unwrap();
         let filter = SellableSkuFilter {
+            nationwide_only: false,
             keyword: Some("礼盒".to_string()),
             product_kind: Some(ProductKind::Physical),
             category_id: Some("cat-1".to_string()),

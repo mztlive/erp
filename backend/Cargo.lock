@@ -1928,6 +1928,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "storage",
  "test-support",
  "thiserror 2.0.20",
  "tokio",
@@ -2034,8 +2035,10 @@ dependencies = [
 name = "erp-sales"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "application-core",
  "async-trait",
+ "base64 0.23.1",
  "bson",
  "chrono",
  "entity-core",
@@ -2053,6 +2056,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "uuid",
  "validator",
 ]
 

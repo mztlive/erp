@@ -227,7 +227,14 @@ impl CustomerService {
     }
 
     /// 按服务端数据范围解析允许返回的客户 ID。
-    async fn customer_ids_for_scope(
+    ///
+    /// # 参数
+    /// `scope` 必须由入口授权，`actor_user_id` 为当前登录用户。
+    /// # 返回
+    /// 全量权限返回 None；受限范围返回当前有效归属集合（可为空）。
+    /// # 错误
+    /// 查询失败时返回仓储错误。
+    pub async fn customer_ids_for_scope(
         &self,
         scope: CustomerScope,
         actor_user_id: &str,

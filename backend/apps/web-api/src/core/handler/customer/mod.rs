@@ -510,7 +510,7 @@ async fn allowed_actions(
 }
 
 /// 判断当前 RBAC 主体是否覆盖给定权限。
-async fn has_permission(
+pub(crate) async fn has_permission(
     state: &AppState,
     subject: &RbacSubject,
     permission: &str,

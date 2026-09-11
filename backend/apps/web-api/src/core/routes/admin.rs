@@ -13,9 +13,9 @@ use crate::{
         routes::{
             access_control, approval_instance, bulk_job, catalog, contract, cost, customer,
             document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import, party,
-            payable, purchase_order, receivable, returns, sales_order, sales_review, source_registry,
-            supplier, supplier_api, supplier_fulfillment, supplier_offering, supplier_settlement, warehouse,
-            work_item,
+            payable, purchase_order, receivable, returns, sales_order, sales_review, sales_selection,
+            source_registry, supplier, supplier_api, supplier_fulfillment, supplier_offering,
+            supplier_settlement, warehouse, work_item,
         },
     },
 };
@@ -52,6 +52,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(returns::routes(&rbac_service))
         .merge(sales_order::routes(&rbac_service))
         .merge(sales_review::routes(&rbac_service))
+        .merge(sales_selection::routes(&rbac_service))
         .merge(source_registry::routes(&rbac_service))
         .merge(supplier::routes(&rbac_service))
         .merge(supplier_api::routes(&rbac_service))

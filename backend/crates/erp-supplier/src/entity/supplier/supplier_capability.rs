@@ -291,6 +291,47 @@ impl SupplierCapability {
         self.stable.status().is_active()
     }
 
+    /// 判断能力在指定业务日是否可用于列表展示。
+    ///
+    /// 须同时满足启用、已到生效日、且尚未到期；与列表按能力筛选的日期口径一致。
+    ///
+    /// # 参数
+    /// * `as_of` - 判定所用业务日
+    ///
+    /// # 返回
+    /// 当前可用于新业务时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn is_effective_on(&self, as_of: BusinessDate) -> bool {
+        self.is_active() && self.valid_from <= as_of && self.valid_to.is_none_or(|end| as_of <= end)
+    }
+
+    /// 返回当前有效能力代码的去重稳定序列。
+    ///
+    /// # 参数
+    /// * `capabilities` - 同一供应商或当前页的能力集合
+    /// * `as_of` - 判定所用业务日
+    ///
+    /// # 返回
+    /// 按稳定代码排序、去重后的有效能力代码。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn list_codes<'a, I>(capabilities: I, as_of: BusinessDate) -> Vec<CapabilityCode>
+    where
+        I: IntoIterator<Item = &'a Self>,
+    {
+        let mut codes: Vec<CapabilityCode> = capabilities
+            .into_iter()
+            .filter(|capability| capability.is_effective_on(as_of))
+            .map(|capability| capability.capability_code)
+            .collect();
+        codes.sort_by_key(CapabilityCode::as_str);
+        codes.dedup();
+        codes
+    }
+
     /// 应用服务区域更新。
     ///
     /// # 参数
@@ -465,6 +506,17 @@ mod tests {
         assert_eq!(capability.fulfillment_note.as_deref(), Some("常规履约"));
         assert_eq!(capability.capability_code, CapabilityCode::Physical);
         assert!(capability.is_active());
+        assert!(capability.is_effective_on(BusinessDate::from_ymd(2026, 6, 1).unwrap()));
+        assert!(!capability.is_effective_on(BusinessDate::from_ymd(2025, 12, 31).unwrap()));
+        assert!(!capability.is_effective_on(BusinessDate::from_ymd(2027, 1, 1).unwrap()));
+        assert_eq!(
+            SupplierCapability::list_codes([&capability], BusinessDate::from_ymd(2026, 6, 1).unwrap()),
+            vec![CapabilityCode::Physical]
+        );
+        assert!(
+            SupplierCapability::list_codes([&capability], BusinessDate::from_ymd(2027, 1, 1).unwrap())
+                .is_empty()
+        );
     }
 
     /// 失败路径：负责人为空/超长、区域超长、区间倒挂。
@@ -510,6 +562,7 @@ mod tests {
             )
             .unwrap();
         assert!(!capability.is_active());
+        assert!(!capability.is_effective_on(BusinessDate::from_ymd(2026, 3, 1).unwrap()));
         assert_eq!(capability.service_region, None);
         assert_eq!(capability.owner_user_id, "buyer-2");
         assert_eq!(

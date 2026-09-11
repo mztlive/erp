@@ -4,14 +4,14 @@ use std::collections::HashSet;
 use crate::entity::supplier::{CapabilityCode, QualificationType, SupplierQualification};
 use erp_core::ids::{PartyId, SupplierAccountId};
 
-use super::super::account::SupplierAccountFilter;
+use super::super::account::{SupplierAccountFilter, SupplierAccountRow};
 use super::super::{SupplierRepository, SUPPLIER_ACCOUNTS};
 use super::{
     QualificationConstraintKind, SupplierListBundle, SupplierListSearchInput,
     SupplierQualificationHealthFilter,
 };
 use persistence_core::Executor;
-use persistence_core::{Error, Result};
+use persistence_core::{Error, PageResult, Result};
 
 /// 判定资质筛选约束的纯分支种类。
 ///
@@ -148,19 +148,54 @@ impl<'a> SupplierRepository<'a> {
         let page = SupplierAccountRepository::new(self.db, SUPPLIER_ACCOUNTS)
             .search_supplier_accounts(&filter, executor)
             .await?;
+        self.hydrate_supplier_list_page(page, executor).await
+    }
+
+    /// 为当前页批量装载列表展示所需的商务资料、能力与资质。
+    ///
+    /// # 参数
+    /// * `page` - 已完成筛选与分页的供应商投影页
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回带当前页水合事实的列表事实束。
+    ///
+    /// # 错误
+    /// 任一批量查询失败时返回错误。
+    ///
+    /// # 约束
+    /// 查询次数固定为商务资料、能力、资质各一次，不随页内关联行数增加往返。
+    async fn hydrate_supplier_list_page(
+        &self,
+        page: PageResult<SupplierAccountRow>,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierListBundle> {
         let party_ids: Vec<PartyId> = page.items.iter().map(|row| PartyId::new(&row.party_id)).collect();
         let profile_ids: Vec<String> = page
             .items
             .iter()
             .filter_map(|row| row.current_commercial_profile_revision_id.clone())
             .collect();
+        let supplier_ids: Vec<SupplierAccountId> = page
+            .items
+            .iter()
+            .map(|row| SupplierAccountId::new(&row.id))
+            .collect();
         let profiles = self
             .list_commercial_profiles_by_ids(&profile_ids, executor)
+            .await?;
+        let capabilities = self
+            .list_capabilities_by_supplier_ids(&supplier_ids, executor)
+            .await?;
+        let qualifications = self
+            .list_qualifications_by_supplier_ids(&supplier_ids, executor)
             .await?;
         Ok(SupplierListBundle {
             page,
             party_ids,
             profiles,
+            capabilities,
+            qualifications,
         })
     }
 

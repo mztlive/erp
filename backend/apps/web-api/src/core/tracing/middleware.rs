@@ -39,7 +39,7 @@ pub(crate) async fn trace_middleware(mut request: Request, next: Next) -> Result
 
     let method = request.method().clone();
     let uri = request.uri().clone();
-    let path = uri.path().to_string();
+    let path = redacted_path(uri.path());
     let matched_route = request
         .extensions()
         .get::<MatchedPath>()
@@ -243,5 +243,30 @@ mod tests {
             response.headers().get(TRACE_ID_HEADER).unwrap(),
             "client-trace-id"
         );
+    }
+}
+
+/// 在所有日志字段生成前移除公开选品凭证，包含未匹配到路由的路径。
+fn redacted_path(path: &str) -> String {
+    for prefix in ["/public/selection/", "/public/sales-selections/"] {
+        if let Some(rest) = path.strip_prefix(prefix) {
+            let suffix = rest.find('/').map(|index| &rest[index..]).unwrap_or("");
+            return format!("{prefix}[REDACTED]{suffix}");
+        }
+    }
+    path.to_string()
+}
+
+#[cfg(test)]
+mod selection_path_tests {
+    #[test]
+    fn tokens_are_removed_for_both_prefixes_and_unknown_routes() {
+        for prefix in ["/public/selection/", "/public/sales-selections/"] {
+            for suffix in ["", "/session", "/submit", "/images/file", "/unknown"] {
+                let path = super::redacted_path(&format!("{prefix}secret{suffix}"));
+                assert_eq!(path, format!("{prefix}[REDACTED]{suffix}"));
+            }
+        }
+        assert_eq!(super::redacted_path("/admin/customers"), "/admin/customers");
     }
 }

@@ -1,4 +1,4 @@
-//! 34 个域的 ID newtype（P0-1.1 共享基元任务，P0 冻结后禁止在域内自定义 ID 类型）。
+//! 35 个域的 ID newtype（P0-1.1 共享基元任务，P0 冻结后禁止在域内自定义 ID 类型）。
 //!
 //! 生成规则：稳定主表 → `<Entity>Id`；修订表 → `<Entity>RevisionId`；
 //! 行表 → `<Entity>LineId`。实体名 = 表名 PascalCase（`source_system` → `SourceSystemId`，
@@ -180,6 +180,17 @@
 //! - `integration_error_task` → `IntegrationErrorTaskId`
 //! - `reconciliation_difference` → `ReconciliationDifferenceId`
 //! - `reconciliation_difference_resolution` → `ReconciliationDifferenceResolutionId`
+//!
+//! D35 `sales_selection`：
+//! - `sales_selection_booklet` → `SalesSelectionBookletId`
+//! - `sales_selection_display_item` → `SalesSelectionDisplayItemId`
+//! - `sales_selection_pool_member` → `SalesSelectionPoolMemberId`
+//! - `sales_selection_prepare_task` → `SalesSelectionPrepareTaskId`
+//! - `sales_selection_session` → `SalesSelectionSessionId`
+//! - `sales_selection_proposal` → `SalesSelectionProposalId`
+//! - `sales_selection_proposal_display_line` → `SalesSelectionProposalDisplayLineId`
+//! - `sales_selection_proposal_sku_line` → `SalesSelectionProposalSkuLineId`
+//! - `sales_selection_idempotency` → `SalesSelectionIdempotencyId`
 
 use entity_macros::id_type;
 
@@ -379,6 +390,17 @@ id_type!(InboxMessageId);
 id_type!(IntegrationErrorTaskId);
 id_type!(ReconciliationDifferenceId);
 id_type!(ReconciliationDifferenceResolutionId);
+
+// D35 sales_selection
+id_type!(SalesSelectionBookletId);
+id_type!(SalesSelectionDisplayItemId);
+id_type!(SalesSelectionPoolMemberId);
+id_type!(SalesSelectionPrepareTaskId);
+id_type!(SalesSelectionSessionId);
+id_type!(SalesSelectionProposalId);
+id_type!(SalesSelectionProposalDisplayLineId);
+id_type!(SalesSelectionProposalSkuLineId);
+id_type!(SalesSelectionIdempotencyId);
 
 #[cfg(test)]
 mod tests {

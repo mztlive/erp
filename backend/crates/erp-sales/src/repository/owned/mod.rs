@@ -27,3 +27,4 @@ pub use sales_order_submission_line::SalesOrderSubmissionLineRepository;
 pub use sales_order_voucher_line_revision::SalesOrderVoucherLineRevisionRepository;
 pub use sales_order_working_copy::SalesOrderWorkingCopyRepository;
 pub use sales_order_working_copy_line::SalesOrderWorkingCopyLineRepository;
+pub mod sales_selection;

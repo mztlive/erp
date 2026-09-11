@@ -49,6 +49,7 @@ mod receivable;
 mod returns;
 mod sales_order;
 mod sales_review;
+mod sales_selection;
 mod source_registry;
 mod supplier;
 mod supplier_api;

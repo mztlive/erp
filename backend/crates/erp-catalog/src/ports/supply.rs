@@ -26,4 +26,11 @@ pub trait CatalogSupplyQueryPort: Send + Sync {
         date: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<SellableSkuRow>>;
+    /// 按稳定 SKU 身份取出当前可售修订。
+    async fn find_sellable_skus_by_ids(
+        &self,
+        sku_ids: &[String],
+        date: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SellableSkuRow>>;
 }

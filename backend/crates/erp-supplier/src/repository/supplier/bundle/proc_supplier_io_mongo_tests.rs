@@ -754,6 +754,7 @@ async fn supplier_bundles_see_same_session_writes() {
                         )
                         .await?;
                     assert_eq!(bundle.page.total, 1, "事务内应能 read-your-writes");
+                    assert_eq!(bundle.capabilities.len(), 1, "列表事实束应带回当前页能力");
                     let detail = db
                         .supplier()
                         .load_supplier_detail_bundle(&SupplierAccountId::new("sup-txn"), session)

@@ -381,6 +381,31 @@ impl<'a> SupplierRepository<'a> {
             .await
     }
 
+    /// 按当前页供应商角色 ID 批量读取资质。
+    ///
+    /// # 参数
+    /// * `supplier_ids` - 当前页供应商角色 ID；空集合时不访问数据库
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回这些供应商的全部未删除资质，不按页大小之外的供应商扩展。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_qualifications_by_supplier_ids(
+        &self,
+        supplier_ids: &[SupplierAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualification>> {
+        if supplier_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = supplier_ids.iter().map(ToString::to_string).collect();
+        SupplierQualificationRepository::new(self.db, SUPPLIER_QUALIFICATIONS)
+            .find_many(doc! { "supplier_id": { "$in": ids } }, executor)
+            .await
+    }
+
     /// 按创建时间倒序读取供应商全部资质。
     ///
     /// # 参数

@@ -266,6 +266,11 @@ impl From<erp_sales::Error> for Error {
     /// 将销售领域错误映射为 HTTP 边界错误。
     fn from(err: erp_sales::Error) -> Self {
         boundary_error!(err, erp_sales;
+            erp_sales::Error::SelectionConflict(msg) => Self::Conflict(msg),
+            erp_sales::Error::SelectionEnded(msg) => Self::Unprocessable(msg),
+            erp_sales::Error::SelectionLimitExceeded(msg) => Self::Unprocessable(msg),
+            erp_sales::Error::SelectionPrepareFailed(msg) => Self::Unprocessable(msg),
+            erp_sales::Error::SelectionPendingCheck(msg) => Self::Internal(msg),
         )
     }
 }

@@ -133,6 +133,19 @@ const SALES_PERMISSIONS: &[&str] = &[
     "sales_change_order:delete",
     "customer_acceptance:*",
     "sellable_sku:list",
+    "sales_selection_booklet:list",
+    "sales_selection_booklet:get",
+    "sales_selection_booklet:create",
+    "sales_selection_booklet:maintain",
+    "sales_selection_booklet:prepare",
+    "sales_selection_booklet:publish",
+    "sales_selection_booklet:copy_link",
+    "sales_selection_booklet:rotate_link",
+    "sales_selection_booklet:close",
+    "sales_selection_booklet:revoke",
+    "sales_selection_booklet:void",
+    "sales_selection_proposal:list",
+    "sales_selection_proposal:get",
     "receivable_account:list",
     "receivable_account:detail",
     "customer_receipt:list",
@@ -768,7 +781,25 @@ async fn upgrade_sales_role_permissions(rbac: &SharedRbacService) -> Result<()> 
 
 /// 构造销售角色已知历史默认权限快照，管理员自定义权限不在匹配范围内。
 fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
-    let mut before_sellable_pool = remove_permissions(desired, &["sellable_sku:list"]);
+    let before_selection = remove_permissions(
+        desired,
+        &[
+            "sales_selection_booklet:list",
+            "sales_selection_booklet:get",
+            "sales_selection_booklet:create",
+            "sales_selection_booklet:maintain",
+            "sales_selection_booklet:prepare",
+            "sales_selection_booklet:publish",
+            "sales_selection_booklet:copy_link",
+            "sales_selection_booklet:rotate_link",
+            "sales_selection_booklet:close",
+            "sales_selection_booklet:revoke",
+            "sales_selection_booklet:void",
+            "sales_selection_proposal:list",
+            "sales_selection_proposal:get",
+        ],
+    );
+    let mut before_sellable_pool = remove_permissions(&before_selection, &["sellable_sku:list"]);
     for permission in [
         "product:list",
         "product_revision:list",
@@ -793,7 +824,11 @@ fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<P
     );
     before_customer_boundary.push(Permission::parse("customer:*")?);
     before_customer_boundary.push(Permission::parse("party_bank_account:*")?);
-    Ok(vec![before_sellable_pool, before_customer_boundary])
+    Ok(vec![
+        before_selection,
+        before_sellable_pool,
+        before_customer_boundary,
+    ])
 }
 
 /// 仅为仍保持历史默认种子的财务角色补齐往来主体只读权限。
@@ -1557,18 +1592,27 @@ mod tests {
     fn sales_legacy_snapshots_cover_catalog_and_customer_boundary_seeds() {
         let desired = parse_permissions(SALES_PERMISSIONS).unwrap();
         let snapshots = sales_legacy_permission_snapshots(&desired).unwrap();
-        assert_eq!(snapshots[0].len(), desired.len() + 6);
-        assert_eq!(snapshots[1].len(), desired.len() + 3);
-        assert!(snapshots[0]
-            .iter()
-            .any(|permission| permission.to_string() == "sku:list"));
+        // 快照[0]为选品上线前：desired 去掉 13 个选品权限。
+        assert_eq!(snapshots[0].len(), desired.len() - 13);
+        // 快照[1]为可售池上线前：[0] 去掉 sellable_sku:list 并补 7 个商品只读权限。
+        assert_eq!(snapshots[1].len(), desired.len() - 7);
+        // 快照[2]为客户边界收紧前：[1] 去掉 5 个客户细分权限并补 customer:* 与 party_bank_account:*。
+        assert_eq!(snapshots[2].len(), desired.len() - 10);
         assert!(snapshots[1]
             .iter()
+            .any(|permission| permission.to_string() == "sku:list"));
+        assert!(snapshots[2]
+            .iter()
             .any(|permission| permission.to_string() == "party_bank_account:*"));
-        assert!(snapshots
+        // 可售池上线前的快照（[1] 起）不含 sellable_sku:list；[0] 为选品上线前仍保留它。
+        assert!(snapshots[1..]
             .iter()
             .flatten()
             .all(|permission| permission.to_string() != "sellable_sku:list"));
+        assert!(snapshots
+            .iter()
+            .flatten()
+            .all(|permission| { !permission.to_string().starts_with("sales_selection_") }));
     }
 
     #[test]

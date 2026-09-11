@@ -75,6 +75,14 @@ impl CatalogSupplyQueryPort for RecordingQuery {
     ) -> persistence_core::Result<Vec<SellableSkuRow>> {
         panic!("list entry points must not execute the exact-reference query")
     }
+    async fn find_sellable_skus_by_ids(
+        &self,
+        _: &[String],
+        _: BusinessDate,
+        _: &mut dyn Executor,
+    ) -> persistence_core::Result<Vec<SellableSkuRow>> {
+        panic!("list entry points must not execute the id-only query")
+    }
 }
 
 #[tokio::test]

@@ -462,6 +462,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "销售单",
                     icon: ShoppingCartIcon,
                 },
+                {
+                    routeId: "W05",
+                    href: "/sales/selection",
+                    label: "选品册",
+                    icon: PackageSearchIcon,
+                    requiredPermissions: ["sales_selection_booklet:list"],
+                },
             ],
         },
         {

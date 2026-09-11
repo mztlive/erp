@@ -47,4 +47,14 @@ impl CatalogSupplyQueryPort for MongoCatalogSupplyQuery {
             .find_sellable_sku_refs(refs, date, executor)
             .await
     }
+    async fn find_sellable_skus_by_ids(
+        &self,
+        sku_ids: &[String],
+        date: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SellableSkuRow>> {
+        CatalogSupplyRepository::new(&self.db)
+            .find_sellable_skus_by_ids(sku_ids, date, executor)
+            .await
+    }
 }

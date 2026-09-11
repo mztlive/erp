@@ -136,6 +136,7 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     );
 
     let outbox_worker = state.start_approval_outbox_worker();
+    spawn_sales_selection_worker(state.clone());
     let result = run_app(app_port, state).await;
     outbox_worker.stop().await;
     result
@@ -147,6 +148,32 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 ///
 /// # 错误
 /// 政策缺失或权限字符串无法解析时返回服务错误。
+/// 启动选品准备任务领取循环。进程退出时任务可被下次启动恢复。
+///
+/// # 参数
+/// * `state` - 应用状态
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 任务失败记日志，不中断循环。
+fn spawn_sales_selection_worker(state: AppState) {
+    tokio::spawn(async move {
+        let process = erp_processes::sales_selection::SalesSelectionProcess::new(
+            state.db(),
+            state.storage().clone(),
+            state.config_snapshot().app.secret.as_bytes(),
+        );
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if let Err(error) = process.run_due_prepare_tasks().await {
+                tracing::error!(error = %error, "选品准备任务领取失败");
+            }
+        }
+    });
+}
+
 fn ensure_registered_approval_policies() -> erp_workflow::Result<()> {
     for document_type in erp_workflow::service::approval::policy::ALL_DOCUMENT_TYPES {
         erp_workflow::service::approval::policy::policy_of(document_type)?;
