@@ -24,6 +24,7 @@ export function useBackgroundJobsQuery(params: BackgroundJobListParams) {
     return useQuery({
         queryKey: backgroundJobKeys.list(params),
         queryFn: () => fetchBackgroundJobs(params),
+        placeholderData: (previous) => previous,
         refetchInterval: (current) => {
             const active = current.state.data?.items.some((job) =>
                 isJobActive(job.status),
@@ -38,6 +39,7 @@ export function useBackgroundJobDetailQuery(id: string | null) {
         queryKey: backgroundJobKeys.detail(id ?? ""),
         queryFn: () => fetchBackgroundJobDetail(id ?? ""),
         enabled: Boolean(id),
+        placeholderData: (previous) => previous,
         refetchInterval: (current) => {
             const status = current.state.data?.status
             return status && isJobActive(status) ? 2000 : false

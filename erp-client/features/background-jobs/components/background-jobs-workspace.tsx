@@ -424,7 +424,7 @@ export function BackgroundJobsWorkspace() {
                             </>
                         }
                         resultStatus={listWorkspaceFilterStatusText({
-                            loading: jobsQuery.isFetching,
+                            loading: jobsQuery.isPending,
                             failed: jobsQuery.isError,
                             resultCount: jobsQuery.data?.total,
                             noun: "个任务",
@@ -523,7 +523,8 @@ export function BackgroundJobsWorkspace() {
                         onPaginationChange={(next) => {
                             setPage(next.pageIndex + 1)
                         }}
-                        loading={jobsQuery.isFetching}
+                        loading={jobsQuery.isPending}
+                        showRefreshingBanner={false}
                         layout="flush"
                         onRowPreview={openPreview}
                         highlightedRowId={previewId ?? undefined}
