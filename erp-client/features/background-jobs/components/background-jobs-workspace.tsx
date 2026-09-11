@@ -587,7 +587,7 @@ export function BackgroundJobsWorkspace() {
             />
             <QuickPreviewSheet
                 idPrefix={`${ID_PREFIX}-preview-sheet`}
-                open={previewJob != null}
+                open={previewId != null}
                 onOpenChange={(open) => {
                     if (!open) closePreview()
                 }}
@@ -621,7 +621,7 @@ export function BackgroundJobsWorkspace() {
                     ) : null
                 }
                 footer={
-                    previewJob ? (
+                    previewId ? (
                         <>
                             <Button
                                 id={`${ID_PREFIX}-preview-close`}
@@ -648,7 +648,11 @@ export function BackgroundJobsWorkspace() {
                     ) : null
                 }
             >
-                {previewJob ? (
+                {detailQuery.isPending && !previewJob ? (
+                    <p className="text-sm text-muted-foreground">
+                        正在加载任务详情…
+                    </p>
+                ) : previewJob ? (
                     <div className="space-y-6 text-sm">
                         <BackgroundJobProgress
                             mode="partialAllowed"
@@ -752,6 +756,21 @@ export function BackgroundJobsWorkspace() {
                             )}
                         </section>
                     </div>
+                ) : detailQuery.isError ? (
+                    <BusinessFailureState
+                        error={detailQuery.error}
+                        action={
+                            <Button
+                                id={`${ID_PREFIX}-preview-retry`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void detailQuery.refetch()}
+                            >
+                                重试
+                            </Button>
+                        }
+                    />
                 ) : null}
             </QuickPreviewSheet>
             <AlertDialog

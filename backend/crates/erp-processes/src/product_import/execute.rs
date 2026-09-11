@@ -1,5 +1,7 @@
 //! 领取并执行商品导入后台任务。
 
+use std::collections::HashMap;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_core::ids::BackgroundJobId;
@@ -10,8 +12,12 @@ use erp_support::{
 };
 use persistence_core::{NoTransaction, Transactional};
 
+use super::images::RowMediaSource;
 use super::parse::{parse_product_quote_xlsx, ParsedProductSheet};
 use super::resolve::ImportDictionaryCache;
+use super::row_manifest::{
+    read_row_manifest, row_entries_by_number, row_media_from_entry, RowManifest, RowManifestRow,
+};
 use super::ProductImportProcess;
 use crate::{Error, Result};
 
@@ -87,7 +93,6 @@ impl ProductImportProcess {
         if !matches!(job.status, JobStatus::Running | JobStatus::PartiallySucceeded) {
             return Ok(());
         }
-        let (bytes, parsed) = self.load_source(&job).await?;
         let items = self
             .db
             .background_job_items()
@@ -112,22 +117,48 @@ impl ProductImportProcess {
             }
             return Ok(());
         }
+        let row_source = self.load_row_source(&job).await?;
+        let manifest_entries;
+        let legacy_workbook;
+        let (entries, workbook) = match &row_source {
+            JobRowSource::Manifest(manifest) => {
+                manifest_entries = row_entries_by_number(manifest);
+                (Some(&manifest_entries), None)
+            }
+            JobRowSource::Legacy { bytes, parsed } => {
+                legacy_workbook = (bytes, parsed);
+                (None, Some(&legacy_workbook))
+            }
+        };
         let mut done = 0usize;
         for mut item in items {
             if item.status.is_some() {
                 continue;
             }
             let row_number = item.source_row_no.unwrap_or(item.item_no);
-            let cells = parsed
-                .rows
-                .iter()
-                .find(|row| row.row_number == row_number)
-                .map(|row| row.cells.as_slice())
-                .unwrap_or(&[]);
-            let recorded = record_row_outcome(
-                self.import_row(row_number, cells, &bytes, &parsed, &actor, &mut cache)
-                    .await,
-            );
+            let recorded = match (entries, workbook) {
+                (Some(entries), _) => {
+                    self.import_manifest_row(row_number, entries, &actor, &mut cache)
+                        .await
+                }
+                (_, Some((bytes, parsed))) => {
+                    let cells = parsed
+                        .rows
+                        .iter()
+                        .find(|row| row.row_number == row_number)
+                        .map(|row| row.cells.as_slice())
+                        .unwrap_or(&[]);
+                    let media_source = RowMediaSource::Workbook {
+                        xlsx: bytes,
+                        sheet: parsed,
+                    };
+                    record_row_outcome(
+                        self.import_row(row_number, cells, &media_source, &actor, &mut cache)
+                            .await,
+                    )
+                }
+                (None, None) => unreachable!("行来源必为清单或源文件之一"),
+            };
             item.record_result(
                 recorded.status,
                 recorded.code,
@@ -150,7 +181,78 @@ impl ProductImportProcess {
         Ok(())
     }
 
-    /// 加载任务源文件并解析报价表。
+    /// 行来源：清单优先，老任务回退到源文件。
+    ///
+    /// 清单由提交时写入，执行阶段只读清单；清单缺失或损坏
+    /// （部署前创建的老任务）时回退到源文件下载解析。
+    ///
+    /// # 参数
+    /// * `job` - 后台任务实体
+    ///
+    /// # 返回
+    /// 返回清单或源文件行来源。
+    ///
+    /// # 错误
+    /// 清单与源文件均不可用时返回错误。
+    async fn load_row_source(&self, job: &BackgroundJob) -> Result<JobRowSource> {
+        match read_row_manifest(&self.storage, &job.request_id).await {
+            Ok(manifest) => Ok(JobRowSource::Manifest(manifest)),
+            Err(error) => {
+                tracing::info!(
+                    job_id = %job.base.id,
+                    error = %error,
+                    "行清单不可用，回退到源文件链路",
+                );
+                let (bytes, parsed) = self.load_source(job).await?;
+                Ok(JobRowSource::Legacy { bytes, parsed })
+            }
+        }
+    }
+
+    /// 执行清单中的一行（单元格与媒体均来自清单，不接触源文件）。
+    ///
+    /// # 参数
+    /// * `row_number` - Excel 行号
+    /// * `entries` - 行号到清单行的映射
+    /// * `actor` - 审计操作人
+    /// * `cache` - 字典缓存
+    ///
+    /// # 返回
+    /// 返回可持久化的明细结果；清单缺行或图片预提失败记该行失败。
+    async fn import_manifest_row(
+        &self,
+        row_number: u32,
+        entries: &HashMap<u32, &RowManifestRow>,
+        actor: &AuditActor,
+        cache: &mut ImportDictionaryCache,
+    ) -> RecordedOutcome {
+        let Some(entry) = entries.get(&row_number) else {
+            return RecordedOutcome {
+                status: ItemStatus::Failed,
+                code: Some("manifest_missing".to_string()),
+                summary: Some("行数据缺失，请重新提交导入".to_string()),
+                object_type: None,
+                object_id: None,
+            };
+        };
+        if let Some(media_error) = &entry.media_error {
+            return RecordedOutcome {
+                status: ItemStatus::Failed,
+                code: Some("media_unavailable".to_string()),
+                summary: Some(media_error.clone()),
+                object_type: None,
+                object_id: None,
+            };
+        }
+        let media = row_media_from_entry(entry);
+        let media_source = RowMediaSource::Manifest(&media);
+        record_row_outcome(
+            self.import_row(row_number, &entry.cells, &media_source, actor, cache)
+                .await,
+        )
+    }
+
+    /// 加载任务源文件并解析报价表（老任务回退链路）。
     ///
     /// # 参数
     /// * `job` - 后台任务实体
@@ -224,6 +326,19 @@ struct RecordedOutcome {
     summary: Option<String>,
     object_type: Option<String>,
     object_id: Option<String>,
+}
+
+/// 任务行来源：提交时写入的清单，或老任务的源文件。
+enum JobRowSource {
+    /// 行级清单（含单元格与已上传图片引用）。
+    Manifest(RowManifest),
+    /// 源文件字节与解析结果（老任务回退）。
+    Legacy {
+        /// 源文件字节。
+        bytes: Vec<u8>,
+        /// 解析后的工作表。
+        parsed: ParsedProductSheet,
+    },
 }
 
 /// 并发认领冲突的稳定文案，与持久层乐观锁映射保持一致。

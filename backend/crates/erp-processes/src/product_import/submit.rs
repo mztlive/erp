@@ -13,6 +13,7 @@ use id_generator::next_id;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::parse::{parse_product_quote_xlsx, ParsedProductSheet};
+use super::row_manifest::{build_row_manifest, delete_manifest_objects, write_row_manifest};
 use super::views::job_view;
 use super::ProductImportProcess;
 use crate::{Error, Result};
@@ -40,15 +41,20 @@ impl ProductImportProcess {
         request_id: String,
         actor: &AuditActor,
     ) -> Result<ProductImportJobView> {
-        let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&bytes))
+        let shared_bytes = std::sync::Arc::new(bytes);
+        let for_parse = shared_bytes.clone();
+        let parsed = tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".into()))??;
         let file_asset = FileAsset::new(FileAssetId::new(next_id()), registration.into_data(actor.id())?)?;
-        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor)
+        self.create_job_from_parsed(file_asset, parsed, file_name, request_id, actor, &shared_bytes)
             .await
     }
 
     /// 由已解析工作表创建导入任务（表单上传与浏览器直传共用）。
+    ///
+    /// 提交时预提各行图片并写入行级清单，执行阶段只读清单，
+    /// 不再回源文件下载解析。
     ///
     /// # 参数
     /// * `file_asset` - 已落对象存储的文件资产
@@ -56,6 +62,7 @@ impl ProductImportProcess {
     /// * `file_name` - 原始文件名
     /// * `request_id` - 幂等请求身份
     /// * `actor` - 审计操作人
+    /// * `xlsx` - 源文件字节（仅本次预提使用）
     ///
     /// # 返回
     /// 返回新建或幂等回放的导入任务。
@@ -66,6 +73,7 @@ impl ProductImportProcess {
         file_name: String,
         request_id: String,
         actor: &AuditActor,
+        xlsx: &[u8],
     ) -> Result<ProductImportJobView> {
         let job_id = BackgroundJobId::new(next_id());
         let drafts = parsed
@@ -102,7 +110,7 @@ impl ProductImportProcess {
                 domain_job_id: Some(file_asset.base.id.clone()),
                 selection_snapshot_id: None,
                 requested_by: actor.id().to_string(),
-                request_id,
+                request_id: request_id.clone(),
                 input_file_asset_id: Some(FileAssetId::new(file_asset.base.id.clone())),
                 result_file_asset_id: None,
                 declared_total_count: total_rows,
@@ -110,7 +118,25 @@ impl ProductImportProcess {
             drafts,
         )?;
         let (job, items) = aggregate.into_parts();
-        self.persist_job(file_asset, job, items, file_name).await
+        let built = build_row_manifest(&self.storage, &self.secret, &request_id, &parsed, xlsx).await?;
+        let manifest_key = match write_row_manifest(&self.storage, &built.manifest).await {
+            Ok(key) => key,
+            Err(error) => {
+                delete_manifest_objects(&self.storage, &built.uploaded_object_keys).await;
+                return Err(error);
+            }
+        };
+        let mut manifest_keys = built.uploaded_object_keys;
+        manifest_keys.push(manifest_key);
+        match self.persist_job(file_asset, job, items, file_name).await {
+            Ok(view) => Ok(view),
+            Err(error) => {
+                if !matches!(error, Error::OutcomeUnknown(_)) {
+                    delete_manifest_objects(&self.storage, &manifest_keys).await;
+                }
+                Err(error)
+            }
+        }
     }
 
     pub(super) async fn persist_job(

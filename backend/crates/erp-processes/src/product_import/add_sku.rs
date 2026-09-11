@@ -11,8 +11,7 @@ use persistence_core::NoTransaction;
 
 use super::backfill::sku_inputs_with_main_image;
 use super::identity::{next_sku_no, NormalizedImportRow};
-use super::images::{upload_row_images, RowMedia};
-use super::parse::ParsedProductSheet;
+use super::images::{resolve_row_media, RowMedia, RowMediaSource};
 use super::row::RowImportOutcome;
 use super::ProductImportProcess;
 use crate::{Error, Result};
@@ -24,8 +23,7 @@ impl ProductImportProcess {
     /// * `product` - 已有 SPU
     /// * `row` - 规范化后的导入行
     /// * `cells` - 原单元格
-    /// * `xlsx` - 源文件字节
-    /// * `sheet` - 解析结果
+    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
     /// * `actor` - 审计操作人
     ///
     /// # 返回
@@ -38,8 +36,7 @@ impl ProductImportProcess {
         product: Product,
         row: NormalizedImportRow,
         cells: &[String],
-        xlsx: &[u8],
-        sheet: &ParsedProductSheet,
+        media_source: &RowMediaSource<'_>,
         actor: &AuditActor,
     ) -> Result<RowImportOutcome> {
         let skus = self
@@ -61,7 +58,7 @@ impl ProductImportProcess {
             });
         if same_sku {
             return self
-                .import_existing_with_images(product, cells, xlsx, sheet, actor)
+                .import_existing_with_images(product, cells, media_source, actor)
                 .await;
         }
         if let Some(barcode) = &row.barcode {
@@ -78,7 +75,7 @@ impl ProductImportProcess {
                 });
             }
         }
-        let media = upload_row_images(&self.storage, &self.secret, xlsx, sheet, cells).await?;
+        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let pending = media.pending.clone();
         let request = self.append_sku_request(&product, &row, &skus, media).await?;
         match crate::product_update_with_assets(

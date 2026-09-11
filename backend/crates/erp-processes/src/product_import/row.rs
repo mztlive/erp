@@ -7,8 +7,7 @@ use erp_core::common::time::BusinessDate;
 use persistence_core::NoTransaction;
 
 use super::identity::normalize_import_row;
-use super::images::upload_row_images;
-use super::parse::ParsedProductSheet;
+use super::images::{resolve_row_media, RowMediaSource};
 use super::resolve::ImportDictionaryCache;
 use super::ProductImportProcess;
 use crate::{Error, Result};
@@ -30,8 +29,7 @@ impl ProductImportProcess {
     /// # 参数
     /// * `row_number` - Excel 行号
     /// * `cells` - 单元格
-    /// * `xlsx` - 源文件字节
-    /// * `sheet` - 解析结果
+    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
     /// * `actor` - 审计操作人
     /// * `cache` - 字典缓存
     ///
@@ -44,8 +42,7 @@ impl ProductImportProcess {
         &self,
         row_number: u32,
         cells: &[String],
-        xlsx: &[u8],
-        sheet: &ParsedProductSheet,
+        media_source: &RowMediaSource<'_>,
         actor: &AuditActor,
         cache: &mut ImportDictionaryCache,
     ) -> Result<RowImportOutcome> {
@@ -58,11 +55,11 @@ impl ProductImportProcess {
         {
             if row.coded_spu {
                 return self
-                    .import_sku_into_spu(existing, row, cells, xlsx, sheet, actor)
+                    .import_sku_into_spu(existing, row, cells, media_source, actor)
                     .await;
             }
             return self
-                .import_existing_with_images(existing, cells, xlsx, sheet, actor)
+                .import_existing_with_images(existing, cells, media_source, actor)
                 .await;
         }
         if let Some(barcode) = &row.barcode {
@@ -82,7 +79,7 @@ impl ProductImportProcess {
         let unit_id = self.resolve_unit(cache).await?;
         let brand_id = self.resolve_brand(&row.brand_name, actor, cache).await?;
         let category_id = self.resolve_category(&row.category_name, actor, cache).await?;
-        let media = upload_row_images(&self.storage, &self.secret, xlsx, sheet, cells).await?;
+        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         let carousel_media = media
             .carousel
             .iter()

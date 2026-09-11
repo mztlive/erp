@@ -8,8 +8,7 @@ use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SpecEntryInput
 use erp_core::ids::{FileAssetId, ProductId, SkuId, SkuRevisionId};
 use persistence_core::NoTransaction;
 
-use super::images::{upload_row_images, RowMedia};
-use super::parse::ParsedProductSheet;
+use super::images::{resolve_row_media, RowMedia, RowMediaSource};
 use super::row::RowImportOutcome;
 use super::ProductImportProcess;
 use crate::{Error, Result};
@@ -20,8 +19,7 @@ impl ProductImportProcess {
     /// # 参数
     /// * `product` - 已存在商品
     /// * `cells` - 当前行单元格
-    /// * `xlsx` - 源文件字节
-    /// * `sheet` - 解析结果
+    /// * `media_source` - 行媒体来源（清单复用或源文件提取）
     /// * `actor` - 审计操作人
     ///
     /// # 返回
@@ -33,14 +31,13 @@ impl ProductImportProcess {
         &self,
         product: Product,
         cells: &[String],
-        xlsx: &[u8],
-        sheet: &ParsedProductSheet,
+        media_source: &RowMediaSource<'_>,
         actor: &AuditActor,
     ) -> Result<RowImportOutcome> {
         if self.product_has_images(&product).await? {
             return Ok(already_imported(product.base.id));
         }
-        let media = upload_row_images(&self.storage, &self.secret, xlsx, sheet, cells).await?;
+        let media = resolve_row_media(&self.storage, &self.secret, cells, media_source).await?;
         if media.pending.is_empty() {
             return Ok(already_imported(product.base.id));
         }

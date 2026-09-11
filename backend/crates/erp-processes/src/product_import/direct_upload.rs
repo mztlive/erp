@@ -193,7 +193,9 @@ impl ProductImportProcess {
         }
         let byte_len = bytes.len() as u64;
         let digest = hex::encode(Sha256::digest(&bytes));
-        let parsed = match tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&bytes))
+        let shared_bytes = std::sync::Arc::new(bytes);
+        let for_parse = shared_bytes.clone();
+        let parsed = match tokio::task::spawn_blocking(move || parse_product_quote_xlsx(&for_parse))
             .await
             .map_err(|_| Error::Internal("解析导入文件失败".to_string()))
         {
@@ -221,6 +223,7 @@ impl ProductImportProcess {
             req.file_name.clone(),
             req.request_id.clone(),
             actor,
+            &shared_bytes,
         )
         .await
     }

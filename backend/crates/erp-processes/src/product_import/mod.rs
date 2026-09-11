@@ -10,6 +10,7 @@ mod parse;
 mod query;
 mod resolve;
 mod row;
+mod row_manifest;
 mod submit;
 mod views;
 

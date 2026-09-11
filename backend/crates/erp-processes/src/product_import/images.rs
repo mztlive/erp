@@ -24,6 +24,47 @@ pub struct RowMedia {
     pub pending: Vec<PendingFileAssetRequest>,
 }
 
+/// 行媒体来源：清单复用零上传，回退链路沿用源文件提取。
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RowMediaSource<'a> {
+    /// 清单预提媒体（对象已在存储中，直接复用）。
+    Manifest(&'a RowMedia),
+    /// 源文件提取（老任务回退链路）。
+    Workbook {
+        /// 源文件字节。
+        xlsx: &'a [u8],
+        /// 解析结果。
+        sheet: &'a ParsedProductSheet,
+    },
+}
+
+/// 按来源获取行媒体；清单来源不产生任何上传。
+///
+/// # 参数
+/// * `storage` - 对象存储（仅源文件来源使用）
+/// * `secret` - 内容指纹密钥（仅源文件来源使用）
+/// * `cells` - 当前行单元格（仅源文件来源使用）
+/// * `source` - 行媒体来源
+///
+/// # 返回
+/// 返回临时文件引用与待登记资产。
+///
+/// # 错误
+/// 源文件来源上传失败时返回错误；清单来源无错误。
+pub(super) async fn resolve_row_media(
+    storage: &S3Storage,
+    secret: &[u8],
+    cells: &[String],
+    source: &RowMediaSource<'_>,
+) -> Result<RowMedia> {
+    match source {
+        RowMediaSource::Manifest(media) => Ok((*media).clone()),
+        RowMediaSource::Workbook { xlsx, sheet } => {
+            upload_row_images(storage, secret, xlsx, sheet, cells).await
+        }
+    }
+}
+
 /// 为指定行提取并上传主图、副图。
 ///
 /// # 参数
@@ -109,7 +150,7 @@ async fn store_image(
     })
 }
 
-fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
+pub(super) fn detect_image(content: &[u8]) -> Option<(&'static str, &'static str)> {
     if content.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Some(("image/png", "png"));
     }
