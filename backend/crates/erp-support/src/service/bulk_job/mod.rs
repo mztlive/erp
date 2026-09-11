@@ -310,8 +310,13 @@ impl BulkJobService {
 
     /// 分页查询后台任务列表（任务中心）。
     ///
+    /// 数据隔离：普通用户只能看到自己创建的任务，`requested_by` 会被强制覆盖为本人；
+    /// 管理员可查看全部，也可用 `requested_by` 筛选指定创建人。
+    ///
     /// # 参数
     /// * `params` - 查询参数（`job_no`/`job_type`/`status`/`requested_by` 扁平筛选）
+    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -322,6 +327,8 @@ impl BulkJobService {
     pub async fn background_job_list(
         &self,
         params: &BackgroundJobListParams,
+        actor: &AuditActor,
+        is_admin: bool,
     ) -> Result<PageView<BackgroundJobView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -330,7 +337,11 @@ impl BulkJobService {
             job_type: query.job_type,
             domain_job_type: query.domain_job_type,
             status: query.status,
-            requested_by: query.requested_by,
+            requested_by: if is_admin {
+                query.requested_by
+            } else {
+                Some(actor.id().to_string())
+            },
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -381,21 +392,32 @@ impl BulkJobService {
 
     /// 查询后台任务详情。
     ///
+    /// 数据隔离：普通用户只能查看自己创建的任务。
+    ///
     /// # 参数
     /// * `id` - 后台任务 ID
+    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回完整任务视图（含进度与错误摘要）。
     ///
     /// # 错误
     /// * `NotFound` - 任务不存在
-    pub async fn background_job_detail(&self, id: &str) -> Result<BackgroundJobView> {
+    /// * `Forbidden` - 非管理员查看他人创建的任务
+    pub async fn background_job_detail(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        is_admin: bool,
+    ) -> Result<BackgroundJobView> {
         let job = self
             .db
             .background_jobs()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
+        ensure_job_visible(&job, actor, is_admin)?;
         Ok(job.into())
     }
 
@@ -510,26 +532,31 @@ impl BulkJobService {
     /// 取消后台任务。
     ///
     /// 任务取消只停止尚未开始的项目；已经提交的正式事实不回滚、不删除（§6.1）。
+    /// 数据隔离：普通用户只能取消自己创建的任务。
     ///
     /// # 参数
     /// * `id` - 后台任务 ID
     /// * `req` - 取消请求（含期望版本）
     /// * `actor` - 已通过鉴权的审计操作人
+    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回取消后的任务视图。
     ///
     /// # 错误
     /// * `NotFound` - 任务不存在
+    /// * `Forbidden` - 非管理员取消他人创建的任务
     /// * `ConflictError` - 版本陈旧或任务已处于终态
     pub async fn cancel_background_job(
         &self,
         id: &str,
         req: CancelBackgroundJobRequest,
         actor: &AuditActor,
+        is_admin: bool,
     ) -> Result<BackgroundJobView> {
         req.validate()?;
         let mut job = self.load_job_with_version(id, req.version).await?;
+        ensure_job_visible(&job, actor, is_admin)?;
         job.cancel(erp_core::common::time::Instant::now())?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -555,27 +582,40 @@ impl BulkJobService {
 
     /// 分页查询任务逐项结果。
     ///
+    /// 数据隔离：普通用户只能查看自己创建任务的逐项结果。
+    ///
     /// # 参数
     /// * `job_id` - 后台任务 ID
     /// * `status` - 逐项执行结果筛选
     /// * `page` - 页码（1 起）
     /// * `page_size` - 单页条数
+    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
     ///
     /// # 返回
     /// 返回当前页逐项结果行与总数。
     ///
     /// # 错误
-    /// 分页参数非法或数据库查询失败时返回错误。
+    /// 分页参数非法、任务不存在、无权查看或数据库查询失败时返回错误。
     pub async fn background_job_item_list(
         &self,
         job_id: &str,
         status: Option<crate::entity::bulk_job::ItemStatus>,
         page: u64,
         page_size: u32,
+        actor: &AuditActor,
+        is_admin: bool,
     ) -> Result<PageView<BackgroundJobItemView>> {
         if page == 0 {
             return Err(Error::ValidationError("页码必须大于0".to_string()));
         }
+        let owner = self
+            .db
+            .background_jobs()
+            .find_by_id(job_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
+        ensure_job_visible(&owner, actor, is_admin)?;
         let job_id = BackgroundJobId::new(job_id);
         let result = self
             .db
@@ -740,6 +780,27 @@ impl BulkJobService {
         }
         Ok(job)
     }
+}
+
+/// 校验操作人可见指定后台任务。
+///
+/// 管理员可见全部；普通用户仅可见自己创建的任务。
+///
+/// # 参数
+/// * `job` - 后台任务实体
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
+///
+/// # 返回
+/// 可见时返回 `Ok(())`。
+///
+/// # 错误
+/// 非管理员访问他人任务时返回 `Forbidden`。
+fn ensure_job_visible(job: &BackgroundJob, actor: &AuditActor, is_admin: bool) -> Result<()> {
+    if is_admin || job.requested_by == actor.id() {
+        return Ok(());
+    }
+    Err(Error::Forbidden("只能查看自己创建的后台任务".to_string()))
 }
 
 /// Map a support-domain error back to a persistence error for idempotent job create.

@@ -49,6 +49,18 @@ export function isExportJobActive(status: ExportJobStatus): boolean {
     )
 }
 
+/** 可查看全部后台任务的管理员角色，与服务端判定口径一致。 */
+const EXPORT_TASK_ADMIN_ROLES = ["role-root", "role-sysadmin"] as const
+
+export function isExportTaskAdmin(
+    roleIds: readonly string[] | undefined | null,
+): boolean {
+    if (!roleIds) return false
+    return roleIds.some((roleId) =>
+        (EXPORT_TASK_ADMIN_ROLES as readonly string[]).includes(roleId),
+    )
+}
+
 export function formatExportDateTime(value: number | null): string {
     if (value === null || !Number.isFinite(value)) return "—"
     return new Date(value * 1000).toLocaleString("zh-CN", { hour12: false })

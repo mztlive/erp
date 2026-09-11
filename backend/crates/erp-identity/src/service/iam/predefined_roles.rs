@@ -152,6 +152,8 @@ const SALES_PERMISSIONS: &[&str] = &[
     "customer_receipt:detail",
     "invoice:list",
     "invoice:detail",
+    "background_job:*",
+    "background_job_item:list",
 ];
 
 /// 销售领导推荐权限。
@@ -193,6 +195,8 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "cost_entry:list",
     "cost_entry:detail",
     "cost_allocation:list",
+    "background_job:*",
+    "background_job_item:list",
 ];
 
 /// 采购推荐权限。
@@ -304,6 +308,8 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "supplier_settlement_item:list",
     "supplier_settlement_difference:list",
     "supplier_settlement_difference:update",
+    "background_job:*",
+    "background_job_item:list",
 ];
 
 /// 运营推荐权限。
@@ -342,6 +348,8 @@ const OPERATIONS_PERMISSIONS: &[&str] = &[
     "supplier_offering:list",
     "supplier_fulfillment_order:list",
     "supplier_fulfillment_order:detail",
+    "background_job:*",
+    "background_job_item:list",
 ];
 
 /// 仓储推荐权限。
@@ -379,6 +387,8 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
     "product:list",
     "sku:list",
     "sellable_sku:list",
+    "background_job:*",
+    "background_job_item:list",
 ];
 
 /// 财务推荐权限。
@@ -460,6 +470,8 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "receipt_reversal:*",
     "payment_reversal:*",
     "supplier_offering:list",
+    "background_job:*",
+    "background_job_item:list",
 ];
 
 /// 管理层业务只读与待办责任管理推荐权限。
@@ -517,6 +529,10 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "cost_allocation:list",
     "supplier_settlement_statement:list",
     "supplier_settlement_statement:detail",
+    "background_job:list",
+    "background_job:detail",
+    "background_job:cancel",
+    "background_job_item:list",
 ];
 
 /// 系统管理员（技术运维，非超级管理员）推荐权限。
@@ -1632,6 +1648,7 @@ mod tests {
                     | &"approval_instance:cancel"
                     | &"approval_instance:resume"
                     | &"approval_instance:cancel_blocked"
+                    | &"background_job:cancel"
             ) {
                 continue;
             }

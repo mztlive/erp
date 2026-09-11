@@ -56,6 +56,7 @@ export type ExportJobListParams = {
     job_no?: string
     status?: ExportJobStatus | "active"
     domain_job_type?: string
+    requested_by?: string
 }
 
 export async function fetchExportJobs(

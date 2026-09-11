@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/description-list"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { getErrorMessage } from "@/lib/api/errors"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import type { ExportJob, ExportJobStatus } from "@/features/export-tasks/api"
 import {
     EXPORT_JOB_STATUS_LABELS,
@@ -48,6 +49,7 @@ import {
     exportProgressStatus,
     formatExportDateTime,
     isExportJobActive,
+    isExportTaskAdmin,
 } from "@/features/export-tasks/labels"
 import {
     useCancelExportJobMutation,
@@ -80,7 +82,17 @@ const DOMAIN_FILTER_OPTIONS = [
     { value: "CONTRACT_EXPORT", label: "合同导出" },
 ] as const
 
+const SCOPE_FILTER_OPTIONS = [
+    { value: "all", label: "全部任务" },
+    { value: "mine", label: "只看我的" },
+] as const
+
+type ScopeFilter = (typeof SCOPE_FILTER_OPTIONS)[number]["value"]
+
 export function ExportTasksWorkspace() {
+    const profileQuery = useAccountProfileQuery()
+    const isAdmin = isExportTaskAdmin(profileQuery.data?.role_ids)
+    const currentUserId = profileQuery.data?.userid
     const [searchDraft, setSearchDraft] = React.useState("")
     const [appliedJobNo, setAppliedJobNo] = React.useState("")
     const [statusDraft, setStatusDraft] = React.useState<StatusFilter>("all")
@@ -88,6 +100,8 @@ export function ExportTasksWorkspace() {
         React.useState<StatusFilter>("all")
     const [domainDraft, setDomainDraft] = React.useState<string>("")
     const [appliedDomain, setAppliedDomain] = React.useState<string>("")
+    const [scopeDraft, setScopeDraft] = React.useState<ScopeFilter>("all")
+    const [appliedScope, setAppliedScope] = React.useState<ScopeFilter>("all")
     const [page, setPage] = React.useState(1)
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [cancelId, setCancelId] = React.useState<string | null>(null)
@@ -105,8 +119,18 @@ export function ExportTasksWorkspace() {
                     ? undefined
                     : (appliedStatus as ExportJobStatus | "active"),
             domain_job_type: appliedDomain || undefined,
+            requested_by:
+                isAdmin && appliedScope === "mine" ? currentUserId : undefined,
         }),
-        [page, appliedJobNo, appliedStatus, appliedDomain],
+        [
+            page,
+            appliedJobNo,
+            appliedStatus,
+            appliedDomain,
+            isAdmin,
+            appliedScope,
+            currentUserId,
+        ],
     )
     const jobsQuery = useExportJobsQuery(listParams)
     const detailQuery = useExportJobDetailQuery(previewId)
@@ -123,8 +147,9 @@ export function ExportTasksWorkspace() {
         setAppliedJobNo(searchDraft.trim())
         setAppliedStatus(statusDraft)
         setAppliedDomain(domainDraft)
+        setAppliedScope(scopeDraft)
         setPage(1)
-    }, [searchDraft, statusDraft, domainDraft])
+    }, [searchDraft, statusDraft, domainDraft, scopeDraft])
 
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -133,11 +158,16 @@ export function ExportTasksWorkspace() {
         setAppliedStatus("all")
         setDomainDraft("")
         setAppliedDomain("")
+        setScopeDraft("all")
+        setAppliedScope("all")
         setPage(1)
     }, [])
 
     const hasActiveFilters =
-        appliedJobNo !== "" || appliedStatus !== "all" || appliedDomain !== ""
+        appliedJobNo !== "" ||
+        appliedStatus !== "all" ||
+        appliedDomain !== "" ||
+        (isAdmin && appliedScope !== "all")
 
     const openPreview = React.useCallback((job: ExportJob) => {
         lastFocusedRowId.current = job.id
@@ -275,6 +305,16 @@ export function ExportTasksWorkspace() {
                         }
                         commonFilters={
                             <>
+                                {isAdmin ? (
+                                    <FixedOptionRadioFilter
+                                        idPrefix="governance-exports-toolbar-scope"
+                                        label="可见范围"
+                                        variant="quiet"
+                                        value={scopeDraft}
+                                        onValueChange={setScopeDraft}
+                                        options={SCOPE_FILTER_OPTIONS}
+                                    />
+                                ) : null}
                                 <FixedOptionRadioFilter
                                     idPrefix="governance-exports-toolbar-status"
                                     label="状态"
@@ -315,6 +355,14 @@ export function ExportTasksWorkspace() {
                             noun: "个任务",
                         })}
                         chips={[
+                            ...(isAdmin && appliedScope === "mine"
+                                ? [
+                                      {
+                                          key: "scope",
+                                          label: "范围：只看我的",
+                                      },
+                                  ]
+                                : []),
                             ...(appliedJobNo
                                 ? [
                                       {
@@ -347,6 +395,10 @@ export function ExportTasksWorkspace() {
                                 : []),
                         ]}
                         onClearChip={(key) => {
+                            if (key === "scope") {
+                                setScopeDraft("all")
+                                setAppliedScope("all")
+                            }
                             if (key === "job_no") {
                                 setSearchDraft("")
                                 setAppliedJobNo("")
@@ -362,6 +414,9 @@ export function ExportTasksWorkspace() {
                             setPage(1)
                         }}
                         onClearAll={clearFilters}
+                        idleHint={
+                            isAdmin ? undefined : "仅显示我创建的导出任务"
+                        }
                     />
                 }
                 table={

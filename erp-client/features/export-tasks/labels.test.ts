@@ -5,6 +5,7 @@ import {
     exportProgressStatus,
     formatExportDateTime,
     isExportJobActive,
+    isExportTaskAdmin,
 } from "@/features/export-tasks/labels"
 
 describe("export task labels", () => {
@@ -35,5 +36,13 @@ describe("export task labels", () => {
     it("formats timestamps and guards empty values", () => {
         expect(formatExportDateTime(null)).toBe("—")
         expect(formatExportDateTime(1_700_000_000)).toContain("2023")
+    })
+
+    it("grants full task visibility only to admin roles", () => {
+        expect(isExportTaskAdmin(["role-root"])).toBe(true)
+        expect(isExportTaskAdmin(["role-sysadmin"])).toBe(true)
+        expect(isExportTaskAdmin(["role-sales"])).toBe(false)
+        expect(isExportTaskAdmin([])).toBe(false)
+        expect(isExportTaskAdmin(null)).toBe(false)
     })
 })
