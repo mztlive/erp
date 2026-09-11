@@ -17,6 +17,7 @@ import {
     publishBook,
     replaceBookLink,
     revokeBookLink,
+    fetchActionableBookCount,
     startPrepareTask,
     voidBook,
     type PrepareKind,
@@ -51,6 +52,8 @@ export const salesSelectionKeys = {
         [...salesSelectionKeys.all, "proposal", proposalId] as const,
     session: (bookId: string) =>
         [...salesSelectionKeys.all, "session", bookId] as const,
+    actionableCount: () =>
+        [...salesSelectionKeys.all, "actionable-count"] as const,
 }
 
 /** 详情与列表同时失效。 */
@@ -73,6 +76,18 @@ export const useBooks = (query: BookListQuery) =>
     useQuery({
         queryKey: salesSelectionKeys.list(query),
         queryFn: () => fetchBooks(query),
+    })
+
+/**
+ * 侧栏「选品册」待处理角标。
+ * @param enabled 无列表权限时不请求
+ */
+export const useActionableBookCountQuery = (enabled = true) =>
+    useQuery({
+        queryKey: salesSelectionKeys.actionableCount(),
+        queryFn: fetchActionableBookCount,
+        enabled,
+        refetchInterval: 30_000,
     })
 
 /** 选品册详情查询。 */
@@ -131,14 +146,22 @@ export const useBookOperations = () => {
 
     /** 创建选品册。 */
     const create = useMutation({
-        mutationFn: (input: CreateBookInput) => createBook(input),
-        onSuccess: async () => {
+        mutationFn: (input: CreateBookInput & { silent?: boolean }) => {
+            const { silent: _silent, ...payload } = input
+            return createBook(payload)
+        },
+        onSuccess: async (_data, variables) => {
+            queryClient.setQueryData(
+                salesSelectionKeys.actionableCount(),
+                (previous: number | undefined) => (previous ?? 0) + 1,
+            )
             await queryClient.invalidateQueries({
                 queryKey: salesSelectionKeys.all,
             })
+            if (variables.silent) return
             toast.add({
                 title: "选品册已创建",
-                description: "已按当前商品来源进入草稿，可开始准备。",
+                description: "正在准备陈列，可在选品册中查看进度。",
                 type: "success",
                 timeout: 4000,
             })
@@ -156,18 +179,22 @@ export const useBookOperations = () => {
             tiers?: CreateBookInput["tiers"]
             expected_version: number
             idempotency_key: string
-        }) =>
-            startPrepareTask(input.bookId, {
-                kind: input.kind,
-                tier_ids: input.tier_ids,
-                filter: input.filter,
-                sku_ids: input.sku_ids,
-                tiers: input.tiers,
-                expected_version: input.expected_version,
-                idempotency_key: input.idempotency_key,
-            }),
+            silent?: boolean
+        }) => {
+            const { silent: _silent, ...payload } = input
+            return startPrepareTask(payload.bookId, {
+                kind: payload.kind,
+                tier_ids: payload.tier_ids,
+                filter: payload.filter,
+                sku_ids: payload.sku_ids,
+                tiers: payload.tiers,
+                expected_version: payload.expected_version,
+                idempotency_key: payload.idempotency_key,
+            })
+        },
         onSuccess: async (_data, variables) => {
             await invalidateBookCaches(queryClient, variables.bookId)
+            if (variables.silent) return
             toast.add({
                 title: "准备任务已启动",
                 description: "正在冻结商品池并生成陈列，请稍后查看进度。",

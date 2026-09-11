@@ -76,6 +76,7 @@ export type WorkspaceNavBadgeKey =
     | "todo-count"
     | "delivery-count"
     | "warehouse-count"
+    | "selection-actionable-count"
 
 type WorkspaceNavItem = Readonly<{
     id: WorkspaceId
@@ -467,6 +468,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     href: "/sales/selection",
                     label: "选品册",
                     icon: PackageSearchIcon,
+                    badge: "selection-actionable-count",
                     requiredPermissions: ["sales_selection_booklet:list"],
                 },
             ],

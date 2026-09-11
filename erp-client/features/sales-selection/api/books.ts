@@ -5,6 +5,10 @@
 
 import { apiDelete, apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
+import {
+    ACTIONABLE_BOOK_STATUSES,
+    sumActionableBookCounts,
+} from "@/features/sales-selection/lib/actionable-books"
 import type {
     BookListQuery,
     CreateBookInput,
@@ -45,6 +49,19 @@ export const fetchBooks = async (
         },
     )
     return { rows: page.items, total: page.total }
+}
+
+/**
+ * 查询仍需销售处理的选品册数量（草稿 + 准备中 + 待发布）。
+ * 按状态各取 total，不把列表行拉到侧栏。
+ */
+export const fetchActionableBookCount = async (): Promise<number> => {
+    const pages = await Promise.all(
+        ACTIONABLE_BOOK_STATUSES.map((status) =>
+            fetchBooks({ status, page: 1, page_size: 1 }),
+        ),
+    )
+    return sumActionableBookCounts(pages.map((page) => page.total))
 }
 
 /**

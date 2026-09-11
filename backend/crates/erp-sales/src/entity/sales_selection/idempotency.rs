@@ -58,6 +58,31 @@ impl IdempotencyOperation {
             Self::Void => "VOID",
         }
     }
+
+    /// 重试时是否回读选品册当前事实，而不是返回落库时的摘要。
+    ///
+    /// 创建已包含首次准备排队，摘要会过时；发布后令牌也可能再次变化。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 册级写操作返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn replays_live_booklet(self) -> bool {
+        matches!(
+            self,
+            Self::Create
+                | Self::Prepare
+                | Self::Publish
+                | Self::RotateLink
+                | Self::Close
+                | Self::RevokeAccess
+                | Self::Void
+        )
+    }
 }
 
 /// 幂等记录创建数据。
@@ -206,5 +231,18 @@ mod tests {
     fn operations_have_stable_codes() {
         assert_eq!(IdempotencyOperation::Create.as_str(), "CREATE");
         assert_eq!(IdempotencyOperation::SaveSession.as_str(), "SAVE_SESSION");
+    }
+
+    #[test]
+    fn booklet_writes_replay_live_state() {
+        assert!(IdempotencyOperation::Create.replays_live_booklet());
+        assert!(IdempotencyOperation::Prepare.replays_live_booklet());
+        assert!(IdempotencyOperation::Publish.replays_live_booklet());
+        assert!(IdempotencyOperation::RotateLink.replays_live_booklet());
+        assert!(IdempotencyOperation::Close.replays_live_booklet());
+        assert!(IdempotencyOperation::RevokeAccess.replays_live_booklet());
+        assert!(IdempotencyOperation::Void.replays_live_booklet());
+        assert!(!IdempotencyOperation::SaveSession.replays_live_booklet());
+        assert!(!IdempotencyOperation::Submit.replays_live_booklet());
     }
 }

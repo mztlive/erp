@@ -29,8 +29,16 @@ describe("sales selection query keys", () => {
             salesSelectionKeys.preview("token_1"),
             salesSelectionKeys.proposal("proposal_1"),
             salesSelectionKeys.session("book_1"),
+            salesSelectionKeys.actionableCount(),
         ]) {
             expect(key[0]).toBe(root[0])
         }
+    })
+
+    it("keeps the actionable count on a stable key", () => {
+        expect(salesSelectionKeys.actionableCount()).toEqual([
+            "sales-selection",
+            "actionable-count",
+        ])
     })
 })

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { CircleHelpIcon } from "lucide-react"
+import { CircleHelpIcon, PackageSearchIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 import type { SortingState } from "@tanstack/react-table"
 
@@ -14,6 +14,7 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import {
     Popover,
     PopoverContent,
@@ -34,7 +35,7 @@ import { SellableItemsGallery } from "@/features/master-data/components/list/sel
 import { SellableListStatusActions } from "@/features/master-data/components/list/sellable-layout-toggle"
 import { SellablePreviewDialog } from "@/features/master-data/components/list/sellable-preview-dialog"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
-import { BookCreateDialog } from "@/features/sales-selection/components/book-create-dialog"
+import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSellableExcelExport } from "@/features/master-data/hooks/use-sellable-excel-export"
 import { useSellableGallerySelection } from "@/features/master-data/hooks/use-sellable-gallery-selection"
@@ -43,6 +44,12 @@ import { useSellableListState } from "@/features/master-data/hooks/use-sellable-
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
+import { BookCreateDialog } from "@/features/sales-selection/components/book-create-dialog"
+import { launchSelectionNavFrom } from "@/features/sales-selection/lib/nav-launch"
+import {
+    describePoolSource,
+    resolveSellablePoolSourceKind,
+} from "@/features/sales-selection/lib/pool-source"
 
 const supplyViews = [
     { value: "all", label: "全部商品" },
@@ -89,6 +96,27 @@ export function SellableItemsListPage() {
 
     const [exportConfirmOpen, setExportConfirmOpen] = React.useState(false)
     const [selectionLaunchOpen, setSelectionLaunchOpen] = React.useState(false)
+    const launchButtonRef = React.useRef<HTMLSpanElement>(null)
+    const { canCreate: canLaunchSelection } = useCreatePermission(
+        "sales_selection_booklet:create",
+    )
+    const sourceKind = resolveSellablePoolSourceKind(
+        isGallery,
+        selection.selectedCount,
+    )
+    const sourceSummary = describePoolSource({
+        kind: sourceKind,
+        itemCount:
+            sourceKind === "SELECTION"
+                ? selection.selectedCount
+                : state.rows.length,
+        filterLabel: state.appliedChips.map((chip) => chip.label).join(" · "),
+    })
+    const launchDisabled =
+        listLoadFailed ||
+        (sourceKind === "SELECTION"
+            ? selection.selectedCount === 0
+            : state.rows.length === 0)
 
     const changeLayout = React.useCallback(
         (next: SellableListLayout) => {
@@ -156,7 +184,7 @@ export function SellableItemsListPage() {
                             {masterDataCopy.sellableItemsHint}
                         </p>
                         <p className="text-sm leading-6 text-muted-foreground">
-                            表格模式点击行查看资料，导出范围与当前筛选一致。选品模式可勾选商品，导出带主图的表格文件。
+                            表格模式点击行查看资料，导出与发起选品都按当前筛选。卡片模式可勾选商品，导出带主图的表格，或把已勾选商品做成选品册。
                         </p>
                     </PopoverContent>
                 </Popover>
@@ -205,7 +233,7 @@ export function SellableItemsListPage() {
                         ariaLabel="供应快捷筛选"
                         hint={
                             isGallery
-                                ? "勾选后可导出带主图的表格"
+                                ? "勾选后可导出带主图的表格，或做成选品册"
                                 : "选择商品查看详情"
                         }
                         items={supplyViews.map(({ value, label }) => ({
@@ -231,22 +259,41 @@ export function SellableItemsListPage() {
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
                         idleHint={
-                            isGallery
-                                ? "导出范围为当前勾选商品"
-                                : "导出与当前查询结果一致"
+                            sourceKind === "SELECTION"
+                                ? `导出与发起选品均按已勾选 ${selection.selectedCount} 件`
+                                : isGallery
+                                  ? "未勾选时发起选品按当前筛选；导出需先勾选"
+                                  : "导出与发起选品均按当前筛选"
                         }
                         statusActions={
                             <div className="flex items-center">
-                                <Button
-                                    id="master-data-sellable-items-launch-selection"
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    className="h-auto rounded-none px-1 text-xs font-normal text-foreground shadow-none hover:bg-transparent"
-                                    onClick={() => setSelectionLaunchOpen(true)}
-                                >
-                                    发起选品
-                                </Button>
+                                {canLaunchSelection ? (
+                                    <span
+                                        ref={launchButtonRef}
+                                        className="mr-1 inline-flex"
+                                    >
+                                        <Button
+                                            id="master-data-sellable-items-launch-selection"
+                                            type="button"
+                                            variant="default"
+                                            size="xs"
+                                            className="h-7 rounded-md px-2 text-xs font-medium"
+                                            disabled={launchDisabled}
+                                            title={sourceSummary}
+                                            onClick={() =>
+                                                setSelectionLaunchOpen(true)
+                                            }
+                                        >
+                                            <PackageSearchIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                            {sourceKind === "SELECTION"
+                                                ? `发起选品 ${selection.selectedCount}`
+                                                : "发起选品"}
+                                        </Button>
+                                    </span>
+                                ) : null}
                                 <SellableListStatusActions
                                     layout={layout}
                                     onLayoutChange={changeLayout}
@@ -407,30 +454,52 @@ export function SellableItemsListPage() {
                 onConfirm={onConfirmGalleryExport}
             />
 
-            <BookCreateDialog
-                open={selectionLaunchOpen}
-                onOpenChange={setSelectionLaunchOpen}
-                initialFilterQ={filters.q.trim()}
-                initialFilter={{
-                    max_supplier_count:
-                        filters.supplyPreset === "single-supplier"
-                            ? 1
-                            : undefined,
-                    nationwide_only: filters.supplyPreset === "nationwide",
-                    q: filters.q.trim() || undefined,
-                    product_kind: filters.productKind,
-                    category_id: filters.productCategoryId,
-                    brand_id: filters.productBrandId,
-                    supplier_id: filters.productSupplierId,
-                    supply_region: filters.supplyRegion,
-                    sales_price_min: filters.productSalesPriceMin,
-                    sales_price_max: filters.productSalesPriceMax,
-                }}
-                initialSkuIds={isGallery ? [...selection.selectedIds] : []}
-                onCreated={(bookId) =>
-                    router.push(`/sales/selection/${bookId}`)
-                }
-            />
+            {canLaunchSelection ? (
+                <BookCreateDialog
+                    open={selectionLaunchOpen}
+                    onOpenChange={setSelectionLaunchOpen}
+                    sourceKind={sourceKind}
+                    sourceSummary={sourceSummary}
+                    initialFilter={{
+                        max_supplier_count:
+                            filters.supplyPreset === "single-supplier"
+                                ? 1
+                                : undefined,
+                        nationwide_only: filters.supplyPreset === "nationwide",
+                        q: filters.q.trim() || undefined,
+                        product_kind: filters.productKind,
+                        category_id: filters.productCategoryId,
+                        brand_id: filters.productBrandId,
+                        supplier_id: filters.productSupplierId,
+                        supply_region: filters.supplyRegion,
+                        sales_price_min: filters.productSalesPriceMin,
+                        sales_price_max: filters.productSalesPriceMax,
+                    }}
+                    initialSkuIds={
+                        sourceKind === "SELECTION"
+                            ? [...selection.selectedIds]
+                            : []
+                    }
+                    onFlyToNav={() =>
+                        launchSelectionNavFrom(launchButtonRef.current)
+                    }
+                    onLaunched={({ bookId, customerName, prepared }) => {
+                        toast.add({
+                            title: prepared ? "正在准备选品册" : "选品册已创建",
+                            description: prepared
+                                ? `正在为「${customerName}」冻结商品并生成陈列。`
+                                : `已为「${customerName}」创建选品册，准备未开始，可在选品册继续。`,
+                            type: prepared ? "success" : "warning",
+                            timeout: 6000,
+                            actionProps: {
+                                children: "查看这本",
+                                onClick: () =>
+                                    router.push(`/sales/selection/${bookId}`),
+                            },
+                        })
+                    }}
+                />
+            ) : null}
 
             {isGallery ? (
                 <SellablePreviewDialog

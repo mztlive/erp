@@ -28,16 +28,19 @@ import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
 import { isNavItemActive } from "@/lib/nav-active"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import {
     filterNavGroupsByPermissions,
     WORKSPACE_NAV_GROUPS,
     type WorkspaceNavBadgeKey,
 } from "@/lib/workspace-registry"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useActionableBookCountQuery } from "@/features/sales-selection/hooks/queries"
 import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
 
 type NavBadgeCounts = {
     todo: number
+    selectionActionable: number
 }
 
 function badgeCountFor(
@@ -47,6 +50,8 @@ function badgeCountFor(
     switch (key) {
         case "todo-count":
             return counts.todo
+        case "selection-actionable-count":
+            return counts.selectionActionable
         case "delivery-count":
         case "warehouse-count":
             return undefined
@@ -157,8 +162,16 @@ export function WorkspaceSidebarNav() {
     )
 
     const todoCountQuery = useWorkspaceInboxCountQuery()
+    const canListSelectionBooks = hasPermission(
+        permissions,
+        "sales_selection_booklet:list",
+    )
+    const selectionCountQuery = useActionableBookCountQuery(
+        canListSelectionBooks,
+    )
     const counts: NavBadgeCounts = {
         todo: todoCountQuery.data?.mine ?? 0,
+        selectionActionable: selectionCountQuery.data ?? 0,
     }
 
     if (profileQuery.isPending) {
@@ -232,6 +245,9 @@ export function WorkspaceSidebarNav() {
                                     >
                                         <SidebarMenuButton
                                             id={`workspace-sidebar-nav-${toAutomationIdSegment(item.href)}`}
+                                            data-workspace-nav={toAutomationIdSegment(
+                                                item.href,
+                                            )}
                                             isActive={isActive}
                                             tooltip={item.label}
                                             render={<Link href={item.href} />}
@@ -240,6 +256,8 @@ export function WorkspaceSidebarNav() {
                                             <span>{item.label}</span>
                                             {badgeCount && badgeCount > 0 ? (
                                                 <span
+                                                    data-workspace-nav-badge=""
+                                                    aria-label={`${badgeCount} 本待处理`}
                                                     className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-sidebar-accent px-1.5 text-[10px] font-semibold text-sidebar-accent-foreground tabular-nums group-data-[collapsible=icon]:hidden"
                                                 >
                                                     {badgeCount}

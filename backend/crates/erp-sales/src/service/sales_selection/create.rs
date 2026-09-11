@@ -1,6 +1,8 @@
 //! 创建选品册。
 
-use crate::dto::sales_selection::{CreateSalesSelectionBookletRequest, SalesSelectionBookletView};
+use crate::dto::sales_selection::{
+    CreateSalesSelectionBookletRequest, PrepareSalesSelectionRequest, SalesSelectionBookletView,
+};
 use crate::entity::sales_selection::{
     normalize_idempotency_key, request_hash, IdempotencyOperation, PoolSource, SalesSelectionBooklet,
     SalesSelectionBookletData, SalesSelectionIdempotency, SalesSelectionIdempotencyData, TierRule,
@@ -14,7 +16,9 @@ use persistence_core::{Executor, NoTransaction};
 use super::{IdempotencyStoreInput, SalesSelectionService};
 
 impl SalesSelectionService {
-    /// 创建草稿选品册。
+    /// 创建选品册并在同一事务内排队首次准备。
+    ///
+    /// 创建成功后册进入准备中；准备失败恢复仍回草稿。独立准备接口只用于重生成与重新准备。
     ///
     /// # 参数
     /// * `req` - 创建请求
@@ -23,10 +27,10 @@ impl SalesSelectionService {
     /// * `executor` - 执行器；多集合写入须在事务中
     ///
     /// # 返回
-    /// 返回草稿详情。
+    /// 返回已排队的准备中详情。
     ///
     /// # 错误
-    /// 缺客户、形态、提交方式、幂等冲突或客户停用时拒绝。
+    /// 缺客户、形态、提交方式、幂等冲突、客户停用或无法排队准备时拒绝。
     pub async fn create(
         &self,
         req: CreateSalesSelectionBookletRequest,
@@ -82,7 +86,17 @@ impl SalesSelectionService {
             .sales_selection_booklets()
             .create(&booklet, executor)
             .await?;
-        let view = Self::booklet_view(&booklet, &[], None, None);
+        let view = self
+            .enqueue_prepare(
+                PrepareSalesSelectionRequest::first_prepare(
+                    booklet.base.id.clone(),
+                    booklet.base.version,
+                    key.clone(),
+                ),
+                actor_id,
+                executor,
+            )
+            .await?;
         self.store_idempotency(
             IdempotencyStoreInput {
                 operation: IdempotencyOperation::Create,
@@ -132,16 +146,8 @@ impl SalesSelectionService {
         record
             .ensure_same_request(hash)
             .map_err(|error| Error::selection_conflict(error.to_string()))?;
-        if let Some(id) = &record.booklet_id {
-            if matches!(
-                operation,
-                IdempotencyOperation::Prepare
-                    | IdempotencyOperation::Publish
-                    | IdempotencyOperation::RotateLink
-                    | IdempotencyOperation::Close
-                    | IdempotencyOperation::RevokeAccess
-                    | IdempotencyOperation::Void
-            ) {
+        if operation.replays_live_booklet() {
+            if let Some(id) = &record.booklet_id {
                 let book = self.load_booklet(id.as_ref(), executor).await?;
                 let view = self.detail_view(&book, None, executor).await?;
                 return serde_json::from_value(

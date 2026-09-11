@@ -49,17 +49,17 @@ impl SalesSelectionProcess {
         }
     }
 
-    /// 创建选品册。
+    /// 创建选品册并排队首次准备。
     ///
     /// # 参数
     /// * `req` - 请求
     /// * `actor_id` - 创建人
     ///
     /// # 返回
-    /// 返回草稿。
+    /// 返回准备中详情。
     ///
     /// # 错误
-    /// 校验或客户不可用。
+    /// 校验、客户不可用或无法排队准备。
     pub async fn create(
         &self,
         req: CreateSalesSelectionBookletRequest,

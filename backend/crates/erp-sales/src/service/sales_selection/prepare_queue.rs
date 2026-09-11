@@ -51,8 +51,19 @@ impl SalesSelectionService {
             .await
     }
 
-    /// 校验规则时只修改副本，原有效规则一直保留到任务成功。
-    async fn enqueue_prepare(
+    /// 在当前事务内占用册版本并写入排队任务，不执行商品池 I/O。
+    ///
+    /// # 参数
+    /// * `req` - 完整准备命令
+    /// * `actor` - 操作人
+    /// * `tx` - 当前事务执行器
+    ///
+    /// # 返回
+    /// 返回可轮询的准备中详情；同请求重试返回已建立的任务事实。
+    ///
+    /// # 错误
+    /// 旧版本、非法规则或写入失败时整次拒绝。
+    pub(super) async fn enqueue_prepare(
         &self,
         req: PrepareSalesSelectionRequest,
         actor: &str,
@@ -474,6 +485,13 @@ mod tests {
         book.base.version -= 1;
         book.active_task_id = Some("new-task".into());
         assert!(ensure_task_book(&task, &book).is_err());
+    }
+
+    #[test]
+    fn first_prepare_from_create_is_valid_for_draft() {
+        let book = book();
+        let req = PrepareSalesSelectionRequest::first_prepare("book", book.base.version, "key");
+        assert!(validate_prepare_request(&book, &req).is_ok());
     }
 
     #[test]

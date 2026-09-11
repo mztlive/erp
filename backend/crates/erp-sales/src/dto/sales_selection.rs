@@ -81,6 +81,40 @@ pub struct PrepareSalesSelectionRequest {
     pub tiers: Vec<CreateTierRequest>,
 }
 
+impl PrepareSalesSelectionRequest {
+    /// 构造创建后立刻排队的首次准备命令。
+    ///
+    /// 商品池和档位沿用刚写入的册，不重复提交筛选或勾选。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 刚创建的选品册身份
+    /// * `expected_version` - 创建落库后的册版本
+    /// * `idempotency_key` - 与创建请求相同的幂等键；准备操作域单独记账
+    ///
+    /// # 返回
+    /// 返回首次准备命令。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn first_prepare(
+        booklet_id: impl Into<String>,
+        expected_version: u64,
+        idempotency_key: impl Into<String>,
+    ) -> Self {
+        Self {
+            idempotency_key: idempotency_key.into(),
+            booklet_id: booklet_id.into(),
+            expected_version,
+            kind: PrepareKind::FirstPrepare,
+            tier_ids: Vec::new(),
+            seed: 0,
+            pool_filter: None,
+            sku_ids: None,
+            tiers: Vec::new(),
+        }
+    }
+}
+
 /// 删除陈列项。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct DeleteDisplayItemRequest {
@@ -531,6 +565,25 @@ pub struct PublicReceiptView {
     pub items: Vec<PublicChoiceView>,
     /// 按份采购合计。
     pub total_amount: Option<Amount>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_prepare_reuses_book_rules_and_create_key() {
+        let req = PrepareSalesSelectionRequest::first_prepare("book-1", 1, "idem-1");
+        assert_eq!(req.booklet_id, "book-1");
+        assert_eq!(req.expected_version, 1);
+        assert_eq!(req.idempotency_key, "idem-1");
+        assert_eq!(req.kind, PrepareKind::FirstPrepare);
+        assert!(req.tier_ids.is_empty());
+        assert_eq!(req.seed, 0);
+        assert!(req.pool_filter.is_none());
+        assert!(req.sku_ids.is_none());
+        assert!(req.tiers.is_empty());
+    }
 }
 
 /// 分页别名。

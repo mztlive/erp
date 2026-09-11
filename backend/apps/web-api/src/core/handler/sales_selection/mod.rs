@@ -104,7 +104,7 @@ pub async fn booklet_detail(
     resource = "sales_selection_booklet",
     action = "create"
 )]
-/// 创建选品册。
+/// 创建选品册并排队首次准备。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -112,7 +112,7 @@ pub async fn booklet_detail(
 /// * `req` - 创建请求
 ///
 /// # 返回
-/// 返回草稿。
+/// 返回准备中详情。
 pub async fn booklet_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
