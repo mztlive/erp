@@ -20,16 +20,17 @@ import {
     Clock,
     FileCheck,
     Gift,
-    Info,
     Layers,
     Megaphone,
     Minus,
     Package,
     Plus,
     RefreshCw,
+    Search,
     ShieldAlert,
     ShoppingBag,
     Store,
+    X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { publicImageUrl, savePublicSession, submitPublicSession } from "../api"
@@ -246,7 +247,59 @@ const ChoiceSummary = ({
     )
 }
 
-/** 本地编辑撤销确认，冲突保留选择，未知结果保留原请求。 */
+/** 分类推断辅助函数（在单品形态无档位时，根据名称与规格智能分类）。 */
+const inferItemCategory = (item: PublicDisplayItemView): string => {
+    if (item.tier_name) return item.tier_name
+    for (const spec of item.specification) {
+        if (
+            (spec.name === "分类" || spec.name === "品类") &&
+            spec.value.trim()
+        ) {
+            return spec.value.trim()
+        }
+    }
+    const name = item.name.toLowerCase()
+    if (
+        name.includes("茶") ||
+        name.includes("普洱") ||
+        name.includes("龙井") ||
+        name.includes("滋补")
+    )
+        return "茗茶冲饮"
+    if (
+        name.includes("卡") ||
+        name.includes("券") ||
+        name.includes("密") ||
+        name.includes("通")
+    )
+        return "礼品卡券"
+    if (
+        name.includes("安装") ||
+        name.includes("派送") ||
+        name.includes("服务") ||
+        name.includes("保洁")
+    )
+        return "生活服务"
+    if (name.includes("数码") || name.includes("家电") || name.includes("电"))
+        return "数码家电"
+    if (
+        name.includes("生鲜") ||
+        name.includes("礼包") ||
+        name.includes("果") ||
+        name.includes("食品") ||
+        name.includes("粮油")
+    )
+        return "节庆生鲜"
+    return "精选好物"
+}
+
+interface FloorSection {
+    id: string
+    name: string
+    items: PublicDisplayItemView[]
+}
+
+/** 方案 2：经典双栏联动楼层系统（固定视口高，右侧瀑布流滚动实时带动左侧菜单更新位置）。 */
 const SelectionForm = ({
     token,
     page,
@@ -280,43 +333,142 @@ const SelectionForm = ({
     const [message, setMessage] = React.useState("")
     const mall = page.submit_mode === "MALL_REDEEM"
 
-    // 电商交互状态：当前选中的详情商品、购物车抽屉、排序与已选过滤
+    // 交互状态
+    const [searchQuery, setSearchQuery] = React.useState("")
+    const [activeTabId, setActiveTabId] = React.useState<string>("")
     const [detailItem, setDetailItem] =
         React.useState<PublicDisplayItemView | null>(null)
     const [cartDrawerOpen, setCartDrawerOpen] = React.useState(false)
-    const [showOnlySelected, setShowOnlySelected] = React.useState(false)
-    const [priceSort, setPriceSort] = React.useState<"NONE" | "ASC" | "DESC">(
-        "NONE",
-    )
 
-    // 收集全部档位供快捷导航（套餐形态）
-    const tiers = React.useMemo(() => {
-        const set = new Set<string>()
+    // DOM 引用用于双向滚动同步
+    const rightContainerRef = React.useRef<HTMLDivElement>(null)
+    const leftAsideRef = React.useRef<HTMLElement>(null)
+    const sectionRefs = React.useRef<Record<string, HTMLDivElement | null>>({})
+    const leftTabRefs = React.useRef<Record<string, HTMLButtonElement | null>>({})
+    const isManualScrolling = React.useRef(false)
+    const manualScrollTimer = React.useRef<ReturnType<
+        typeof setTimeout
+    > | null>(null)
+
+    const selectedCount = Object.values(picks).filter(
+        (pick) => pick.selected,
+    ).length
+
+    // 构建楼层数据（全部商品按分类连续分楼层展示）
+    const sections: FloorSection[] = React.useMemo(() => {
+        const tierNames = Array.from(
+            new Set(page.items.map((i) => i.tier_name).filter(Boolean)),
+        ) as string[]
+
+        if (tierNames.length > 0) {
+            return tierNames.map((tier) => ({
+                id: `tier:${tier}`,
+                name: tier,
+                items: page.items.filter((item) => item.tier_name === tier),
+            }))
+        }
+
+        // 单品形态按分类构建楼层
+        const categoryMap = new Map<string, PublicDisplayItemView[]>()
         for (const item of page.items) {
-            if (item.tier_name) set.add(item.tier_name)
+            const cat = inferItemCategory(item)
+            const list = categoryMap.get(cat) ?? []
+            list.push(item)
+            categoryMap.set(cat, list)
         }
-        return Array.from(set)
-    }, [page.items])
-    const [activeTier, setActiveTier] = React.useState<string>("ALL")
 
-    // 商品过滤与排序逻辑
-    const displayedItems = React.useMemo(() => {
-        let list = page.items
-        if (activeTier !== "ALL") {
-            list = list.filter((item) => item.tier_name === activeTier)
+        return Array.from(categoryMap.entries()).map(([catName, items]) => ({
+            id: `cat:${catName}`,
+            name: catName,
+            items,
+        }))
+    }, [page.items])
+
+    const activeTabIdRef = React.useRef(activeTabId)
+    React.useEffect(() => {
+        activeTabIdRef.current = activeTabId
+    }, [activeTabId])
+
+    // 初始化默认选中第一个楼层
+    React.useEffect(() => {
+        if (!activeTabId && sections.length > 0) {
+            setActiveTabId(sections[0].id)
         }
-        if (showOnlySelected) {
-            list = list.filter((item) => picks[item.item_id]?.selected)
+    }, [sections, activeTabId])
+
+    // 联动核心 1：右侧滚动时，检测当前视口顶部楼层，带动左侧菜单更新高亮并居中
+    const handleRightScroll = React.useCallback(() => {
+        if (isManualScrolling.current) return
+        if (searchQuery.trim()) return
+        const container = rightContainerRef.current
+        if (!container || sections.length === 0) return
+
+        const containerTop = container.getBoundingClientRect().top
+        let currentId = sections[0].id
+
+        // 检测是否已滚动到底部，若到底部则直接高亮最后一个分类
+        const isAtBottom =
+            container.scrollTop + container.clientHeight >=
+            container.scrollHeight - 25
+        if (isAtBottom) {
+            currentId = sections[sections.length - 1].id
+        } else {
+            for (const section of sections) {
+                const el = sectionRefs.current[section.id]
+                if (!el) continue
+                const elTop = el.getBoundingClientRect().top - containerTop
+                if (elTop <= 50) {
+                    currentId = section.id
+                } else {
+                    break
+                }
+            }
         }
-        if (priceSort !== "NONE") {
-            list = [...list].sort((a, b) => {
-                const aVal = Number.parseInt(a.price.replace(".", ""), 10) || 0
-                const bVal = Number.parseInt(b.price.replace(".", ""), 10) || 0
-                return priceSort === "ASC" ? aVal - bVal : bVal - aVal
-            })
+
+        if (currentId && currentId !== activeTabIdRef.current) {
+            setActiveTabId(currentId)
+            const tabBtn = leftTabRefs.current[currentId]
+            if (tabBtn) {
+                tabBtn.scrollIntoView({ block: "nearest", behavior: "smooth" })
+            }
         }
-        return list
-    }, [page.items, activeTier, showOnlySelected, priceSort, picks])
+    }, [sections, searchQuery])
+
+    // 联动核心 2：点击左侧菜单，右侧平滑滚动定位到指定楼层
+    const scrollToSection = React.useCallback((sectionId: string) => {
+        setActiveTabId(sectionId)
+        isManualScrolling.current = true
+        if (manualScrollTimer.current) clearTimeout(manualScrollTimer.current)
+
+        const targetEl = sectionRefs.current[sectionId]
+        const container = rightContainerRef.current
+        if (targetEl && container) {
+            const currentScroll = container.scrollTop
+            const targetRelativeTop =
+                targetEl.getBoundingClientRect().top -
+                container.getBoundingClientRect().top
+            const targetScrollTop = currentScroll + targetRelativeTop
+            container.scrollTo({ top: targetScrollTop, behavior: "smooth" })
+        }
+
+        manualScrollTimer.current = setTimeout(() => {
+            isManualScrolling.current = false
+        }, 500)
+    }, [])
+
+    // 搜索过滤视图
+    const searchResults = React.useMemo(() => {
+        if (!searchQuery.trim()) return null
+        const q = searchQuery.trim().toLowerCase()
+        return page.items.filter((item) => {
+            if (item.name.toLowerCase().includes(q)) return true
+            return item.specification.some(
+                (s) =>
+                    s.name.toLowerCase().includes(q) ||
+                    s.value.toLowerCase().includes(q),
+            )
+        })
+    }, [page.items, searchQuery])
 
     const keepRequest = (next: PendingSelectionRequest | null) => {
         setRequest(next)
@@ -447,25 +599,240 @@ const SelectionForm = ({
 
     if (ended) return <Ended />
 
-    const selectedCount = Object.values(picks).filter(
-        (pick) => pick.selected,
-    ).length
+    const renderCard = (item: PublicDisplayItemView) => {
+        const pick = picks[item.item_id]
+        const isSelected = pick?.selected ?? false
+        const image = publicImageUrl(token, item.cover_path)
+        const [intPart, decPart] = item.price.split(".")
+
+        return (
+            <article
+                key={item.item_id}
+                className={cn(
+                    "group relative flex gap-2.5 rounded-2xl bg-white p-2.5 border transition-all shadow-2xs hover:shadow-xs",
+                    isSelected
+                        ? "border-rose-500/80 ring-1 ring-rose-500/15"
+                        : "border-slate-200/80 hover:border-slate-300",
+                )}
+            >
+                {/* 左侧: 1:1 方形图片/占位 */}
+                <button
+                    type="button"
+                    aria-label={`查看${item.name}详情`}
+                    className="relative size-20 sm:size-22 rounded-xl overflow-hidden bg-slate-50 shrink-0 text-left block cursor-pointer border-0 p-0"
+                    onClick={() => setDetailItem(item)}
+                >
+                    {image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                            src={image}
+                            alt=""
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                        />
+                    ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-rose-50/40 via-slate-50 to-amber-50/30 p-2 text-center">
+                            <Gift className="h-6 w-6 stroke-[1.5] text-rose-400" />
+                            <span className="mt-1 text-[9px] font-semibold text-slate-400">
+                                严选好物
+                            </span>
+                        </div>
+                    )}
+
+                    {/* 档位微标 */}
+                    {item.tier_name && (
+                        <span className="absolute left-1 top-1 rounded bg-slate-900/75 px-1 py-0.2 text-[9px] font-semibold text-white backdrop-blur-xs">
+                            {item.tier_name}
+                        </span>
+                    )}
+
+                    {/* 套餐件数 */}
+                    {item.members.length > 0 && (
+                        <span className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.2 text-[9px] text-white flex items-center gap-0.5 backdrop-blur-xs">
+                            <Layers className="h-2 w-2" />
+                            {item.members.length}件装
+                        </span>
+                    )}
+
+                    {/* 选中打勾标记 */}
+                    {isSelected && (
+                        <div className="absolute right-1 top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-rose-600 text-white shadow-xs ring-1 ring-white">
+                            <Check className="h-2.5 w-2.5 stroke-[3]" />
+                        </div>
+                    )}
+                </button>
+
+                {/* 右侧: 商品信息与操作 */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setDetailItem(item)}
+                            className="text-left w-full text-xs sm:text-sm font-medium text-slate-900 leading-snug line-clamp-2 hover:text-rose-600 transition-colors p-0 border-0 bg-transparent"
+                        >
+                            {item.name}
+                        </button>
+
+                        {/* Specs */}
+                        {item.specification.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                                {item.specification.slice(0, 2).map((s) => (
+                                    <span
+                                        key={s.name}
+                                        className="rounded bg-slate-100 px-1 py-0.2 text-[10px] text-slate-500 truncate max-w-full"
+                                    >
+                                        {s.value || s.name}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 价格与操作 */}
+                    <div className="mt-1 flex items-end justify-between gap-1 pt-1 border-t border-slate-100/60">
+                        <div>
+                            <div className="flex items-baseline text-rose-600 font-semibold">
+                                <span className="text-[11px] mr-0.5 font-bold">
+                                    ¥
+                                </span>
+                                <span className="text-base font-bold tracking-tight">
+                                    {intPart}
+                                </span>
+                                {decPart !== undefined && (
+                                    <span className="text-[10px] font-medium">
+                                        .{decPart}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 选品或步进器 */}
+                        <div className="flex items-center gap-1.5">
+                            {isSelected && !mall ? (
+                                <div className="flex items-center gap-0.5 rounded-lg bg-slate-50 p-0.5 border border-slate-200">
+                                    <button
+                                        type="button"
+                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs disabled:opacity-40"
+                                        disabled={
+                                            locked ||
+                                            conflict ||
+                                            Number.parseInt(pick.quantity, 10) <=
+                                                1
+                                        }
+                                        onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            const current = Number.parseInt(
+                                                pick.quantity,
+                                                10,
+                                            )
+                                            if (
+                                                Number.isSafeInteger(current) &&
+                                                current > 1
+                                            ) {
+                                                change(item.item_id, {
+                                                    quantity: String(
+                                                        current - 1,
+                                                    ),
+                                                })
+                                            }
+                                        }}
+                                    >
+                                        <Minus className="h-2.5 w-2.5" />
+                                    </button>
+                                    <Input
+                                        id={`sales-selection-public-qty-${item.item_id}`}
+                                        inputMode="numeric"
+                                        className="h-5 w-8 border-0 bg-transparent text-center text-xs font-bold p-0 shadow-none focus-visible:ring-0"
+                                        value={pick.quantity}
+                                        onChange={(e) =>
+                                            change(item.item_id, {
+                                                quantity: e.target.value,
+                                            })
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs"
+                                        disabled={locked || conflict}
+                                        onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            const current = Number.parseInt(
+                                                pick.quantity,
+                                                10,
+                                            )
+                                            const val = Number.isSafeInteger(
+                                                current,
+                                            )
+                                                ? current
+                                                : 1
+                                            change(item.item_id, {
+                                                quantity: String(val + 1),
+                                            })
+                                        }}
+                                    >
+                                        <Plus className="h-2.5 w-2.5" />
+                                    </button>
+                                </div>
+                            ) : null}
+
+                            {/* 选择按钮与 Checkbox */}
+                            <label
+                                aria-label={item.name}
+                                htmlFor={`sales-selection-public-select-${item.item_id}`}
+                                className={cn(
+                                    "flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none shadow-2xs active:scale-95",
+                                    isSelected
+                                        ? "bg-rose-600 text-white"
+                                        : "bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white",
+                                )}
+                            >
+                                <input
+                                    id={`sales-selection-public-select-${item.item_id}`}
+                                    aria-label={item.name}
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) =>
+                                        change(item.item_id, {
+                                            selected: e.target.checked,
+                                        })
+                                    }
+                                    className="sr-only"
+                                />
+                                {isSelected ? (
+                                    <>
+                                        <Check className="h-3 w-3 stroke-[3]" />
+                                        <span>已选</span>
+                                    </>
+                                ) : (
+                                    <span>+ 选品</span>
+                                )}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        )
+    }
 
     return (
-        <main className="min-h-screen bg-slate-100 pb-32">
-            <div className="mx-auto max-w-lg min-h-screen bg-white shadow-xl flex flex-col">
-                {/* 1. 电商商城顶部导航条 */}
-                <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-rose-500 via-rose-600 to-amber-500 text-white shadow-xs">
-                                <Store className="h-5 w-5" />
+        <main className="fixed inset-0 h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-slate-100">
+            <div className="mx-auto w-full max-w-lg h-full flex flex-col bg-white shadow-xl overflow-hidden relative">
+                {/* 1. 顶部电商商城头部 + 搜索框 (固定不滚动) */}
+                <header className="shrink-0 bg-white border-b border-slate-200/80 px-3.5 py-2 z-20">
+                    <div className="flex items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-rose-500 via-rose-600 to-amber-500 text-white shadow-xs">
+                                <Store className="h-4.5 w-4.5" />
                             </div>
                             <div className="min-w-0">
-                                <h1 className="text-sm font-bold text-slate-900 truncate">
+                                <h1 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
                                     {page.customer_name}
                                 </h1>
-                                <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                <p className="text-[10px] text-slate-500 flex items-center gap-1">
                                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                     <span>专属选品会场</span>
                                     <span className="text-slate-300">|</span>
@@ -477,18 +844,39 @@ const SelectionForm = ({
                         </div>
                         <Badge
                             variant="outline"
-                            className="shrink-0 text-xs border-rose-200 bg-rose-50 text-rose-600 font-medium px-2.5 py-0.5"
+                            className="shrink-0 text-[11px] border-rose-200 bg-rose-50 text-rose-600 font-medium px-2 py-0.5"
                         >
                             {mall ? "意向可选库" : "批量采购"}
                         </Badge>
                     </div>
+
+                    {/* 搜索框 */}
+                    <div className="relative mt-1.5">
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                        <Input
+                            type="text"
+                            placeholder="搜索几百款商品、规格或名称..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="h-8 w-full rounded-full bg-slate-100 pl-8.5 pr-8 text-xs placeholder:text-slate-400 border-0 shadow-none focus-visible:ring-1 focus-visible:ring-rose-500"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
                 </header>
 
-                {/* 2. 电商通知走马灯 / 提示条 */}
+                {/* 2. 业务公告 (固定不滚动) */}
                 {page.notices.length > 0 && (
-                    <div className="bg-amber-50/90 border-b border-amber-200/60 px-4 py-2 text-xs text-amber-900 flex items-center gap-2">
-                        <Megaphone className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                        <div className="truncate flex-1 space-x-2 font-medium">
+                    <div className="shrink-0 bg-amber-50/90 border-b border-amber-200/60 px-3.5 py-1 text-[11px] text-amber-900 flex items-center gap-1.5 font-medium z-10">
+                        <Megaphone className="h-3 w-3 shrink-0 text-amber-600" />
+                        <div className="truncate flex-1 space-x-2">
                             {page.notices.map((notice, i) => (
                                 <span key={notice}>
                                     {i > 0 ? " · " : ""}
@@ -503,7 +891,7 @@ const SelectionForm = ({
                 {(message || request) && (
                     <div
                         role="status"
-                        className="mx-3 mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 shadow-2xs"
+                        className="shrink-0 mx-3 my-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 shadow-2xs z-10"
                     >
                         <div className="flex items-start gap-2">
                             <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
@@ -516,7 +904,7 @@ const SelectionForm = ({
                                     <Button
                                         id="sales-selection-public-reconcile"
                                         size="sm"
-                                        className="mt-2 h-7 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-xs"
+                                        className="mt-1.5 h-6 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-xs px-2"
                                         onClick={() => mutation.mutate(request)}
                                     >
                                         核对并恢复本次操作
@@ -530,16 +918,16 @@ const SelectionForm = ({
                 {/* 冲突处理区域 */}
                 {conflict && (
                     <section
-                        className="mx-3 mt-3 rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-3.5 space-y-2.5"
+                        className="shrink-0 mx-3 my-2 rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-3 space-y-2 z-10"
                         aria-label="最新保存的选择"
                     >
-                        <div className="flex items-center gap-2 text-amber-900">
+                        <div className="flex items-center gap-1.5 text-amber-900">
                             <ShieldAlert className="h-4 w-4 text-amber-600" />
-                            <h2 className="font-bold text-xs sm:text-sm">
+                            <h2 className="font-bold text-xs">
                                 其他页面最新保存的选择
                             </h2>
                         </div>
-                        <p className="text-xs text-amber-800 leading-relaxed">
+                        <p className="text-[11px] text-amber-800">
                             其他设备刚刚更新了该选品册。您的本地修改已保留，请仔细核对最新清单：
                         </p>
                         {latest ? (
@@ -584,405 +972,221 @@ const SelectionForm = ({
                     </section>
                 )}
 
-                {/* 3. 分类、档位与快捷筛选横滑栏 */}
-                <div className="sticky top-[57px] z-20 bg-white border-b border-slate-200/80 px-3 py-2 flex items-center justify-between gap-2 shadow-2xs">
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setActiveTier("ALL")
-                                setShowOnlySelected(false)
-                            }}
-                            className={cn(
-                                "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all",
-                                activeTier === "ALL" && !showOnlySelected
-                                    ? "bg-rose-600 text-white shadow-xs"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                            )}
-                        >
-                            全部 ({page.items.length})
-                        </button>
-                        {tiers.map((tier) => (
-                            <button
-                                key={tier}
-                                type="button"
-                                onClick={() => {
-                                    setActiveTier(tier)
-                                    setShowOnlySelected(false)
-                                }}
-                                className={cn(
-                                    "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all",
-                                    activeTier === tier && !showOnlySelected
-                                        ? "bg-rose-600 text-white shadow-xs"
-                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                                )}
-                            >
-                                {tier}
-                            </button>
-                        ))}
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setShowOnlySelected(!showOnlySelected)
-                            }
-                            className={cn(
-                                "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all flex items-center gap-1",
-                                showOnlySelected
-                                    ? "bg-rose-600 text-white shadow-xs"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-                            )}
-                        >
-                            <Check className="h-3 w-3" />
-                            已选 ({selectedCount})
-                        </button>
-                    </div>
-                    {/* 价格排序微调 */}
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setPriceSort((prev) =>
-                                prev === "NONE"
-                                    ? "ASC"
-                                    : prev === "ASC"
-                                      ? "DESC"
-                                      : "NONE",
-                            )
-                        }
-                        className={cn(
-                            "shrink-0 flex items-center gap-0.5 rounded-full px-2.5 py-1 text-xs font-medium border border-slate-200 bg-white transition-all",
-                            priceSort !== "NONE"
-                                ? "text-rose-600 border-rose-300 font-bold bg-rose-50/50"
-                                : "text-slate-600",
-                        )}
+                {/* 3. 核心双栏分层联动区域（只有本区域内部独立滚动，整个页面不乱跑） */}
+                <div className="flex-1 flex overflow-hidden min-h-0">
+                    {/* 左侧品类侧边栏 */}
+                    <aside
+                        ref={leftAsideRef}
+                        className="w-20 sm:w-24 shrink-0 bg-slate-50/90 border-r border-slate-200/80 overflow-y-auto no-scrollbar py-1 select-none"
                     >
-                        价格
-                        {priceSort === "ASC"
-                            ? " ↑"
-                            : priceSort === "DESC"
-                              ? " ↓"
-                              : " ↕"}
-                    </button>
-                </div>
-
-                {/* 4. 标准电商双列瀑布流 / 宫格商品列表 */}
-                <div className="p-3 sm:p-4 flex-1">
-                    <fieldset
-                        disabled={locked || conflict}
-                        className="grid grid-cols-2 gap-2.5 sm:gap-3"
-                    >
-                        {displayedItems.map((item) => {
-                            const pick = picks[item.item_id]
-                            const isSelected = pick?.selected ?? false
-                            const image = publicImageUrl(token, item.cover_path)
-                            const [intPart, decPart] = item.price.split(".")
-
+                        {sections.map((section) => {
+                            const isActive =
+                                activeTabId === section.id && !searchQuery
                             return (
-                                <article
-                                    key={item.item_id}
+                                <button
+                                    key={section.id}
+                                    ref={(el) => {
+                                        leftTabRefs.current[section.id] = el
+                                    }}
+                                    type="button"
+                                    onClick={() => scrollToSection(section.id)}
                                     className={cn(
-                                        "group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border transition-all duration-200 shadow-2xs hover:shadow-md",
-                                        isSelected
-                                            ? "border-rose-500 ring-2 ring-rose-500/15"
-                                            : "border-slate-200/80 hover:border-slate-300",
+                                        "relative flex w-full flex-col items-center justify-center py-3.5 px-1 text-center transition-all border-0",
+                                        isActive
+                                            ? "bg-white text-rose-600 font-bold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-rose-600 shadow-2xs"
+                                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium bg-transparent",
                                     )}
                                 >
-                                    {/* 1:1 正方形电商大图 */}
-                                    <button
-                                        type="button"
-                                        aria-label={`查看${item.name}详情`}
-                                        className="relative aspect-square w-full overflow-hidden bg-slate-50 text-left block cursor-pointer border-0 p-0"
-                                        onClick={() => setDetailItem(item)}
+                                    <span className="text-[11px] sm:text-xs line-clamp-2 leading-tight">
+                                        {section.name}
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            "mt-1 rounded-full px-1.5 py-0.2 text-[9px] font-bold",
+                                            isActive
+                                                ? "bg-rose-100 text-rose-600"
+                                                : "bg-slate-200/70 text-slate-500",
+                                        )}
                                     >
-                                        {image ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img
-                                                src={image}
-                                                alt=""
-                                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                                loading="lazy"
-                                                referrerPolicy="no-referrer"
-                                            />
-                                        ) : (
-                                            <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-rose-50/40 via-slate-50 to-amber-50/30 p-3 text-center">
-                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-2xs text-rose-400">
-                                                    <Gift className="h-6 w-6 stroke-[1.5]" />
-                                                </div>
-                                                <span className="mt-2 text-[10px] font-semibold text-slate-400 tracking-wider">
-                                                    严选好物
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        {/* 套餐档位徽标 */}
-                                        {item.tier_name && (
-                                            <span className="absolute left-2 top-2 rounded-md bg-slate-900/75 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-xs backdrop-blur-xs">
-                                                {item.tier_name}
-                                            </span>
-                                        )}
-
-                                        {/* 套餐件数提示 */}
-                                        {item.members.length > 0 && (
-                                            <span className="absolute left-2 bottom-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white flex items-center gap-1 backdrop-blur-xs">
-                                                <Layers className="h-2.5 w-2.5" />
-                                                {item.members.length}件装
-                                            </span>
-                                        )}
-
-                                        {/* 右上角选中状态徽标 */}
-                                        <div className="absolute right-2 top-2">
-                                            <span
-                                                className={cn(
-                                                    "flex h-6 w-6 items-center justify-center rounded-full transition-all shadow-xs",
-                                                    isSelected
-                                                        ? "bg-rose-600 text-white scale-100 ring-2 ring-white"
-                                                        : "bg-black/20 text-transparent border border-white/60 backdrop-blur-xs scale-90",
-                                                )}
-                                            >
-                                                <Check className="h-3.5 w-3.5 stroke-[3]" />
-                                            </span>
-                                        </div>
-                                    </button>
-
-                                    {/* 卡片详情与操作 */}
-                                    <div className="p-2.5 sm:p-3 flex flex-col flex-1 justify-between gap-1.5">
-                                        <div>
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setDetailItem(item)
-                                                }
-                                                className="text-left w-full text-xs sm:text-sm font-medium text-slate-900 leading-snug line-clamp-2 h-[2.5em] hover:text-rose-600 transition-colors p-0 border-0 bg-transparent"
-                                            >
-                                                {item.name}
-                                            </button>
-
-                                            {/* 规格标签 */}
-                                            {item.specification.length > 0 && (
-                                                <div className="mt-1 flex flex-wrap gap-1">
-                                                    {item.specification
-                                                        .slice(0, 2)
-                                                        .map((s) => (
-                                                            <span
-                                                                key={s.name}
-                                                                className="rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-500 truncate max-w-full"
-                                                            >
-                                                                {s.value ||
-                                                                    s.name}
-                                                            </span>
-                                                        ))}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* 价格与操作区域 */}
-                                        <div className="mt-1 pt-1.5 border-t border-slate-100">
-                                            <div className="flex items-baseline text-rose-600 font-semibold">
-                                                <span className="text-xs mr-0.5 font-bold">
-                                                    ¥
-                                                </span>
-                                                <span className="text-base sm:text-lg font-bold tracking-tight">
-                                                    {intPart}
-                                                </span>
-                                                {decPart !== undefined && (
-                                                    <span className="text-[11px] font-medium">
-                                                        .{decPart}
-                                                    </span>
-                                                )}
-                                                {mall && (
-                                                    <span className="ml-1 text-[10px] font-normal text-slate-400">
-                                                        参考值
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* 按钮行 */}
-                                            <div className="mt-1.5 flex items-center justify-between gap-1">
-                                                <label
-                                                    aria-label={item.name}
-                                                    htmlFor={`sales-selection-public-select-${item.item_id}`}
-                                                    className={cn(
-                                                        "flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none flex-1 shadow-2xs active:scale-95",
-                                                        isSelected
-                                                            ? "bg-rose-600 text-white"
-                                                            : "bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white",
-                                                    )}
-                                                >
-                                                    <input
-                                                        id={`sales-selection-public-select-${item.item_id}`}
-                                                        aria-label={item.name}
-                                                        type="checkbox"
-                                                        checked={isSelected}
-                                                        onChange={(e) =>
-                                                            change(
-                                                                item.item_id,
-                                                                {
-                                                                    selected:
-                                                                        e.target
-                                                                            .checked,
-                                                                },
-                                                            )
-                                                        }
-                                                        className="sr-only"
-                                                    />
-                                                    {isSelected ? (
-                                                        <>
-                                                            <Check className="h-3 w-3 stroke-[3]" />
-                                                            <span>已选</span>
-                                                        </>
-                                                    ) : (
-                                                        <span>+ 选品</span>
-                                                    )}
-                                                </label>
-
-                                                {/* 详情浮层快捷查看 */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setDetailItem(item)
-                                                    }
-                                                    className="flex h-6.5 w-6.5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                                                    title="查看商品详情"
-                                                >
-                                                    <Info className="h-3.5 w-3.5" />
-                                                </button>
-                                            </div>
-
-                                            {/* 按份步进器 */}
-                                            {isSelected && !mall && (
-                                                <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 p-1 border border-slate-200">
-                                                    <span className="text-[10px] text-slate-500 pl-1 font-medium">
-                                                        份数
-                                                    </span>
-                                                    <div className="flex items-center gap-1">
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs disabled:opacity-40"
-                                                            disabled={
-                                                                locked ||
-                                                                conflict ||
-                                                                Number.parseInt(
-                                                                    pick.quantity,
-                                                                    10,
-                                                                ) <= 1
-                                                            }
-                                                            onClick={(e) => {
-                                                                e.preventDefault()
-                                                                e.stopPropagation()
-                                                                const current =
-                                                                    Number.parseInt(
-                                                                        pick.quantity,
-                                                                        10,
-                                                                    )
-                                                                if (
-                                                                    Number.isSafeInteger(
-                                                                        current,
-                                                                    ) &&
-                                                                    current > 1
-                                                                ) {
-                                                                    change(
-                                                                        item.item_id,
-                                                                        {
-                                                                            quantity:
-                                                                                String(
-                                                                                    current -
-                                                                                        1,
-                                                                                ),
-                                                                        },
-                                                                    )
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Minus className="h-2.5 w-2.5" />
-                                                        </button>
-                                                        <Input
-                                                            id={`sales-selection-public-qty-${item.item_id}`}
-                                                            inputMode="numeric"
-                                                            className="h-5 w-8 border-0 bg-transparent text-center text-xs font-bold p-0 shadow-none focus-visible:ring-0"
-                                                            value={
-                                                                pick.quantity
-                                                            }
-                                                            onChange={(e) =>
-                                                                change(
-                                                                    item.item_id,
-                                                                    {
-                                                                        quantity:
-                                                                            e
-                                                                                .target
-                                                                                .value,
-                                                                    },
-                                                                )
-                                                            }
-                                                            onClick={(e) =>
-                                                                e.stopPropagation()
-                                                            }
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs"
-                                                            disabled={
-                                                                locked ||
-                                                                conflict
-                                                            }
-                                                            onClick={(e) => {
-                                                                e.preventDefault()
-                                                                e.stopPropagation()
-                                                                const current =
-                                                                    Number.parseInt(
-                                                                        pick.quantity,
-                                                                        10,
-                                                                    )
-                                                                const val =
-                                                                    Number.isSafeInteger(
-                                                                        current,
-                                                                    )
-                                                                        ? current
-                                                                        : 1
-                                                                change(
-                                                                    item.item_id,
-                                                                    {
-                                                                        quantity:
-                                                                            String(
-                                                                                val +
-                                                                                    1,
-                                                                            ),
-                                                                    },
-                                                                )
-                                                            }}
-                                                        >
-                                                            <Plus className="h-2.5 w-2.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </article>
+                                        {section.items.length}
+                                    </span>
+                                </button>
                             )
                         })}
-                    </fieldset>
+                    </aside>
+
+                    {/* 右侧商品瀑布流 (监听滚动以联动左侧高亮) */}
+                    <section
+                        ref={rightContainerRef}
+                        onScroll={handleRightScroll}
+                        onWheel={() => {
+                            isManualScrolling.current = false
+                        }}
+                        onTouchStart={() => {
+                            isManualScrolling.current = false
+                        }}
+                        className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-4 bg-white"
+                    >
+                        <fieldset
+                            disabled={locked || conflict}
+                            className="space-y-4"
+                        >
+                            {/* 如果处于搜索状态，显示搜索结果 */}
+                            {searchResults ? (
+                                <div className="space-y-2.5">
+                                    <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                                        <span className="text-xs font-bold text-slate-800">
+                                            搜索结果 &quot;{searchQuery}&quot; (
+                                            {searchResults.length})
+                                        </span>
+                                    </div>
+                                    {searchResults.map(renderCard)}
+                                    {searchResults.length === 0 && (
+                                        <div className="py-16 text-center text-xs text-slate-400">
+                                            未找到匹配的商品
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* 默认全楼层连续滚动陈列 */
+                                sections.map((section) => (
+                                    <div
+                                        key={section.id}
+                                        ref={(el) => {
+                                            sectionRefs.current[section.id] = el
+                                        }}
+                                        data-section-id={section.id}
+                                        className="space-y-2"
+                                    >
+                                        {/* 品类楼层吸顶标题 */}
+                                        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs py-1.5 flex items-center justify-between border-b border-slate-100">
+                                            <h2 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                                <span className="h-3 w-1 rounded-full bg-rose-600" />
+                                                {section.name} (
+                                                {section.items.length})
+                                            </h2>
+                                        </div>
+
+                                        {/* 楼层内商品列表 */}
+                                        <div className="space-y-2.5">
+                                            {section.items.map(renderCard)}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </fieldset>
+
+                        {/* 核对清单（点击核对后在右侧底部展开） */}
+                        {confirmed && (
+                            <section
+                                className="mt-4 rounded-2xl border-2 border-rose-500/20 bg-rose-50/25 p-3.5 space-y-2.5 shadow-xs"
+                                aria-label="核对并提交"
+                            >
+                                <div className="flex items-center gap-1.5 text-rose-600">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    <h2 className="font-bold text-xs sm:text-sm text-slate-900">
+                                        请核对本次提交清单
+                                    </h2>
+                                </div>
+                                <p className="text-[11px] text-slate-500">
+                                    确认提交后将生成唯一的正式销售方案编号，并锁定会话。
+                                </p>
+                                <ChoiceSummary page={confirmed} />
+                            </section>
+                        )}
+                    </section>
                 </div>
 
-                {/* 5. 正式待确认清单（点击核对并提交后展开） */}
-                {confirmed && (
-                    <section
-                        className="mx-3 mb-6 rounded-3xl border-2 border-rose-500/20 bg-rose-50/20 p-4 space-y-3 shadow-sm"
-                        aria-label="核对并提交"
-                    >
-                        <div className="flex items-center gap-2 text-rose-600">
-                            <CheckCircle2 className="h-5 w-5" />
-                            <h2 className="font-bold text-sm sm:text-base text-slate-900">
-                                请核对本次提交清单
-                            </h2>
+                {/* 4. 底部吸底结算栏 (固定不滚动) */}
+                <aside
+                    aria-label="核对并提交"
+                    className="shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-[0_-8px_20px_rgba(0,0,0,0.08)] z-30"
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        {/* 左侧：点击呼出已选清单 */}
+                        <button
+                            type="button"
+                            className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
+                            onClick={() => setCartDrawerOpen(true)}
+                        >
+                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white shadow-md active:scale-95 transition-transform">
+                                <ShoppingBag className="h-5 w-5" />
+                                {selectedCount > 0 && (
+                                    <span className="absolute -right-1.5 -top-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-950 shadow-sm animate-in zoom-in">
+                                        {selectedCount}
+                                    </span>
+                                )}
+                            </div>
+                            <div>
+                                {mall ? (
+                                    <div>
+                                        <p className="text-xs sm:text-sm font-bold text-slate-900">
+                                            已选{" "}
+                                            <span className="text-rose-600">
+                                                {selectedCount}
+                                            </span>{" "}
+                                            款
+                                        </p>
+                                        <p className="text-[10px] text-slate-400">
+                                            {dirty
+                                                ? "修改待保存"
+                                                : "点击查看清单"}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <p className="text-sm sm:text-base font-bold text-rose-600 leading-none">
+                                            已选 {selectedCount} 项
+                                        </p>
+                                        <p className="text-[10px] text-slate-500 mt-0.5">
+                                            {dirty
+                                                ? "尚有修改未保存"
+                                                : "已选内容已同步"}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </button>
+
+                        {/* 右侧：电商结算按钮组 */}
+                        <div className="flex items-center gap-2">
+                            <Button
+                                id="sales-selection-public-save"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full border-slate-300 text-xs text-slate-700 px-3.5 h-8.5"
+                                disabled={locked || conflict}
+                                onClick={() => persist(false)}
+                            >
+                                保存选择
+                            </Button>
+                            {confirmed ? (
+                                <Button
+                                    id="sales-selection-public-submit"
+                                    size="sm"
+                                    className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-8.5 active:scale-95 transition-all"
+                                    disabled={locked || conflict || dirty}
+                                    onClick={submit}
+                                >
+                                    确认并提交选品
+                                </Button>
+                            ) : (
+                                <Button
+                                    id="sales-selection-public-review"
+                                    size="sm"
+                                    className="rounded-full bg-gradient-to-r from-rose-500 via-rose-600 to-red-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-8.5 active:scale-95 transition-all"
+                                    disabled={locked || conflict}
+                                    onClick={() => persist(true)}
+                                >
+                                    核对并提交
+                                </Button>
+                            )}
                         </div>
-                        <p className="text-xs text-slate-500 leading-relaxed">
-                            确认提交后将生成唯一的正式销售方案编号，并锁定会话。请仔细核对以下所选项：
-                        </p>
-                        <ChoiceSummary page={confirmed} />
-                    </section>
-                )}
+                    </div>
+                </aside>
             </div>
 
-            {/* 6. 商品详情 Dialog */}
+            {/* 5. 商品详情弹窗 (Detail Dialog) */}
             <Dialog
                 open={detailItem !== null}
                 onOpenChange={(open) => {
@@ -1082,7 +1286,7 @@ const SelectionForm = ({
                                                     {m.specification
                                                         .map((s) => s.value)
                                                         .join("/")}{" "}
-                                                    · 1{m.unit}
+                                                · 1{m.unit}
                                                 </span>
                                             </div>
                                         ))}
@@ -1112,7 +1316,7 @@ const SelectionForm = ({
                 </DialogContent>
             </Dialog>
 
-            {/* 7. 已选清单 Dialog (Cart Sheet) */}
+            {/* 6. 已选清单抽屉 (Cart Sheet) */}
             <Dialog open={cartDrawerOpen} onOpenChange={setCartDrawerOpen}>
                 <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col">
                     <DialogHeader>
@@ -1179,94 +1383,6 @@ const SelectionForm = ({
                     </div>
                 </DialogContent>
             </Dialog>
-
-            {/* 8. 核心吸底结算栏 (Sticky Bottom Action Bar) */}
-            <aside
-                aria-label="核对并提交"
-                className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-4 py-2.5 shadow-[0_-8px_20px_rgba(0,0,0,0.08)]"
-            >
-                <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
-                    {/* 左侧：点击呼出已选清单 */}
-                    <button
-                        type="button"
-                        className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
-                        onClick={() => setCartDrawerOpen(true)}
-                    >
-                        <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white shadow-md active:scale-95 transition-transform">
-                            <ShoppingBag className="h-5 w-5" />
-                            {selectedCount > 0 && (
-                                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[11px] font-bold text-slate-950 shadow-sm animate-in zoom-in">
-                                    {selectedCount}
-                                </span>
-                            )}
-                        </div>
-                        <div>
-                            {mall ? (
-                                <div>
-                                    <p className="text-sm font-bold text-slate-900">
-                                        已选{" "}
-                                        <span className="text-rose-600">
-                                            {selectedCount}
-                                        </span>{" "}
-                                        款
-                                    </p>
-                                    <p className="text-[11px] text-slate-400">
-                                        {dirty
-                                            ? "修改待保存"
-                                            : "点击查看已选清单"}
-                                    </p>
-                                </div>
-                            ) : (
-                                <div>
-                                    <p className="text-base font-bold text-rose-600 leading-none">
-                                        已选 {selectedCount} 项
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 mt-0.5">
-                                        {dirty
-                                            ? "尚有修改未保存"
-                                            : "已选内容已同步"}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </button>
-
-                    {/* 右侧：电商结算大按钮组 */}
-                    <div className="flex items-center gap-2">
-                        <Button
-                            id="sales-selection-public-save"
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full border-slate-300 text-xs text-slate-700 px-3.5 h-9"
-                            disabled={locked || conflict}
-                            onClick={() => persist(false)}
-                        >
-                            保存选择
-                        </Button>
-                        {confirmed ? (
-                            <Button
-                                id="sales-selection-public-submit"
-                                size="sm"
-                                className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-9 active:scale-95 transition-all"
-                                disabled={locked || conflict || dirty}
-                                onClick={submit}
-                            >
-                                确认并提交选品
-                            </Button>
-                        ) : (
-                            <Button
-                                id="sales-selection-public-review"
-                                size="sm"
-                                className="rounded-full bg-gradient-to-r from-rose-500 via-rose-600 to-red-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-9 active:scale-95 transition-all"
-                                disabled={locked || conflict}
-                                onClick={() => persist(true)}
-                            >
-                                核对并提交
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </aside>
         </main>
     )
 }

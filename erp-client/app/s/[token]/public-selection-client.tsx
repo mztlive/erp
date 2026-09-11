@@ -69,7 +69,7 @@ type LocalSelection = Record<string, string>
 /**
  * 由服务端已保存构建本地初始选择。
  */
-const initialFromSaved = (
+const _initialFromSaved = (
     saved: PublicSelection["choices"],
 ): LocalSelection => {
     const next: LocalSelection = {}
