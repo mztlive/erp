@@ -22,7 +22,6 @@ import {
     ChevronRight,
     Clock,
     FileCheck,
-    Gift,
     Layers,
     Megaphone,
     Minus,
@@ -1230,17 +1229,17 @@ const SelectionForm = ({
             <article
                 key={item.item_id}
                 className={cn(
-                    "group relative flex gap-2.5 rounded-2xl bg-white p-2.5 border transition-all shadow-2xs hover:shadow-xs",
+                    "group relative flex gap-3 rounded-2xl p-3 border transition-all duration-200",
                     isSelected
-                        ? "border-blue-500/80 ring-1 ring-blue-500/15"
-                        : "border-slate-200/80 hover:border-slate-300",
+                        ? "bg-gradient-to-r from-blue-50/25 via-white to-white border-blue-200/90 shadow-xs"
+                        : "bg-white border-slate-200/70 hover:border-slate-300 shadow-2xs",
                 )}
             >
                 {/* 左侧: 1:1 方形图片/占位 */}
                 <button
                     type="button"
                     aria-label={`查看${item.name}详情`}
-                    className="relative size-20 sm:size-22 rounded-xl overflow-hidden bg-slate-50 shrink-0 text-left block cursor-pointer border-0 p-0"
+                    className="relative size-20 sm:size-22 rounded-xl overflow-hidden bg-slate-50 shrink-0 text-left block cursor-pointer border border-slate-100 p-0"
                     onClick={() => setDetailItem(item)}
                 >
                     {image ? (
@@ -1253,44 +1252,37 @@ const SelectionForm = ({
                             referrerPolicy="no-referrer"
                         />
                     ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-blue-50/40 via-slate-50 to-indigo-50/30 p-2 text-center">
-                            <Gift className="h-6 w-6 stroke-[1.5] text-blue-400" />
-                            <span className="mt-1 text-[9px] font-semibold text-slate-400">
-                                严选好物
+                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-slate-100/60 to-slate-50 p-2 text-center">
+                            <Package className="h-6 w-6 stroke-[1.25] text-slate-400" />
+                            <span className="mt-1 text-[9px] font-medium text-slate-400 tracking-wider">
+                                严选品质
                             </span>
                         </div>
                     )}
 
                     {/* 档位微标 */}
                     {item.tier_name && (
-                        <span className="absolute left-1 top-1 rounded bg-slate-900/75 px-1 py-0.2 text-[9px] font-semibold text-white backdrop-blur-xs">
+                        <span className="absolute left-1 top-1 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-xs">
                             {item.tier_name}
                         </span>
                     )}
 
                     {/* 套餐件数 */}
                     {item.members.length > 0 && (
-                        <span className="absolute left-1 bottom-1 rounded bg-black/60 px-1 py-0.2 text-[9px] text-white flex items-center gap-0.5 backdrop-blur-xs">
-                            <Layers className="h-2 w-2" />
+                        <span className="absolute left-1 bottom-1 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[9px] text-white flex items-center gap-1 backdrop-blur-xs font-medium">
+                            <Layers className="h-2.5 w-2.5" />
                             {item.members.length}件装
                         </span>
-                    )}
-
-                    {/* 选中打勾标记 */}
-                    {isSelected && (
-                        <div className="absolute right-1 top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs ring-1 ring-white">
-                            <Check className="h-2.5 w-2.5 stroke-[3]" />
-                        </div>
                     )}
                 </button>
 
                 {/* 右侧: 商品信息与操作 */}
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                     <div>
                         <button
                             type="button"
                             onClick={() => setDetailItem(item)}
-                            className="text-left w-full text-xs sm:text-sm font-medium text-slate-900 leading-snug line-clamp-2 hover:text-blue-600 transition-colors p-0 border-0 bg-transparent"
+                            className="text-left w-full text-xs sm:text-sm font-semibold text-slate-900 leading-snug line-clamp-2 hover:text-blue-600 transition-colors p-0 border-0 bg-transparent cursor-pointer"
                         >
                             {item.name}
                         </button>
@@ -1301,7 +1293,7 @@ const SelectionForm = ({
                                 {item.specification.slice(0, 2).map((s) => (
                                     <span
                                         key={s.name}
-                                        className="rounded bg-slate-100 px-1 py-0.2 text-[10px] text-slate-500 truncate max-w-full"
+                                        className="rounded-md bg-slate-100/80 px-1.5 py-0.5 text-[10px] text-slate-500 font-normal truncate max-w-full"
                                     >
                                         {s.value || s.name}
                                     </span>
@@ -1311,17 +1303,17 @@ const SelectionForm = ({
                     </div>
 
                     {/* 价格与操作 */}
-                    <div className="mt-1 flex items-end justify-between gap-1 pt-1 border-t border-slate-100/60">
+                    <div className="mt-2 flex items-end justify-between gap-1.5 pt-1.5 border-t border-slate-100/80">
                         <div>
-                            <div className="flex items-baseline text-blue-600 font-semibold">
-                                <span className="text-[11px] mr-0.5 font-bold">
+                            <div className="flex items-baseline font-bold tracking-tight">
+                                <span className="text-xs font-bold text-blue-600 mr-0.5">
                                     ¥
                                 </span>
-                                <span className="text-base font-bold tracking-tight">
+                                <span className="text-base sm:text-lg font-black text-slate-900 leading-none">
                                     {intPart}
                                 </span>
                                 {decPart !== undefined && (
-                                    <span className="text-[10px] font-medium">
+                                    <span className="text-[11px] font-semibold text-slate-400 leading-none">
                                         .{decPart}
                                     </span>
                                 )}
@@ -1331,10 +1323,10 @@ const SelectionForm = ({
                         {/* 选品或步进器 */}
                         <div className="flex items-center gap-1.5">
                             {isSelected && !mall ? (
-                                <div className="flex items-center gap-0.5 rounded-lg bg-slate-50 p-0.5 border border-slate-200">
+                                <div className="flex items-center gap-0.5 rounded-lg bg-slate-100/80 p-0.5 border border-slate-200/80">
                                     <button
                                         type="button"
-                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs disabled:opacity-40"
+                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-40"
                                         disabled={
                                             locked ||
                                             conflict ||
@@ -1376,7 +1368,7 @@ const SelectionForm = ({
                                     />
                                     <button
                                         type="button"
-                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs"
+                                        className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs hover:bg-slate-50"
                                         disabled={locked || conflict}
                                         onClick={(e) => {
                                             e.preventDefault()
@@ -1405,10 +1397,10 @@ const SelectionForm = ({
                                 aria-label={item.name}
                                 htmlFor={`sales-selection-public-select-${item.item_id}`}
                                 className={cn(
-                                    "flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none shadow-2xs active:scale-95",
+                                    "flex items-center justify-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all cursor-pointer select-none active:scale-95",
                                     isSelected
-                                        ? "bg-blue-600 text-white shadow-blue-500/20"
-                                        : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white",
+                                        ? "bg-blue-600 text-white shadow-xs shadow-blue-500/25"
+                                        : "bg-white text-blue-600 border border-blue-500/40 hover:bg-blue-50/60 shadow-2xs",
                                 )}
                             >
                                 <input
@@ -1446,7 +1438,7 @@ const SelectionForm = ({
                 <header className="shrink-0 bg-white border-b border-slate-200/80 px-3.5 py-2 z-20">
                     <div className="flex items-center justify-between gap-2.5">
                         <div className="flex items-center gap-2 min-w-0">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 text-white shadow-xs">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
                                 <Store className="h-4.5 w-4.5" />
                             </div>
                             <div className="min-w-0">
@@ -1465,7 +1457,7 @@ const SelectionForm = ({
                         </div>
                         <Badge
                             variant="outline"
-                            className="shrink-0 text-[11px] border-blue-200 bg-blue-50 text-blue-700 font-medium px-2 py-0.5"
+                            className="shrink-0 text-[11px] border-blue-200/80 bg-blue-50/70 text-blue-700 font-medium px-2.5 py-0.5 rounded-full"
                         >
                             {mall ? "意向可选库" : "批量采购"}
                         </Badge>
@@ -1479,7 +1471,7 @@ const SelectionForm = ({
                             placeholder="搜索几百款商品、规格或名称..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-8 w-full rounded-full bg-slate-100 pl-8.5 pr-8 text-xs placeholder:text-slate-400 border-0 shadow-none focus-visible:ring-1 focus-visible:ring-blue-600"
+                            className="h-8.5 w-full rounded-full bg-slate-100/90 pl-8.5 pr-8 text-xs placeholder:text-slate-400 border border-slate-200/60 shadow-none focus-visible:bg-white focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/15 transition-all"
                         />
                         {searchQuery && (
                             <button
@@ -1598,11 +1590,15 @@ const SelectionForm = ({
                     {/* 左侧品类侧边栏 */}
                     <aside
                         ref={leftAsideRef}
-                        className="w-20 sm:w-24 shrink-0 bg-slate-50/90 border-r border-slate-200/80 overflow-y-auto no-scrollbar py-1 select-none"
+                        className="w-20 sm:w-22 shrink-0 bg-[#f8fafc] border-r border-slate-200/70 overflow-y-auto no-scrollbar select-none"
                     >
                         {sections.map((section) => {
                             const isActive =
                                 activeTabId === section.id && !searchQuery
+                            const sectionSelectedCount = section.items.filter(
+                                (item) => picks[item.item_id]?.selected,
+                            ).length
+
                             return (
                                 <button
                                     key={section.id}
@@ -1612,26 +1608,21 @@ const SelectionForm = ({
                                     type="button"
                                     onClick={() => scrollToSection(section.id)}
                                     className={cn(
-                                         "relative flex w-full flex-col items-center justify-center py-3.5 px-1 text-center transition-all border-0",
-                                         isActive
-                                             ? "bg-white text-blue-700 font-bold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-blue-600 shadow-2xs"
-                                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium bg-transparent",
-                                     )}
-                                 >
-                                     <span className="text-[11px] sm:text-xs line-clamp-2 leading-tight">
-                                         {section.name}
-                                     </span>
-                                     <span
-                                         className={cn(
-                                             "mt-1 rounded-full px-1.5 py-0.2 text-[9px] font-bold",
-                                             isActive
-                                                 ? "bg-blue-100 text-blue-700"
-                                                 : "bg-slate-200/70 text-slate-500",
-                                         )}
-                                     >
-                                         {section.items.length}
-                                     </span>
-                                 </button>
+                                        "relative flex w-full flex-col items-center justify-center py-3.5 px-2 text-center transition-colors border-0 cursor-pointer",
+                                        isActive
+                                            ? "bg-white text-slate-900 font-semibold before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-full before:bg-blue-600"
+                                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/60 font-normal bg-transparent",
+                                    )}
+                                >
+                                    <span className="text-xs line-clamp-2 leading-tight">
+                                        {section.name}
+                                    </span>
+                                    {sectionSelectedCount > 0 && (
+                                        <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white shadow-xs">
+                                            {sectionSelectedCount}
+                                        </span>
+                                    )}
+                                </button>
                             )
                         })}
                     </aside>
@@ -1680,12 +1671,16 @@ const SelectionForm = ({
                                         className="space-y-2"
                                     >
                                         {/* 品类楼层吸顶标题 */}
-                                        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xs py-1.5 flex items-center justify-between border-b border-slate-100">
-                                            <h2 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                                                <span className="h-3 w-1 rounded-full bg-blue-600" />
-                                                {section.name} (
-                                                {section.items.length})
-                                            </h2>
+                                        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm py-2 px-0.5 flex items-center justify-between border-b border-slate-150/70">
+                                            <div className="flex items-center gap-2">
+                                                <span className="h-3.5 w-1 rounded-full bg-blue-600" />
+                                                <h2 className="text-xs font-bold text-slate-900 tracking-tight">
+                                                    {section.name}
+                                                </h2>
+                                                <span className="text-[11px] font-normal text-slate-400">
+                                                    共 {section.items.length} 款
+                                                </span>
+                                            </div>
                                         </div>
 
                                         {/* 楼层内商品列表 */}
@@ -1703,7 +1698,7 @@ const SelectionForm = ({
                 {/* 4. 底部吸底结算栏 (固定不滚动) */}
                 <aside
                     aria-label="核对并提交"
-                    className="shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-[0_-8px_20px_rgba(0,0,0,0.08)] z-30"
+                    className="shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-4 py-2.5 shadow-[0_-6px_20px_rgba(0,0,0,0.06)] z-30"
                 >
                     <div className="flex items-center justify-between gap-3">
                         {/* 左侧：点击呼出已选清单 */}
@@ -1712,10 +1707,10 @@ const SelectionForm = ({
                             className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
                             onClick={() => setCartDrawerOpen(true)}
                         >
-                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md active:scale-95 transition-transform">
+                            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm active:scale-95 transition-transform">
                                 <ShoppingBag className="h-5 w-5" />
                                 {selectedCount > 0 && (
-                                    <span className="absolute -right-1.5 -top-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-950 shadow-sm animate-in zoom-in">
+                                    <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-950 shadow-xs animate-in zoom-in">
                                         {selectedCount}
                                     </span>
                                 )}
@@ -1725,7 +1720,7 @@ const SelectionForm = ({
                                     <div>
                                         <p className="text-xs sm:text-sm font-bold text-slate-900">
                                             已选{" "}
-                                            <span className="text-blue-700">
+                                            <span className="text-blue-600">
                                                 {selectedCount}
                                             </span>{" "}
                                             款
@@ -1738,7 +1733,7 @@ const SelectionForm = ({
                                     </div>
                                 ) : (
                                     <div>
-                                        <p className="text-sm sm:text-base font-bold text-blue-700 leading-none">
+                                        <p className="text-sm sm:text-base font-bold text-blue-600 leading-none">
                                             已选 {selectedCount} 项
                                         </p>
                                         <p className="text-[10px] text-slate-500 mt-0.5">
@@ -1757,7 +1752,7 @@ const SelectionForm = ({
                                 id="sales-selection-public-save"
                                 variant="outline"
                                 size="sm"
-                                className="rounded-full border-slate-300 text-xs text-slate-700 px-3.5 h-8.5"
+                                className="rounded-full border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 px-4 h-9 shadow-2xs"
                                 disabled={locked || conflict}
                                 onClick={() => persist(false)}
                             >
@@ -1767,7 +1762,7 @@ const SelectionForm = ({
                                 <Button
                                     id="sales-selection-public-review"
                                     size="sm"
-                                    className="rounded-full bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-8.5 active:scale-95 transition-all"
+                                    className="rounded-full bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-sm shadow-blue-500/25 px-5 h-9 active:scale-95 transition-all"
                                     disabled={locked || conflict}
                                     onClick={() => persist(true)}
                                 >
