@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest"
 
 import {
     launchControlPoint,
+    launchNavDelivery,
+    NAV_DELIVERY_TARGETS,
     quadraticBezier,
     rectCenter,
-    subscribeSelectionNavLaunch,
-    launchSelectionNavFrom,
-} from "@/features/sales-selection/lib/nav-launch"
+    subscribeNavDelivery,
+} from "@/lib/nav-delivery"
 
-describe("nav launch geometry", () => {
+describe("nav delivery geometry", () => {
     it("uses the rectangle center as the origin", () => {
         const rect = {
             left: 10,
@@ -35,19 +36,26 @@ describe("nav launch geometry", () => {
     })
 })
 
-describe("launchSelectionNavFrom", () => {
-    it("notifies subscribers with the element center", () => {
-        const seen: { x: number; y: number }[] = []
-        const unsubscribe = subscribeSelectionNavLaunch((origin) => {
-            seen.push(origin)
+describe("launchNavDelivery", () => {
+    it("notifies subscribers with the kind and element center", () => {
+        const seen: { kind: string; x: number; y: number }[] = []
+        const unsubscribe = subscribeNavDelivery(({ kind, origin }) => {
+            seen.push({ kind, ...origin })
         })
         const element = {
             getBoundingClientRect: () =>
                 ({ left: 0, top: 0, width: 20, height: 10 }) as DOMRect,
         } as unknown as Element
-        launchSelectionNavFrom(element)
+        launchNavDelivery("background-task", element)
         unsubscribe()
-        launchSelectionNavFrom(element)
-        expect(seen).toEqual([{ x: 10, y: 5 }])
+        launchNavDelivery("background-task", element)
+        expect(seen).toEqual([{ kind: "background-task", x: 10, y: 5 }])
+    })
+
+    it("keeps sidebar entry ids aligned with nav hrefs", () => {
+        expect(NAV_DELIVERY_TARGETS).toEqual({
+            "selection-booklet": "sales-selection",
+            "background-task": "governance-background-jobs",
+        })
     })
 })

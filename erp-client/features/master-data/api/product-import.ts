@@ -1,5 +1,4 @@
-import { apiGet, apiPostForm } from "@/lib/api"
-import type { Page } from "@/lib/api/paging"
+import { apiPostForm } from "@/lib/api"
 
 export type ProductImportJob = {
     id: string
@@ -18,15 +17,6 @@ export type ProductImportJob = {
     created_at: number
 }
 
-export type ProductImportItem = {
-    item_no: number
-    source_row_no: number | null
-    name: string | null
-    status: string | null
-    result_summary: string | null
-    product_id: string | null
-}
-
 export async function submitProductImport(input: {
     file: File
     requestId: string
@@ -37,25 +27,4 @@ export async function submitProductImport(input: {
     return apiPostForm<ProductImportJob>("/admin/products/import", body, {
         timeoutMs: 15 * 60 * 1000,
     })
-}
-
-export async function fetchProductImportJobs(page = 1): Promise<Page<ProductImportJob>> {
-    return apiGet<Page<ProductImportJob>>("/admin/products/import-jobs", {
-        page,
-        page_size: 20,
-    })
-}
-
-export async function fetchProductImportJob(id: string): Promise<ProductImportJob> {
-    return apiGet<ProductImportJob>(`/admin/products/import-jobs/${id}`)
-}
-
-export async function fetchProductImportItems(
-    id: string,
-    page = 1,
-): Promise<Page<ProductImportItem>> {
-    return apiGet<Page<ProductImportItem>>(
-        `/admin/products/import-jobs/${id}/items`,
-        { page, page_size: 100 },
-    )
 }

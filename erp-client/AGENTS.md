@@ -191,9 +191,9 @@ export function CreateOrderForm() {
 - 表单层（TanStack Form）与展示层解耦：字段通过 `components/form` 绑定 UI，业务页只声明 schema 与 submit。
 - 列表行点开的右侧窄栏预览，视觉与信息架构以公司商品池为准，见第 8 节。
 
-## 5. 用户可见文案必须过术语表
+## 5. 用户可见文案规则
 
-**权威文件：`../docs/ui-glossary.md`**（禁用词表 + 替换口径）。写任何界面字符串前先查。
+写任何界面字符串前先查本节规则，跨页复用文案优先从 `lib/ui-text.ts` 引用。
 
 本系统围绕内部工作流架构构建（work item、租约、投影、事实、幂等键）。这些词
 **只出现在代码注释、字段名和设计文档里**，界面一律翻译成业务语言。
@@ -201,7 +201,7 @@ export function CreateOrderForm() {
 ### 强制规则
 
 - **禁止**把实现术语写进用户可见字符串：租约、投影、幂等键、work_item、指纹、水位、
-  乐观更新、正式（作为前缀）等。已有替换口径见术语表 §2。
+  乐观更新、正式（作为前缀）等。替换口径见本节强制规则与 `lib/ui-text.ts`。
 - **禁止**把枚举原值直接渲染：`POSTED`、`SHIPPED`、`BLOCKED`、`PENDING`…
   新增枚举时必须同时写中文映射表（如 `FORMAL_STATUS_LABEL`）。
 - **禁止**把内部 ID 展示给用户：`rsv_*`、`pla_*`、`sv_*`、`wi_*`。
@@ -225,7 +225,7 @@ export function CreateOrderForm() {
 - [ ] mutation 后是否正确失效或更新相关 queryKey？
 - [ ] 新表单是否使用 `useAppForm`（TanStack Form），而非 useState/react-hook-form？
 - [ ] 表单提交是否通过 `useMutation`，校验是否用 Zod / Standard Schema？
-- [ ] 新增/修改的界面字符串是否过了 `../docs/ui-glossary.md`？
+- [ ] 新增/修改的界面字符串是否符合本节规则并复用 `lib/ui-text.ts`？
 - [ ] 新增枚举是否配了中文映射？内部 ID 是否漏进界面？
 - [ ] 是否为了单个页面改了共享组件的默认文案（应改为加 prop）？
 - [ ] 新增的 URL 查询参数是否有对应的界面控件和清除方式？
@@ -324,7 +324,7 @@ contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460
 7. **末段交代这是哪一时点的快照**（可售期间、资格核对日），`text-xs leading-5 text-muted-foreground`。不要假装 Sheet 里的数是实时锁。
 8. **只留帮助决策的字段。** 名称已在 title，就不要再做「名称」行。编号可以在资料区再出现一次（方便复制），不要第三遍。内部 ID、阻断原因原文、审计字段不进轻预览。
 9. **空值写出来**：`—`、`未标注区域`、`暂无描述`。禁止留空白格子。
-10. 标签、数字、日期一律走术语表和 `.num`；枚举走中文映射。
+10. 标签、数字、日期一律走本节规则和 `.num`；枚举走中文映射。
 
 反例：为了「信息全」把仓库库存、敏感字段、修订时间线、可用性矩阵全塞进窄栏。那些属于对象中心或 `size="detail"`。
 

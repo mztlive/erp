@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react"
 import {
     BoxesIcon,
     ClipboardListIcon,
-    DownloadIcon,
     FileStackIcon,
     FileTextIcon,
     FolderTreeIcon,
@@ -10,6 +9,7 @@ import {
     HandshakeIcon,
     HistoryIcon,
     LayoutDashboardIcon,
+    ListChecksIcon,
     PackageIcon,
     PackageSearchIcon,
     PlugIcon,
@@ -629,9 +629,9 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W18",
-                    href: "/governance/exports",
-                    label: "导出任务",
-                    icon: DownloadIcon,
+                    href: "/governance/background-jobs",
+                    label: "后台任务",
+                    icon: ListChecksIcon,
                     requiredPermissions: ["background_job:list"],
                 },
                 {

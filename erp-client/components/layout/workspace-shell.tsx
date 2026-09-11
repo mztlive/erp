@@ -8,7 +8,7 @@ import {
     WorkspaceSidebarAccount,
     WorkspaceSidebarNav,
 } from "@/components/layout/workspace-sidebar-nav"
-import { SelectionNavLaunchOverlay } from "@/features/sales-selection/components/selection-nav-launch-overlay"
+import { NavDeliveryOverlay } from "@/components/layout/nav-delivery-overlay"
 
 function WorkspaceSidebarHeader() {
     return (
@@ -40,7 +40,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             sidebarFooter={<WorkspaceSidebarAccount />}
         >
             {children}
-            <SelectionNavLaunchOverlay />
+            <NavDeliveryOverlay />
         </ErpAppShell>
     )
 }

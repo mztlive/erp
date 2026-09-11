@@ -15,6 +15,7 @@ import {
     listWorkspaceEmptyStateClassName,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { ProductListToolbar } from "@/features/master-data/components/list/product-list-toolbar"
@@ -27,12 +28,16 @@ import { useProductListState } from "@/features/master-data/hooks/use-product-li
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { ProductImportDialog } from "@/features/master-data/components/product/product-import-dialog"
-import { ProductImportQueue } from "@/features/master-data/components/product/product-import-queue"
+import { launchNavDelivery } from "@/lib/nav-delivery"
+import type { ProductImportJob } from "@/features/master-data/api/product-import"
+
+/** 导入动作按钮与投递落点：动作 id 同时是动画起点。 */
+const IMPORT_ACTION_ID = "master-data-products-list-import"
+const BACKGROUND_TASKS_HREF = "/governance/background-jobs"
 
 export function ProductsListPage() {
     const router = useRouter()
     const [importOpen, setImportOpen] = React.useState(false)
-    const [sessionJobIds, setSessionJobIds] = React.useState<string[]>([])
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useProductListState(searchInputRef)
@@ -75,33 +80,39 @@ export function ProductsListPage() {
         lastFocusedRowId.current = stableId
         router.push(`/master-data/products/${stableId}?section=overview`)
     }
+    // 导入只做任务投递：本页不留进度，用曲线把任务飞到侧栏「后台任务」，结果由 toast 交代。
+    const onImportSubmitted = (job: ProductImportJob) => {
+        launchNavDelivery(
+            "background-task",
+            document.getElementById(IMPORT_ACTION_ID),
+        )
+        toast.add({
+            title: "导入任务已提交",
+            description: `「${job.file_name ?? "所选文件"}」共 ${job.total_count} 行，正在后台逐行导入，进度与结果在「后台任务」查看。`,
+            type: "success",
+            timeout: 6000,
+            actionProps: {
+                children: "查看任务",
+                onClick: () => router.push(BACKGROUND_TASKS_HREF),
+            },
+        })
+    }
 
     return (
         <ListPageFrame
             title="商品列表"
             description="查看商品资料、上架状态与供应覆盖。"
             alerts={
-                <>
-                    {state.listingError ? (
-                        <p className="text-sm text-destructive" role="alert">
-                            {state.listingError}
-                        </p>
-                    ) : null}
-                    <ProductImportQueue
-                        enabled
-                        sessionJobIds={sessionJobIds}
-                        onDismiss={(jobId) =>
-                            setSessionJobIds((ids) =>
-                                ids.filter((id) => id !== jobId),
-                            )
-                        }
-                    />
-                </>
+                state.listingError ? (
+                    <p className="text-sm text-destructive" role="alert">
+                        {state.listingError}
+                    </p>
+                ) : null
             }
             exportMeta={state.exportMeta}
             actions={[
                 {
-                    id: "master-data-products-list-import",
+                    id: IMPORT_ACTION_ID,
                     actionKey: "import",
                     label: "导入",
                     icon: UploadIcon,
@@ -336,11 +347,7 @@ export function ProductsListPage() {
             {importOpen ? (
                 <ProductImportDialog
                     onClose={() => setImportOpen(false)}
-                    onSubmitted={(job) =>
-                        setSessionJobIds((ids) =>
-                            ids.includes(job.id) ? ids : [job.id, ...ids],
-                        )
-                    }
+                    onSubmitted={onImportSubmitted}
                 />
             ) : null}
         </ListPageFrame>

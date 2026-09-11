@@ -8,7 +8,7 @@
  * 文档-代码差异（以代码为准）：
  * - 服务履约表单没有独立「服务对象」字段，而是完成数量 + 履约结果 + 服务时间 + 服务地点 + 图片凭证 + 完成说明
  * - 供给分配页文案仍写「优先推荐现有库存」，服务 SKU 的推荐结果只有采购/线下服务
- * - 客户验收成功 toast 描述使用「已过账」（与 ui-glossary 禁用「过账」不一致）
+ * - 客户验收成功 toast 描述使用「已过账」（与 docs/erp-phase-1.md §10.1 不用「过账」不一致）
  * - ServiceFulfillment / CustomerAcceptance 为 NO_APPROVAL，工作台原地确认，不出现审批决定栏
  */
 import { existsSync } from 'node:fs'

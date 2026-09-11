@@ -1,5 +1,5 @@
 /**
- * 选品册投递动画：从发起按钮沿二次贝塞尔飞到侧栏菜单。
+ * 投递动画：从触发按钮沿二次贝塞尔飞到侧栏入口。
  * 减弱动效时只在落点闪一下。粒子是装饰，成功语义由 Toast 承担。
  */
 
@@ -7,33 +7,43 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { PackageSearchIcon } from "lucide-react"
+import { ListChecksIcon, PackageSearchIcon } from "lucide-react"
 
 import {
     launchControlPoint,
+    NAV_DELIVERY_TARGETS,
     quadraticBezier,
     rectCenter,
-    SELECTION_NAV_TARGET,
-    subscribeSelectionNavLaunch,
-    type SelectionNavPoint,
-} from "@/features/sales-selection/lib/nav-launch"
+    subscribeNavDelivery,
+    type NavDeliveryKind,
+    type NavDeliveryPoint,
+} from "@/lib/nav-delivery"
 
 const LAUNCH_DURATION_MS = 720
 const PULSE_DURATION_MS = 700
 
 type LaunchParticle = {
     id: number
-    origin: SelectionNavPoint
-    target: SelectionNavPoint
+    kind: NavDeliveryKind
+    origin: NavDeliveryPoint
+    target: NavDeliveryPoint
+}
+
+const PARTICLE_ICON: Record<
+    NavDeliveryKind,
+    React.ComponentType<{ className?: string }>
+> = {
+    "selection-booklet": PackageSearchIcon,
+    "background-task": ListChecksIcon,
 }
 
 /**
- * 挂在工作区壳上，接收发起选品成功后的投递。
+ * 挂在工作区壳上，接收提交成功后的投递。
  */
-export function SelectionNavLaunchOverlay() {
+export function NavDeliveryOverlay() {
     const [mounted, setMounted] = React.useState(false)
     const [particles, setParticles] = React.useState<LaunchParticle[]>([])
-    const [pulse, setPulse] = React.useState<SelectionNavPoint | null>(null)
+    const [pulse, setPulse] = React.useState<NavDeliveryPoint | null>(null)
     const nextId = React.useRef(0)
     const pulseTimer = React.useRef<number | null>(null)
 
@@ -41,7 +51,7 @@ export function SelectionNavLaunchOverlay() {
         setMounted(true)
     }, [])
 
-    const pulseAt = React.useCallback((point: SelectionNavPoint) => {
+    const pulseAt = React.useCallback((point: NavDeliveryPoint) => {
         if (pulseTimer.current != null) window.clearTimeout(pulseTimer.current)
         setPulse(point)
         pulseTimer.current = window.setTimeout(() => {
@@ -51,10 +61,12 @@ export function SelectionNavLaunchOverlay() {
     }, [])
 
     React.useEffect(() => {
-        const unsubscribe = subscribeSelectionNavLaunch((origin) => {
+        const unsubscribe = subscribeNavDelivery(({ kind, origin }) => {
             const targetEl = document.querySelector<HTMLElement>(
-                `[data-workspace-nav="${SELECTION_NAV_TARGET}"]`,
+                `[data-workspace-nav="${NAV_DELIVERY_TARGETS[kind]}"]`,
             )
+            // 入口可能在侧栏的可视区之外：先让它露出，落点才是用户看得到的那个菜单项。
+            targetEl?.scrollIntoView({ block: "nearest" })
             const target = targetEl
                 ? rectCenter(targetEl.getBoundingClientRect())
                 : origin
@@ -67,7 +79,10 @@ export function SelectionNavLaunchOverlay() {
             }
             const id = nextId.current
             nextId.current += 1
-            setParticles((current) => [...current, { id, origin, target }])
+            setParticles((current) => [
+                ...current,
+                { id, kind, origin, target },
+            ])
         })
         return () => {
             unsubscribe()
@@ -77,7 +92,7 @@ export function SelectionNavLaunchOverlay() {
     }, [pulseAt])
 
     const removeParticle = React.useCallback(
-        (id: number, target: SelectionNavPoint) => {
+        (id: number, target: NavDeliveryPoint) => {
             setParticles((current) =>
                 current.filter((particle) => particle.id !== id),
             )
@@ -94,8 +109,9 @@ export function SelectionNavLaunchOverlay() {
             aria-hidden="true"
         >
             {particles.map((particle) => (
-                <FlyingBooklet
+                <FlyingTask
                     key={particle.id}
+                    kind={particle.kind}
                     origin={particle.origin}
                     target={particle.target}
                     onDone={() => removeParticle(particle.id, particle.target)}
@@ -103,6 +119,7 @@ export function SelectionNavLaunchOverlay() {
             ))}
             {pulse ? (
                 <span
+                    data-slot="nav-delivery-pulse"
                     className="absolute size-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25 motion-safe:animate-ping"
                     style={{ left: pulse.x, top: pulse.y }}
                 />
@@ -112,18 +129,21 @@ export function SelectionNavLaunchOverlay() {
     )
 }
 
-function FlyingBooklet({
+function FlyingTask({
+    kind,
     origin,
     target,
     onDone,
 }: {
-    origin: SelectionNavPoint
-    target: SelectionNavPoint
+    kind: NavDeliveryKind
+    origin: NavDeliveryPoint
+    target: NavDeliveryPoint
     onDone: () => void
 }) {
     const nodeRef = React.useRef<HTMLDivElement>(null)
     const onDoneRef = React.useRef(onDone)
     onDoneRef.current = onDone
+    const Icon = PARTICLE_ICON[kind]
 
     React.useEffect(() => {
         const node = nodeRef.current
@@ -153,12 +173,13 @@ function FlyingBooklet({
     return (
         <div
             ref={nodeRef}
+            data-slot="nav-delivery-particle"
             className="absolute top-0 left-0 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg will-change-transform"
             style={{
                 transform: `translate(${origin.x}px, ${origin.y}px) translate(-50%, -50%) scale(1)`,
             }}
         >
-            <PackageSearchIcon className="size-4" />
+            <Icon className="size-4" />
         </div>
     )
 }

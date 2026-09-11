@@ -45,7 +45,7 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
 import { BookCreateDialog } from "@/features/sales-selection/components/book-create-dialog"
-import { launchSelectionNavFrom } from "@/features/sales-selection/lib/nav-launch"
+import { launchNavDelivery } from "@/lib/nav-delivery"
 import {
     describePoolSource,
     resolveSellablePoolSourceKind,
@@ -481,7 +481,10 @@ export function SellableItemsListPage() {
                             : []
                     }
                     onFlyToNav={() =>
-                        launchSelectionNavFrom(launchButtonRef.current)
+                        launchNavDelivery(
+                            "selection-booklet",
+                            launchButtonRef.current,
+                        )
                     }
                     onLaunched={({ bookId, customerName, prepared }) => {
                         toast.add({

@@ -1,29 +1,17 @@
 import type { Metadata } from "next"
-import { Suspense } from "react"
 
-import { ExportTasksPage } from "@/features/export-tasks/pages/export-tasks-page"
+import { ListRouteRedirect } from "@/features/master-data/pages/list-route-redirect"
 
 export const metadata: Metadata = {
-    title: "导出任务",
+    title: "后台任务",
 }
 
-function ExportTasksFallback() {
-    return (
-        <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:gap-4 md:px-6 md:py-5">
-            <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-            <div className="h-24 animate-pulse rounded-lg bg-muted" />
-            <div className="h-64 animate-pulse rounded-lg bg-muted" />
-        </div>
-    )
-}
-
-/**
- * SPA 壳：列表筛选只在客户端维护，不做服务端取数。
- */
+/** 导出任务已并入后台任务：旧地址保留跳转，避免书签与历史链接失效。 */
 export default function Page() {
     return (
-        <Suspense fallback={<ExportTasksFallback />}>
-            <ExportTasksPage />
-        </Suspense>
+        <ListRouteRedirect
+            href="/governance/background-jobs"
+            label="后台任务"
+        />
     )
 }

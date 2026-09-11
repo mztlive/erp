@@ -1148,7 +1148,7 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 - `erp-data-model.md` 中预创建步骤、驳回终结实例、旧 definition/step 集合，以及 `procurement_confirmation`、`procurement_confirmation_line`、`low_margin_manager_confirmation` 三个集合及其索引；
 - `docs/dev-plan` 中代码注册、`POOL` 审批和恢复当前步骤的旧合同；
 - W01 与 W02 的页面合同：按第 16.4 节合并为唯一工作台，W02 标记废止；
-- `ui-glossary.md` 中「团队待处理」「未分派」「领取」「开始处理」「退回团队」「采购二次确认待办」「低毛利上级确认」等术语；
+- 页面文案中「团队待处理」「未分派」「领取」「开始处理」「退回团队」「采购二次确认待办」「低毛利上级确认」等术语；
 - OpenAPI、错误目录和权限种子；
 - 前端 mock、查询键、任务类型、页面文案和测试夹具。
 

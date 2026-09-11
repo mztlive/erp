@@ -1,7 +1,6 @@
 /**
  * W27 供应商结算 · 枚举/动作中文映射表
  * 从 types.ts 拆出：用户可见文案统一走这些映射，枚举原值不上屏。
- * 改动文案前先查 docs/ui-glossary.md。
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"

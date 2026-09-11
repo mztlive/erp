@@ -41,7 +41,9 @@ export function ProductImportDialog({
             onSubmitted(job)
             onClose()
         } catch (err) {
-            setError(getErrorMessage(err, "导入任务提交失败，请检查模板后重试。"))
+            setError(
+                getErrorMessage(err, "导入任务提交失败，请检查模板后重试。"),
+            )
         }
     }
 
@@ -60,7 +62,7 @@ export function ProductImportDialog({
                 <DialogHeader>
                     <DialogTitle>导入商品</DialogTitle>
                     <DialogDescription>
-                        使用产品报价表「对内」工作表。提交后后台逐行导入，结果在本页任务队列中查看。图片随文件导入；供应商与成本价不会写入供给。
+                        使用产品报价表「对内」工作表。提交后后台逐行导入，进度与结果在「后台任务」查看。图片随文件导入；供应商与成本价不会写入供给。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
@@ -74,8 +76,8 @@ export function ProductImportDialog({
                     />
                     {file ? (
                         <p className="text-sm">
-                            {file.name} · {(file.size / (1024 * 1024)).toFixed(1)}{" "}
-                            MB
+                            {file.name} ·{" "}
+                            {(file.size / (1024 * 1024)).toFixed(1)} MB
                         </p>
                     ) : null}
                     {error ? (

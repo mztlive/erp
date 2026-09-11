@@ -43,25 +43,30 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { getErrorMessage } from "@/lib/api/errors"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import type {
-    CancelAllExportJobsResult,
-    ExportJob,
-    ExportJobStatus,
-} from "@/features/export-tasks/api"
+    BackgroundJobView,
+    CancelAllBackgroundJobsResult,
+    JobStatus,
+} from "@/features/background-jobs/api"
 import {
-    EXPORT_JOB_STATUS_LABELS,
-    exportDomainLabel,
-    exportProgressStatus,
-    formatExportDateTime,
-    isExportJobActive,
-    isExportTaskAdmin,
-} from "@/features/export-tasks/labels"
+    backgroundJobDomainLabel,
+    formatJobDateTime,
+    isBackgroundJobAdmin,
+    isJobActive,
+    JOB_DOMAIN_FILTER_OPTIONS,
+    JOB_STATUS_LABELS,
+    JOB_TYPE_FILTER_OPTIONS,
+    JOB_TYPE_LABELS,
+    jobProgressStatus,
+} from "@/features/background-jobs/labels"
 import {
-    useCancelAllExportJobsMutation,
-    useCancelExportJobMutation,
-    useExportJobDetailQuery,
-    useExportJobItemsQuery,
-    useExportJobsQuery,
-} from "@/features/export-tasks/queries"
+    useBackgroundJobDetailQuery,
+    useBackgroundJobItemsQuery,
+    useBackgroundJobsQuery,
+    useCancelAllBackgroundJobsMutation,
+    useCancelBackgroundJobMutation,
+} from "@/features/background-jobs/queries"
+
+const ID_PREFIX = "governance-background-jobs"
 
 const STATUS_FILTER_OPTIONS = [
     { value: "all", label: "全部" },
@@ -76,17 +81,6 @@ const STATUS_FILTER_OPTIONS = [
 
 type StatusFilter = (typeof STATUS_FILTER_OPTIONS)[number]["value"]
 
-const DOMAIN_FILTER_OPTIONS = [
-    { value: "", label: "全部类型" },
-    { value: "SALES_ORDER_EXPORT", label: "销售单导出" },
-    { value: "INVENTORY_LEDGER_EXPORT", label: "库存台账导出" },
-    {
-        value: "supplier_fulfillment_order_export",
-        label: "供应商订单导出",
-    },
-    { value: "CONTRACT_EXPORT", label: "合同导出" },
-] as const
-
 const SCOPE_FILTER_OPTIONS = [
     { value: "all", label: "全部任务" },
     { value: "mine", label: "只看我的" },
@@ -94,15 +88,18 @@ const SCOPE_FILTER_OPTIONS = [
 
 type ScopeFilter = (typeof SCOPE_FILTER_OPTIONS)[number]["value"]
 
-export function ExportTasksWorkspace() {
+/** 后台任务页：集中查看导入、导出等任务的进度与结果。 */
+export function BackgroundJobsWorkspace() {
     const profileQuery = useAccountProfileQuery()
-    const isAdmin = isExportTaskAdmin(profileQuery.data?.role_ids)
+    const isAdmin = isBackgroundJobAdmin(profileQuery.data?.role_ids)
     const currentUserId = profileQuery.data?.userid
     const [searchDraft, setSearchDraft] = React.useState("")
     const [appliedJobNo, setAppliedJobNo] = React.useState("")
     const [statusDraft, setStatusDraft] = React.useState<StatusFilter>("all")
     const [appliedStatus, setAppliedStatus] =
         React.useState<StatusFilter>("all")
+    const [jobTypeDraft, setJobTypeDraft] = React.useState<string>("")
+    const [appliedJobType, setAppliedJobType] = React.useState<string>("")
     const [domainDraft, setDomainDraft] = React.useState<string>("")
     const [appliedDomain, setAppliedDomain] = React.useState<string>("")
     const [scopeDraft, setScopeDraft] = React.useState<ScopeFilter>("all")
@@ -114,7 +111,7 @@ export function ExportTasksWorkspace() {
     const [stopAllOpen, setStopAllOpen] = React.useState(false)
     const [stopAllError, setStopAllError] = React.useState<string | null>(null)
     const [stopAllResult, setStopAllResult] =
-        React.useState<CancelAllExportJobsResult | null>(null)
+        React.useState<CancelAllBackgroundJobsResult | null>(null)
     const lastFocusedRowId = React.useRef<string | null>(null)
     const searchInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -126,7 +123,8 @@ export function ExportTasksWorkspace() {
             status:
                 appliedStatus === "all"
                     ? undefined
-                    : (appliedStatus as ExportJobStatus | "active"),
+                    : (appliedStatus as JobStatus | "active"),
+            job_type: appliedJobType || undefined,
             domain_job_type: appliedDomain || undefined,
             requested_by:
                 isAdmin && appliedScope === "mine" ? currentUserId : undefined,
@@ -135,17 +133,18 @@ export function ExportTasksWorkspace() {
             page,
             appliedJobNo,
             appliedStatus,
+            appliedJobType,
             appliedDomain,
             isAdmin,
             appliedScope,
             currentUserId,
         ],
     )
-    const jobsQuery = useExportJobsQuery(listParams)
-    const detailQuery = useExportJobDetailQuery(previewId)
-    const itemsQuery = useExportJobItemsQuery(previewId)
-    const cancelMutation = useCancelExportJobMutation()
-    const cancelAllMutation = useCancelAllExportJobsMutation()
+    const jobsQuery = useBackgroundJobsQuery(listParams)
+    const detailQuery = useBackgroundJobDetailQuery(previewId)
+    const itemsQuery = useBackgroundJobItemsQuery(previewId)
+    const cancelMutation = useCancelBackgroundJobMutation()
+    const cancelAllMutation = useCancelAllBackgroundJobsMutation()
 
     const rows = React.useMemo(
         () => jobsQuery.data?.items ?? [],
@@ -156,16 +155,19 @@ export function ExportTasksWorkspace() {
     const applyFilters = React.useCallback(() => {
         setAppliedJobNo(searchDraft.trim())
         setAppliedStatus(statusDraft)
+        setAppliedJobType(jobTypeDraft)
         setAppliedDomain(domainDraft)
         setAppliedScope(scopeDraft)
         setPage(1)
-    }, [searchDraft, statusDraft, domainDraft, scopeDraft])
+    }, [searchDraft, statusDraft, jobTypeDraft, domainDraft, scopeDraft])
 
     const clearFilters = React.useCallback(() => {
         setSearchDraft("")
         setAppliedJobNo("")
         setStatusDraft("all")
         setAppliedStatus("all")
+        setJobTypeDraft("")
+        setAppliedJobType("")
         setDomainDraft("")
         setAppliedDomain("")
         setScopeDraft("all")
@@ -176,10 +178,17 @@ export function ExportTasksWorkspace() {
     const hasActiveFilters =
         appliedJobNo !== "" ||
         appliedStatus !== "all" ||
+        appliedJobType !== "" ||
         appliedDomain !== "" ||
         (isAdmin && appliedScope !== "all")
 
-    const openPreview = React.useCallback((job: ExportJob) => {
+    const jobLabel = React.useCallback(
+        (job: BackgroundJobView) =>
+            backgroundJobDomainLabel(job.domain_job_type, job.job_type),
+        [],
+    )
+
+    const openPreview = React.useCallback((job: BackgroundJobView) => {
         lastFocusedRowId.current = job.id
         setPreviewId(job.id)
     }, [])
@@ -217,7 +226,7 @@ export function ExportTasksWorkspace() {
     const confirmStopAll = React.useCallback(async () => {
         setStopAllError(null)
         try {
-            const result = await cancelAllMutation.mutateAsync()
+            const result = await cancelAllMutation.mutateAsync(undefined)
             setStopAllResult(result)
         } catch (error) {
             setStopAllError(
@@ -226,16 +235,16 @@ export function ExportTasksWorkspace() {
         }
     }, [cancelAllMutation])
 
-    const columns = React.useMemo<ColumnDef<ExportJob>[]>(
+    const columns = React.useMemo<ColumnDef<BackgroundJobView>[]>(
         () => [
             {
                 id: "job",
-                header: "导出任务",
-                meta: { label: "导出任务" },
+                header: "任务",
+                meta: { label: "任务" },
                 cell: ({ row }) => (
                     <div className="min-w-0">
                         <p className="truncate font-medium">
-                            {exportDomainLabel(row.original.domain_job_type)}
+                            {jobLabel(row.original)}
                         </p>
                         <p className="num mt-0.5 truncate text-xs text-muted-foreground">
                             {row.original.job_no}
@@ -258,7 +267,7 @@ export function ExportTasksWorkspace() {
                                     ? "neutral"
                                     : "info"
                         }
-                        label={EXPORT_JOB_STATUS_LABELS[row.original.status]}
+                        label={JOB_STATUS_LABELS[row.original.status]}
                     />
                 ),
             },
@@ -279,7 +288,7 @@ export function ExportTasksWorkspace() {
                 meta: { label: "创建时间", numeric: true },
                 cell: ({ row }) => (
                     <span className="num text-xs text-muted-foreground">
-                        {formatExportDateTime(row.original.created_at)}
+                        {formatJobDateTime(row.original.created_at)}
                     </span>
                 ),
             },
@@ -290,7 +299,7 @@ export function ExportTasksWorkspace() {
                 enableSorting: false,
                 cell: ({ row }) => (
                     <Button
-                        id={`governance-exports-row-${row.original.id}-preview`}
+                        id={`${ID_PREFIX}-row-${row.original.id}-preview`}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -304,19 +313,19 @@ export function ExportTasksWorkspace() {
                 ),
             },
         ],
-        [openPreview],
+        [jobLabel, openPreview],
     )
 
     return (
         <PageScaffold density="compact" className={styles.page}>
             <ListWorkspaceHeader
                 eyebrow="治理"
-                title="导出任务"
-                description="集中查看各业务的导出进度、结果与有效期，取消尚未完成的任务。"
+                title="后台任务"
+                description="集中查看商品导入、业务导出等后台任务的进度与结果，取消尚未完成的任务。"
             >
                 {isAdmin ? (
                     <Button
-                        id="governance-exports-stop-all"
+                        id={`${ID_PREFIX}-stop-all`}
                         type="button"
                         variant="destructive"
                         onClick={openStopAll}
@@ -326,27 +335,27 @@ export function ExportTasksWorkspace() {
                 ) : null}
             </ListWorkspaceHeader>
             <ListWorkSurface
-                ariaLabel="导出任务"
+                ariaLabel="后台任务"
                 toolbar={
                     <ListWorkspaceFilterBar
-                        idPrefix="governance-exports-toolbar"
-                        formAriaLabel="导出任务查询"
+                        idPrefix={`${ID_PREFIX}-toolbar`}
+                        formAriaLabel="后台任务查询"
                         onSubmit={applyFilters}
                         search={
                             <ListSearchField
-                                id="governance-exports-toolbar-search-input"
+                                id={`${ID_PREFIX}-toolbar-search-input`}
                                 searchInputRef={searchInputRef}
                                 value={searchDraft}
                                 onChange={setSearchDraft}
                                 placeholder="按任务号搜索"
-                                aria-label="按任务号搜索导出任务"
+                                aria-label="按任务号搜索后台任务"
                             />
                         }
                         commonFilters={
                             <>
                                 {isAdmin ? (
                                     <FixedOptionRadioFilter
-                                        idPrefix="governance-exports-toolbar-scope"
+                                        idPrefix={`${ID_PREFIX}-toolbar-scope`}
                                         label="可见范围"
                                         variant="quiet"
                                         value={scopeDraft}
@@ -355,7 +364,7 @@ export function ExportTasksWorkspace() {
                                     />
                                 ) : null}
                                 <FixedOptionRadioFilter
-                                    idPrefix="governance-exports-toolbar-status"
+                                    idPrefix={`${ID_PREFIX}-toolbar-status`}
                                     label="状态"
                                     variant="quiet"
                                     value={statusDraft}
@@ -363,26 +372,53 @@ export function ExportTasksWorkspace() {
                                     options={STATUS_FILTER_OPTIONS}
                                 />
                                 <ListWorkspaceFilterField
-                                    htmlFor="governance-exports-toolbar-domain"
+                                    htmlFor={`${ID_PREFIX}-toolbar-job-type`}
                                     label="任务类型"
                                 >
                                     <select
-                                        id="governance-exports-toolbar-domain"
-                                        className="h-9 w-full rounded-md border bg-background px-2 text-[13px] sm:w-52"
+                                        id={`${ID_PREFIX}-toolbar-job-type`}
+                                        className="h-9 w-full rounded-md border bg-background px-2 text-[13px] sm:w-40"
+                                        value={jobTypeDraft}
+                                        onChange={(event) =>
+                                            setJobTypeDraft(event.target.value)
+                                        }
+                                        aria-label="任务类型"
+                                    >
+                                        {JOB_TYPE_FILTER_OPTIONS.map(
+                                            (option) => (
+                                                <option
+                                                    key={option.value || "all"}
+                                                    value={option.value}
+                                                >
+                                                    {option.label}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </ListWorkspaceFilterField>
+                                <ListWorkspaceFilterField
+                                    htmlFor={`${ID_PREFIX}-toolbar-domain`}
+                                    label="业务类型"
+                                >
+                                    <select
+                                        id={`${ID_PREFIX}-toolbar-domain`}
+                                        className="h-9 w-full rounded-md border bg-background px-2 text-[13px] sm:w-44"
                                         value={domainDraft}
                                         onChange={(event) =>
                                             setDomainDraft(event.target.value)
                                         }
-                                        aria-label="任务类型"
+                                        aria-label="业务类型"
                                     >
-                                        {DOMAIN_FILTER_OPTIONS.map((option) => (
-                                            <option
-                                                key={option.value || "all"}
-                                                value={option.value}
-                                            >
-                                                {option.label}
-                                            </option>
-                                        ))}
+                                        {JOB_DOMAIN_FILTER_OPTIONS.map(
+                                            (option) => (
+                                                <option
+                                                    key={option.value || "all"}
+                                                    value={option.value}
+                                                >
+                                                    {option.label}
+                                                </option>
+                                            ),
+                                        )}
                                     </select>
                                 </ListWorkspaceFilterField>
                             </>
@@ -424,11 +460,22 @@ export function ExportTasksWorkspace() {
                                       },
                                   ]
                                 : []),
+                            ...(appliedJobType
+                                ? [
+                                      {
+                                          key: "job_type",
+                                          label: `任务类型：${
+                                              JOB_TYPE_LABELS[appliedJobType] ??
+                                              appliedJobType
+                                          }`,
+                                      },
+                                  ]
+                                : []),
                             ...(appliedDomain
                                 ? [
                                       {
                                           key: "domain",
-                                          label: `类型：${exportDomainLabel(appliedDomain)}`,
+                                          label: `业务类型：${backgroundJobDomainLabel(appliedDomain, null)}`,
                                       },
                                   ]
                                 : []),
@@ -446,6 +493,10 @@ export function ExportTasksWorkspace() {
                                 setStatusDraft("all")
                                 setAppliedStatus("all")
                             }
+                            if (key === "job_type") {
+                                setJobTypeDraft("")
+                                setAppliedJobType("")
+                            }
                             if (key === "domain") {
                                 setDomainDraft("")
                                 setAppliedDomain("")
@@ -454,13 +505,13 @@ export function ExportTasksWorkspace() {
                         }}
                         onClearAll={clearFilters}
                         idleHint={
-                            isAdmin ? undefined : "仅显示我创建的导出任务"
+                            isAdmin ? undefined : "仅显示我创建的后台任务"
                         }
                     />
                 }
                 table={
                     <DataTable
-                        id="governance-exports-table"
+                        id={`${ID_PREFIX}-table`}
                         data={rows}
                         columns={columns}
                         getRowId={(row) => row.id}
@@ -482,7 +533,7 @@ export function ExportTasksWorkspace() {
                                     error={jobsQuery.error}
                                     action={
                                         <Button
-                                            id="governance-exports-retry"
+                                            id={`${ID_PREFIX}-retry`}
                                             type="button"
                                             variant="outline"
                                             size="sm"
@@ -506,17 +557,17 @@ export function ExportTasksWorkspace() {
                                     title={
                                         hasActiveFilters
                                             ? "当前筛选无结果"
-                                            : "还没有导出任务"
+                                            : "还没有后台任务"
                                     }
                                     description={
                                         hasActiveFilters
                                             ? "没有任务符合当前筛选条件，可清除筛选后重试。"
-                                            : "在销售单、库存台账等页面发起导出后，进度会集中显示在这里。"
+                                            : "在商品列表导入报价表，或在销售单、库存台账等页面发起导出后，进度会集中显示在这里。"
                                     }
                                     action={
                                         hasActiveFilters ? (
                                             <Button
-                                                id="governance-exports-empty-clear-filters"
+                                                id={`${ID_PREFIX}-empty-clear-filters`}
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -534,21 +585,14 @@ export function ExportTasksWorkspace() {
                 }
             />
             <QuickPreviewSheet
-                idPrefix="governance-exports-preview-sheet"
+                idPrefix={`${ID_PREFIX}-preview-sheet`}
                 open={previewJob != null}
                 onOpenChange={(open) => {
                     if (!open) closePreview()
                 }}
                 size="preview"
                 contentClassName="data-[side=right]:sm:w-[460px] data-[side=right]:sm:max-w-[460px]"
-                title={
-                    previewJob
-                        ? exportDomainLabel(previewJob.domain_job_type)
-                        : "导出任务"
-                }
-                description={
-                    previewJob ? `任务号 ${previewJob.job_no}` : undefined
-                }
+                title={previewJob ? jobLabel(previewJob) : "后台任务"}
                 identity={
                     previewJob ? (
                         <span className="num">任务号：{previewJob.job_no}</span>
@@ -567,12 +611,10 @@ export function ExportTasksWorkspace() {
                                             ? "neutral"
                                             : "info"
                                 }
-                                label={
-                                    EXPORT_JOB_STATUS_LABELS[previewJob.status]
-                                }
+                                label={JOB_STATUS_LABELS[previewJob.status]}
                             />
                             <span className="text-xs text-muted-foreground">
-                                {exportDomainLabel(previewJob.domain_job_type)}
+                                {jobLabel(previewJob)}
                             </span>
                         </div>
                     ) : null
@@ -581,17 +623,16 @@ export function ExportTasksWorkspace() {
                     previewJob ? (
                         <>
                             <Button
-                                id="governance-exports-preview-close"
+                                id={`${ID_PREFIX}-preview-close`}
                                 type="button"
                                 variant="outline"
                                 onClick={closePreview}
                             >
                                 关闭
                             </Button>
-                            {previewJob &&
-                            isExportJobActive(previewJob.status) ? (
+                            {previewJob && isJobActive(previewJob.status) ? (
                                 <Button
-                                    id="governance-exports-preview-cancel"
+                                    id={`${ID_PREFIX}-preview-cancel`}
                                     type="button"
                                     variant="destructive"
                                     disabled={cancelMutation.isPending}
@@ -610,19 +651,17 @@ export function ExportTasksWorkspace() {
                     <div className="space-y-6 text-sm">
                         <BackgroundJobProgress
                             mode="partialAllowed"
-                            status={exportProgressStatus(previewJob.status)}
+                            status={jobProgressStatus(previewJob.status)}
                             total={previewJob.total_count}
                             completed={previewJob.processed_count}
                             succeeded={previewJob.success_count}
                             skipped={previewJob.skipped_count}
                             failed={previewJob.failed_count}
-                            label={exportDomainLabel(
-                                previewJob.domain_job_type,
-                            )}
+                            label={jobLabel(previewJob)}
                             description={
                                 previewJob.error_summary
                                     ? previewJob.error_summary
-                                    : "导出按选择快照执行，已完成的部分不受未完成部分影响。"
+                                    : "任务在后台逐项执行，已完成的部分不受未完成部分影响。"
                             }
                         />
                         <section className="space-y-3">
@@ -637,7 +676,7 @@ export function ExportTasksWorkspace() {
                                 <DescriptionItem>
                                     <DescriptionTerm>创建时间</DescriptionTerm>
                                     <DescriptionDetails className="num">
-                                        {formatExportDateTime(
+                                        {formatJobDateTime(
                                             previewJob.created_at,
                                         )}
                                     </DescriptionDetails>
@@ -645,7 +684,7 @@ export function ExportTasksWorkspace() {
                                 <DescriptionItem>
                                     <DescriptionTerm>开始时间</DescriptionTerm>
                                     <DescriptionDetails className="num">
-                                        {formatExportDateTime(
+                                        {formatJobDateTime(
                                             previewJob.started_at,
                                         )}
                                     </DescriptionDetails>
@@ -653,7 +692,7 @@ export function ExportTasksWorkspace() {
                                 <DescriptionItem>
                                     <DescriptionTerm>结束时间</DescriptionTerm>
                                     <DescriptionDetails className="num">
-                                        {formatExportDateTime(
+                                        {formatJobDateTime(
                                             previewJob.finished_at,
                                         )}
                                     </DescriptionDetails>
@@ -663,7 +702,7 @@ export function ExportTasksWorkspace() {
                                         结果有效期至
                                     </DescriptionTerm>
                                     <DescriptionDetails className="num">
-                                        {formatExportDateTime(
+                                        {formatJobDateTime(
                                             previewJob.result_expires_at,
                                         )}
                                     </DescriptionDetails>
@@ -725,7 +764,7 @@ export function ExportTasksWorkspace() {
             >
                 <AlertDialogContent size="sm">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>取消导出任务</AlertDialogTitle>
+                        <AlertDialogTitle>取消任务</AlertDialogTitle>
                         <AlertDialogDescription>
                             取消后尚未开始的部分不再执行，已经完成的部分不受影响。
                         </AlertDialogDescription>
@@ -736,11 +775,11 @@ export function ExportTasksWorkspace() {
                         </p>
                     ) : null}
                     <AlertDialogFooter>
-                        <AlertDialogCancel id="governance-exports-cancel-back">
+                        <AlertDialogCancel id={`${ID_PREFIX}-cancel-back`}>
                             返回
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            id="governance-exports-cancel-confirm"
+                            id={`${ID_PREFIX}-cancel-confirm`}
                             disabled={cancelMutation.isPending}
                             onClick={() => {
                                 void confirmCancel()
@@ -764,7 +803,7 @@ export function ExportTasksWorkspace() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>停止并取消所有任务</AlertDialogTitle>
                         <AlertDialogDescription>
-                            将停止并取消当前全部未完成的导出任务，包括他人创建的任务。已经完成的部分不受影响，没有进行中的任务时不做任何处理。
+                            将停止并取消当前全部未完成的后台任务，包括他人创建的任务。已经完成的部分不受影响，没有进行中的任务时不做任何处理。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     {stopAllResult ? (
@@ -789,16 +828,20 @@ export function ExportTasksWorkspace() {
                     ) : null}
                     <AlertDialogFooter>
                         {stopAllResult ? (
-                            <AlertDialogCancel id="governance-exports-stop-all-close">
+                            <AlertDialogCancel
+                                id={`${ID_PREFIX}-stop-all-close`}
+                            >
                                 关闭
                             </AlertDialogCancel>
                         ) : (
                             <>
-                                <AlertDialogCancel id="governance-exports-stop-all-back">
+                                <AlertDialogCancel
+                                    id={`${ID_PREFIX}-stop-all-back`}
+                                >
                                     返回
                                 </AlertDialogCancel>
                                 <AlertDialogAction
-                                    id="governance-exports-stop-all-confirm"
+                                    id={`${ID_PREFIX}-stop-all-confirm`}
                                     disabled={cancelAllMutation.isPending}
                                     onClick={() => {
                                         void confirmStopAll()
