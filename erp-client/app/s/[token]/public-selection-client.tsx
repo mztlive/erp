@@ -172,12 +172,6 @@ const ReceiptView = ({ page }: { page: PublicSelection }) => {
                     ) : null}
                 </CardContent>
             </Card>
-            <p className="text-xs leading-5 text-muted-foreground">
-                选品报价不预占库存，后续销售单另行确认。
-                {page.submit_mode === "MALL_REDEEM"
-                    ? "本次仅确认可选范围，尚未上架商城。"
-                    : ""}
-            </p>
         </div>
     )
 }
@@ -332,7 +326,6 @@ export const PublicSelectionClient = ({ token }: { token: string }) => {
     React.useEffect(() => {
         if (!data || data.kind !== "SELECTING" || conflict !== null) return
         if (hydratedVersion === null) {
-            setLocal(initialFromSaved(data.choices))
             setHydratedVersion(data.session_version ?? null)
             return
         }
@@ -558,12 +551,6 @@ export const PublicSelectionClient = ({ token }: { token: string }) => {
                     <h1 className="text-lg font-semibold">
                         {data.form === "PACKAGE" ? "套餐选品" : "商品选品"}
                     </h1>
-                    <p className="text-xs leading-5 text-muted-foreground">
-                        选品报价不预占库存，后续销售单另行确认。
-                        {data.submit_mode === "MALL_REDEEM"
-                            ? "本次仅确认可选范围，尚未上架商城。"
-                            : ""}
-                    </p>
                 </div>
 
                 {data.items.length === 0 ? (

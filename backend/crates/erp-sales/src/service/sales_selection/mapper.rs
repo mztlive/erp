@@ -221,13 +221,9 @@ impl SalesSelectionService {
                 choices: Vec::new(),
                 total_amount: None,
                 receipt: None,
-                notices: vec!["选品已结束".into()],
             };
         }
-        let mut notices = vec!["选品报价不预占库存，后续销售单另行确认".into()];
-        if booklet.submit_mode == crate::entity::sales_selection::SubmitMode::MallRedeem {
-            notices.push("本次仅确认可选范围，尚未上架商城".into());
-        }
+
         PublicSelectionPageView {
             kind,
             customer_name: Some(booklet.customer_name.clone()),
@@ -249,7 +245,6 @@ impl SalesSelectionService {
                 .unwrap_or_default(),
             total_amount: None,
             receipt,
-            notices,
         }
     }
 }

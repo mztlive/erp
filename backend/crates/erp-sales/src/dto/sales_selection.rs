@@ -505,8 +505,6 @@ pub struct PublicSelectionPageView {
     pub total_amount: Option<Amount>,
     /// 回执。
     pub receipt: Option<PublicReceiptView>,
-    /// 说明。
-    pub notices: Vec<String>,
 }
 
 /// 公开陈列卡片。

@@ -6,21 +6,30 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import {
     AlertCircle,
     Check,
     CheckCircle2,
     Clock,
     FileCheck,
+    Gift,
     Info,
     Layers,
+    Megaphone,
     Minus,
     Package,
     Plus,
     RefreshCw,
     ShieldAlert,
     ShoppingBag,
-    Sparkles,
+    Store,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { publicImageUrl, savePublicSession, submitPublicSession } from "../api"
@@ -33,7 +42,7 @@ import {
     type Pick,
 } from "../lib/public-flow"
 import { quantityStringSchema } from "../lib/validation"
-import type { PublicPageView } from "../types"
+import type { PublicDisplayItemView, PublicPageView } from "../types"
 
 /** 读取公开选品事实，明确区分加载、结束、回执和可编辑状态。 */
 export const PublicSelectionPage = ({ token }: { token: string }) => {
@@ -71,7 +80,7 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
     if (!page)
         return (
             <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center text-sm text-slate-500">
-                <RefreshCw className="mb-3 h-6 w-6 animate-spin text-primary" />
+                <RefreshCw className="mb-3 h-6 w-6 animate-spin text-rose-500" />
                 正在打开选品页…
             </main>
         )
@@ -92,8 +101,8 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
 /** 结束后移除所有可写表单。 */
 const Ended = () => {
     return (
-        <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400 shadow-inner">
+        <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center p-6 text-center bg-slate-50">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-200/70 text-slate-400">
                 <Clock className="h-8 w-8" />
             </div>
             <h1 className="text-xl font-bold text-slate-900">选品已结束</h1>
@@ -111,16 +120,16 @@ const Ended = () => {
 const Receipt = ({ page }: { page: PublicPageView }) => {
     const receipt = page.receipt!
     return (
-        <main className="mx-auto min-h-screen max-w-lg bg-slate-50/50 p-4 pb-12">
-            <div className="mb-6 rounded-3xl bg-white p-6 text-center shadow-xs border border-slate-100">
-                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+        <main className="mx-auto min-h-screen max-w-lg bg-slate-100 p-4 pb-12">
+            <div className="mb-4 rounded-3xl bg-white p-6 text-center shadow-xs border border-slate-200/80">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                     <CheckCircle2 className="h-8 w-8" />
                 </div>
                 <h1 className="text-xl font-bold text-slate-900">已提交选品</h1>
                 <p className="mt-1 text-sm font-semibold text-slate-800">
                     {receipt.customer_name}
                 </p>
-                <div className="mt-4 inline-flex flex-col items-center gap-1 rounded-xl bg-slate-50 px-4 py-2 text-xs text-slate-600 border border-slate-150">
+                <div className="mt-3 inline-flex flex-col items-center gap-1 rounded-xl bg-slate-50 px-4 py-2 text-xs text-slate-600 border border-slate-200">
                     <span className="font-mono font-medium">
                         方案编号 {receipt.proposal_no}
                     </span>
@@ -130,9 +139,9 @@ const Receipt = ({ page }: { page: PublicPageView }) => {
                 </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
                 <div className="flex items-center gap-2 px-1">
-                    <FileCheck className="h-4 w-4 text-primary" />
+                    <FileCheck className="h-4 w-4 text-rose-600" />
                     <h2 className="text-sm font-semibold text-slate-900">
                         确认选品清单
                     </h2>
@@ -141,7 +150,7 @@ const Receipt = ({ page }: { page: PublicPageView }) => {
                 {page.notices.map((notice) => (
                     <div
                         key={notice}
-                        className="rounded-xl bg-slate-100/80 p-3 text-xs text-slate-500 leading-relaxed"
+                        className="rounded-xl bg-white p-3 text-xs text-slate-500 border border-slate-200/60 leading-relaxed"
                     >
                         {notice}
                     </div>
@@ -181,7 +190,7 @@ const ChoiceSummary = ({
                                     : ""}
                             </p>
                             {choice.line_amount != null && (
-                                <p className="font-semibold text-slate-900 text-sm shrink-0">
+                                <p className="font-semibold text-rose-600 text-sm shrink-0">
                                     ¥ {choice.line_amount}
                                 </p>
                             )}
@@ -271,6 +280,15 @@ const SelectionForm = ({
     const [message, setMessage] = React.useState("")
     const mall = page.submit_mode === "MALL_REDEEM"
 
+    // 电商交互状态：当前选中的详情商品、购物车抽屉、排序与已选过滤
+    const [detailItem, setDetailItem] =
+        React.useState<PublicDisplayItemView | null>(null)
+    const [cartDrawerOpen, setCartDrawerOpen] = React.useState(false)
+    const [showOnlySelected, setShowOnlySelected] = React.useState(false)
+    const [priceSort, setPriceSort] = React.useState<"NONE" | "ASC" | "DESC">(
+        "NONE",
+    )
+
     // 收集全部档位供快捷导航（套餐形态）
     const tiers = React.useMemo(() => {
         const set = new Set<string>()
@@ -281,10 +299,24 @@ const SelectionForm = ({
     }, [page.items])
     const [activeTier, setActiveTier] = React.useState<string>("ALL")
 
+    // 商品过滤与排序逻辑
     const displayedItems = React.useMemo(() => {
-        if (activeTier === "ALL") return page.items
-        return page.items.filter((item) => item.tier_name === activeTier)
-    }, [page.items, activeTier])
+        let list = page.items
+        if (activeTier !== "ALL") {
+            list = list.filter((item) => item.tier_name === activeTier)
+        }
+        if (showOnlySelected) {
+            list = list.filter((item) => picks[item.item_id]?.selected)
+        }
+        if (priceSort !== "NONE") {
+            list = [...list].sort((a, b) => {
+                const aVal = Number.parseInt(a.price.replace(".", ""), 10) || 0
+                const bVal = Number.parseInt(b.price.replace(".", ""), 10) || 0
+                return priceSort === "ASC" ? aVal - bVal : bVal - aVal
+            })
+        }
+        return list
+    }, [page.items, activeTier, showOnlySelected, priceSort, picks])
 
     const keepRequest = (next: PendingSelectionRequest | null) => {
         setRequest(next)
@@ -420,58 +452,63 @@ const SelectionForm = ({
     ).length
 
     return (
-        <main className="min-h-screen bg-slate-50/60 pb-32">
-            <div className="mx-auto max-w-lg px-4 pt-4">
-                {/* 顶部企业尊享卡片 */}
-                <header className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 text-white shadow-md">
-                    <div className="pointer-events-none absolute -right-6 -top-6 h-28 w-28 rounded-full bg-primary/20 blur-2xl" />
-                    <div className="pointer-events-none absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-emerald-500/15 blur-2xl" />
-
-                    <div className="relative z-10 flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-slate-200 backdrop-blur-xs">
-                                <Sparkles className="h-3 w-3 text-amber-400" />
-                                尊享选品手册
-                            </span>
-                            <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300 border border-emerald-500/30">
-                                {mall ? "商城兑换模式" : "按份采购模式"}
-                            </span>
-                        </div>
-
-                        <div>
-                            <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                                {page.customer_name} 选品
-                            </h1>
-                            <p className="mt-1 text-xs text-slate-300">
-                                {mall
-                                    ? "勾选意向商品形成商城可兑范围，无需填写份数。"
-                                    : "选择意向商品并确认采购份数，系统将核算方案金额。"}
-                            </p>
-                        </div>
-
-                        {page.notices.length > 0 && (
-                            <div className="mt-2 rounded-2xl bg-white/10 p-3 text-xs text-slate-200 backdrop-blur-xs border border-white/10 flex items-start gap-2">
-                                <Info className="h-4 w-4 shrink-0 text-amber-300 mt-0.5" />
-                                <div className="space-y-0.5 leading-relaxed">
-                                    {page.notices.map((notice) => (
-                                        <p key={notice}>{notice}</p>
-                                    ))}
-                                </div>
+        <main className="min-h-screen bg-slate-100 pb-32">
+            <div className="mx-auto max-w-lg min-h-screen bg-white shadow-xl flex flex-col">
+                {/* 1. 电商商城顶部导航条 */}
+                <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-rose-500 via-rose-600 to-amber-500 text-white shadow-xs">
+                                <Store className="h-5 w-5" />
                             </div>
-                        )}
+                            <div className="min-w-0">
+                                <h1 className="text-sm font-bold text-slate-900 truncate">
+                                    {page.customer_name}
+                                </h1>
+                                <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span>专属选品会场</span>
+                                    <span className="text-slate-300">|</span>
+                                    <span>
+                                        {mall ? "商城兑换" : "按份采购"}
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                        <Badge
+                            variant="outline"
+                            className="shrink-0 text-xs border-rose-200 bg-rose-50 text-rose-600 font-medium px-2.5 py-0.5"
+                        >
+                            {mall ? "意向可选库" : "批量采购"}
+                        </Badge>
                     </div>
                 </header>
+
+                {/* 2. 电商通知走马灯 / 提示条 */}
+                {page.notices.length > 0 && (
+                    <div className="bg-amber-50/90 border-b border-amber-200/60 px-4 py-2 text-xs text-amber-900 flex items-center gap-2">
+                        <Megaphone className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                        <div className="truncate flex-1 space-x-2 font-medium">
+                            {page.notices.map((notice, i) => (
+                                <span key={notice}>
+                                    {i > 0 ? " · " : ""}
+                                    {notice}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* 状态与未知结果恢复提示 */}
                 {(message || request) && (
                     <div
                         role="status"
-                        className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900 shadow-xs"
+                        className="mx-3 mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 shadow-2xs"
                     >
-                        <div className="flex items-start gap-2.5">
-                            <AlertCircle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                        <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                             <div className="flex-1">
-                                <p className="font-medium leading-relaxed">
+                                <p className="font-semibold leading-relaxed">
                                     {message ||
                                         "上次操作结果待核对，请先恢复本次请求。"}
                                 </p>
@@ -479,7 +516,7 @@ const SelectionForm = ({
                                     <Button
                                         id="sales-selection-public-reconcile"
                                         size="sm"
-                                        className="mt-3 bg-amber-600 text-white hover:bg-amber-700"
+                                        className="mt-2 h-7 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-xs"
                                         onClick={() => mutation.mutate(request)}
                                     >
                                         核对并恢复本次操作
@@ -493,12 +530,12 @@ const SelectionForm = ({
                 {/* 冲突处理区域 */}
                 {conflict && (
                     <section
-                        className="mb-5 rounded-2xl border-2 border-amber-300 bg-amber-50/70 p-4 space-y-3"
+                        className="mx-3 mt-3 rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-3.5 space-y-2.5"
                         aria-label="最新保存的选择"
                     >
                         <div className="flex items-center gap-2 text-amber-900">
-                            <ShieldAlert className="h-5 w-5 text-amber-600" />
-                            <h2 className="font-bold text-sm">
+                            <ShieldAlert className="h-4 w-4 text-amber-600" />
+                            <h2 className="font-bold text-xs sm:text-sm">
                                 其他页面最新保存的选择
                             </h2>
                         </div>
@@ -517,6 +554,7 @@ const SelectionForm = ({
                                 id="sales-selection-public-reload-conflict"
                                 variant="outline"
                                 size="sm"
+                                className="h-7 text-xs rounded-lg"
                                 onClick={async () =>
                                     setLatest((await refresh()) ?? null)
                                 }
@@ -526,6 +564,7 @@ const SelectionForm = ({
                             <Button
                                 id="sales-selection-public-acknowledge"
                                 size="sm"
+                                className="h-7 text-xs rounded-lg bg-amber-600 text-white hover:bg-amber-700"
                                 disabled={
                                     !latest || latest.kind !== "SELECTING"
                                 }
@@ -545,405 +584,660 @@ const SelectionForm = ({
                     </section>
                 )}
 
-                {/* 套餐档位快捷切换 Tabs */}
-                {tiers.length > 0 && (
-                    <div className="sticky top-2 z-20 mb-4 flex gap-1.5 overflow-x-auto rounded-2xl bg-white/90 p-1.5 backdrop-blur-md border border-slate-200/80 shadow-xs no-scrollbar">
+                {/* 3. 分类、档位与快捷筛选横滑栏 */}
+                <div className="sticky top-[57px] z-20 bg-white border-b border-slate-200/80 px-3 py-2 flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1">
                         <button
                             type="button"
-                            onClick={() => setActiveTier("ALL")}
+                            onClick={() => {
+                                setActiveTier("ALL")
+                                setShowOnlySelected(false)
+                            }}
                             className={cn(
-                                "shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all",
-                                activeTier === "ALL"
-                                    ? "bg-slate-900 text-white shadow-xs"
-                                    : "text-slate-600 hover:bg-slate-100",
+                                "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                                activeTier === "ALL" && !showOnlySelected
+                                    ? "bg-rose-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200",
                             )}
                         >
                             全部 ({page.items.length})
                         </button>
-                        {tiers.map((tier) => {
-                            const count = page.items.filter(
-                                (i) => i.tier_name === tier,
-                            ).length
-                            return (
-                                <button
-                                    key={tier}
-                                    type="button"
-                                    onClick={() => setActiveTier(tier)}
-                                    className={cn(
-                                        "shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all",
-                                        activeTier === tier
-                                            ? "bg-slate-900 text-white shadow-xs"
-                                            : "text-slate-600 hover:bg-slate-100",
-                                    )}
-                                >
-                                    {tier} ({count})
-                                </button>
-                            )
-                        })}
-                    </div>
-                )}
-
-                {/* 商品卡片列表 */}
-                <fieldset disabled={locked || conflict} className="space-y-4">
-                    {displayedItems.map((item) => {
-                        const pick = picks[item.item_id]
-                        const isSelected = pick?.selected ?? false
-                        const image = publicImageUrl(token, item.cover_path)
-                        const [intPart, decPart] = item.price.split(".")
-
-                        return (
-                            <article
-                                key={item.item_id}
+                        {tiers.map((tier) => (
+                            <button
+                                key={tier}
+                                type="button"
+                                onClick={() => {
+                                    setActiveTier(tier)
+                                    setShowOnlySelected(false)
+                                }}
                                 className={cn(
-                                    "group relative overflow-hidden rounded-3xl border bg-white transition-all duration-200 shadow-xs",
-                                    isSelected
-                                        ? "border-primary/80 ring-2 ring-primary/15 bg-primary/[0.015] shadow-sm"
-                                        : "border-slate-200/80 hover:border-slate-300",
+                                    "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                                    activeTier === tier && !showOnlySelected
+                                        ? "bg-rose-600 text-white shadow-xs"
+                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
                                 )}
                             >
-                                {/* 封面图 / 高品质占位区 */}
-                                <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100 sm:aspect-[16/9]">
-                                    {image ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                            src={image}
-                                            alt=""
-                                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-102"
-                                            loading="lazy"
-                                            referrerPolicy="no-referrer"
-                                        />
-                                    ) : (
-                                        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-stone-50 to-slate-200/60 p-4 text-center">
-                                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 shadow-xs text-slate-400">
-                                                <Package className="h-6 w-6 stroke-[1.5]" />
+                                {tier}
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setShowOnlySelected(!showOnlySelected)
+                            }
+                            className={cn(
+                                "shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all flex items-center gap-1",
+                                showOnlySelected
+                                    ? "bg-rose-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                            )}
+                        >
+                            <Check className="h-3 w-3" />
+                            已选 ({selectedCount})
+                        </button>
+                    </div>
+                    {/* 价格排序微调 */}
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setPriceSort((prev) =>
+                                prev === "NONE"
+                                    ? "ASC"
+                                    : prev === "ASC"
+                                      ? "DESC"
+                                      : "NONE",
+                            )
+                        }
+                        className={cn(
+                            "shrink-0 flex items-center gap-0.5 rounded-full px-2.5 py-1 text-xs font-medium border border-slate-200 bg-white transition-all",
+                            priceSort !== "NONE"
+                                ? "text-rose-600 border-rose-300 font-bold bg-rose-50/50"
+                                : "text-slate-600",
+                        )}
+                    >
+                        价格
+                        {priceSort === "ASC"
+                            ? " ↑"
+                            : priceSort === "DESC"
+                              ? " ↓"
+                              : " ↕"}
+                    </button>
+                </div>
+
+                {/* 4. 标准电商双列瀑布流 / 宫格商品列表 */}
+                <div className="p-3 sm:p-4 flex-1">
+                    <fieldset
+                        disabled={locked || conflict}
+                        className="grid grid-cols-2 gap-2.5 sm:gap-3"
+                    >
+                        {displayedItems.map((item) => {
+                            const pick = picks[item.item_id]
+                            const isSelected = pick?.selected ?? false
+                            const image = publicImageUrl(token, item.cover_path)
+                            const [intPart, decPart] = item.price.split(".")
+
+                            return (
+                                <article
+                                    key={item.item_id}
+                                    className={cn(
+                                        "group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border transition-all duration-200 shadow-2xs hover:shadow-md",
+                                        isSelected
+                                            ? "border-rose-500 ring-2 ring-rose-500/15"
+                                            : "border-slate-200/80 hover:border-slate-300",
+                                    )}
+                                >
+                                    {/* 1:1 正方形电商大图 */}
+                                    <button
+                                        type="button"
+                                        aria-label={`查看${item.name}详情`}
+                                        className="relative aspect-square w-full overflow-hidden bg-slate-50 text-left block cursor-pointer border-0 p-0"
+                                        onClick={() => setDetailItem(item)}
+                                    >
+                                        {image ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                                src={image}
+                                                alt=""
+                                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                loading="lazy"
+                                                referrerPolicy="no-referrer"
+                                            />
+                                        ) : (
+                                            <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-rose-50/40 via-slate-50 to-amber-50/30 p-3 text-center">
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-2xs text-rose-400">
+                                                    <Gift className="h-6 w-6 stroke-[1.5]" />
+                                                </div>
+                                                <span className="mt-2 text-[10px] font-semibold text-slate-400 tracking-wider">
+                                                    严选好物
+                                                </span>
                                             </div>
-                                            <span className="mt-2 text-xs font-medium text-slate-500">
-                                                精选商品资料
+                                        )}
+
+                                        {/* 套餐档位徽标 */}
+                                        {item.tier_name && (
+                                            <span className="absolute left-2 top-2 rounded-md bg-slate-900/75 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-xs backdrop-blur-xs">
+                                                {item.tier_name}
+                                            </span>
+                                        )}
+
+                                        {/* 套餐件数提示 */}
+                                        {item.members.length > 0 && (
+                                            <span className="absolute left-2 bottom-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white flex items-center gap-1 backdrop-blur-xs">
+                                                <Layers className="h-2.5 w-2.5" />
+                                                {item.members.length}件装
+                                            </span>
+                                        )}
+
+                                        {/* 右上角选中状态徽标 */}
+                                        <div className="absolute right-2 top-2">
+                                            <span
+                                                className={cn(
+                                                    "flex h-6 w-6 items-center justify-center rounded-full transition-all shadow-xs",
+                                                    isSelected
+                                                        ? "bg-rose-600 text-white scale-100 ring-2 ring-white"
+                                                        : "bg-black/20 text-transparent border border-white/60 backdrop-blur-xs scale-90",
+                                                )}
+                                            >
+                                                <Check className="h-3.5 w-3.5 stroke-[3]" />
                                             </span>
                                         </div>
-                                    )}
+                                    </button>
 
-                                    {/* 档位浮动徽标 */}
-                                    {item.tier_name && (
-                                        <span className="absolute left-3 top-3 rounded-lg bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-white shadow-xs backdrop-blur-xs">
-                                            {item.tier_name}
-                                        </span>
-                                    )}
-
-                                    {/* 右上角选中状态圆标 */}
-                                    <div className="absolute right-3 top-3">
-                                        <span
-                                            className={cn(
-                                                "flex h-7 w-7 items-center justify-center rounded-full transition-all shadow-xs",
-                                                isSelected
-                                                    ? "bg-primary text-primary-foreground scale-100 ring-2 ring-white"
-                                                    : "bg-black/25 text-transparent border border-white/60 backdrop-blur-xs scale-90",
-                                            )}
-                                        >
-                                            <Check className="h-4 w-4 stroke-[3]" />
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* 卡片信息与交互 */}
-                                <div className="p-4 sm:p-5">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0 flex-1">
-                                            <h3 className="font-semibold text-slate-900 text-base leading-snug">
+                                    {/* 卡片详情与操作 */}
+                                    <div className="p-2.5 sm:p-3 flex flex-col flex-1 justify-between gap-1.5">
+                                        <div>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setDetailItem(item)
+                                                }
+                                                className="text-left w-full text-xs sm:text-sm font-medium text-slate-900 leading-snug line-clamp-2 h-[2.5em] hover:text-rose-600 transition-colors p-0 border-0 bg-transparent"
+                                            >
                                                 {item.name}
-                                            </h3>
+                                            </button>
 
                                             {/* 规格标签 */}
                                             {item.specification.length > 0 && (
-                                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                                    {item.specification.map(
-                                                        (s) => (
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    {item.specification
+                                                        .slice(0, 2)
+                                                        .map((s) => (
                                                             <span
                                                                 key={s.name}
-                                                                className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+                                                                className="rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-500 truncate max-w-full"
                                                             >
-                                                                {s.name}：
-                                                                {s.value}
+                                                                {s.value ||
+                                                                    s.name}
                                                             </span>
-                                                        ),
-                                                    )}
+                                                        ))}
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
 
-                                    {/* 套餐包含明细 */}
-                                    {item.members.length > 0 && (
-                                        <div className="mt-3 rounded-2xl bg-slate-50/90 p-3 border border-slate-150">
-                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5">
-                                                <Layers className="h-3.5 w-3.5 text-primary" />
-                                                礼盒包含 {item.members.length}{" "}
-                                                款精选单品
-                                            </p>
-                                            <ul className="space-y-1 text-xs text-slate-500">
-                                                {item.members.map(
-                                                    (member, index) => (
-                                                        <li
-                                                            key={`${member.name}-${index}`}
-                                                            className="flex items-center justify-between text-[11px]"
-                                                        >
-                                                            <span className="truncate text-slate-600">
-                                                                {member.name}
-                                                            </span>
-                                                            <span className="shrink-0 text-slate-400 ml-2">
-                                                                {member.specification
-                                                                    .map(
-                                                                        (s) =>
-                                                                            s.value,
-                                                                    )
-                                                                    .join(
-                                                                        " / ",
-                                                                    )}
-                                                                {member
-                                                                    .specification
-                                                                    .length > 0
-                                                                    ? " · "
-                                                                    : ""}
-                                                                1 {member.unit}
-                                                            </span>
-                                                        </li>
-                                                    ),
-                                                )}
-                                            </ul>
-                                        </div>
-                                    )}
-
-                                    {/* 价格与操作栏 */}
-                                    <div className="mt-4 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
-                                        {/* 价格展示 */}
-                                        <div>
-                                            <span className="text-[11px] text-slate-400 block mb-0.5">
-                                                {mall
-                                                    ? "商城参考价值"
-                                                    : "含税单价"}
-                                            </span>
-                                            <div className="flex items-baseline text-slate-900 font-semibold">
-                                                <span className="text-xs mr-0.5 font-bold text-rose-600">
+                                        {/* 价格与操作区域 */}
+                                        <div className="mt-1 pt-1.5 border-t border-slate-100">
+                                            <div className="flex items-baseline text-rose-600 font-semibold">
+                                                <span className="text-xs mr-0.5 font-bold">
                                                     ¥
                                                 </span>
-                                                <span className="text-xl font-bold tracking-tight text-rose-600">
+                                                <span className="text-base sm:text-lg font-bold tracking-tight">
                                                     {intPart}
                                                 </span>
                                                 {decPart !== undefined && (
-                                                    <span className="text-xs font-medium text-rose-600">
+                                                    <span className="text-[11px] font-medium">
                                                         .{decPart}
                                                     </span>
                                                 )}
+                                                {mall && (
+                                                    <span className="ml-1 text-[10px] font-normal text-slate-400">
+                                                        参考值
+                                                    </span>
+                                                )}
                                             </div>
-                                        </div>
 
-                                        {/* 操作区域 */}
-                                        <div className="flex items-center gap-2">
+                                            {/* 按钮行 */}
+                                            <div className="mt-1.5 flex items-center justify-between gap-1">
+                                                <label
+                                                    aria-label={item.name}
+                                                    htmlFor={`sales-selection-public-select-${item.item_id}`}
+                                                    className={cn(
+                                                        "flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer select-none flex-1 shadow-2xs active:scale-95",
+                                                        isSelected
+                                                            ? "bg-rose-600 text-white"
+                                                            : "bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white",
+                                                    )}
+                                                >
+                                                    <input
+                                                        id={`sales-selection-public-select-${item.item_id}`}
+                                                        aria-label={item.name}
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={(e) =>
+                                                            change(
+                                                                item.item_id,
+                                                                {
+                                                                    selected:
+                                                                        e.target
+                                                                            .checked,
+                                                                },
+                                                            )
+                                                        }
+                                                        className="sr-only"
+                                                    />
+                                                    {isSelected ? (
+                                                        <>
+                                                            <Check className="h-3 w-3 stroke-[3]" />
+                                                            <span>已选</span>
+                                                        </>
+                                                    ) : (
+                                                        <span>+ 选品</span>
+                                                    )}
+                                                </label>
+
+                                                {/* 详情浮层快捷查看 */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setDetailItem(item)
+                                                    }
+                                                    className="flex h-6.5 w-6.5 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                                                    title="查看商品详情"
+                                                >
+                                                    <Info className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+
                                             {/* 按份步进器 */}
                                             {isSelected && !mall && (
-                                                <div className="flex items-center gap-1 rounded-xl bg-slate-50 p-1 border border-slate-200">
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7 rounded-lg text-slate-600 hover:bg-slate-200"
-                                                        disabled={
-                                                            locked ||
-                                                            conflict ||
-                                                            Number.parseInt(
-                                                                pick.quantity,
-                                                                10,
-                                                            ) <= 1
-                                                        }
-                                                        onClick={(e) => {
-                                                            e.preventDefault()
-                                                            e.stopPropagation()
-                                                            const current =
+                                                <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 p-1 border border-slate-200">
+                                                    <span className="text-[10px] text-slate-500 pl-1 font-medium">
+                                                        份数
+                                                    </span>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs disabled:opacity-40"
+                                                            disabled={
+                                                                locked ||
+                                                                conflict ||
                                                                 Number.parseInt(
                                                                     pick.quantity,
                                                                     10,
+                                                                ) <= 1
+                                                            }
+                                                            onClick={(e) => {
+                                                                e.preventDefault()
+                                                                e.stopPropagation()
+                                                                const current =
+                                                                    Number.parseInt(
+                                                                        pick.quantity,
+                                                                        10,
+                                                                    )
+                                                                if (
+                                                                    Number.isSafeInteger(
+                                                                        current,
+                                                                    ) &&
+                                                                    current > 1
+                                                                ) {
+                                                                    change(
+                                                                        item.item_id,
+                                                                        {
+                                                                            quantity:
+                                                                                String(
+                                                                                    current -
+                                                                                        1,
+                                                                                ),
+                                                                        },
+                                                                    )
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Minus className="h-2.5 w-2.5" />
+                                                        </button>
+                                                        <Input
+                                                            id={`sales-selection-public-qty-${item.item_id}`}
+                                                            inputMode="numeric"
+                                                            className="h-5 w-8 border-0 bg-transparent text-center text-xs font-bold p-0 shadow-none focus-visible:ring-0"
+                                                            value={
+                                                                pick.quantity
+                                                            }
+                                                            onChange={(e) =>
+                                                                change(
+                                                                    item.item_id,
+                                                                    {
+                                                                        quantity:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    },
                                                                 )
-                                                            if (
-                                                                Number.isSafeInteger(
-                                                                    current,
-                                                                ) &&
-                                                                current > 1
-                                                            ) {
+                                                            }
+                                                            onClick={(e) =>
+                                                                e.stopPropagation()
+                                                            }
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="flex h-5 w-5 items-center justify-center rounded bg-white text-slate-700 shadow-2xs"
+                                                            disabled={
+                                                                locked ||
+                                                                conflict
+                                                            }
+                                                            onClick={(e) => {
+                                                                e.preventDefault()
+                                                                e.stopPropagation()
+                                                                const current =
+                                                                    Number.parseInt(
+                                                                        pick.quantity,
+                                                                        10,
+                                                                    )
+                                                                const val =
+                                                                    Number.isSafeInteger(
+                                                                        current,
+                                                                    )
+                                                                        ? current
+                                                                        : 1
                                                                 change(
                                                                     item.item_id,
                                                                     {
                                                                         quantity:
                                                                             String(
-                                                                                current -
+                                                                                val +
                                                                                     1,
                                                                             ),
                                                                     },
                                                                 )
-                                                            }
-                                                        }}
-                                                    >
-                                                        <Minus className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                    <Input
-                                                        id={`sales-selection-public-qty-${item.item_id}`}
-                                                        inputMode="numeric"
-                                                        className="h-7 w-12 text-center text-xs font-bold border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0"
-                                                        value={pick.quantity}
-                                                        onChange={(e) =>
-                                                            change(
-                                                                item.item_id,
-                                                                {
-                                                                    quantity:
-                                                                        e.target
-                                                                            .value,
-                                                                },
-                                                            )
-                                                        }
-                                                        onClick={(e) =>
-                                                            e.stopPropagation()
-                                                        }
-                                                    />
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7 rounded-lg text-slate-600 hover:bg-slate-200"
-                                                        disabled={
-                                                            locked || conflict
-                                                        }
-                                                        onClick={(e) => {
-                                                            e.preventDefault()
-                                                            e.stopPropagation()
-                                                            const current =
-                                                                Number.parseInt(
-                                                                    pick.quantity,
-                                                                    10,
-                                                                )
-                                                            const val =
-                                                                Number.isSafeInteger(
-                                                                    current,
-                                                                )
-                                                                    ? current
-                                                                    : 1
-                                                            change(
-                                                                item.item_id,
-                                                                {
-                                                                    quantity:
-                                                                        String(
-                                                                            val +
-                                                                                1,
-                                                                        ),
-                                                                },
-                                                            )
-                                                        }}
-                                                    >
-                                                        <Plus className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                    <span className="text-xs text-slate-400 pr-1">
-                                                        份
-                                                    </span>
+                                                            }}
+                                                        >
+                                                            <Plus className="h-2.5 w-2.5" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
-
-                                            {/* 选择勾选控件 */}
-                                            <label
-                                                aria-label={item.name}
-                                                htmlFor={`sales-selection-public-select-${item.item_id}`}
-                                                className={cn(
-                                                    "flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer select-none",
-                                                    isSelected
-                                                        ? "bg-primary text-primary-foreground shadow-xs"
-                                                        : "bg-slate-100 text-slate-700 hover:bg-slate-200",
-                                                )}
-                                            >
-                                                <input
-                                                    id={`sales-selection-public-select-${item.item_id}`}
-                                                    aria-label={item.name}
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={(e) =>
-                                                        change(item.item_id, {
-                                                            selected:
-                                                                e.target
-                                                                    .checked,
-                                                        })
-                                                    }
-                                                    className="sr-only"
-                                                />
-                                                {isSelected ? (
-                                                    <>
-                                                        <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                                                        <span>已选</span>
-                                                    </>
-                                                ) : (
-                                                    <span>选择</span>
-                                                )}
-                                            </label>
                                         </div>
                                     </div>
-                                </div>
-                            </article>
-                        )
-                    })}
-                </fieldset>
+                                </article>
+                            )
+                        })}
+                    </fieldset>
+                </div>
 
-                {/* 核对清单（点击核对后展开的正式待确认面板） */}
+                {/* 5. 正式待确认清单（点击核对并提交后展开） */}
                 {confirmed && (
                     <section
-                        className="mt-6 rounded-3xl border-2 border-primary/20 bg-primary/[0.02] p-5 space-y-4 shadow-sm"
+                        className="mx-3 mb-6 rounded-3xl border-2 border-rose-500/20 bg-rose-50/20 p-4 space-y-3 shadow-sm"
                         aria-label="核对并提交"
                     >
-                        <div className="flex items-center gap-2 text-primary">
+                        <div className="flex items-center gap-2 text-rose-600">
                             <CheckCircle2 className="h-5 w-5" />
-                            <h2 className="font-bold text-base text-slate-900">
+                            <h2 className="font-bold text-sm sm:text-base text-slate-900">
                                 请核对本次提交清单
                             </h2>
                         </div>
-                        <p className="text-xs text-slate-500">
-                            确认提交后将生成唯一的正式销售方案，并冻结当前会话。
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                            确认提交后将生成唯一的正式销售方案编号，并锁定会话。请仔细核对以下所选项：
                         </p>
                         <ChoiceSummary page={confirmed} />
                     </section>
                 )}
             </div>
 
-            {/* 核心体验升级：移动端吸底浮动结算栏 (Sticky Bottom Action Bar) */}
+            {/* 6. 商品详情 Dialog */}
+            <Dialog
+                open={detailItem !== null}
+                onOpenChange={(open) => {
+                    if (!open) setDetailItem(null)
+                }}
+            >
+                <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[85vh] overflow-y-auto space-y-4">
+                    {detailItem && (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle className="text-base font-bold text-slate-900 line-clamp-1">
+                                    {detailItem.name}
+                                </DialogTitle>
+                            </DialogHeader>
+
+                            {/* 大图预览 */}
+                            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-slate-50">
+                                {publicImageUrl(token, detailItem.cover_path) ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={publicImageUrl(
+                                            token,
+                                            detailItem.cover_path,
+                                        )}
+                                        alt=""
+                                        className="h-full w-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="flex h-full w-full flex-col items-center justify-center text-slate-400 bg-slate-100">
+                                        <Package className="h-10 w-10 stroke-[1.5]" />
+                                        <span className="mt-2 text-xs font-medium text-slate-500">
+                                            精选商品快照
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 价格与信息 */}
+                            <div className="flex items-baseline justify-between">
+                                <div className="flex items-baseline text-rose-600 font-bold">
+                                    <span className="text-xs mr-0.5">¥</span>
+                                    <span className="text-2xl">
+                                        {detailItem.price}
+                                    </span>
+                                    {mall && (
+                                        <span className="ml-2 text-xs text-slate-400 font-normal">
+                                            商城兑换参考价值
+                                        </span>
+                                    )}
+                                </div>
+                                {detailItem.tier_name && (
+                                    <Badge className="bg-slate-900 text-white">
+                                        {detailItem.tier_name}
+                                    </Badge>
+                                )}
+                            </div>
+
+                            {/* 详细规格 */}
+                            {detailItem.specification.length > 0 && (
+                                <div className="rounded-2xl bg-slate-50 p-3 text-xs space-y-1.5 border border-slate-150">
+                                    <p className="font-semibold text-slate-700">
+                                        规格参数
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2 text-slate-600">
+                                        {detailItem.specification.map(
+                                            (spec) => (
+                                                <p key={spec.name}>
+                                                    <span className="text-slate-400">
+                                                        {spec.name}：
+                                                    </span>
+                                                    {spec.value}
+                                                </p>
+                                            ),
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 套餐明细清单 */}
+                            {detailItem.members.length > 0 && (
+                                <div className="rounded-2xl bg-rose-50/40 p-3 text-xs space-y-2 border border-rose-100">
+                                    <p className="font-bold text-rose-950 flex items-center gap-1.5">
+                                        <Layers className="h-4 w-4 text-rose-600" />
+                                        套餐包含 {detailItem.members.length}{" "}
+                                        款组合商品
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        {detailItem.members.map((m, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="flex items-center justify-between text-slate-700 border-b border-rose-100/60 pb-1 last:border-0 last:pb-0"
+                                            >
+                                                <span className="font-medium">
+                                                    {m.name}
+                                                </span>
+                                                <span className="text-slate-400">
+                                                    {m.specification
+                                                        .map((s) => s.value)
+                                                        .join("/")}{" "}
+                                                    · 1{m.unit}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-2">
+                                <Button
+                                    className="w-full rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold h-11"
+                                    onClick={() => {
+                                        change(detailItem.item_id, {
+                                            selected:
+                                                !picks[detailItem.item_id]
+                                                    ?.selected,
+                                        })
+                                        setDetailItem(null)
+                                    }}
+                                >
+                                    {picks[detailItem.item_id]?.selected
+                                        ? "从选品中取消"
+                                        : "加入选品"}
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* 7. 已选清单 Dialog (Cart Sheet) */}
+            <Dialog open={cartDrawerOpen} onOpenChange={setCartDrawerOpen}>
+                <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <ShoppingBag className="h-5 w-5 text-rose-600" />
+                            已选商品清单 ({selectedCount} 款)
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto py-2 space-y-3">
+                        {page.items
+                            .filter((item) => picks[item.item_id]?.selected)
+                            .map((item) => {
+                                const pick = picks[item.item_id]
+                                return (
+                                    <div
+                                        key={item.item_id}
+                                        className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2.5"
+                                    >
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-medium text-xs sm:text-sm text-slate-900 truncate">
+                                                {item.name}
+                                            </p>
+                                            <p className="text-xs font-bold text-rose-600 mt-0.5">
+                                                ¥ {item.price}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {!mall && (
+                                                <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                                                    {pick?.quantity} 份
+                                                </span>
+                                            )}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 text-xs text-rose-600 hover:bg-rose-50 px-2"
+                                                onClick={() =>
+                                                    change(item.item_id, {
+                                                        selected: false,
+                                                    })
+                                                }
+                                            >
+                                                移除
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        {selectedCount === 0 && (
+                            <p className="text-center py-8 text-xs text-slate-400">
+                                尚未选择任何商品
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100">
+                        <Button
+                            className="w-full rounded-full bg-slate-900 text-white"
+                            onClick={() => setCartDrawerOpen(false)}
+                        >
+                            继续选品
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* 8. 核心吸底结算栏 (Sticky Bottom Action Bar) */}
             <aside
                 aria-label="核对并提交"
-                className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur-md shadow-[0_-8px_24px_rgba(0,0,0,0.06)]"
+                className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-4 py-2.5 shadow-[0_-8px_20px_rgba(0,0,0,0.08)]"
             >
                 <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
-                    {/* 左侧：已选概览 */}
-                    <div className="flex items-center gap-2.5">
-                        <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-800">
+                    {/* 左侧：点击呼出已选清单 */}
+                    <button
+                        type="button"
+                        className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
+                        onClick={() => setCartDrawerOpen(true)}
+                    >
+                        <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white shadow-md active:scale-95 transition-transform">
                             <ShoppingBag className="h-5 w-5" />
                             {selectedCount > 0 && (
-                                <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-xs">
+                                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[11px] font-bold text-slate-950 shadow-sm animate-in zoom-in">
                                     {selectedCount}
                                 </span>
                             )}
                         </div>
                         <div>
-                            <p className="text-sm font-semibold text-slate-900">
-                                已选{" "}
-                                <span className="text-primary font-bold">
-                                    {selectedCount}
-                                </span>{" "}
-                                项
-                            </p>
-                            <p className="text-[11px] text-slate-400">
-                                {dirty ? "尚有修改未保存" : "选择已同步"}
-                            </p>
+                            {mall ? (
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900">
+                                        已选{" "}
+                                        <span className="text-rose-600">
+                                            {selectedCount}
+                                        </span>{" "}
+                                        款
+                                    </p>
+                                    <p className="text-[11px] text-slate-400">
+                                        {dirty
+                                            ? "修改待保存"
+                                            : "点击查看已选清单"}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="text-base font-bold text-rose-600 leading-none">
+                                        已选 {selectedCount} 项
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                        {dirty
+                                            ? "尚有修改未保存"
+                                            : "已选内容已同步"}
+                                    </p>
+                                </div>
+                            )}
                         </div>
-                    </div>
+                    </button>
 
-                    {/* 右侧：按钮组 */}
+                    {/* 右侧：电商结算大按钮组 */}
                     <div className="flex items-center gap-2">
                         <Button
                             id="sales-selection-public-save"
                             variant="outline"
                             size="sm"
-                            className="rounded-xl border-slate-200 text-xs text-slate-700"
+                            className="rounded-full border-slate-300 text-xs text-slate-700 px-3.5 h-9"
                             disabled={locked || conflict}
                             onClick={() => persist(false)}
                         >
@@ -953,7 +1247,7 @@ const SelectionForm = ({
                             <Button
                                 id="sales-selection-public-submit"
                                 size="sm"
-                                className="rounded-xl bg-emerald-600 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700"
+                                className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-9 active:scale-95 transition-all"
                                 disabled={locked || conflict || dirty}
                                 onClick={submit}
                             >
@@ -963,7 +1257,7 @@ const SelectionForm = ({
                             <Button
                                 id="sales-selection-public-review"
                                 size="sm"
-                                className="rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-xs"
+                                className="rounded-full bg-gradient-to-r from-rose-500 via-rose-600 to-red-600 text-xs font-bold text-white shadow-md hover:opacity-95 px-5 h-9 active:scale-95 transition-all"
                                 disabled={locked || conflict}
                                 onClick={() => persist(true)}
                             >
