@@ -148,28 +148,30 @@ impl ProductImportProcess {
             market_price: row.market_price,
             spec_entries: row.spec_entries.clone(),
         });
-        let carousel_media = if snapshot.media.is_empty() {
-            media
-                .carousel
-                .iter()
-                .map(|(id, sort_order)| ProductMediaInput {
-                    file_asset_id: id.clone(),
-                    sort_order: *sort_order,
-                    alt_text: Some(row.name.clone()),
-                })
-                .collect()
-        } else {
-            snapshot
-                .media
-                .into_iter()
-                .filter(|item| item.media_role == MediaRole::Carousel)
-                .map(|item| ProductMediaInput {
-                    file_asset_id: item.file_asset_id,
-                    sort_order: item.sort_order,
-                    alt_text: item.alt_text,
-                })
-                .collect()
-        };
+        let mut carousel_media: Vec<ProductMediaInput> = snapshot
+            .media
+            .into_iter()
+            .filter(|item| item.media_role == MediaRole::Carousel)
+            .map(|item| ProductMediaInput {
+                file_asset_id: item.file_asset_id,
+                sort_order: item.sort_order,
+                alt_text: item.alt_text,
+            })
+            .collect();
+        let mut next_order = carousel_media
+            .iter()
+            .map(|item| item.sort_order)
+            .max()
+            .unwrap_or(-1)
+            .saturating_add(1);
+        for (id, _) in media.carousel {
+            carousel_media.push(ProductMediaInput {
+                file_asset_id: id,
+                sort_order: next_order,
+                alt_text: Some(row.name.clone()),
+            });
+            next_order = next_order.saturating_add(1);
+        }
         Ok(UpdateProductRequest {
             version: product.base.version,
             change_reason: Some(format!("产品报价表导入新增 SKU 第{}行", row.row_number)),

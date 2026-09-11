@@ -25,6 +25,7 @@ use crate::ports::{is_business_document_type, BusinessDocumentPort, SupportAudit
 use crate::repository::{BackgroundJobRegistration, BulkJobExt};
 use erp_core::ids::FileAssetId;
 use id_generator::next_id;
+use mongodb::bson::doc;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -34,10 +35,10 @@ use application_core::AuditActor;
 
 pub use crate::dto::bulk_job::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
-    BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelBackgroundJobRequest,
-    ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobItemRequest, CreateBackgroundJobRequest,
-    CreateBulkSelectionItemRequest, CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest,
-    PageView,
+    BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
+    CancelAllBackgroundJobsResponse, CancelBackgroundJobRequest, ConfirmBulkSelectionSnapshotRequest,
+    CreateBackgroundJobItemRequest, CreateBackgroundJobRequest, CreateBulkSelectionItemRequest,
+    CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest, PageView,
 };
 
 /// 选择快照列表筛选条件类型（经 `BulkJobExt` 关联类型跨 crate 可达）。
@@ -578,6 +579,88 @@ impl BulkJobService {
             .await?;
 
         Ok(updated.into())
+    }
+
+    /// 停止并取消全部未完成后台任务（仅管理员）。
+    ///
+    /// 逐个按最新版本取消，已进入终态的不再触碰；单个任务失败不阻塞其余任务，
+    /// 调用方可按 `failed_count` 决定是否重试。
+    ///
+    /// # 参数
+    /// * `req` - 批量取消请求（可选 `job_type` 缩小范围）
+    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `is_admin` - 是否为管理员（超级管理员或系统管理员）
+    ///
+    /// # 返回
+    /// 返回已取消、跳过与失败的任务数。
+    ///
+    /// # 错误
+    /// * `Forbidden` - 非管理员调用
+    /// * `RepositoryError` - 批量查询失败
+    pub async fn cancel_all_background_jobs(
+        &self,
+        req: CancelAllBackgroundJobsRequest,
+        actor: &AuditActor,
+        is_admin: bool,
+    ) -> Result<CancelAllBackgroundJobsResponse> {
+        if !is_admin {
+            return Err(Error::Forbidden("只有管理员可以停止全部后台任务".to_string()));
+        }
+        req.validate()?;
+        let mut filter = doc! {
+            "status": { "$in": ["pending", "running", "partially_succeeded"] },
+        };
+        if let Some(job_type) = req.job_type {
+            filter.insert("job_type", job_type.as_str());
+        }
+        let candidates = self
+            .db
+            .background_jobs()
+            .find_many(filter, &mut NoTransaction)
+            .await?;
+        let mut cancelled_count = 0u64;
+        let mut skipped_count = 0u64;
+        let mut failed_count = 0u64;
+        for mut job in candidates {
+            if job.is_terminal() || job.cancel(erp_core::common::time::Instant::now()).is_err() {
+                skipped_count += 1;
+                continue;
+            }
+            let audit = match self.audit.resource_log(
+                actor.clone(),
+                "background_job.cancel_all",
+                "background_job",
+                job.base.id.clone(),
+            ) {
+                Ok(audit) => audit,
+                Err(_) => {
+                    failed_count += 1;
+                    continue;
+                }
+            };
+            let db = self.db.clone();
+            let client = db.client().clone();
+            let audit_port = self.audit.clone();
+            let outcome = client
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        db.background_jobs().update(&mut job, session).await?;
+                        audit_port.persist(&audit, session).await?;
+                        Ok::<(), crate::error::Error>(())
+                    })
+                })
+                .await;
+            match outcome {
+                Ok(()) => cancelled_count += 1,
+                Err(_) => failed_count += 1,
+            }
+        }
+
+        Ok(CancelAllBackgroundJobsResponse {
+            cancelled_count,
+            skipped_count,
+            failed_count,
+        })
     }
 
     /// 分页查询任务逐项结果。

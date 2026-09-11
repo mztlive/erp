@@ -723,6 +723,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/background-jobs/cancel-all",
+                description: "停止并取消全部后台任务",
+                permission: {
+                    resource: "background_job",
+                    action: "cancel_all",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/background-jobs/{id}",
                 description: "查询后台任务详情",

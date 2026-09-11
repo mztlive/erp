@@ -42,7 +42,11 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge"
 import { getErrorMessage } from "@/lib/api/errors"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import type { ExportJob, ExportJobStatus } from "@/features/export-tasks/api"
+import type {
+    CancelAllExportJobsResult,
+    ExportJob,
+    ExportJobStatus,
+} from "@/features/export-tasks/api"
 import {
     EXPORT_JOB_STATUS_LABELS,
     exportDomainLabel,
@@ -52,6 +56,7 @@ import {
     isExportTaskAdmin,
 } from "@/features/export-tasks/labels"
 import {
+    useCancelAllExportJobsMutation,
     useCancelExportJobMutation,
     useExportJobDetailQuery,
     useExportJobItemsQuery,
@@ -106,6 +111,10 @@ export function ExportTasksWorkspace() {
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [cancelId, setCancelId] = React.useState<string | null>(null)
     const [cancelError, setCancelError] = React.useState<string | null>(null)
+    const [stopAllOpen, setStopAllOpen] = React.useState(false)
+    const [stopAllError, setStopAllError] = React.useState<string | null>(null)
+    const [stopAllResult, setStopAllResult] =
+        React.useState<CancelAllExportJobsResult | null>(null)
     const lastFocusedRowId = React.useRef<string | null>(null)
     const searchInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -136,6 +145,7 @@ export function ExportTasksWorkspace() {
     const detailQuery = useExportJobDetailQuery(previewId)
     const itemsQuery = useExportJobItemsQuery(previewId)
     const cancelMutation = useCancelExportJobMutation()
+    const cancelAllMutation = useCancelAllExportJobsMutation()
 
     const rows = React.useMemo(
         () => jobsQuery.data?.items ?? [],
@@ -197,6 +207,24 @@ export function ExportTasksWorkspace() {
             setCancelError(getErrorMessage(error, "取消失败，请重试。"))
         }
     }, [cancelId, detailQuery.data, cancelMutation])
+
+    const openStopAll = React.useCallback(() => {
+        setStopAllError(null)
+        setStopAllResult(null)
+        setStopAllOpen(true)
+    }, [])
+
+    const confirmStopAll = React.useCallback(async () => {
+        setStopAllError(null)
+        try {
+            const result = await cancelAllMutation.mutateAsync()
+            setStopAllResult(result)
+        } catch (error) {
+            setStopAllError(
+                getErrorMessage(error, "停止全部任务失败，请重试。"),
+            )
+        }
+    }, [cancelAllMutation])
 
     const columns = React.useMemo<ColumnDef<ExportJob>[]>(
         () => [
@@ -285,7 +313,18 @@ export function ExportTasksWorkspace() {
                 eyebrow="治理"
                 title="导出任务"
                 description="集中查看各业务的导出进度、结果与有效期，取消尚未完成的任务。"
-            />
+            >
+                {isAdmin ? (
+                    <Button
+                        id="governance-exports-stop-all"
+                        type="button"
+                        variant="destructive"
+                        onClick={openStopAll}
+                    >
+                        停止并取消所有任务
+                    </Button>
+                ) : null}
+            </ListWorkspaceHeader>
             <ListWorkSurface
                 ariaLabel="导出任务"
                 toolbar={
@@ -709,6 +748,68 @@ export function ExportTasksWorkspace() {
                         >
                             {cancelMutation.isPending ? "取消中…" : "确认取消"}
                         </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog
+                open={stopAllOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setStopAllOpen(false)
+                        setStopAllError(null)
+                    }
+                }}
+            >
+                <AlertDialogContent size="sm">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>停止并取消所有任务</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            将停止并取消当前全部未完成的导出任务，包括他人创建的任务。已经完成的部分不受影响，没有进行中的任务时不做任何处理。
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {stopAllResult ? (
+                        <p
+                            className="text-sm text-muted-foreground"
+                            role="status"
+                        >
+                            已取消 {stopAllResult.cancelled_count} 个任务
+                            {stopAllResult.skipped_count > 0
+                                ? `，跳过 ${stopAllResult.skipped_count} 个已结束任务`
+                                : ""}
+                            {stopAllResult.failed_count > 0
+                                ? `，${stopAllResult.failed_count} 个取消失败，可重试`
+                                : ""}
+                            。
+                        </p>
+                    ) : null}
+                    {stopAllError ? (
+                        <p className="text-sm text-destructive" role="alert">
+                            {stopAllError}
+                        </p>
+                    ) : null}
+                    <AlertDialogFooter>
+                        {stopAllResult ? (
+                            <AlertDialogCancel id="governance-exports-stop-all-close">
+                                关闭
+                            </AlertDialogCancel>
+                        ) : (
+                            <>
+                                <AlertDialogCancel id="governance-exports-stop-all-back">
+                                    返回
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                    id="governance-exports-stop-all-confirm"
+                                    disabled={cancelAllMutation.isPending}
+                                    onClick={() => {
+                                        void confirmStopAll()
+                                    }}
+                                >
+                                    {cancelAllMutation.isPending
+                                        ? "停止中…"
+                                        : "确认停止"}
+                                </AlertDialogAction>
+                            </>
+                        )}
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

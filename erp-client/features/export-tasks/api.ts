@@ -92,3 +92,18 @@ export async function cancelExportJob(input: {
         version: input.version,
     })
 }
+
+export type CancelAllExportJobsResult = {
+    cancelled_count: number
+    skipped_count: number
+    failed_count: number
+}
+
+export async function cancelAllExportJobs(): Promise<CancelAllExportJobsResult> {
+    return apiPost<CancelAllExportJobsResult>(
+        "/admin/background-jobs/cancel-all",
+        {
+            job_type: "export",
+        },
+    )
+}

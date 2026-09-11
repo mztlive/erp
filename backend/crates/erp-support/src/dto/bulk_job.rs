@@ -469,6 +469,24 @@ pub struct CancelBackgroundJobRequest {
     pub version: u64,
 }
 
+/// 批量停止并取消后台任务请求（仅管理员逐个按最新版本取消）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CancelAllBackgroundJobsRequest {
+    /// 任务类型筛选；`None` 表示全部类型。
+    pub job_type: Option<JobType>,
+}
+
+/// 批量停止并取消后台任务响应。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CancelAllBackgroundJobsResponse {
+    /// 成功取消的任务数。
+    pub cancelled_count: u64,
+    /// 取消期间已进入终态而跳过的任务数。
+    pub skipped_count: u64,
+    /// 因并发冲突等失败、需重试的任务数。
+    pub failed_count: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, BackgroundJobListParams, BulkSelectionSnapshotListParams, SortDir};

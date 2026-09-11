@@ -60,11 +60,19 @@ pub async fn upload_row_images(
         let Some((content_type, ext)) = detect_image(&bytes) else {
             continue;
         };
+        if index == 2 {
+            let carousel_pending = store_image(storage, secret, bytes.clone(), content_type, ext).await?;
+            let carousel_reference = FileAssetId::new(carousel_pending.reference.clone());
+            media.carousel.push((carousel_reference, sort_order));
+            sort_order += 1;
+            media.pending.push(carousel_pending);
+            let sku_pending = store_image(storage, secret, bytes, content_type, ext).await?;
+            media.main_image = Some(FileAssetId::new(sku_pending.reference.clone()));
+            media.pending.push(sku_pending);
+            continue;
+        }
         let pending = store_image(storage, secret, bytes, content_type, ext).await?;
         let reference = FileAssetId::new(pending.reference.clone());
-        if index == 2 {
-            media.main_image = Some(reference.clone());
-        }
         media.carousel.push((reference, sort_order));
         sort_order += 1;
         media.pending.push(pending);

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
+    cancelAllExportJobs,
     cancelExportJob,
     fetchExportJobDetail,
     fetchExportJobItems,
@@ -56,6 +57,17 @@ export function useCancelExportJobMutation() {
     const client = useQueryClient()
     return useMutation({
         mutationFn: cancelExportJob,
+        retry: false,
+        onSuccess: async () => {
+            await client.invalidateQueries({ queryKey: exportTaskKeys.all })
+        },
+    })
+}
+
+export function useCancelAllExportJobsMutation() {
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: cancelAllExportJobs,
         retry: false,
         onSuccess: async () => {
             await client.invalidateQueries({ queryKey: exportTaskKeys.all })

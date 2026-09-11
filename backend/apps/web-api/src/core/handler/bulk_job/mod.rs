@@ -10,9 +10,10 @@ use axum::{
 };
 use erp_support::{
     BackgroundJobItemView, BackgroundJobListParams, BackgroundJobView, BulkSelectionItemView,
-    BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelBackgroundJobRequest,
-    ConfirmBulkSelectionSnapshotRequest, CreateBackgroundJobRequest, CreateBulkSelectionSnapshotRequest,
-    ExpireBulkSelectionSnapshotRequest, PageView,
+    BulkSelectionSnapshotListParams, BulkSelectionSnapshotView, CancelAllBackgroundJobsRequest,
+    CancelAllBackgroundJobsResponse, CancelBackgroundJobRequest, ConfirmBulkSelectionSnapshotRequest,
+    CreateBackgroundJobRequest, CreateBulkSelectionSnapshotRequest, ExpireBulkSelectionSnapshotRequest,
+    PageView,
 };
 
 use crate::{
@@ -289,6 +290,38 @@ pub async fn background_job_cancel(
     let view = state
         .bulk_job_service()
         .cancel_background_job(&id, req, &actor, is_admin)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "批量任务",
+    group_desc = "批量选择快照与后台任务中心",
+    desc = "停止并取消全部后台任务",
+    resource = "background_job",
+    action = "cancel_all"
+)]
+/// 停止并取消全部未完成后台任务（仅管理员）。
+///
+/// 单个任务失败不阻塞其余任务，调用方按返回计数决定是否重试。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 批量取消请求（可选 `job_type` 缩小范围）
+///
+/// # 返回
+/// 返回已取消、跳过与失败的任务数。
+pub async fn background_job_cancel_all(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CancelAllBackgroundJobsRequest>,
+) -> Result<CancelAllBackgroundJobsResponse> {
+    let is_admin = is_background_job_admin(&state, &actor).await;
+    let view = state
+        .bulk_job_service()
+        .cancel_all_background_jobs(req, &actor, is_admin)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

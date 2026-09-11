@@ -81,6 +81,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/background-jobs/cancel-all",
+            with_permission(
+                post(bulk_job::background_job_cancel_all),
+                rbac,
+                bulk_job::background_job_cancel_all_permission_key(),
+            ),
+        )
+        .route(
             "/background-jobs/{id}",
             with_permission(
                 get(bulk_job::background_job_detail),
