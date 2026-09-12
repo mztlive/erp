@@ -9,14 +9,12 @@ import { useIsMutating } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import { ListWorkSurface } from "@/components/business/list-workspace"
-import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
+import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
-import { dictionaryListStyles } from "./dictionary-list-styles"
 import { VoucherCategoryFormDialog } from "@/features/master-data/components/list/voucher-category-form-dialog"
 import { VoucherCategoryPreviewSheet } from "@/features/master-data/components/list/voucher-category-preview-sheet"
-import { useVoucherCategoryListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import {
@@ -50,12 +48,6 @@ export function VoucherCategoriesListPage() {
                 )
             },
         }) > 0
-    const columns = useVoucherCategoryListColumns({
-        lastFocusedRowId,
-        rows: state.rows,
-        onReviseTarget: state.setReviseTarget,
-        onStatusTarget: setStatusTarget,
-    })
     const { filters } = state
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.lifecycleStatus !== "all"
@@ -126,13 +118,12 @@ export function VoucherCategoriesListPage() {
                         failed={state.listQuery.isError}
                     />
                 }
-                tableClassName={dictionaryListStyles.table}
                 table={
-                    <DictionaryListTable
-                        id="master-data-voucher-categories-list-table"
+                    <DictionaryCompactList
+                        id="master-data-voucher-categories-list"
                         rows={state.rows}
-                        pageRows={state.pageRows}
-                        columns={columns}
+                        codeLabel="类目编号"
+                        selectedId={state.previewId}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
                         loading={state.listQuery.isFetching}
@@ -157,11 +148,7 @@ export function VoucherCategoriesListPage() {
                                 </Button>
                             ) : undefined
                         }
-                        onRowPreview={(row) => {
-                            lastFocusedRowId.current = row.stableId
-                            state.setPreviewId(row.stableId)
-                        }}
-                        onRowOpen={(row) => {
+                        onPreview={(row) => {
                             lastFocusedRowId.current = row.stableId
                             state.setPreviewId(row.stableId)
                         }}

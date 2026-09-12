@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
     describePoolSource,
     resolvePoolSourceKind,
-    resolveSellablePoolSourceKind,
 } from "@/features/sales-selection/lib/pool-source"
 
 describe("resolvePoolSourceKind", () => {
@@ -14,17 +13,6 @@ describe("resolvePoolSourceKind", () => {
 
     it("falls back to the current filter when nothing is checked", () => {
         expect(resolvePoolSourceKind(0)).toBe("FILTER")
-    })
-})
-
-describe("resolveSellablePoolSourceKind", () => {
-    it("keeps table layout on the current filter even if leftover checks exist", () => {
-        expect(resolveSellablePoolSourceKind(false, 8)).toBe("FILTER")
-    })
-
-    it("uses checks only in gallery layout", () => {
-        expect(resolveSellablePoolSourceKind(true, 8)).toBe("SELECTION")
-        expect(resolveSellablePoolSourceKind(true, 0)).toBe("FILTER")
     })
 })
 

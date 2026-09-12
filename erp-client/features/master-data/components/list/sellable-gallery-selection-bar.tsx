@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SellableGallerySelectionBar({
+    idPrefix = "master-data-sellable-items-gallery",
     resultCount,
     selectedCount,
     allSelected,
@@ -12,6 +13,7 @@ export function SellableGallerySelectionBar({
     onSelectAll,
     onClear,
 }: {
+    idPrefix?: string
     resultCount: number
     selectedCount: number
     allSelected: boolean
@@ -25,11 +27,11 @@ export function SellableGallerySelectionBar({
             data-slot="sellable-gallery-selection-bar"
         >
             <label
-                htmlFor="master-data-sellable-items-gallery-select-all"
+                htmlFor={`${idPrefix}-select-all`}
                 className="inline-flex items-center gap-2"
             >
                 <Checkbox
-                    id="master-data-sellable-items-gallery-select-all"
+                    id={`${idPrefix}-select-all`}
                     checked={allSelected}
                     indeterminate={someSelected}
                     onCheckedChange={(checked) => {
@@ -46,7 +48,7 @@ export function SellableGallerySelectionBar({
                 </span>
             </label>
             <Button
-                id="master-data-sellable-items-gallery-select-all-action"
+                id={`${idPrefix}-select-all-action`}
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -56,7 +58,7 @@ export function SellableGallerySelectionBar({
                 {masterDataCopy.sellableSelectAll}
             </Button>
             <Button
-                id="master-data-sellable-items-gallery-clear-selection"
+                id={`${idPrefix}-clear-selection`}
                 type="button"
                 variant="ghost"
                 size="sm"

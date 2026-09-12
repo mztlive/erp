@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { CircleHelpIcon, PackageSearchIcon } from "lucide-react"
+import { CircleHelpIcon, DownloadIcon, PackageSearchIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 import type { SortingState } from "@tanstack/react-table"
 
@@ -14,6 +14,7 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import {
     Popover,
@@ -48,7 +49,7 @@ import { BookCreateDialog } from "@/features/sales-selection/components/book-cre
 import { launchNavDelivery } from "@/lib/nav-delivery"
 import {
     describePoolSource,
-    resolveSellablePoolSourceKind,
+    resolvePoolSourceKind,
 } from "@/features/sales-selection/lib/pool-source"
 
 const supplyViews = [
@@ -88,9 +89,16 @@ export function SellableItemsListPage() {
         filters.hasStructuredSellableFilters ||
         filters.supplyPreset != null
     const listLoadFailed = state.listQuery.isError
-    const exportPending = isGallery ? excelExport.pending : csvExportPending
-    const exportMeta = isGallery ? excelExport.exportMeta : state.exportMeta
-    const exportDisabled = isGallery
+    const exportsSelection = isGallery || selection.selectedCount > 0
+    const exportPending = excelExport.pending || csvExportPending
+    const [lastExportKind, setLastExportKind] = React.useState<
+        "selection" | "filter"
+    >("filter")
+    const exportMeta =
+        lastExportKind === "selection"
+            ? excelExport.exportMeta
+            : state.exportMeta
+    const exportDisabled = exportsSelection
         ? exportPending || selection.selectedCount === 0
         : exportPending || state.rows.length === 0
 
@@ -100,10 +108,7 @@ export function SellableItemsListPage() {
     const { canCreate: canLaunchSelection } = useCreatePermission(
         "sales_selection_booklet:create",
     )
-    const sourceKind = resolveSellablePoolSourceKind(
-        isGallery,
-        selection.selectedCount,
-    )
+    const sourceKind = resolvePoolSourceKind(selection.selectedCount)
     const sourceSummary = describePoolSource({
         kind: sourceKind,
         itemCount:
@@ -127,12 +132,13 @@ export function SellableItemsListPage() {
         [filters, state],
     )
 
-    const onGalleryExport = React.useCallback(() => {
+    const onSelectionExport = React.useCallback(() => {
         if (selection.selectedCount === 0) return
         setExportConfirmOpen(true)
     }, [selection.selectedCount])
 
-    const onConfirmGalleryExport = React.useCallback(() => {
+    const onConfirmSelectionExport = React.useCallback(() => {
+        setLastExportKind("selection")
         void excelExport
             .handleExcelExport({
                 query: {
@@ -184,10 +190,39 @@ export function SellableItemsListPage() {
                             {masterDataCopy.sellableItemsHint}
                         </p>
                         <p className="text-sm leading-6 text-muted-foreground">
-                            表格模式点击行查看资料，导出与发起选品都按当前筛选。卡片模式可勾选商品，导出带主图的表格，或把已勾选商品做成选品册。
+                            表格和卡片模式均可勾选商品，导出带主图的表格，或把已勾选商品做成选品册。表格未勾选时导出当前筛选结果；发起选品时，已勾选则按勾选，未勾选则按当前筛选。
                         </p>
                     </PopoverContent>
                 </Popover>
+                <Button
+                    id="master-data-sellable-items-list-export"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={styles.exportButton}
+                    disabled={exportDisabled}
+                    onClick={() => {
+                        if (exportsSelection) onSelectionExport()
+                        else {
+                            setLastExportKind("filter")
+                            state.onExport()
+                        }
+                    }}
+                >
+                    {exportPending ? (
+                        <Spinner data-icon="inline-start" />
+                    ) : (
+                        <DownloadIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    )}
+                    {exportPending
+                        ? "导出中…"
+                        : exportsSelection
+                          ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
+                          : "导出当前结果"}
+                </Button>
             </ListWorkspaceHeader>
 
             {exportMeta ? (
@@ -199,7 +234,7 @@ export function SellableItemsListPage() {
                     succeeded={exportMeta.rowCount}
                     label={masterDataCopy.exportDone}
                     description={
-                        isGallery ? (
+                        lastExportKind === "selection" ? (
                             <>
                                 已按勾选导出 {exportMeta.rowCount}{" "}
                                 条，单元格含商品主图。任务号{" "}
@@ -231,11 +266,7 @@ export function SellableItemsListPage() {
                 views={
                     <ListWorkspaceViews
                         ariaLabel="供应快捷筛选"
-                        hint={
-                            isGallery
-                                ? "勾选后可导出带主图的表格，或做成选品册"
-                                : "选择商品查看详情"
-                        }
+                        hint="勾选后可导出带主图的表格，或做成选品册"
                         items={supplyViews.map(({ value, label }) => ({
                             id: `master-data-sellable-preset-${value}`,
                             label,
@@ -297,36 +328,25 @@ export function SellableItemsListPage() {
                                 <SellableListStatusActions
                                     layout={layout}
                                     onLayoutChange={changeLayout}
-                                    exportPending={exportPending}
-                                    exportDisabled={exportDisabled}
-                                    exportLabel={
-                                        exportPending
-                                            ? "导出中…"
-                                            : isGallery
-                                              ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
-                                              : "导出当前结果"
-                                    }
-                                    onExport={
-                                        isGallery
-                                            ? onGalleryExport
-                                            : state.onExport
-                                    }
                                 />
                             </div>
                         }
                     />
                 }
                 selectionBar={
-                    isGallery ? (
-                        <SellableGallerySelectionBar
-                            resultCount={state.rows.length}
-                            selectedCount={selection.selectedCount}
-                            allSelected={selection.allSelected}
-                            someSelected={selection.someSelected}
-                            onSelectAll={selection.selectAllResults}
-                            onClear={selection.clear}
-                        />
-                    ) : null
+                    <SellableGallerySelectionBar
+                        idPrefix={
+                            isGallery
+                                ? "master-data-sellable-items-gallery"
+                                : "master-data-sellable-items-table"
+                        }
+                        resultCount={state.rows.length}
+                        selectedCount={selection.selectedCount}
+                        allSelected={selection.allSelected}
+                        someSelected={selection.someSelected}
+                        onSelectAll={selection.selectAllResults}
+                        onClear={selection.clear}
+                    />
                 }
                 tableClassName={
                     isGallery ? productStyles.gallery : productStyles.table
@@ -355,6 +375,11 @@ export function SellableItemsListPage() {
                             data={state.rows}
                             columns={columns}
                             getRowId={(row) => row.stableId}
+                            enableRowSelection
+                            rowSelection={selection.rowSelection}
+                            onRowSelectionChange={
+                                selection.onRowSelectionChange
+                            }
                             rowLabel={(row) =>
                                 row.sellableItem
                                     ? `${row.name} · ${row.sellableItem.specificationLabel}`
@@ -451,7 +476,7 @@ export function SellableItemsListPage() {
                 pending={excelExport.pending}
                 onOpenChange={setExportConfirmOpen}
                 onRemove={(id) => selection.toggle(id, false)}
-                onConfirm={onConfirmGalleryExport}
+                onConfirm={onConfirmSelectionExport}
             />
 
             {canLaunchSelection ? (

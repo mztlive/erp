@@ -3,26 +3,18 @@
 import { DownloadIcon, PlusIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    DataTable,
-} from "@/components/business"
-import {
-    ListWorkSurface,
-    listWorkspaceEmptyStateClassName,
-} from "@/components/business/list-workspace"
+import { ListWorkSurface } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
-import { dictionaryListStyles } from "./dictionary-list-styles"
+import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
+import { BrandPreviewDialog } from "@/features/master-data/components/brand/brand-preview-dialog"
 import {
     BrandCreateDialog,
     BrandReviseDialog,
 } from "@/features/master-data/components/brand/brand-form-dialogs"
 import { BrandDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
-import { useBrandListColumns } from "@/features/master-data/hooks/use-dictionary-list-columns"
 import { useDictionaryListState } from "@/features/master-data/hooks/use-dictionary-list-state"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import {
@@ -51,11 +43,6 @@ export function BrandsListPage() {
                 )
             },
         }) > 0
-    const columns = useBrandListColumns({
-        lastFocusedRowId,
-        rows: state.rows,
-        onDisableTarget: state.setDisableTarget,
-    })
     const { filters } = state
     const hasActiveFilters =
         filters.q.trim() !== "" ||
@@ -127,106 +114,49 @@ export function BrandsListPage() {
                         failed={state.listQuery.isError}
                     />
                 }
-                tableClassName={dictionaryListStyles.table}
                 table={
-                    <DataTable
-                        id="master-data-brands-list-table"
-                        data={state.pageRows}
-                        columns={columns}
-                        defaultColumnVisibility={{
-                            revisionNo: false,
-                            revisionTiming: false,
-                            blocker: false,
-                        }}
-                        getRowId={(row) => row.stableId}
-                        rowCount={state.rows.length}
+                    <DictionaryCompactList
+                        id="master-data-brands-list"
+                        rows={state.rows}
+                        codeLabel="品牌代码"
+                        selectedId={state.previewId}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}
                         loading={state.listQuery.isFetching}
-                        layout="flush"
-                        defaultColumnPinning={{
-                            left: ["stableNo"],
-                            right: ["actions"],
-                        }}
-                        errorState={
-                            listLoadFailed ? (
-                                <BusinessFailureState
-                                    error={state.listQuery.error}
-                                    action={
-                                        <Button
-                                            id="master-data-brands-list-retry"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                void state.listQuery.refetch()
-                                            }
-                                        >
-                                            重试
-                                        </Button>
-                                    }
-                                />
+                        listLoadFailed={listLoadFailed}
+                        error={state.listQuery.error}
+                        onRetry={() => void state.listQuery.refetch()}
+                        hasActiveFilters={hasActiveFilters}
+                        onClearFilters={filters.clearAllFilters}
+                        emptyTitle="还没有品牌资料"
+                        emptyDescription="点击「新建」创建第一份资料；历史记录会随资料保留。"
+                        emptyAction={
+                            state.canCreate ? (
+                                <Button
+                                    id="master-data-brands-list-empty-create"
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="rounded-lg shadow-none"
+                                    onClick={() => state.setCreateOpen(true)}
+                                >
+                                    {masterDataCopy.actionCreate}
+                                </Button>
                             ) : undefined
                         }
-                        emptyState={
-                            !listLoadFailed && state.rows.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind={
-                                        hasActiveFilters ? "filter" : "no-data"
-                                    }
-                                    className={listWorkspaceEmptyStateClassName}
-                                    title={
-                                        hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "还没有品牌资料"
-                                    }
-                                    description={
-                                        hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "点击「新建」创建第一份资料；历史记录会随资料保留。"
-                                    }
-                                    action={
-                                        hasActiveFilters ? (
-                                            <Button
-                                                id="master-data-brands-list-empty-clear-filters"
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={
-                                                    filters.clearAllFilters
-                                                }
-                                            >
-                                                清除筛选
-                                            </Button>
-                                        ) : state.canCreate ? (
-                                            <Button
-                                                id="master-data-brands-list-empty-create"
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="rounded-lg shadow-none"
-                                                onClick={() =>
-                                                    state.setCreateOpen(true)
-                                                }
-                                            >
-                                                {masterDataCopy.actionCreate}
-                                            </Button>
-                                        ) : undefined
-                                    }
-                                />
-                            ) : undefined
-                        }
-                        onRowPreview={(row) => {
+                        onPreview={(row) => {
                             lastFocusedRowId.current = row.stableId
-                            state.setReviseTarget(row)
-                        }}
-                        onRowOpen={(row) => {
-                            lastFocusedRowId.current = row.stableId
-                            state.setReviseTarget(row)
+                            state.setPreviewId(row.stableId)
                         }}
                     />
                 }
+            />
+            <BrandPreviewDialog
+                row={state.previewRow}
+                lastFocusedRowId={lastFocusedRowId}
+                onClose={() => state.setPreviewId(null)}
+                onRevise={state.setReviseTarget}
+                onDisable={state.setDisableTarget}
             />
             <BrandCreateDialog
                 open={state.createOpen}

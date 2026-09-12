@@ -43,6 +43,36 @@ function row(id: string, name = id): MasterDataListItem {
 }
 
 describe("useSellableGallerySelection", () => {
+    it("shares table and gallery selection using stable SKU ids", () => {
+        const { result, rerender } = renderHook(
+            ({ rows }) => useSellableGallerySelection(rows),
+            { initialProps: { rows: [row("sku-1"), row("sku-2")] } },
+        )
+        act(() => result.current.onRowSelectionChange({ "sku-2": true }))
+        expect([...result.current.selectedIds]).toEqual(["sku-2"])
+        expect(
+            result.current.selectedRows.map((item) => item.stableId),
+        ).toEqual(["sku-2"])
+        act(() => result.current.toggle("sku-1", true))
+        expect(result.current.rowSelection).toEqual({
+            "sku-1": true,
+            "sku-2": true,
+        })
+        rerender({ rows: [row("sku-2"), row("sku-1")] })
+        expect(result.current.allSelected).toBe(true)
+        act(() =>
+            result.current.onRowSelectionChange({
+                "sku-1": false,
+                "sku-2": true,
+                missing: true,
+            }),
+        )
+        expect(result.current.rowSelection).toEqual({ "sku-2": true })
+        act(() => result.current.clear())
+        expect(result.current.rowSelection).toEqual({})
+        expect(result.current.selectedCount).toBe(0)
+    })
+
     it("selects all current results and drops ids that leave the result set", () => {
         const first = [row("sku-1"), row("sku-2")]
         const { result, rerender } = renderHook(

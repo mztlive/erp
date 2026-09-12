@@ -1,9 +1,8 @@
 "use client"
 
-import { DownloadIcon, LayoutGridIcon, TableIcon } from "lucide-react"
+import { LayoutGridIcon, TableIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
 import { cn } from "@/lib/utils"
@@ -77,17 +76,9 @@ export function SellableLayoutToggle({
 export function SellableListStatusActions({
     layout,
     onLayoutChange,
-    exportPending,
-    exportDisabled,
-    exportLabel,
-    onExport,
 }: {
     layout: SellableListLayout
     onLayoutChange: (layout: SellableListLayout) => void
-    exportPending: boolean
-    exportDisabled: boolean
-    exportLabel: string
-    onExport: () => void
 }) {
     return (
         <div className="flex items-center text-xs text-muted-foreground">
@@ -96,29 +87,6 @@ export function SellableListStatusActions({
                 layout={layout}
                 onLayoutChange={onLayoutChange}
             />
-            <StatusDivider />
-            <Button
-                id="master-data-sellable-items-list-export"
-                type="button"
-                variant="ghost"
-                size="xs"
-                disabled={exportDisabled}
-                className={cn(
-                    statusActionClassName,
-                    "font-normal",
-                    exportDisabled
-                        ? "text-muted-foreground"
-                        : "text-foreground",
-                )}
-                onClick={onExport}
-            >
-                {exportPending ? (
-                    <Spinner data-icon="inline-start" />
-                ) : (
-                    <DownloadIcon data-icon="inline-start" aria-hidden="true" />
-                )}
-                {exportLabel}
-            </Button>
         </div>
     )
 }
