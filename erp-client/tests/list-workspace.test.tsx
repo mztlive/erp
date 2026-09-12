@@ -4,11 +4,12 @@ import {
     render,
     screen,
     waitFor,
+    within,
 } from "@testing-library/react"
 import { afterEach, beforeAll, expect, test } from "vitest"
 
 import { DataTable } from "@/components/business/data-table"
-import { ListToolbar } from "@/components/business/list"
+import { BusinessTableFrame, ListToolbar } from "@/components/business/list"
 import {
     ListWorkSurface,
     ListWorkspaceViews,
@@ -24,10 +25,10 @@ beforeAll(() => {
 
 afterEach(cleanup)
 
-function ResultsTable() {
+function ResultsTable({ id = "filter-layout-results" }: { id?: string }) {
     return (
         <DataTable
-            id="filter-layout-results"
+            id={id}
             data={[{ id: "one", name: "商品" }]}
             columns={[{ accessorKey: "name", header: "名称" }]}
             getRowId={(row) => row.id}
@@ -36,7 +37,7 @@ function ResultsTable() {
     )
 }
 
-test("列设置挂在搜索主行，展开筛选区域不包含列设置", () => {
+test("列设置位于表格上方，与搜索和展开筛选区域分离", () => {
     const { container } = render(
         <ListWorkSurface
             ariaLabel="列表"
@@ -55,14 +56,17 @@ test("列设置挂在搜索主行，展开筛选区域不包含列设置", () =>
     const columnSettings = screen.getByRole("button", { name: "列设置" })
     expect(
         columnSettings.closest('[data-slot="list-toolbar-primary"]'),
-    ).not.toBeNull()
+    ).toBeNull()
     expect(
         columnSettings.closest('[data-slot="list-toolbar-secondary"]'),
     ).toBeNull()
+    expect(columnSettings.closest('[data-slot="table-toolbar"]')).not.toBeNull()
+    expect(columnSettings.closest("form")).toBeNull()
     expect(
-        container.querySelector('[data-slot="table-frame-view-options"]')
-            ?.childElementCount,
-    ).toBe(0)
+        container
+            .querySelector('[data-slot="table-toolbar"]')
+            ?.nextElementSibling?.getAttribute("data-slot"),
+    ).toBe("business-table-frame-table")
 })
 
 test("只有一个视图时不渲染 tab 行", () => {
@@ -112,7 +116,7 @@ test("多个视图时渲染可切换 tab", () => {
     expect(screen.getByRole("button", { name: "我负责的" })).toBeTruthy()
 })
 
-test("自定义工具栏继续在列表原有插槽显示列设置", () => {
+test("自定义查询工具栏也使用统一表格工具栏", () => {
     render(
         <ListWorkSurface
             ariaLabel="列表"
@@ -124,9 +128,170 @@ test("自定义工具栏继续在列表原有插槽显示列设置", () => {
     expect(
         screen
             .getByRole("button", { name: "列设置" })
-            .closest('[data-slot="table-frame-view-options"]'),
+            .closest('[data-slot="table-toolbar-column-settings"]'),
     ).not.toBeNull()
 })
+
+test.each([false, true])(
+    "旧列表框架统一使用表格工具栏，showHeader=%s",
+    (showHeader) => {
+        render(
+            <BusinessTableFrame
+                title="结果"
+                showHeader={showHeader}
+                toolbar={<input id="legacy-search" />}
+                selectionBar={<span>已选 1 件</span>}
+                tableActions={<button id="legacy-view">表格视图</button>}
+                table={<ResultsTable />}
+            />,
+        )
+        const toolbar = screen
+            .getByRole("button", { name: "列设置" })
+            .closest('[data-slot="table-toolbar"]')!
+        expect(
+            within(toolbar as HTMLElement).getByText("已选 1 件"),
+        ).toBeTruthy()
+        expect(
+            within(toolbar as HTMLElement).getByRole("button", {
+                name: "表格视图",
+            }),
+        ).toBeTruthy()
+        expect(toolbar.nextElementSibling?.getAttribute("data-slot")).toBe(
+            "business-table-frame-table",
+        )
+        expect(toolbar.querySelector("#legacy-search")).toBeNull()
+        expect(within(toolbar as HTMLElement).queryByText("共 1 条")).toBeNull()
+    },
+)
+
+test("独立表格和自定义表格操作共用工具栏，列设置固定在右侧插槽", () => {
+    render(
+        <DataTable
+            id="standalone-table"
+            data={[{ id: "one", name: "商品" }]}
+            columns={[{ accessorKey: "name", header: "名称" }]}
+            getRowId={(row) => row.id}
+            rowCount={1}
+            renderToolbar={() => (
+                <button id="standalone-batch">批量处理</button>
+            )}
+        />,
+    )
+    const toolbar = screen
+        .getByRole("button", { name: "列设置" })
+        .closest('[data-slot="table-toolbar"]')!
+    expect(
+        within(toolbar as HTMLElement).getByRole("button", {
+            name: "批量处理",
+        }),
+    ).toBeTruthy()
+    expect(toolbar.nextElementSibling?.getAttribute("data-slot")).toBe(
+        "data-table-surface",
+    )
+})
+
+test("同一框架中的多张表分别提供列设置", () => {
+    render(
+        <ListWorkSurface
+            ariaLabel="多表"
+            table={
+                <>
+                    <ResultsTable id="first-table" />
+                    <ResultsTable id="second-table" />
+                </>
+            }
+        />,
+    )
+    const buttons = screen.getAllByRole("button", { name: "列设置" })
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]!.closest('[data-slot="data-table"]')?.id).toBe(
+        "first-table",
+    )
+    expect(buttons[1]!.closest('[data-slot="data-table"]')?.id).toBe(
+        "second-table",
+    )
+})
+
+test("嵌套框架的列设置只进入所属表格工具栏", () => {
+    render(
+        <ListWorkSurface
+            ariaLabel="外层列表"
+            table={
+                <>
+                    <ResultsTable id="outer-table" />
+                    <BusinessTableFrame
+                        title="内层列表"
+                        table={<ResultsTable id="inner-table" />}
+                    />
+                </>
+            }
+        />,
+    )
+    const outer = document.getElementById(
+        "outer-table-column-visibility-trigger",
+    )!
+    const inner = document.getElementById(
+        "inner-table-column-visibility-trigger",
+    )!
+    expect(outer.closest('[data-business-component="table-frame"]')).not.toBe(
+        inner.closest('[data-business-component="table-frame"]'),
+    )
+    expect(screen.getAllByRole("button", { name: "列设置" })).toHaveLength(2)
+})
+
+test("表格与卡片切换时清理列设置并保留选择和视图操作", () => {
+    function Surface({ gallery }: { gallery: boolean }) {
+        return (
+            <ListWorkSurface
+                ariaLabel="商品池"
+                selectionBar={<span>已选 2 件</span>}
+                tableActions={<button id="switch-layout">切换视图</button>}
+                table={gallery ? <div>商品卡片</div> : <ResultsTable />}
+            />
+        )
+    }
+    const { rerender } = render(<Surface gallery={false} />)
+    expect(screen.getAllByRole("button", { name: "列设置" })).toHaveLength(1)
+    rerender(<Surface gallery />)
+    expect(screen.queryByRole("button", { name: "列设置" })).toBeNull()
+    expect(screen.getByText("已选 2 件")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "切换视图" })).toBeTruthy()
+    rerender(<Surface gallery={false} />)
+    expect(screen.getAllByRole("button", { name: "列设置" })).toHaveLength(1)
+})
+
+test.each([false, true])(
+    "关闭列设置或所有列固定时不产生工具栏内容，showColumnVisibility=%s",
+    (showColumnVisibility) => {
+        const { container } = render(
+            <ListWorkSurface
+                ariaLabel="固定表格"
+                table={
+                    <DataTable
+                        id="fixed-table"
+                        data={[]}
+                        columns={[
+                            {
+                                accessorKey: "name",
+                                header: "名称",
+                                enableHiding: false,
+                            },
+                        ]}
+                        getRowId={() => "one"}
+                        rowCount={0}
+                        showColumnVisibility={showColumnVisibility}
+                    />
+                }
+            />,
+        )
+        expect(screen.queryByRole("button", { name: "列设置" })).toBeNull()
+        expect(
+            container.querySelectorAll(
+                "[data-table-toolbar-content]:not(:empty)",
+            ),
+        ).toHaveLength(0)
+    },
+)
 
 test("默认摘要列可以显示全部并恢复，不丢失记录或行身份", async () => {
     const { container } = render(

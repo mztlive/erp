@@ -33,7 +33,7 @@ import { SellableExportConfirmDialog } from "@/features/master-data/components/l
 import { SellableGallerySelectionBar } from "@/features/master-data/components/list/sellable-gallery-selection-bar"
 import { SellableItemsFilterBar } from "@/features/master-data/components/list/sellable-items-filter-bar"
 import { SellableItemsGallery } from "@/features/master-data/components/list/sellable-gallery"
-import { SellableListStatusActions } from "@/features/master-data/components/list/sellable-layout-toggle"
+import { SellableLayoutToggle } from "@/features/master-data/components/list/sellable-layout-toggle"
 import { SellablePreviewDialog } from "@/features/master-data/components/list/sellable-preview-dialog"
 import { SellablePreviewSheet } from "@/features/master-data/components/list/sellable-preview-sheet"
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
@@ -325,12 +325,14 @@ export function SellableItemsListPage() {
                                         </Button>
                                     </span>
                                 ) : null}
-                                <SellableListStatusActions
-                                    layout={layout}
-                                    onLayoutChange={changeLayout}
-                                />
                             </div>
                         }
+                    />
+                }
+                tableActions={
+                    <SellableLayoutToggle
+                        layout={layout}
+                        onLayoutChange={changeLayout}
                     />
                 }
                 selectionBar={

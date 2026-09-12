@@ -7,17 +7,7 @@ import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
 import { cn } from "@/lib/utils"
 
-const statusActionClassName =
-    "h-auto rounded-none px-1 text-xs shadow-none hover:bg-transparent"
-
-function StatusDivider() {
-    return (
-        <span
-            className="mx-0.5 h-3 w-px shrink-0 bg-border"
-            aria-hidden="true"
-        />
-    )
-}
+const statusActionClassName = "shadow-none"
 
 export function SellableLayoutToggle({
     layout,
@@ -36,7 +26,7 @@ export function SellableLayoutToggle({
                 id="master-data-sellable-items-layout-table"
                 type="button"
                 variant="ghost"
-                size="xs"
+                size="sm"
                 aria-pressed={layout === "table"}
                 className={cn(
                     statusActionClassName,
@@ -56,7 +46,7 @@ export function SellableLayoutToggle({
                 id="master-data-sellable-items-layout-gallery"
                 type="button"
                 variant="ghost"
-                size="xs"
+                size="sm"
                 aria-pressed={layout === "gallery"}
                 className={cn(
                     statusActionClassName,
@@ -69,24 +59,6 @@ export function SellableLayoutToggle({
                 <LayoutGridIcon data-icon="inline-start" aria-hidden="true" />
                 {masterDataCopy.sellableLayoutGallery}
             </Button>
-        </div>
-    )
-}
-
-export function SellableListStatusActions({
-    layout,
-    onLayoutChange,
-}: {
-    layout: SellableListLayout
-    onLayoutChange: (layout: SellableListLayout) => void
-}) {
-    return (
-        <div className="flex items-center text-xs text-muted-foreground">
-            <StatusDivider />
-            <SellableLayoutToggle
-                layout={layout}
-                onLayoutChange={onLayoutChange}
-            />
         </div>
     )
 }

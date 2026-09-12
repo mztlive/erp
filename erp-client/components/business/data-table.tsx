@@ -39,6 +39,10 @@ import {
     emptyColumnSizingInfo,
     useColumnResize,
 } from "@/components/business/data-table-resize"
+import {
+    TableToolbar,
+    useTableToolbarHost,
+} from "@/components/business/table-toolbar"
 import { useControlledTableState } from "@/components/business/data-table-state"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Spinner } from "@/components/ui/spinner"
@@ -367,30 +371,22 @@ function DataTable<TData>({
         errorSummary !== undefined ||
         onRetry !== undefined
 
-    const [frameViewOptionsSlot, setFrameViewOptionsSlot] =
-        React.useState<Element | null>(null)
-    React.useLayoutEffect(() => {
-        if (layout !== "flush" || renderToolbar || !showColumnVisibility) {
-            setFrameViewOptionsSlot(null)
-            return
-        }
-        const frame = tableSurfaceRef.current?.closest(
-            "[data-business-component=table-frame]",
-        )
-        setFrameViewOptionsSlot(
-            frame?.querySelector(
-                "[data-slot=list-workspace-toolbar] [data-slot=list-toolbar-view-options]",
-            ) ??
-                frame?.querySelector("[data-slot=table-frame-view-options]") ??
-                null,
-        )
-    }, [layout, renderToolbar, showColumnVisibility])
+    const hasColumnSettings =
+        showColumnVisibility &&
+        table.getAllLeafColumns().some((column) => column.getCanHide())
+    const toolbarHost = useTableToolbarHost(
+        layout === "flush" && !renderToolbar && hasColumnSettings,
+    )
 
-    const hostViewOptionsInFrame = Boolean(frameViewOptionsSlot)
-    const showToolbarRow =
-        Boolean(renderToolbar) ||
-        (showColumnVisibility && !hostViewOptionsInFrame)
-    const viewOptions = showColumnVisibility ? (
+    const selectedCount = Object.values(rowSelection).filter(Boolean).length
+    const summary = hasColumnSettings ? (
+        <span className="num text-muted-foreground">
+            {selectedCount > 0
+                ? `已选 ${selectedCount.toLocaleString("zh-CN")} / ${rowCount.toLocaleString("zh-CN")} 条`
+                : `共 ${rowCount.toLocaleString("zh-CN")} 条`}
+        </span>
+    ) : null
+    const viewOptions = hasColumnSettings ? (
         <DataTableViewOptions
             table={table}
             idPrefix={baseId}
@@ -414,20 +410,17 @@ function DataTable<TData>({
             )}
             aria-busy={loading}
         >
-            {hostViewOptionsInFrame && viewOptions && frameViewOptionsSlot
-                ? createPortal(viewOptions, frameViewOptionsSlot)
-                : null}
-            {showToolbarRow ? (
-                <div
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-2",
-                    )}
-                >
-                    <div className="min-w-0 flex-1">
-                        {renderToolbar?.(table)}
-                    </div>
-                    {!hostViewOptionsInFrame ? viewOptions : null}
-                </div>
+            {toolbarHost.settings ? (
+                <>
+                    {createPortal(viewOptions, toolbarHost.settings)}
+                    {toolbarHost.summary
+                        ? createPortal(summary, toolbarHost.summary)
+                        : null}
+                </>
+            ) : hasColumnSettings || renderToolbar ? (
+                <TableToolbar columnSettings={viewOptions}>
+                    {renderToolbar?.(table) ?? summary}
+                </TableToolbar>
             ) : null}
 
             <div

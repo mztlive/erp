@@ -2,6 +2,10 @@
 
 import * as React from "react"
 
+import {
+    TableToolbar,
+    TableToolbarScope,
+} from "@/components/business/table-toolbar"
 import { cn } from "@/lib/utils"
 
 /** Shared Tailwind classes for business list workspaces. */
@@ -28,7 +32,6 @@ export const listWorkspaceStyles = {
     toolbar:
         "flex shrink-0 items-start gap-0 py-[18px] md:gap-3 [&_[data-slot=button]]:text-[13px] [&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:bg-background [&_[data-slot=input-group]]:text-[13px] [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]:focus-within]:outline-2 [&_[data-slot=input-group]:focus-within]:outline-offset-2 [&_[data-slot=input-group]:focus-within]:outline-foreground",
     filters: "min-w-0 flex-1",
-    columnSettings: "shrink-0 empty:hidden",
     table: [
         "min-h-0 flex-1",
         "[&_[data-slot=data-table]]:h-full [&_[data-slot=data-table]]:gap-0",
@@ -140,6 +143,7 @@ export function ListWorkSurface({
     tableClassName,
     toolbarClassName,
     selectionBar,
+    tableActions,
 }: {
     ariaLabel: string
     views?: React.ReactNode
@@ -148,31 +152,34 @@ export function ListWorkSurface({
     tableClassName?: string
     toolbarClassName?: string
     selectionBar?: React.ReactNode
+    tableActions?: React.ReactNode
 }) {
     return (
-        <section
-            className={styles.workSurface}
-            data-business-component="table-frame"
-            aria-label={ariaLabel}
-        >
-            {views}
-            <div
-                className={cn(styles.toolbar, toolbarClassName)}
-                data-slot="list-workspace-toolbar"
+        <TableToolbarScope>
+            <section
+                className={styles.workSurface}
+                data-business-component="table-frame"
+                aria-label={ariaLabel}
             >
-                <div className={styles.filters}>{toolbar}</div>
+                {views}
+                {toolbar ? (
+                    <div
+                        className={cn(styles.toolbar, toolbarClassName)}
+                        data-slot="list-workspace-toolbar"
+                    >
+                        <div className={styles.filters}>{toolbar}</div>
+                    </div>
+                ) : null}
+                <TableToolbar isFrameToolbar actions={tableActions}>
+                    {selectionBar}
+                </TableToolbar>
                 <div
-                    className={styles.columnSettings}
-                    data-slot="table-frame-view-options"
-                />
-            </div>
-            {selectionBar}
-            <div
-                className={cn(styles.table, tableClassName)}
-                data-slot="business-table-frame-table"
-            >
-                {table}
-            </div>
-        </section>
+                    className={cn(styles.table, tableClassName)}
+                    data-slot="business-table-frame-table"
+                >
+                    {table}
+                </div>
+            </section>
+        </TableToolbarScope>
     )
 }

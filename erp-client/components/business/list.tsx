@@ -3,6 +3,10 @@
 import * as React from "react"
 import type { LucideIcon } from "lucide-react"
 
+import {
+    TableToolbar,
+    TableToolbarScope,
+} from "@/components/business/table-toolbar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -121,10 +125,6 @@ function ListToolbar({
                         </div>
                     </div>
                 ) : null}
-                <div
-                    data-slot="list-toolbar-view-options"
-                    className="shrink-0 self-end empty:hidden lg:self-center"
-                />
             </div>
 
             {secondary ? (
@@ -347,6 +347,8 @@ interface BusinessTableFrameProps extends Omit<
     readonly headerActions?: React.ReactNode
     readonly toolbar?: React.ReactNode
     readonly selectionBar?: React.ReactNode
+    /** 表格视图操作；列设置由 DataTable 提供并置于最右侧。 */
+    readonly tableActions?: React.ReactNode
     readonly table: React.ReactNode
     readonly footer?: React.ReactNode
 }
@@ -364,6 +366,7 @@ function BusinessTableFrame({
     headerActions,
     toolbar,
     selectionBar,
+    tableActions,
     table,
     footer,
     className,
@@ -372,70 +375,78 @@ function BusinessTableFrame({
     const Heading = headingLevel
 
     return (
-        <section
-            data-business-component="table-frame"
-            className={cn("flex min-w-0 flex-col gap-4", className)}
-            {...props}
-        >
-            {!showHeader ? (
-                <>
-                    <Heading className="sr-only">{title}</Heading>
-                    {description ? (
-                        <p className="sr-only">{description}</p>
-                    ) : null}
-                    {/* items-start：筛选面板展开后表级动作仍留在首行，不被垂直居中拽到面板中间 */}
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">{toolbar}</div>
-                        <div className="flex shrink-0 items-center gap-2">
-                            {headerActions}
-                            <div data-slot="table-frame-view-options" />
-                        </div>
-                    </div>
-                    {selectionBar}
-                    <div data-slot="business-table-frame-table">{table}</div>
-                </>
-            ) : (
-                <>
-                    {toolbar ? (
-                        <div
-                            data-slot="table-frame-toolbar"
-                            className="bg-card py-1"
-                        >
-                            {toolbar}
-                        </div>
-                    ) : null}
-                    {selectionBar}
-                    <div
-                        data-slot="business-table-frame-result"
-                        className="overflow-hidden border-y border-border bg-card"
-                    >
-                        <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-0 py-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0">
-                                <Heading className="text-base font-semibold text-foreground">
-                                    {title}
-                                </Heading>
-                                {description ? (
-                                    <p className="mt-0.5 text-xs text-muted-foreground">
-                                        {description}
-                                    </p>
-                                ) : null}
+        <TableToolbarScope>
+            <section
+                data-business-component="table-frame"
+                className={cn("flex min-w-0 flex-col gap-4", className)}
+                {...props}
+            >
+                {!showHeader ? (
+                    <>
+                        <Heading className="sr-only">{title}</Heading>
+                        {description ? (
+                            <p className="sr-only">{description}</p>
+                        ) : null}
+                        {/* items-start：筛选面板展开后表级动作仍留在首行，不被垂直居中拽到面板中间 */}
+                        {toolbar || headerActions ? (
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">{toolbar}</div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    {headerActions}
+                                </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                                {headerActions}
-                                <div data-slot="table-frame-view-options" />
-                            </div>
-                        </div>
-                        <div
-                            data-slot="business-table-frame-table"
-                            className="[&_[data-slot=data-table]]:gap-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
-                        >
+                        ) : null}
+                        <TableToolbar isFrameToolbar actions={tableActions}>
+                            {selectionBar}
+                        </TableToolbar>
+                        <div data-slot="business-table-frame-table">
                             {table}
                         </div>
-                    </div>
-                </>
-            )}
-            {footer}
-        </section>
+                    </>
+                ) : (
+                    <>
+                        {toolbar ? (
+                            <div
+                                data-slot="table-frame-toolbar"
+                                className="bg-card py-1"
+                            >
+                                {toolbar}
+                            </div>
+                        ) : null}
+                        <div
+                            data-slot="business-table-frame-result"
+                            className="overflow-hidden border-y border-border bg-card"
+                        >
+                            <div className="flex min-h-row-comfortable flex-col gap-2 border-b px-0 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <Heading className="text-base font-semibold text-foreground">
+                                        {title}
+                                    </Heading>
+                                    {description ? (
+                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                            {description}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    {headerActions}
+                                </div>
+                            </div>
+                            <TableToolbar isFrameToolbar actions={tableActions}>
+                                {selectionBar}
+                            </TableToolbar>
+                            <div
+                                data-slot="business-table-frame-table"
+                                className="[&_[data-slot=data-table]]:gap-0 [&_[data-slot=data-table-pagination]]:border-t [&_[data-slot=data-table-surface]]:rounded-none [&_[data-slot=data-table-surface]]:border-0"
+                            >
+                                {table}
+                            </div>
+                        </div>
+                    </>
+                )}
+                {footer}
+            </section>
+        </TableToolbarScope>
     )
 }
 
