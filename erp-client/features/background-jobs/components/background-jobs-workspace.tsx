@@ -8,6 +8,7 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     DataTable,
+    OptionCombobox,
     PageScaffold,
     QuickPreviewSheet,
 } from "@/components/business"
@@ -15,13 +16,12 @@ import {
     ListSearchField,
     ListWorkSurface,
     ListWorkspaceFilterBar,
-    ListWorkspaceFilterField,
+    ListWorkspaceInlineFilter,
     ListWorkspaceHeader,
     listWorkspaceEmptyStateClassName,
     listWorkspaceFilterStatusText,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
-import { FixedOptionRadioFilter } from "@/components/business/fixed-option-radio-filter"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -193,6 +193,13 @@ export function BackgroundJobsWorkspace() {
         appliedDomain !== "" ||
         (isAdmin && appliedScope !== "all")
 
+    const hasPendingChanges =
+        searchDraft.trim() !== appliedJobNo ||
+        statusDraft !== appliedStatus ||
+        jobTypeDraft !== appliedJobType ||
+        domainDraft !== appliedDomain ||
+        (isAdmin && scopeDraft !== appliedScope)
+
     const jobLabel = React.useCallback(
         (job: BackgroundJobView) =>
             backgroundJobDomainLabel(job.domain_job_type, job.job_type),
@@ -350,6 +357,7 @@ export function BackgroundJobsWorkspace() {
                 ariaLabel="后台任务"
                 toolbar={
                     <ListWorkspaceFilterBar
+                        density="compact"
                         idPrefix={`${ID_PREFIX}-toolbar`}
                         formAriaLabel="后台任务查询"
                         onSubmit={applyFilters}
@@ -364,76 +372,88 @@ export function BackgroundJobsWorkspace() {
                             />
                         }
                         commonFilters={
-                            <>
-                                {isAdmin ? (
-                                    <FixedOptionRadioFilter
-                                        idPrefix={`${ID_PREFIX}-toolbar-scope`}
-                                        label="可见范围"
-                                        variant="quiet"
-                                        value={scopeDraft}
-                                        onValueChange={setScopeDraft}
-                                        options={SCOPE_FILTER_OPTIONS}
-                                    />
-                                ) : null}
-                                <FixedOptionRadioFilter
-                                    idPrefix={`${ID_PREFIX}-toolbar-status`}
+                            <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center xl:gap-x-6">
+                                <ListWorkspaceInlineFilter
+                                    className="lg:not-first:border-l-0 lg:not-first:pl-0 xl:not-first:border-l xl:not-first:pl-6 max-xl:[&>label]:w-14"
+                                    htmlFor={`${ID_PREFIX}-toolbar-status`}
                                     label="状态"
-                                    variant="quiet"
-                                    value={statusDraft}
-                                    onValueChange={setStatusDraft}
-                                    options={STATUS_FILTER_OPTIONS}
-                                />
-                                <ListWorkspaceFilterField
+                                >
+                                    <OptionCombobox
+                                        id={`${ID_PREFIX}-toolbar-status`}
+                                        className="w-full xl:w-36"
+                                        value={statusDraft}
+                                        onValueChange={(value) =>
+                                            setStatusDraft(
+                                                (value ??
+                                                    "all") as StatusFilter,
+                                            )
+                                        }
+                                        options={STATUS_FILTER_OPTIONS}
+                                        aria-label="状态"
+                                        placeholder="全部状态"
+                                        allowClear={false}
+                                    />
+                                </ListWorkspaceInlineFilter>
+                                <ListWorkspaceInlineFilter
+                                    className="lg:not-first:border-l-0 lg:not-first:pl-0 xl:not-first:border-l xl:not-first:pl-6 max-xl:[&>label]:w-14"
                                     htmlFor={`${ID_PREFIX}-toolbar-job-type`}
                                     label="任务类型"
                                 >
-                                    <select
+                                    <OptionCombobox
                                         id={`${ID_PREFIX}-toolbar-job-type`}
-                                        className="h-9 w-full rounded-md border bg-background px-2 text-[13px] sm:w-40"
+                                        className="w-full xl:w-36"
                                         value={jobTypeDraft}
-                                        onChange={(event) =>
-                                            setJobTypeDraft(event.target.value)
+                                        onValueChange={(value) =>
+                                            setJobTypeDraft(value ?? "")
                                         }
+                                        options={JOB_TYPE_FILTER_OPTIONS}
                                         aria-label="任务类型"
-                                    >
-                                        {JOB_TYPE_FILTER_OPTIONS.map(
-                                            (option) => (
-                                                <option
-                                                    key={option.value || "all"}
-                                                    value={option.value}
-                                                >
-                                                    {option.label}
-                                                </option>
-                                            ),
-                                        )}
-                                    </select>
-                                </ListWorkspaceFilterField>
-                                <ListWorkspaceFilterField
+                                        placeholder="全部类型"
+                                        allowClear={false}
+                                    />
+                                </ListWorkspaceInlineFilter>
+                                <ListWorkspaceInlineFilter
+                                    className="lg:not-first:border-l-0 lg:not-first:pl-0 xl:not-first:border-l xl:not-first:pl-6 max-xl:[&>label]:w-14"
                                     htmlFor={`${ID_PREFIX}-toolbar-domain`}
                                     label="业务类型"
                                 >
-                                    <select
+                                    <OptionCombobox
                                         id={`${ID_PREFIX}-toolbar-domain`}
-                                        className="h-9 w-full rounded-md border bg-background px-2 text-[13px] sm:w-44"
+                                        className="w-full xl:w-48"
                                         value={domainDraft}
-                                        onChange={(event) =>
-                                            setDomainDraft(event.target.value)
+                                        onValueChange={(value) =>
+                                            setDomainDraft(value ?? "")
                                         }
+                                        options={JOB_DOMAIN_FILTER_OPTIONS}
                                         aria-label="业务类型"
+                                        placeholder="全部业务"
+                                        allowClear={false}
+                                    />
+                                </ListWorkspaceInlineFilter>
+                                {isAdmin ? (
+                                    <ListWorkspaceInlineFilter
+                                        className="lg:not-first:border-l-0 lg:not-first:pl-0 xl:not-first:border-l xl:not-first:pl-6 max-xl:[&>label]:w-14"
+                                        htmlFor={`${ID_PREFIX}-toolbar-scope`}
+                                        label="可见范围"
                                     >
-                                        {JOB_DOMAIN_FILTER_OPTIONS.map(
-                                            (option) => (
-                                                <option
-                                                    key={option.value || "all"}
-                                                    value={option.value}
-                                                >
-                                                    {option.label}
-                                                </option>
-                                            ),
-                                        )}
-                                    </select>
-                                </ListWorkspaceFilterField>
-                            </>
+                                        <OptionCombobox
+                                            id={`${ID_PREFIX}-toolbar-scope`}
+                                            className="w-full xl:w-36"
+                                            value={scopeDraft}
+                                            onValueChange={(value) =>
+                                                setScopeDraft(
+                                                    (value ??
+                                                        "all") as ScopeFilter,
+                                                )
+                                            }
+                                            options={SCOPE_FILTER_OPTIONS}
+                                            aria-label="可见范围"
+                                            placeholder="全部任务"
+                                            allowClear={false}
+                                        />
+                                    </ListWorkspaceInlineFilter>
+                                ) : null}
+                            </div>
                         }
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: jobsQuery.isPending,
@@ -516,6 +536,7 @@ export function BackgroundJobsWorkspace() {
                             setPage(1)
                         }}
                         onClearAll={clearFilters}
+                        hasPendingChanges={hasPendingChanges}
                         idleHint={
                             isAdmin ? undefined : "仅显示我创建的后台任务"
                         }

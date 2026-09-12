@@ -51,7 +51,7 @@ export function FixedOptionRadioFilter<Value extends string>({
         <div
             data-slot="fixed-option-radio-filter"
             className={cn(
-                "grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center",
+                "grid min-w-0 gap-2 sm:grid-cols-[max-content_minmax(0,1fr)] sm:items-center",
                 className,
             )}
         >

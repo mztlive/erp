@@ -4,12 +4,6 @@ import * as React from "react"
 
 import { OptionCombobox } from "@/components/business"
 import { Input } from "@/components/ui/input"
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-    InputGroupText,
-} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import {
     FieldShell,
@@ -23,6 +17,7 @@ import type {
 } from "@/features/master-data/components/supplier/supplier-editor-section-props"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { INVOICE_TYPE_OPTIONS } from "@/features/master-data/lib/resource-fields"
+import { SupplierTaxRatesField } from "./supplier-tax-rates-field"
 
 export function SupplierEditorInvoiceSection({
     values,
@@ -112,27 +107,14 @@ export function SupplierEditorInvoiceSection({
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label htmlFor="master-data-supplier-invoice-tax-rate">
-                        {masterDataCopy.fInvoiceTaxRate}
-                    </Label>
-                    <InputGroup>
-                        <InputGroupInput
-                            id="master-data-supplier-invoice-tax-rate"
-                            value={values.invoiceTaxRate}
-                            inputMode="text"
-                            onChange={(event) =>
-                                setFieldValue(
-                                    "invoiceTaxRate",
-                                    event.target.value,
-                                )
-                            }
-                            placeholder="如：9、13；未登记可留空"
-                            disabled={!canEdit}
-                        />
-                        <InputGroupAddon align="inline-end">
-                            <InputGroupText>%</InputGroupText>
-                        </InputGroupAddon>
-                    </InputGroup>
+                    <SupplierTaxRatesField
+                        id="master-data-supplier-invoice-tax-rate"
+                        value={values.invoiceTaxRate}
+                        onChange={(next) =>
+                            setFieldValue("invoiceTaxRate", next)
+                        }
+                        disabled={!canEdit}
+                    />
                 </FieldShell>
             </div>
         </SectionPanel>
