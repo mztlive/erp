@@ -76,6 +76,8 @@ export function useSalesOrderCreateSubmission({
         documentNumber: string
         savedAt: Date
     } | null>(null)
+    const [savedValues, setSavedValues] =
+        React.useState<CreateSalesOrderFormValues | null>(null)
     const [approval, setApproval] = React.useState<
         DocumentApprovalView | undefined
     >(initialDraft?.approval)
@@ -125,6 +127,7 @@ export function useSalesOrderCreateSubmission({
                     documentNumber: draftIdentity.documentNumber,
                     savedAt: new Date(),
                 })
+                setSavedValues(value)
                 return
             }
 
@@ -211,6 +214,21 @@ export function useSalesOrderCreateSubmission({
             throw error
         }
         if (command.payload.intent === "SAVE_DRAFT") {
+            // 重试可能提交先前保留的内容；只有本次输入与实际保存内容一致时才更新基线。
+            if (
+                value.contractId === command.payload.contract.contractId &&
+                value.requestedContractRevisionId ===
+                    command.payload.contract.requestedContractRevisionId &&
+                Object.entries(draftContent).every(
+                    ([key, current]) =>
+                        JSON.stringify(current) ===
+                        JSON.stringify(
+                            command.payload[key as keyof typeof draftContent],
+                        ),
+                )
+            ) {
+                setSavedValues(value)
+            }
             setDraftIdentity({
                 salesOrderId: result.salesOrderId,
                 documentNumber: result.documentNumber,
@@ -236,6 +254,7 @@ export function useSalesOrderCreateSubmission({
         draftIdentity,
         setDraftIdentity,
         draftSaved,
+        savedValues,
         setDraftSaved,
         approval,
         submitConfirmOpen,

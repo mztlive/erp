@@ -1,20 +1,18 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { ArrowLeftIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { revalidateLogic, useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
 
 import {
     DiscardConfirmDialog,
-    PageHeader,
+    DetailPageHeader,
     PageScaffold,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
-import { Button } from "@/components/ui/button"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
@@ -72,6 +70,8 @@ export function SalesOrderCreateForm({
     onSubmitted?: (salesOrderId: string) => void
     commandLedger?: FormalCommandKeyLedger
 }) {
+    const router = useRouter()
+    const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
     const queryClient = useQueryClient()
     const profileQuery = useAccountProfileQuery()
     const [selectedContractId, setSelectedContractId] = React.useState(
@@ -168,7 +168,14 @@ export function SalesOrderCreateForm({
         },
     })
 
-    const dirty = useSelector(form.store, (state) => state.isDirty)
+    const dirty = useSelector(
+        form.store,
+        (state) =>
+            state.isDirty &&
+            (!submission.savedValues ||
+                JSON.stringify(state.values) !==
+                    JSON.stringify(submission.savedValues)),
+    )
     const nature = useSelector(form.store, (state) => state.values.nature)
     const lineItems = useSelector(form.store, (state) => state.values.lineItems)
     const procurementResponsibilityQuery =
@@ -196,20 +203,28 @@ export function SalesOrderCreateForm({
         form.setFieldValue(
             "requestedContractRevisionId",
             revision?.revisionId ?? contract.currentRevision.revisionId,
+            { dontUpdateMeta: true },
         )
         form.setFieldValue(
             "contractRevisionLabel",
             `${contract.contractNo}@v${revision?.revisionNo ?? contract.currentRevision.revisionNo}`,
+            { dontUpdateMeta: true },
         )
-        form.setFieldValue("customerId", contract.customer.id)
-        form.setFieldValue("customerName", contract.customer.displayName)
+        form.setFieldValue("customerId", contract.customer.id, {
+            dontUpdateMeta: true,
+        })
+        form.setFieldValue("customerName", contract.customer.displayName, {
+            dontUpdateMeta: true,
+        })
         form.setFieldValue(
             "settlementPartyId",
             contract.currentRevision.settlementParty.id,
+            { dontUpdateMeta: true },
         )
         form.setFieldValue(
             "settlementEntity",
             contract.currentRevision.settlementParty.displayName,
+            { dontUpdateMeta: true },
         )
         // 负责销售固定为当前登录用户，不随合同变更覆盖
         if (skipPaymentTermsResetRef.current) {
@@ -221,7 +236,9 @@ export function SalesOrderCreateForm({
             const termMatch = PAYMENT_TERM_OPTIONS.find(
                 (o) => o.label === termLabel || o.value === termLabel,
             )
-            form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
+            form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT", {
+                dontUpdateMeta: true,
+            })
         }
     }, [contractQuery.data, form])
 
@@ -232,8 +249,8 @@ export function SalesOrderCreateForm({
         const userId = profile.userid?.trim()
         const displayName = (profile.name || profile.account || "").trim()
         if (!userId || !displayName) return
-        form.setFieldValue("ownerUserId", userId)
-        form.setFieldValue("ownerName", displayName)
+        form.setFieldValue("ownerUserId", userId, { dontUpdateMeta: true })
+        form.setFieldValue("ownerName", displayName, { dontUpdateMeta: true })
     }, [form, profileQuery.data])
 
     const handleContractChange = React.useCallback(
@@ -425,20 +442,33 @@ export function SalesOrderCreateForm({
 
     return (
         <PageScaffold className="pb-8">
-            <PageHeader
+            <DetailPageHeader
                 title={purpose === "create" ? "新建销售单" : "编辑销售单"}
-                actions={
-                    <Button
-                        id="sales-orders-create-back-to-list"
-                        variant="outline"
-                        render={<Link href="/sales/orders" />}
-                    >
-                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
-                        返回销售单
-                    </Button>
-                }
+                documentNumber={submission.draftIdentity?.documentNumber}
+                version={submission.draftIdentity?.version}
+                back={{
+                    id: "sales-orders-create-back-to-list",
+                    label: "销售单列表",
+                    onClick: () => {
+                        if (dirty) {
+                            setLeaveConfirmOpen(true)
+                            return
+                        }
+                        router.push("/sales/orders")
+                    },
+                }}
             />
             {editor}
+            <DiscardConfirmDialog
+                id="sales-orders-create-leave"
+                open={leaveConfirmOpen}
+                onOpenChange={setLeaveConfirmOpen}
+                confirmLabel="放弃更改并返回"
+                onConfirm={() => {
+                    setLeaveConfirmOpen(false)
+                    router.push("/sales/orders")
+                }}
+            />
         </PageScaffold>
     )
 }
