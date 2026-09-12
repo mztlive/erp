@@ -368,8 +368,8 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             "货到",
         )
 
-        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-        const skuDialog = page.getByRole("dialog", { name: /选择商品|更换销售商品/ })
+        await page.locator("#sales-orders-create-line-items-add").click()
+        const skuDialog = page.getByRole("dialog", { name: /添加商品|更换销售商品/ })
         await expect(skuDialog).toBeVisible({ timeout: 20000 })
         const skuSearch = skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格")
         await skuSearch.fill(SKU_KEYWORD)
@@ -383,6 +383,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             page.locator('[data-testid^="sales-line-procurement-owner-"]'),
         ).not.toContainText("暂未确定", { timeout: 20000 })
 
+        await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickIsoDate(
             page,
             page.locator("#sales-orders-create-batch-due-date"),

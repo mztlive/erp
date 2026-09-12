@@ -343,8 +343,8 @@ async function createSalesOrderWithContract(
     await expect(page.getByText(customerName, { exact: true }).first()).toBeVisible({ timeout: TIMEOUT })
 
     await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
-    await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-    const skuDialog = page.getByRole("dialog", { name: "更换销售商品" })
+    await page.locator("#sales-orders-create-line-items-add").click()
+    const skuDialog = page.getByRole("dialog", { name: "添加商品" })
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
     await searchAndSubmit(skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格"), SKU_NO)
     await expect(skuDialog.getByText(SKU_NO, { exact: true })).toBeVisible({ timeout: TIMEOUT })
@@ -354,11 +354,12 @@ async function createSalesOrderWithContract(
     await expect(page.getByRole("button", { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible({ timeout: TIMEOUT })
 
     await page.getByLabel("数量").fill(SALES_QTY)
+    await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickVisibleDay(page, page.locator("#sales-orders-create-batch-due-date"), futureDayOfMonth())
-    await page.getByRole("button", { name: "应用到全部" }).click()
+    await page.getByRole("button", { name: "应用到全部明细" }).click()
     await expectToast(page, "已批量设置交期")
 
-    await page.getByRole("button", { name: "提交", exact: true }).click()
+    await page.getByRole("button", { name: "提交审批", exact: true }).click()
     const submit = page.getByRole("dialog", { name: "提交销售单" })
     await expect(submit).toBeVisible({ timeout: TIMEOUT })
     await submit.getByRole("button", { name: "确认提交" }).click()

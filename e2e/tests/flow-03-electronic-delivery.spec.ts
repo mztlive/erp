@@ -460,8 +460,8 @@ async function uploadContractOnSalesOrder(page: Page, legalName: string, contrac
 }
 
 async function pickVirtualSku(page: Page) {
-    await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-    const dialog = page.getByRole('dialog', { name: '更换销售商品' })
+    await page.locator("#sales-orders-create-line-items-add").click()
+    const dialog = page.getByRole('dialog', { name: '添加商品' })
     await expect(dialog).toBeVisible({ timeout: 20000 })
     await dialog.locator('#sales-orders-sku-picker-toolbar').getByRole('button', { name: '更多筛选' }).click()
     await dialog.getByRole('radio', { name: '虚拟' }).click()
@@ -513,6 +513,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await chooseComboboxById(page, 'sales-orders-create-header-payment-terms', '货到 30 天')
             await pickVirtualSku(page)
             await page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]').first().fill('10')
+            await page.locator("#sales-orders-create-batch-due-date-open").click()
             await pickIsoDate(page, page.locator('#sales-orders-create-batch-due-date'), due)
             await page.locator('#sales-orders-create-batch-due-date-apply').click()
             await expectToast(page, '已批量设置交期')

@@ -1,58 +1,77 @@
 "use client"
 
 import * as React from "react"
-
+import { CalendarDaysIcon } from "lucide-react"
+import { QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldLabel } from "@/components/ui/field"
+import {
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    PopoverTitle,
+    PopoverDescription,
+} from "@/components/ui/popover"
 
 export type SalesOrderCreateDueDateBatchBarProps = {
     lineCount: number
     onApply: (dueDate: string) => void
 }
 
-/**
- * 实物/服务明细的批量交期：选一个日期后写到全部行，仍可逐行改。
- */
 export function SalesOrderCreateDueDateBatchBar({
     lineCount,
     onApply,
 }: SalesOrderCreateDueDateBatchBarProps) {
     const [dueDate, setDueDate] = React.useState("")
-
+    const [open, setOpen] = React.useState(false)
     return (
-        <div
-            className="flex items-center gap-1.5"
-            data-testid="sales-create-batch-due-date-bar"
-        >
-            <Field orientation="horizontal" className="w-auto gap-1.5">
-                <FieldLabel
-                    htmlFor="sales-orders-create-batch-due-date"
-                    className="shrink-0 text-xs text-muted-foreground"
-                >
-                    批量交期
-                </FieldLabel>
-                <DatePicker
-                    id="sales-orders-create-batch-due-date"
-                    size="sm"
-                    value={dueDate || undefined}
-                    onValueChange={(next) => setDueDate(next ?? "")}
-                    placeholder="选择日期"
-                    clearable={false}
-                    className="w-40"
-                />
-            </Field>
-            <Button
-                id="sales-orders-create-batch-due-date-apply"
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!dueDate || lineCount === 0}
-                onClick={() => onApply(dueDate)}
-                data-testid="sales-create-batch-due-date-apply"
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger
+                id="sales-orders-create-batch-due-date-open"
+                render={<Button type="button" variant="outline" />}
+                disabled={lineCount === 0}
             >
-                应用到全部
-            </Button>
-        </div>
+                <CalendarDaysIcon aria-hidden="true" />
+                设置统一交付日
+            </PopoverTrigger>
+            <PopoverContent
+                align="end"
+                className="w-80 max-w-[calc(100vw-2rem)]"
+                data-testid="sales-create-batch-due-date-bar"
+            >
+                <PopoverTitle>设置统一交付日</PopoverTitle>
+                <PopoverDescription>
+                    将覆盖全部{" "}
+                    <QuantityValue unit="" value={String(lineCount)} />{" "}
+                    条明细的承诺交付日，应用后仍可逐行调整。
+                </PopoverDescription>
+                <Field>
+                    <FieldLabel htmlFor="sales-orders-create-batch-due-date">
+                        承诺交付日
+                    </FieldLabel>
+                    <DatePicker
+                        id="sales-orders-create-batch-due-date"
+                        value={dueDate || undefined}
+                        onValueChange={(next) => setDueDate(next ?? "")}
+                        placeholder="选择日期"
+                        clearable={false}
+                        className="w-full"
+                    />
+                </Field>
+                <Button
+                    id="sales-orders-create-batch-due-date-apply"
+                    type="button"
+                    disabled={!dueDate || lineCount === 0}
+                    onClick={() => {
+                        onApply(dueDate)
+                        setOpen(false)
+                    }}
+                    data-testid="sales-create-batch-due-date-apply"
+                >
+                    应用到全部明细
+                </Button>
+            </PopoverContent>
+        </Popover>
     )
 }

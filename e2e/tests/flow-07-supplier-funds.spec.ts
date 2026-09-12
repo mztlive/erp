@@ -265,8 +265,8 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         await chooseOption(page, paymentTerms, /货到 30 天|按合同约定/);
     }
 
-    await page.getByRole("button", { name: "选择商品" }).first().click();
-    const skuDialog = page.getByRole("dialog", { name: "更换销售商品" });
+    await page.getByRole("button", { name: "添加商品" }).first().click();
+    const skuDialog = page.getByRole("dialog", { name: "添加商品" });
     await expect(skuDialog).toBeVisible({ timeout: 20_000 });
     const skuSearch = skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input");
     await skuSearch.fill(SKU_NAME);
@@ -286,6 +286,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         { timeout: 20_000 },
     );
 
+    await page.locator("#sales-orders-create-batch-due-date-open").click()
     await page.locator("#sales-orders-create-batch-due-date").click();
     await pickCalendarDay(page);
     await page.locator("#sales-orders-create-batch-due-date-apply").click();

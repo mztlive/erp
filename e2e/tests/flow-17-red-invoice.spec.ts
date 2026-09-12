@@ -544,8 +544,8 @@ async function createAndSubmitPhysicalSalesOrder(
         "sales-orders-create-header-payment-terms-option-postpay-net30",
     )
 
-    await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeVisible({
+    await page.locator("#sales-orders-create-line-items-add").click()
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeVisible({
         timeout: TIMEOUT,
     })
     const skuSearch = page.locator("#master-data-list-sellable-list-toolbar-search-input")
@@ -555,7 +555,7 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(skuCheckbox.first()).toBeVisible({ timeout: LONG })
     await skuCheckbox.first().check()
     await page.locator("#sales-orders-sku-picker-confirm").click()
-    await expect(page.getByRole("dialog").getByRole("heading", { name: "更换销售商品" })).toBeHidden({
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeHidden({
         timeout: TIMEOUT,
     })
     await expect(page.getByRole("button", { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible({ timeout: TIMEOUT })
@@ -564,6 +564,7 @@ async function createAndSubmitPhysicalSalesOrder(
         { timeout: LONG },
     )
 
+    await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickToday(page, "sales-orders-create-batch-due-date")
     await page.locator("#sales-orders-create-batch-due-date-apply").click()
     await expectToast(page, "已批量设置交期")

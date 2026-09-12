@@ -323,8 +323,8 @@ async function uploadContract(
 }
 
 async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Promise<void> {
-  await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-  const picker = page.getByRole('dialog', { name: '更换销售商品' })
+  await page.locator("#sales-orders-create-line-items-add").click()
+  const picker = page.getByRole('dialog', { name: '添加商品' })
   await expect(picker).toBeVisible(VISIBLE)
   await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').fill(SKU_NAME)
   await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').press('Enter')
@@ -341,6 +341,7 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
     VISIBLE,
   )
   await page.getByLabel('数量').first().fill(quantity)
+  await page.locator("#sales-orders-create-batch-due-date-open").click()
   await pickIsoDate(page, 'sales-orders-create-batch-due-date', isoDate(due))
   await page.locator('#sales-orders-create-batch-due-date-apply').click()
   await expect(page.getByText('已批量设置交期')).toBeVisible(VISIBLE)

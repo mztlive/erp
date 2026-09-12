@@ -385,8 +385,8 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     // 付款条件必填缺一不可，否则提交按钮保持禁用（与 flow-03 同款）。
     await chooseComboboxById(sales.page, 'sales-orders-create-header-payment-terms', '货到 30 天')
 
-    await sales.page.getByRole('button', { name: '选择商品' }).first().click()
-    await expect(sales.page.getByRole('heading', { name: '更换销售商品' })).toBeVisible({ timeout: TIMEOUT })
+    await sales.page.getByRole('button', { name: '添加商品' }).first().click()
+    await expect(sales.page.getByRole('heading', { name: '添加商品' })).toBeVisible({ timeout: TIMEOUT })
     const skuSearch = sales.page.getByPlaceholder('搜索 SKU、商品名称、编号或规格')
     await skuSearch.fill(SERVICE_SKU_NO)
     await skuSearch.press('Enter')
@@ -394,7 +394,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
     await expect(sales.page.getByText(SERVICE_SKU_NO, { exact: true })).toBeVisible({ timeout: TIMEOUT })
     await sales.page.getByRole('checkbox', { name: new RegExp(`选择 ${SERVICE_SKU_NAME}`) }).click()
     await sales.page.locator('#sales-orders-sku-picker-confirm').click()
-    await expect(sales.page.getByRole('heading', { name: '更换销售商品' })).toBeHidden({ timeout: TIMEOUT })
+    await expect(sales.page.getByRole('heading', { name: '添加商品' })).toBeHidden({ timeout: TIMEOUT })
     await expect(sales.page.getByText(SERVICE_SKU_NAME).first()).toBeVisible({ timeout: TIMEOUT })
     await expect(sales.page.locator('[data-testid^="sales-line-procurement-owner-"]')).not.toContainText(
       '暂未确定采购负责人',
@@ -403,6 +403,7 @@ test('flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
 
     await sales.page.getByLabel('数量').fill('2')
     // 批量交期控件改名：用稳定 id 打开日历再跨月点选（与 flow-03 同款）。
+    await sales.page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickIsoDate(sales.page, sales.page.locator('#sales-orders-create-batch-due-date'), dueIso)
     await sales.page.locator('#sales-orders-create-batch-due-date-apply').click()
     await expectToast(sales.page, '已批量设置交期')

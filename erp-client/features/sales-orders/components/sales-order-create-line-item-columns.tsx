@@ -19,29 +19,34 @@ import type {
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
-export const PROCUREMENT_OWNER_UNRESOLVED_MESSAGE =
-    "暂未确定采购负责人，请联系管理员维护采购责任规则"
-
 function ProcurementOwnerPreview({
     line,
     responsibility,
+    status,
 }: {
     line: SalesOrderDraftLineInput
     responsibility?: SalesLineProcurementResponsibility
+    status: { fetching: boolean; error: boolean }
 }) {
     return (
         <div
-            className="min-w-44 text-sm"
+            className="w-28 text-sm"
             data-testid={`sales-line-procurement-owner-${line.rowKey}`}
         >
-            {responsibility?.resolved && responsibility.ownerName ? (
+            {!line.sku.trim() ? (
+                <span className="text-muted-foreground">
+                    选择商品后自动匹配
+                </span>
+            ) : status.fetching ? (
+                <span className="text-muted-foreground">正在匹配…</span>
+            ) : status.error ? (
+                <span className="text-destructive">匹配失败，暂不能提交</span>
+            ) : responsibility?.resolved && responsibility.ownerName ? (
                 <span className="font-medium text-foreground">
                     {responsibility.ownerName}
                 </span>
             ) : (
-                <span className="text-muted-foreground">
-                    {PROCUREMENT_OWNER_UNRESOLVED_MESSAGE}
-                </span>
+                <span className="text-destructive">待配置 · 暂不能提交</span>
             )}
         </div>
     )
@@ -56,6 +61,7 @@ export function buildSalesOrderCreateLineItemColumns(
         SalesLineProcurementResponsibility
     > = new Map(),
     onPickSku?: (rowIndex: number) => void,
+    procurementStatus = { fetching: false, error: false },
 ): EditableLineItemColumn<SalesOrderDraftLineInput>[] {
     const nature = values.nature
     return [
@@ -73,55 +79,6 @@ export function buildSalesOrderCreateLineItemColumns(
                 />
             ),
         },
-        ...(nature === "physical_service"
-            ? ([
-                  {
-                      id: "serviceRegion",
-                      header: "服务区域",
-                      renderValue: ({ item }) => item.serviceRegion || "—",
-                      renderEditor: ({ rowIndex }) => {
-                          const lineKey = values.lineItems[rowIndex]?.rowKey
-                          if (!lineKey) return null
-                          return (
-                              <div className="min-w-32">
-                                  <form.AppField
-                                      name={`lineItems[${rowIndex}].serviceRegion`}
-                                  >
-                                      {(field) => (
-                                          <field.TextField
-                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-service-region`}
-                                              label="服务区域"
-                                              hideLabel
-                                              placeholder="选填"
-                                          />
-                                      )}
-                                  </form.AppField>
-                              </div>
-                          )
-                      },
-                  },
-                  {
-                      id: "procurementOwner",
-                      header: "采购负责人",
-                      renderValue: ({ item }) => (
-                          <ProcurementOwnerPreview
-                              line={item}
-                              responsibility={procurementOwners.get(
-                                  item.rowKey,
-                              )}
-                          />
-                      ),
-                      renderEditor: ({ item }) => (
-                          <ProcurementOwnerPreview
-                              line={item}
-                              responsibility={procurementOwners.get(
-                                  item.rowKey,
-                              )}
-                          />
-                      ),
-                  },
-              ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
-            : []),
         {
             id: "quantity",
             header: "数量 / 单位",
@@ -317,6 +274,57 @@ export function buildSalesOrderCreateLineItemColumns(
                       },
                   },
               ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])),
+        ...(nature === "physical_service"
+            ? ([
+                  {
+                      id: "serviceRegion",
+                      header: "服务区域",
+                      renderValue: ({ item }) => item.serviceRegion || "—",
+                      renderEditor: ({ rowIndex }) => {
+                          const lineKey = values.lineItems[rowIndex]?.rowKey
+                          if (!lineKey) return null
+                          return (
+                              <div className="w-28">
+                                  <form.AppField
+                                      name={`lineItems[${rowIndex}].serviceRegion`}
+                                  >
+                                      {(field) => (
+                                          <field.TextField
+                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-service-region`}
+                                              label="服务区域"
+                                              hideLabel
+                                              placeholder="选填"
+                                          />
+                                      )}
+                                  </form.AppField>
+                              </div>
+                          )
+                      },
+                  },
+                  {
+                      id: "procurementOwner",
+                      header: "采购负责人",
+                      renderValue: ({ item }) => (
+                          <ProcurementOwnerPreview
+                              line={item}
+                              status={procurementStatus}
+                              responsibility={procurementOwners.get(
+                                  item.rowKey,
+                              )}
+                          />
+                      ),
+                      renderEditor: ({ item }) => (
+                          <ProcurementOwnerPreview
+                              line={item}
+                              status={procurementStatus}
+                              responsibility={procurementOwners.get(
+                                  item.rowKey,
+                              )}
+                          />
+                      ),
+                  },
+              ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
+            : []),
         {
             id: "amount",
             header: "含税小计",

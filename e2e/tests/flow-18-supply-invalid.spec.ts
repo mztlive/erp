@@ -435,8 +435,8 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
 
         await chooseOption(page, page.locator("#sales-orders-create-header-welfare-scene"), "年节礼包")
         await chooseOption(page, page.locator("#sales-orders-create-header-payment-terms"), "货到 15 天")
-        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-        const skuDialog = page.getByRole("dialog", { name: "更换销售商品" })
+        await page.locator("#sales-orders-create-line-items-add").click()
+        const skuDialog = page.getByRole("dialog", { name: "添加商品" })
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT })
         await skuDialog
             .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
@@ -449,6 +449,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT })
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT })
         await page.getByLabel("数量").fill(SALES_QTY)
+        await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate)
         await page.locator("#sales-orders-create-batch-due-date-apply").click()
         await expectToast(page, "已批量设置交期")
@@ -611,7 +612,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(startDialog.first()).toBeHidden({ timeout: UI_TIMEOUT })
         await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled()
         await expect(page.getByRole("tab", { name: /版本/ })).toContainText("改单中")
-        await expect(page.getByRole("button", { name: "选择商品" })).toHaveCount(0)
+        await expect(page.getByRole("button", { name: "添加商品" })).toHaveCount(0)
         await expect(page.getByRole("heading", { name: "销售明细" })).toHaveCount(0)
 
         await page.getByRole("tab", { name: /版本/ }).click()
@@ -680,7 +681,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         })
         await expect(page.getByText("销售变更单").first()).toBeVisible()
         await expect(page.getByRole("button", { name: "提交改单" })).toHaveCount(0)
-        await expect(page.getByRole("button", { name: "选择商品" })).toHaveCount(0)
+        await expect(page.getByRole("button", { name: "添加商品" })).toHaveCount(0)
 
         page = await switchTo("caigou")
         await expectAllocationCannotCreatePurchase(page, salesOrderNo)

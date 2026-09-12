@@ -5,6 +5,10 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 type ToolbarScope = {
+    filterStatus: HTMLDivElement | null
+    setFilterStatus: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>
+    filters: ReadonlySet<object>
+    registerFilter: (filter: object) => () => void
     summary: HTMLDivElement | null
     settings: HTMLDivElement | null
     setSummary: React.Dispatch<React.SetStateAction<HTMLDivElement | null>>
@@ -17,6 +21,20 @@ const ToolbarContext = React.createContext<ToolbarScope | null>(null)
 
 /** 每个列表框架独立管理挂载点；嵌套框架和多表不得共用列设置。 */
 export function TableToolbarScope({ children }: { children: React.ReactNode }) {
+    const [filterStatus, setFilterStatus] =
+        React.useState<HTMLDivElement | null>(null)
+    const [filters, setFilters] = React.useState<ReadonlySet<object>>(
+        () => new Set(),
+    )
+    const registerFilter = React.useCallback((filter: object) => {
+        setFilters((current) => new Set(current).add(filter))
+        return () =>
+            setFilters((current) => {
+                const next = new Set(current)
+                next.delete(filter)
+                return next
+            })
+    }, [])
     const [summary, setSummary] = React.useState<HTMLDivElement | null>(null)
     const [settings, setSettings] = React.useState<HTMLDivElement | null>(null)
     const [tables, setTables] = React.useState<ReadonlySet<object>>(
@@ -33,6 +51,10 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
     }, [])
     const value = React.useMemo(
         () => ({
+            filterStatus,
+            setFilterStatus,
+            filters,
+            registerFilter,
             summary,
             settings,
             setSummary,
@@ -40,9 +62,26 @@ export function TableToolbarScope({ children }: { children: React.ReactNode }) {
             tables,
             register,
         }),
-        [summary, settings, tables, register],
+        [
+            filterStatus,
+            filters,
+            registerFilter,
+            summary,
+            settings,
+            tables,
+            register,
+        ],
     )
     return <ToolbarContext value={value}>{children}</ToolbarContext>
+}
+
+/** 将查询结果和已生效条件放入所属列表的表格工具栏；独立筛选栏保留原位。 */
+export function useTableFilterStatusHost() {
+    const scope = React.useContext(ToolbarContext)
+    const identity = React.useRef({})
+    const register = scope?.registerFilter
+    React.useLayoutEffect(() => register?.(identity.current), [register])
+    return scope?.filters.size === 1 ? scope.filterStatus : null
 }
 
 export function useTableToolbarHost(enabled: boolean) {
@@ -57,6 +96,9 @@ export function useTableToolbarHost(enabled: boolean) {
     return {
         summary: ownsToolbar ? scope.summary : null,
         settings: ownsToolbar ? scope.settings : null,
+        hasFilterStatus: Boolean(
+            ownsToolbar && scope.filterStatus && scope.filters.size === 1,
+        ),
     }
 }
 
@@ -84,6 +126,14 @@ export function TableToolbar({
                 className,
             )}
         >
+            {isFrameToolbar ? (
+                <div
+                    data-slot="table-toolbar-filter-status"
+                    ref={scope?.setFilterStatus}
+                    data-table-toolbar-content=""
+                    className="min-w-0 flex-1 basis-full empty:hidden sm:basis-auto"
+                />
+            ) : null}
             <div
                 data-slot="table-toolbar-summary"
                 ref={

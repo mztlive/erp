@@ -379,13 +379,15 @@ function DataTable<TData>({
     )
 
     const selectedCount = Object.values(rowSelection).filter(Boolean).length
-    const summary = hasColumnSettings ? (
-        <span className="num text-muted-foreground">
-            {selectedCount > 0
-                ? `已选 ${selectedCount.toLocaleString("zh-CN")} / ${rowCount.toLocaleString("zh-CN")} 条`
-                : `共 ${rowCount.toLocaleString("zh-CN")} 条`}
-        </span>
-    ) : null
+    const summary =
+        hasColumnSettings &&
+        (selectedCount > 0 || !toolbarHost.hasFilterStatus) ? (
+            <span className="num text-muted-foreground">
+                {selectedCount > 0
+                    ? `已选 ${selectedCount.toLocaleString("zh-CN")} / ${rowCount.toLocaleString("zh-CN")} 条`
+                    : `共 ${rowCount.toLocaleString("zh-CN")} 条`}
+            </span>
+        ) : null
     const viewOptions = hasColumnSettings ? (
         <DataTableViewOptions
             table={table}

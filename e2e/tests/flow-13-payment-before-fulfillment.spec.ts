@@ -313,8 +313,8 @@ async function ensureDefaultProcurementOwner(page: Page) {
 }
 
 async function pickSku(page: Page, keyword: string, name: string) {
-    await page.getByRole("button", { name: "选择商品" }).first().click();
-    const skuDialog = page.getByRole("dialog", { name: /选择商品|更换销售商品/ });
+    await page.getByRole("button", { name: "添加商品" }).first().click();
+    const skuDialog = page.getByRole("dialog", { name: /添加商品|更换销售商品/ });
     await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
     const skuSearch = skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input");
     await skuSearch.fill(keyword);
@@ -610,6 +610,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await pickSku(page, "龙井", SKU_INBOUND);
         await pickSku(page, "普洱", SKU_DIRECT);
         await fillAllLineQuantities(page, SALES_QTY);
+        await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate);
         await page.locator("#sales-orders-create-batch-due-date-apply").click();
         await expectToast(page, "已批量设置交期");

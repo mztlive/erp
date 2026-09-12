@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import { FilterChip } from "@/components/business/filter-chip"
 import { ListToolbar } from "@/components/business/list"
+import { useTableFilterStatusHost } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -162,6 +164,68 @@ export function ListWorkspaceFilterBar({
 }) {
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
     const showMore = morePanel != null && onToggleMore != null
+    const statusHost = useTableFilterStatusHost()
+    const statusRow = (
+        <div
+            className={cn(
+                "flex flex-wrap items-center gap-x-3 gap-y-2 text-xs",
+                statusHost
+                    ? undefined
+                    : density === "compact"
+                      ? "pt-1"
+                      : "border-t border-border/60 pt-3",
+            )}
+        >
+            <span role="status" className="shrink-0 text-muted-foreground">
+                {resultStatus}
+            </span>
+            {chips.length ? (
+                <>
+                    <span className="text-muted-foreground">已生效</span>
+                    {chips.map((chip) => (
+                        <FilterChip
+                            key={chip.key}
+                            id={`${idPrefix}-chip-${toAutomationIdSegment(chip.key)}`}
+                            label={chip.label}
+                            clearLabel={chip.clearLabel ?? `移除${chip.label}`}
+                            onClear={() => {
+                                if (chip.onClear) chip.onClear()
+                                else onClearChip?.(chip.key)
+                            }}
+                        />
+                    ))}
+                    {onClearAll ? (
+                        <Button
+                            id={clearButtonId ?? `${idPrefix}-clear`}
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={onClearAll}
+                        >
+                            清除全部
+                        </Button>
+                    ) : null}
+                </>
+            ) : null}
+            {idleHint || hasPendingChanges || statusActions ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
+                    {idleHint || hasPendingChanges ? (
+                        <span
+                            role="status"
+                            className={
+                                hasPendingChanges
+                                    ? "font-medium text-warning-soft-foreground"
+                                    : "text-muted-foreground"
+                            }
+                        >
+                            {hasPendingChanges ? pendingHint : idleHint}
+                        </span>
+                    ) : null}
+                    {statusActions}
+                </div>
+            ) : null}
+        </div>
+    )
 
     return (
         <form
@@ -222,118 +286,54 @@ export function ListWorkspaceFilterBar({
                 }
                 actions={actions}
                 secondary={
-                    <div
-                        className={cn(
-                            "w-full min-w-0",
-                            density === "compact" ? "space-y-2" : "space-y-4",
-                        )}
-                    >
-                        {commonFilters ? (
-                            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
-                                {commonFilters}
-                            </div>
-                        ) : null}
-                        {showMore && moreOpen ? (
-                            <section
-                                id={panelId}
-                                aria-label={morePanelAriaLabel}
-                                className="rounded-xl border border-border/70 bg-muted/25 p-4"
-                            >
-                                {morePanel}
-                                {onResetMore ? (
-                                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
-                                        <span className="text-xs text-muted-foreground">
-                                            {moreHint}
-                                        </span>
-                                        <Button
-                                            id={
-                                                resetMoreButtonId ??
-                                                `${idPrefix}-reset-more`
-                                            }
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={onResetMore}
-                                        >
-                                            重置更多条件
-                                        </Button>
-                                    </div>
-                                ) : null}
-                            </section>
-                        ) : null}
+                    commonFilters || (showMore && moreOpen) || !statusHost ? (
                         <div
                             className={cn(
-                                "flex flex-wrap items-center gap-x-3 gap-y-2 text-xs",
+                                "w-full min-w-0",
                                 density === "compact"
-                                    ? "pt-1"
-                                    : "border-t border-border/60 pt-3",
+                                    ? "space-y-2"
+                                    : "space-y-4",
                             )}
                         >
-                            <span
-                                role="status"
-                                className="shrink-0 text-muted-foreground"
-                            >
-                                {resultStatus}
-                            </span>
-                            {chips.length ? (
-                                <>
-                                    <span className="text-muted-foreground">
-                                        已生效
-                                    </span>
-                                    {chips.map((chip) => (
-                                        <FilterChip
-                                            key={chip.key}
-                                            id={`${idPrefix}-chip-${toAutomationIdSegment(chip.key)}`}
-                                            label={chip.label}
-                                            clearLabel={
-                                                chip.clearLabel ??
-                                                `移除${chip.label}`
-                                            }
-                                            onClear={() => {
-                                                if (chip.onClear) chip.onClear()
-                                                else onClearChip?.(chip.key)
-                                            }}
-                                        />
-                                    ))}
-                                    {onClearAll ? (
-                                        <Button
-                                            id={
-                                                clearButtonId ??
-                                                `${idPrefix}-clear`
-                                            }
-                                            type="button"
-                                            variant="ghost"
-                                            size="xs"
-                                            onClick={onClearAll}
-                                        >
-                                            清除全部
-                                        </Button>
-                                    ) : null}
-                                </>
-                            ) : null}
-                            {idleHint || hasPendingChanges || statusActions ? (
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
-                                    {idleHint || hasPendingChanges ? (
-                                        <span
-                                            role="status"
-                                            className={
-                                                hasPendingChanges
-                                                    ? "font-medium text-warning-soft-foreground"
-                                                    : "text-muted-foreground"
-                                            }
-                                        >
-                                            {hasPendingChanges
-                                                ? pendingHint
-                                                : idleHint}
-                                        </span>
-                                    ) : null}
-                                    {statusActions}
+                            {commonFilters ? (
+                                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
+                                    {commonFilters}
                                 </div>
                             ) : null}
+                            {showMore && moreOpen ? (
+                                <section
+                                    id={panelId}
+                                    aria-label={morePanelAriaLabel}
+                                    className="rounded-xl border border-border/70 bg-muted/25 p-4"
+                                >
+                                    {morePanel}
+                                    {onResetMore ? (
+                                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                                            <span className="text-xs text-muted-foreground">
+                                                {moreHint}
+                                            </span>
+                                            <Button
+                                                id={
+                                                    resetMoreButtonId ??
+                                                    `${idPrefix}-reset-more`
+                                                }
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={onResetMore}
+                                            >
+                                                重置更多条件
+                                            </Button>
+                                        </div>
+                                    ) : null}
+                                </section>
+                            ) : null}
+                            {!statusHost ? statusRow : null}
                         </div>
-                    </div>
+                    ) : undefined
                 }
             />
+            {statusHost ? createPortal(statusRow, statusHost) : null}
         </form>
     )
 }

@@ -566,8 +566,8 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
             page.locator("#sales-orders-create-header-payment-terms"),
             "货到 15 天",
         );
-        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click();
-        const skuDialog = page.getByRole("dialog", { name: "更换销售商品" });
+        await page.locator("#sales-orders-create-line-items-add").click();
+        const skuDialog = page.getByRole("dialog", { name: "添加商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input").fill(SKU_KEYWORD);
         await skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input").press("Enter");
@@ -578,6 +578,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT });
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByLabel("数量").fill(SALES_QTY);
+        await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate);
         await page.locator("#sales-orders-create-batch-due-date-apply").click();
         await expectToast(page, "已批量设置交期");

@@ -209,7 +209,7 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
     )
 
     await page.locator("#sales-orders-create-line-items-add").click()
-    const skuDialog = page.getByRole("dialog", { name: "选择商品" })
+    const skuDialog = page.getByRole("dialog", { name: "添加商品" })
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
     await skuDialog
         .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
@@ -225,6 +225,7 @@ async function createPhysicalSalesOrder(page: Page, customerName: string, contra
     })
 
     await page.getByLabel("数量").fill(LINE_QTY)
+    await page.locator("#sales-orders-create-batch-due-date-open").click()
     await page.locator("#sales-orders-create-batch-due-date").click()
     const nextMonth = page.locator("#sales-orders-create-batch-due-date-calendar-next-month")
     if (await nextMonth.count()) await nextMonth.click()

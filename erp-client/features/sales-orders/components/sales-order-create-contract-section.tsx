@@ -1,6 +1,6 @@
 "use client"
 
-import { PlusIcon } from "lucide-react"
+import { UploadIcon } from "lucide-react"
 
 import { surfaceInsetClassName } from "@/components/business"
 import { cn } from "@/lib/utils"
@@ -47,7 +47,7 @@ export function SalesOrderCreateContractSection({
                             tabIndex={-1}
                             data-invalid={isInvalid || undefined}
                         >
-                            <FieldLabel htmlFor="contractId">
+                            <FieldLabel htmlFor="sales-orders-create-contract">
                                 有效合同
                                 <span className="text-destructive">*</span>
                             </FieldLabel>
@@ -66,20 +66,20 @@ export function SalesOrderCreateContractSection({
                                         }
                                         selectableOnly
                                         placeholder="搜索合同编号或客户"
-                                        emptyLabel="暂无可用合同，请点加号上传"
+                                        emptyLabel="暂无可用合同，请上传合同 PDF"
                                     />
                                 </div>
                                 <Button
                                     id="sales-orders-create-contract-upload"
                                     type="button"
                                     variant="outline"
-                                    size="icon"
                                     className="shrink-0"
                                     aria-label="上传合同 PDF"
                                     title="上传合同 PDF"
                                     onClick={() => onUploadClick()}
                                 >
-                                    <PlusIcon aria-hidden="true" />
+                                    <UploadIcon aria-hidden="true" />
+                                    上传合同
                                 </Button>
                             </div>
                             {isInvalid ? <FieldError errors={errors} /> : null}
@@ -101,7 +101,7 @@ export function SalesOrderCreateContractSection({
                         <div
                             className={cn(
                                 surfaceInsetClassName,
-                                "flex flex-wrap items-center gap-2 px-3 py-2.5 text-xs",
+                                "flex flex-wrap items-center gap-x-6 gap-y-2 px-3 py-3 text-sm",
                             )}
                         >
                             {contractRevisionLabel ? (
@@ -122,7 +122,7 @@ export function SalesOrderCreateContractSection({
                             ) : null}
                             {settlementEntity ? (
                                 <span className="text-muted-foreground">
-                                    · 结算{" "}
+                                    结算主体{" "}
                                     <span className="text-foreground">
                                         {settlementEntity}
                                     </span>
@@ -136,7 +136,7 @@ export function SalesOrderCreateContractSection({
                         </div>
                     ) : (
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                            选择合同后自动带出版本、客户与结算主体；无合同时点加号上传
+                            选择合同后自动带出客户、合同版本与结算主体；无可用合同时，可上传合同
                             PDF。
                         </p>
                     )

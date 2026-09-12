@@ -1,6 +1,6 @@
 "use client"
 
-import { LoaderCircleIcon, PlusIcon } from "lucide-react"
+import { LoaderCircleIcon } from "lucide-react"
 import { useSelector } from "@tanstack/react-form"
 
 import {
@@ -14,20 +14,36 @@ import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-
 
 const HEADER_VALIDATION_FIELDS = [
     { name: "contractId", label: "有效合同", targetId: "contractId" },
-    { name: "ownerName", label: "负责销售", targetId: "ownerName" },
-    { name: "welfareScene", label: "福利场景", targetId: "welfareScene" },
-    { name: "paymentTerms", label: "付款条件", targetId: "paymentTerms" },
+    {
+        name: "ownerName",
+        label: "负责销售",
+        targetId: "sales-orders-create-header-owner-name",
+    },
+    {
+        name: "welfareScene",
+        label: "福利场景",
+        targetId: "sales-orders-create-header-welfare-scene",
+    },
+    {
+        name: "paymentTerms",
+        label: "付款条件",
+        targetId: "sales-orders-create-header-payment-terms",
+    },
     {
         name: "fulfillmentDeadline",
         label: "履约期限",
-        targetId: "fulfillmentDeadline",
+        targetId: "sales-orders-create-header-fulfillment-deadline",
     },
     {
         name: "receivableDueDate",
         label: "应收到期日",
-        targetId: "receivableDueDate",
+        targetId: "sales-orders-create-header-receivable-due-date",
     },
-    { name: "taxRatePercent", label: "税率", targetId: "taxRatePercent" },
+    {
+        name: "taxRatePercent",
+        label: "税率",
+        targetId: "sales-orders-create-header-tax-rate",
+    },
     { name: "customerName", label: "客户", targetId: "contractId" },
     { name: "settlementEntity", label: "结算主体", targetId: "contractId" },
 ] as const
@@ -65,9 +81,9 @@ export function SalesOrderCreateTotalBar({
         <>
             {headerIssues.length > 0 ? (
                 <ValidationSummary
-                    className="border-t border-grid pt-4 2xl:col-span-2"
+                    className="border-t border-grid pt-4"
                     issues={headerIssues}
-                    title={`单据头共 ${headerIssues.length} 项待处理`}
+                    title={`基本信息共 ${headerIssues.length} 项待处理`}
                 />
             ) : null}
 
@@ -79,37 +95,39 @@ export function SalesOrderCreateTotalBar({
                     )
                     return (
                         <StickyTotalBar
-                            className="rounded-none border-0 border-t border-grid px-0 py-4 shadow-none 2xl:col-span-2"
+                            className="rounded-none border-0 border-t border-grid px-0 py-4 shadow-none [&>div>div.grid]:block"
                             items={[
                                 {
                                     id: "gross",
-                                    label: "含税金额",
+                                    label: "含税合计",
                                     value: (
                                         <MoneyValue
                                             value={totals.gross}
-                                            taxBasis="gross"
+                                            className="text-2xl font-semibold"
                                         />
                                     ),
-                                },
-                                {
-                                    id: "net",
-                                    label: "不含税金额",
-                                    value: (
-                                        <MoneyValue
-                                            value={totals.net}
-                                            taxBasis="net"
-                                        />
+                                    description: (
+                                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                                            <span>
+                                                不含税金额{" "}
+                                                <MoneyValue
+                                                    value={totals.net}
+                                                />
+                                            </span>
+                                            <span>
+                                                税额{" "}
+                                                <MoneyValue
+                                                    value={totals.tax}
+                                                />
+                                                （税率{" "}
+                                                {values.taxRatePercent || "0"}
+                                                %）
+                                            </span>
+                                        </div>
                                     ),
-                                },
-                                {
-                                    id: "tax",
-                                    label: "税额",
-                                    value: <MoneyValue value={totals.tax} />,
                                 },
                             ]}
-                            note={
-                                <>税率 {values.taxRatePercent || "0"}% 预估。</>
-                            }
+                            note="提交后进入审批"
                             actions={
                                 <form.AppForm>
                                     <form.SubmitButton
@@ -127,7 +145,7 @@ export function SalesOrderCreateTotalBar({
                                     <form.SubmitButton
                                         id="sales-orders-create-submit"
                                         data-testid="sales-order-submit"
-                                        label="提交"
+                                        label="提交审批"
                                         pendingLabel="正在提交…"
                                         disabled={isSubmitting}
                                         onClick={onSubmitClick}
@@ -138,13 +156,8 @@ export function SalesOrderCreateTotalBar({
                                                 aria-hidden="true"
                                                 className="animate-spin"
                                             />
-                                        ) : (
-                                            <PlusIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                        )}
-                                        {isSubmitting ? "处理中…" : "提交"}
+                                        ) : null}
+                                        {isSubmitting ? "处理中…" : "提交审批"}
                                     </form.SubmitButton>
                                 </form.AppForm>
                             }

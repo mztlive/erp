@@ -549,8 +549,8 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(page.getByLabel("履约责任")).toHaveCount(0)
         await expect(page.getByLabel("采购成本")).toHaveCount(0)
 
-        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-        const skuDialog = page.getByRole("dialog", { name: "更换销售商品" })
+        await page.locator("#sales-orders-create-line-items-add").click()
+        const skuDialog = page.getByRole("dialog", { name: "添加商品" })
         await expect(skuDialog).toBeVisible(VISIBLE)
         const skuSearch = skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格")
         await skuSearch.fill(SKU_KEYWORD)
@@ -562,6 +562,7 @@ test("[flow-14] 采购单审批驳回后轮次加一，不改单再通过才生�
         await expect(skuDialog).toBeHidden(VISIBLE)
         await expect(page.getByText(SKU_NAME).first()).toBeVisible(VISIBLE)
         await page.getByLabel("数量").fill(SALES_QTY)
+        await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate)
         await page.locator("#sales-orders-create-batch-due-date-apply").click()
         await expectToast(page, "已批量设置交期")

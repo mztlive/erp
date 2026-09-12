@@ -2,7 +2,9 @@
 
 import * as React from "react"
 
-import { Badge } from "@/components/ui/badge"
+import { PlusIcon, PackageSearchIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { QuantityValue } from "@/components/business"
 import { toast } from "@/components/ui/toast"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/components/sales-order-create-due-date-batch-bar"
@@ -16,6 +18,8 @@ import type { SalesLineProcurementResponsibility } from "@/features/sales-orders
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
+    procurementFetching?: boolean
+    procurementError?: boolean
 }
 
 type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
@@ -23,6 +27,8 @@ type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
 export function SalesOrderCreateLineItemsSection({
     form,
     procurementOwners,
+    procurementFetching = false,
+    procurementError = false,
 }: SalesOrderCreateLineItemsSectionProps) {
     const [picker, setPicker] = React.useState<SkuPickerState | null>(null)
 
@@ -60,74 +66,134 @@ export function SalesOrderCreateLineItemsSection({
     )
 
     return (
-        <section
-            id="sales-line-items-section"
-            className="min-w-0 border-b border-grid pb-6 2xl:col-span-2"
-        >
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                <div className="flex min-w-0 items-center gap-2">
-                    <h2 className="font-heading text-base font-semibold">
-                        销售明细
-                    </h2>
-                    <form.Subscribe selector={(state) => state.values.nature}>
-                        {(nature) => (
-                            <Badge variant="outline" className="font-normal">
-                                {nature === "card_voucher"
-                                    ? "卡券 · 仅一条"
-                                    : "实物/服务 · 可多行"}
-                            </Badge>
-                        )}
-                    </form.Subscribe>
-                </div>
+        <>
+            <section
+                id="sales-line-items-section"
+                tabIndex={-1}
+                className="min-w-0 space-y-4"
+                aria-labelledby="sales-create-lines-title"
+            >
                 <form.Subscribe
                     selector={(state) => ({
                         nature: state.values.nature,
-                        lineCount: state.values.lineItems.length,
+                        lines: state.values.lineItems,
                     })}
                 >
-                    {({ nature, lineCount }) =>
-                        nature === "physical_service" ? (
-                            <SalesOrderCreateDueDateBatchBar
-                                lineCount={lineCount}
-                                onApply={handleApplyDueDate}
-                            />
-                        ) : null
-                    }
+                    {({ nature, lines }) => (
+                        <>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-baseline gap-3">
+                                    <h2
+                                        id="sales-create-lines-title"
+                                        className="font-heading text-base font-semibold"
+                                    >
+                                        销售明细
+                                    </h2>
+                                    <span className="text-sm text-muted-foreground">
+                                        {nature === "card_voucher" ? (
+                                            "卡券 · 仅一条明细"
+                                        ) : (
+                                            <>
+                                                已添加{" "}
+                                                <QuantityValue
+                                                    unit=""
+                                                    value={String(
+                                                        lines.filter((line) =>
+                                                            line.sku.trim(),
+                                                        ).length,
+                                                    )}
+                                                />{" "}
+                                                项商品
+                                            </>
+                                        )}
+                                    </span>
+                                </div>
+                                {nature === "physical_service" &&
+                                lines.length > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <SalesOrderCreateDueDateBatchBar
+                                            lineCount={lines.length}
+                                            onApply={handleApplyDueDate}
+                                        />
+                                        <Button
+                                            id="sales-orders-create-line-items-add"
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() =>
+                                                setPicker({ mode: "add" })
+                                            }
+                                        >
+                                            <PlusIcon aria-hidden="true" />
+                                            添加商品
+                                        </Button>
+                                    </div>
+                                ) : null}
+                            </div>
+                            {nature === "physical_service" &&
+                            lines.length === 0 ? (
+                                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-6 py-10 text-center">
+                                    <PackageSearchIcon
+                                        className="size-6 text-muted-foreground"
+                                        aria-hidden="true"
+                                    />
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium">
+                                            尚未添加商品
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            从商品池选择商品后，填写数量、含税单价和承诺交付日。
+                                        </p>
+                                    </div>
+                                    <Button
+                                        id="sales-orders-create-line-items-add"
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() =>
+                                            setPicker({ mode: "add" })
+                                        }
+                                    >
+                                        <PlusIcon aria-hidden="true" />
+                                        添加商品
+                                    </Button>
+                                </div>
+                            ) : null}
+                        </>
+                    )}
                 </form.Subscribe>
-            </div>
-
-            <SalesOrderCreateLineItemTable
-                form={form}
-                procurementOwners={procurementOwners}
-                onPickSku={(rowIndex) =>
-                    setPicker({ mode: "replace", rowIndex })
-                }
-                onAddSkus={() => setPicker({ mode: "add" })}
-            />
-
-            <SellableSkuSelectDialog
-                open={picker != null}
-                onOpenChange={(open) => {
-                    if (!open) setPicker(null)
-                }}
-                multiple
-                excludeProductKind="VOUCHER"
-                title={picker?.mode === "replace" ? "更换销售商品" : "选择商品"}
-                onConfirm={handleConfirmPicks}
-            />
-
-            <div className="mt-5">
+                <SalesOrderCreateLineItemTable
+                    form={form}
+                    procurementOwners={procurementOwners}
+                    procurementFetching={procurementFetching}
+                    procurementError={procurementError}
+                    onPickSku={(rowIndex) =>
+                        setPicker({ mode: "replace", rowIndex })
+                    }
+                />
+                <SellableSkuSelectDialog
+                    open={picker != null}
+                    onOpenChange={(open) => {
+                        if (!open) setPicker(null)
+                    }}
+                    multiple={picker?.mode !== "replace"}
+                    excludeProductKind="VOUCHER"
+                    title={
+                        picker?.mode === "replace" ? "更换销售商品" : "添加商品"
+                    }
+                    onConfirm={handleConfirmPicks}
+                />
+            </section>
+            <section className="border-t border-grid pt-6">
                 <form.AppField name="remark">
                     {(field) => (
                         <field.TextareaField
                             id="sales-orders-create-remark"
-                            label="内部说明"
-                            placeholder="补充客户确认、交付或内部协同说明（可选）"
+                            label="内部说明（选填）"
+                            placeholder="补充客户确认、交付或内部协同说明"
                             rows={2}
                         />
                     )}
                 </form.AppField>
-            </div>
-        </section>
+            </section>
+        </>
     )
 }

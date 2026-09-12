@@ -290,8 +290,8 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
             "年节礼包",
             "年节礼包",
         )
-        await sales.page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click()
-        const skuDialog = sales.page.getByRole("dialog", { name: "更换销售商品" })
+        await sales.page.locator("#sales-orders-create-line-items-add").click()
+        const skuDialog = sales.page.getByRole("dialog", { name: "添加商品" })
         await expect(skuDialog).toBeVisible(VISIBLE)
         await skuDialog
             .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
@@ -308,6 +308,7 @@ test("[flow-09] 采购单未入库未付款时走采购变更单并生效", asyn
         await sales.page
             .locator('input[id^="sales-orders-create-line-"][id$="-quantity"]')
             .fill("2")
+        await sales.page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickDateById(sales.page, "sales-orders-create-batch-due-date")
         await sales.page
             .locator("#sales-orders-create-batch-due-date-apply")

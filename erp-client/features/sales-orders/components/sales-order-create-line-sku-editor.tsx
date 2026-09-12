@@ -32,7 +32,7 @@ export function SalesOrderCreateLineSkuEditor({
     if (!lineKey) return null
 
     return nature === "card_voucher" ? (
-        <div className="min-w-52">
+        <div className="min-w-60 max-w-md">
             <form.AppField name={nameFieldName}>{() => null}</form.AppField>
             <form.AppField name={`lineItems[${rowIndex}].sku`}>
                 {(field) => {
@@ -92,7 +92,7 @@ export function SalesOrderCreateLineSkuEditor({
             </form.AppField>
         </div>
     ) : (
-        <div className="min-w-52">
+        <div className="min-w-60 max-w-md">
             <form.AppField name={nameFieldName}>{() => null}</form.AppField>
             <form.AppField name={`lineItems[${rowIndex}].sku`}>
                 {(field) => {
@@ -108,7 +108,9 @@ export function SalesOrderCreateLineSkuEditor({
                                 id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-pick-sku`}
                                 type="button"
                                 variant="outline"
-                                className="w-full justify-start"
+                                // 商品名与规格可换行，避免标准按钮的固定高度覆盖内容高度。
+                                size={null}
+                                className="h-auto min-h-control w-full justify-start gap-3 px-3 py-2 text-left"
                                 aria-label={
                                     selectedLabel
                                         ? `更换销售项目 ${selectedLabel}`
@@ -120,9 +122,19 @@ export function SalesOrderCreateLineSkuEditor({
                                     data-icon="inline-start"
                                     aria-hidden="true"
                                 />
-                                <span className="min-w-0 truncate">
+                                <span className="min-w-0 whitespace-normal break-words">
                                     {selectedLabel || "选择商品"}
+                                    {line?.specification ? (
+                                        <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                                            {line.specification}
+                                        </span>
+                                    ) : null}
                                 </span>
+                                {selectedLabel ? (
+                                    <span className="ml-auto shrink-0 text-xs font-normal text-muted-foreground">
+                                        更换
+                                    </span>
+                                ) : null}
                             </Button>
                             {isInvalid ? <FieldError errors={errors} /> : null}
                         </Field>

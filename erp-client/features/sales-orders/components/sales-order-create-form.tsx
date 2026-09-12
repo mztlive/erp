@@ -11,9 +11,7 @@ import {
     DiscardConfirmDialog,
     PageHeader,
     PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
-import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
@@ -42,7 +40,6 @@ import { SalesOrderCreateContractSection } from "@/features/sales-orders/compone
 import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components/sales-order-create-header-fields"
 import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/components/sales-order-create-line-items-section"
 import { SalesOrderCreateTotalBar } from "@/features/sales-orders/components/sales-order-create-total-bar"
-import { SalesOrderCreateSummaryPanel } from "@/features/sales-orders/components/sales-order-create-summary-panel"
 import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
 import { SalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-order-submit-confirm-dialog"
 import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/components/voucher-sales-order-approval-area"
@@ -274,7 +271,11 @@ export function SalesOrderCreateForm({
                 nature === "card_voucher" ? "6.00" : "13.00",
             )
             form.setFieldValue("receivableDueDate", "")
-            form.setFieldValue("lineItems", [createEmptyLine(nature)])
+            form.setFieldValue("nature", nature)
+            form.setFieldValue(
+                "lineItems",
+                nature === "card_voucher" ? [createEmptyLine(nature)] : [],
+            )
             setDraftSaved(null)
         },
         [form, setDraftSaved],
@@ -306,63 +307,62 @@ export function SalesOrderCreateForm({
             ) : null}
 
             <form
+                noValidate
                 onSubmit={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
                     void form.handleSubmit()
                 }}
             >
-                <div className="grid min-w-0 items-start gap-y-6 2xl:grid-cols-[minmax(0,1fr)_17.5rem] 2xl:gap-x-8">
-                    <div className={cn(surfacePanelClassName, "contents")}>
-                        <section className="min-w-0 border-b border-grid pb-6">
-                            <div className="mb-4">
-                                <h2 className="font-heading text-base font-semibold">
-                                    单据头
-                                </h2>
-                            </div>
-
-                            <div className="space-y-5">
-                                <SalesOrderCreateContractSection
-                                    form={form}
-                                    initialCustomerId={initialCustomerId}
-                                    contractFetching={contractQuery.isFetching}
-                                    onContractChange={handleContractChange}
-                                    onUploadClick={() => setUploadOpen(true)}
-                                />
-                                <SalesOrderCreateHeaderFields
-                                    form={form}
-                                    natureLocked={natureLocked}
-                                    profilePending={profileQuery.isPending}
-                                    profileError={profileQuery.isError}
-                                    applyNature={applyNature}
-                                    onNatureChangeRequest={setPendingNature}
-                                />
-                            </div>
-                        </section>
-
-                        <SalesOrderCreateLineItemsSection
+                <div className="min-w-0 space-y-7">
+                    <section
+                        className="min-w-0 space-y-4 border-b border-grid pb-6"
+                        aria-labelledby="sales-create-contract-title"
+                    >
+                        <h2
+                            id="sales-create-contract-title"
+                            className="font-heading text-base font-semibold"
+                        >
+                            合同与客户
+                        </h2>
+                        <SalesOrderCreateContractSection
                             form={form}
-                            procurementOwners={
-                                procurementResponsibilityQuery.byRowKey
-                            }
+                            initialCustomerId={initialCustomerId}
+                            contractFetching={contractQuery.isFetching}
+                            onContractChange={handleContractChange}
+                            onUploadClick={() => setUploadOpen(true)}
                         />
-
-                        <SalesOrderCreateTotalBar
-                            form={form}
-                            isSubmitting={submission.isSubmitting}
-                            onSaveDraftClick={() => {
-                                submission.submitIntentRef.current =
-                                    "SAVE_DRAFT"
-                            }}
-                            onSubmitClick={() => {
-                                submission.submitIntentRef.current = "SUBMIT"
-                            }}
-                        />
-                    </div>
-
-                    <aside className="hidden border-l border-border pl-6 2xl:col-start-2 2xl:row-start-1 2xl:block">
-                        <SalesOrderCreateSummaryPanel form={form} />
-                    </aside>
+                    </section>
+                    <SalesOrderCreateHeaderFields
+                        form={form}
+                        natureLocked={natureLocked}
+                        profilePending={profileQuery.isPending}
+                        profileError={profileQuery.isError}
+                        applyNature={applyNature}
+                        onNatureChangeRequest={setPendingNature}
+                    />
+                    <SalesOrderCreateLineItemsSection
+                        form={form}
+                        procurementOwners={
+                            procurementResponsibilityQuery.byRowKey
+                        }
+                        procurementFetching={
+                            procurementResponsibilityQuery.isFetching
+                        }
+                        procurementError={
+                            procurementResponsibilityQuery.isError
+                        }
+                    />
+                    <SalesOrderCreateTotalBar
+                        form={form}
+                        isSubmitting={submission.isSubmitting}
+                        onSaveDraftClick={() => {
+                            submission.submitIntentRef.current = "SAVE_DRAFT"
+                        }}
+                        onSubmitClick={() => {
+                            submission.submitIntentRef.current = "SUBMIT"
+                        }}
+                    />
                 </div>
             </form>
 

@@ -13,6 +13,7 @@ import { BusinessTableFrame, ListToolbar } from "@/components/business/list"
 import {
     ListWorkSurface,
     ListWorkspaceViews,
+    ListWorkspaceFilterBar,
 } from "@/components/business/list-workspace"
 
 beforeAll(() => {
@@ -320,4 +321,112 @@ test("默认摘要列可以显示全部并恢复，不丢失记录或行身份",
     ).not.toBeNull()
     expect(container.querySelectorAll("tbody tr")).toHaveLength(1)
     expect(container.querySelectorAll("th")).toHaveLength(2)
+})
+
+function CustomerFilters({
+    resultStatus = "共 1 个客户",
+}: {
+    resultStatus?: string
+}) {
+    return (
+        <ListWorkspaceFilterBar
+            idPrefix="customer-result-filter"
+            formAriaLabel="客户查询"
+            onSubmit={() => undefined}
+            search={<input id="customer-result-search" />}
+            resultStatus={resultStatus}
+            chips={[{ key: "status", label: "状态：启用" }]}
+            onClearChip={() => undefined}
+            hasPendingChanges
+        />
+    )
+}
+
+test("筛选结果与列设置合并为一行，保留筛选提示且不重复总数", () => {
+    const { container, rerender } = render(
+        <ListWorkSurface
+            ariaLabel="客户"
+            toolbar={<CustomerFilters />}
+            table={<ResultsTable />}
+        />,
+    )
+    const toolbar = screen
+        .getByRole("button", { name: "列设置" })
+        .closest('[data-slot="table-toolbar"]') as HTMLElement
+    expect(within(toolbar).getByText("共 1 个客户")).toBeTruthy()
+    expect(within(toolbar).queryByText("共 1 条")).toBeNull()
+    expect(within(toolbar).getByText("条件已修改，待查询")).toBeTruthy()
+    expect(
+        within(toolbar).getByRole("button", { name: "移除状态：启用" }),
+    ).toBeTruthy()
+    expect(toolbar.closest("form")).toBeNull()
+    expect(
+        container.querySelectorAll('[data-slot="table-toolbar"]'),
+    ).toHaveLength(1)
+    expect(
+        within(screen.getByRole("form", { name: "客户查询" })).queryByRole(
+            "status",
+        ),
+    ).toBeNull()
+
+    rerender(<ListWorkSurface ariaLabel="客户" table={<ResultsTable />} />)
+    expect(screen.queryByText("共 1 个客户")).toBeNull()
+    expect(within(toolbar).getByText("共 1 条")).toBeTruthy()
+})
+
+test("合并结果行仍保留勾选数量，切换空态和卡片后保留查询状态", () => {
+    const { rerender } = render(
+        <ListWorkSurface
+            ariaLabel="客户"
+            toolbar={<CustomerFilters />}
+            table={
+                <DataTable
+                    id="selected-customers"
+                    data={[{ id: "one", name: "客户" }]}
+                    columns={[{ accessorKey: "name", header: "名称" }]}
+                    getRowId={(row) => row.id}
+                    rowCount={1}
+                    enableRowSelection
+                    defaultRowSelection={{ one: true }}
+                />
+            }
+        />,
+    )
+    expect(screen.getByText("已选 1 / 1 条")).toBeTruthy()
+    expect(screen.getByText("共 1 个客户")).toBeTruthy()
+    rerender(
+        <ListWorkSurface
+            ariaLabel="客户"
+            toolbar={<CustomerFilters resultStatus="查询未完成" />}
+            table={<div>暂无结果</div>}
+        />,
+    )
+    expect(screen.getByText("查询未完成")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "列设置" })).toBeNull()
+    expect(screen.queryByText("已选 1 / 1 条")).toBeNull()
+})
+
+test("共用筛选的多张表仍分别显示自己的数量与列设置", () => {
+    render(
+        <ListWorkSurface
+            ariaLabel="多表查询"
+            toolbar={<CustomerFilters />}
+            table={
+                <>
+                    <ResultsTable id="first-filtered-table" />
+                    <ResultsTable id="second-filtered-table" />
+                </>
+            }
+        />,
+    )
+    for (const id of ["first-filtered-table", "second-filtered-table"]) {
+        const toolbar = document
+            .getElementById(id)!
+            .querySelector('[data-slot="table-toolbar"]') as HTMLElement
+        expect(within(toolbar).getByText("共 1 条")).toBeTruthy()
+        expect(
+            within(toolbar).getByRole("button", { name: "列设置" }),
+        ).toBeTruthy()
+    }
+    expect(screen.getAllByText("共 1 个客户")).toHaveLength(1)
 })

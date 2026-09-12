@@ -55,7 +55,9 @@ export function useSalesOrderCreateDefaults({
             lineItems:
                 initialDraft && initialDraft.lineItems.length > 0
                     ? initialDraft.lineItems
-                    : [createEmptyLine(nature)],
+                    : nature === "card_voucher"
+                      ? [createEmptyLine(nature)]
+                      : [],
         } satisfies CreateSalesOrderFormValues
         // initialDraft 由外层等查询完成后才挂载本组件，渲染期间引用稳定，可以放心入依赖数组。
     }, [

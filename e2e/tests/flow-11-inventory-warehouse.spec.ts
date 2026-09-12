@@ -498,8 +498,8 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
             page.locator("#sales-orders-create-header-payment-terms"),
             "货到 15 天",
         );
-        await page.locator('[id^="sales-orders-create-line-"][id$="-pick-sku"]').click();
-        const skuDialog = page.getByRole("dialog", { name: "更换销售商品" });
+        await page.locator("#sales-orders-create-line-items-add").click();
+        const skuDialog = page.getByRole("dialog", { name: "添加商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await skuDialog
             .locator("#master-data-list-sellable-list-toolbar-search-input")
@@ -516,6 +516,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT });
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByLabel("数量").fill(SALE_QTY);
+        await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
             page,
             page.locator("#sales-orders-create-batch-due-date"),
