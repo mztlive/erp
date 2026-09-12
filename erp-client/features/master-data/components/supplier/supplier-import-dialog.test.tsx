@@ -11,10 +11,8 @@ import { SupplierImportDialog } from "./supplier-import-dialog"
 
 const mocks = vi.hoisted(() => ({
     post: vi.fn(),
-    push: vi.fn(),
     read: vi.fn(),
 }))
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock("@/lib/api", () => ({ apiPost: mocks.post }))
 vi.mock("@/features/master-data/lib/supplier-import", () => ({
     readSupplierFile: mocks.read,
@@ -25,15 +23,16 @@ afterEach(() => {
 })
 
 describe("supplier background import", () => {
-    it("preserves payload and request identity after an unknown response, then opens background tasks", async () => {
+    it("preserves payload and request identity after an unknown response, then notifies parent", async () => {
         const rows = [
             { row_number: 2, cells: ["", "示例供应商"], parse_errors: [] },
         ]
         mocks.read.mockResolvedValue(rows)
         mocks.post
             .mockRejectedValueOnce(new Error("连接中断"))
-            .mockResolvedValueOnce({ id: "job-1" })
+            .mockResolvedValueOnce({ id: "job-1", total_count: 1 })
         const close = vi.fn()
+        const submitted = vi.fn()
         render(
             <QueryClientProvider
                 client={
@@ -42,7 +41,7 @@ describe("supplier background import", () => {
                     })
                 }
             >
-                <SupplierImportDialog onClose={close} />
+                <SupplierImportDialog onClose={close} onSubmitted={submitted} />
             </QueryClientProvider>,
         )
         fireEvent.change(screen.getByLabelText("选择供应商 Excel 文件"), {
@@ -58,8 +57,9 @@ describe("supplier background import", () => {
         ).toBe(true)
         fireEvent.click(screen.getByText("重试核对"))
         await waitFor(() =>
-            expect(mocks.push).toHaveBeenCalledWith(
-                "/governance/background-jobs",
+            expect(submitted).toHaveBeenCalledWith(
+                { id: "job-1", total_count: 1 },
+                "供应商.xlsx",
             ),
         )
         expect(mocks.post.mock.calls[0][0]).toBe(

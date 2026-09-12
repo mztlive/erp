@@ -16,6 +16,7 @@ import {
     listWorkspaceEmptyStateClassName,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { SupplierListToolbar } from "@/features/master-data/components/list/supplier-list-toolbar"
@@ -24,6 +25,12 @@ import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-ch
 import { useSupplierListColumns } from "@/features/master-data/hooks/use-supplier-list-columns"
 import { useSupplierListState } from "@/features/master-data/hooks/use-supplier-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import type { BackgroundJobView } from "@/features/background-jobs/api"
+import { launchNavDelivery } from "@/lib/nav-delivery"
+
+/** 导入动作按钮与投递落点：动作 id 同时是动画起点。 */
+const IMPORT_ACTION_ID = "master-data-suppliers-list-import"
+const BACKGROUND_TASKS_HREF = "/governance/background-jobs"
 
 export function SuppliersListPage() {
     const router = useRouter()
@@ -53,6 +60,23 @@ export function SuppliersListPage() {
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredSupplierFilters
     const listLoadFailed = state.listQuery.isError || !state.listQuery.data
+    // 导入只做任务投递：本页不留进度，用曲线把任务飞到侧栏「后台任务」，结果由 toast 交代。
+    const onImportSubmitted = (job: BackgroundJobView, fileName: string) => {
+        launchNavDelivery(
+            "background-task",
+            document.getElementById(IMPORT_ACTION_ID),
+        )
+        toast.add({
+            title: "导入任务已提交",
+            description: `「${fileName || "所选文件"}」共 ${job.total_count} 行，正在后台逐行导入，进度与结果在「后台任务」查看。`,
+            type: "success",
+            timeout: 6000,
+            actionProps: {
+                children: "查看任务",
+                onClick: () => router.push(BACKGROUND_TASKS_HREF),
+            },
+        })
+    }
 
     return (
         <ListPageFrame
@@ -61,7 +85,7 @@ export function SuppliersListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
-                    id: "master-data-suppliers-list-import",
+                    id: IMPORT_ACTION_ID,
                     actionKey: "import",
                     label: "导入",
                     icon: UploadIcon,
@@ -224,7 +248,10 @@ export function SuppliersListPage() {
                 }
             />
             {importOpen && (
-                <SupplierImportDialog onClose={() => setImportOpen(false)} />
+                <SupplierImportDialog
+                    onClose={() => setImportOpen(false)}
+                    onSubmitted={onImportSubmitted}
+                />
             )}
         </ListPageFrame>
     )

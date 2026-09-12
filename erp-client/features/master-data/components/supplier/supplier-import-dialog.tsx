@@ -1,6 +1,5 @@
 "use client"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { backgroundJobKeys } from "@/features/background-jobs/queries"
 import type { BackgroundJobView } from "@/features/background-jobs/api"
 import Link from "next/link"
@@ -22,10 +21,15 @@ import {
 } from "@/features/master-data/lib/supplier-import"
 
 /** 读取模板并提交后台任务；响应未知时保留原内容和提交身份供核对。 */
-export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
+export const SupplierImportDialog = ({
+    onClose,
+    onSubmitted,
+}: {
+    onClose: () => void
+    onSubmitted: (job: BackgroundJobView, fileName: string) => void
+}) => {
     const [rows, setRows] = useState<SupplierImportRow[]>([])
     const [requestId, setRequestId] = useState("")
-    const router = useRouter()
     const [fileName, setFileName] = useState("")
     const [error, setError] = useState("")
     const [reading, setReading] = useState(false)
@@ -58,14 +62,14 @@ export const SupplierImportDialog = ({ onClose }: { onClose: () => void }) => {
             setReading(false)
         }
     }
-    // 仅登记任务；登记成功后进入统一后台任务页。
+    // 仅登记任务；投递动画与去向由调用页决定。
     const submit = async () => {
         setError("")
         try {
-            await mutation.mutateAsync(rows)
+            const job = await mutation.mutateAsync(rows)
             void client.invalidateQueries({ queryKey: backgroundJobKeys.all })
+            onSubmitted(job, fileName)
             onClose()
-            router.push("/governance/background-jobs")
         } catch (err) {
             setUncertain(
                 !(
