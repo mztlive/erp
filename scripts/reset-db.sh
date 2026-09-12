@@ -169,7 +169,7 @@ if [[ "${RESET_ONLY}" == "1" ]]; then
     export ERP_RESET_E2E=1
     echo "完成模式: 只清库（E2E 快路径：保留已发布审批定义，web-api 保持运行）"
 else
-    echo "完成模式: 清库 + 岗位账号 + 审批定义 + 基础种子（web-api 保持运行）"
+    echo "完成模式: 清库 + 岗位账号 + 审批定义 + 基础种子"
 fi
 if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
     echo "保留项: 账号/RBAC、source_systems、file_assets、审计、计数器"
@@ -231,4 +231,8 @@ node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
 echo "-- 填充目录种子：供应商收款账户 + 商品 + 公司商品池 --"
 node "${SCRIPT_DIR}/seed-dev-catalog.mjs"
 
-echo "== 重置与种子填充完成：web-api 已运行，可直接使用 =="
+if [[ -n "${ERP_WEB_API_OWNED_PID_FILE:-}" ]]; then
+    echo "== 重置与种子填充完成：由调用方关闭本次启动的 web-api =="
+else
+    echo "== 重置与种子填充完成：web-api 已运行，可直接使用 =="
+fi

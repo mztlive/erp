@@ -10,7 +10,7 @@
 #   - 登记示例公司主体及别名，校验采购/系统管理员的公司查询权限；
 #   - 供应商样例覆盖自然周/月/季/半年/年结、多进项税率及合同有效期状态；
 #   - 未核实与已到期合同样例不生成供给，不影响正常商品开单；
-#   - 执行完成后保持 web-api 运行。
+#   - 退出时关闭本次启动的 web-api，保留已插入的种子数据。
 #
 # 岗位账号（密码均为 123456）：
 #   admin        超级管理员
@@ -60,6 +60,44 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     exit 2
 }
 
+# 私有 PID 文件只由本次 restart-backend.sh 写入，避免误用共享日志中的旧 PID。
+PROCESS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/erp-prepare-dev.XXXXXX")"
+OWNED_PID_FILE="${PROCESS_DIR}/web-api.pid"
+
+# 正常完成、种子失败或收到退出信号时清理本次服务，并保留原失败退出码。
+cleanup() {
+    local status=$? service_pid="" current_pid="" attempt
+    trap - EXIT INT TERM
+    if [[ -s "${OWNED_PID_FILE}" ]]; then
+        service_pid="$(cat "${OWNED_PID_FILE}")"
+        if [[ "${service_pid}" =~ ^[0-9]+$ ]] && (( service_pid > 1 )); then
+            echo "停止本次准备启动的 web-api: ${service_pid}"
+            kill "${service_pid}" 2>/dev/null || true
+            for ((attempt = 0; attempt < 15; attempt++)); do
+                kill -0 "${service_pid}" 2>/dev/null || break
+                sleep 1
+            done
+            if kill -0 "${service_pid}" 2>/dev/null; then
+                kill -9 "${service_pid}" 2>/dev/null || true
+            fi
+            if [[ -f "${SCRIPT_DIR}/../logs/web-api.pid" ]]; then
+                current_pid="$(cat "${SCRIPT_DIR}/../logs/web-api.pid")"
+                if [[ "${current_pid}" == "${service_pid}" ]]; then
+                    rm -f "${SCRIPT_DIR}/../logs/web-api.pid"
+                fi
+            fi
+        fi
+    fi
+    rm -rf "${PROCESS_DIR}"
+    if (( status == 0 )); then
+        echo "== 准备完成：种子数据已插入，本次启动的 web-api 已关闭 =="
+    fi
+    exit "${status}"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 echo "== 开发开单准备 =="
-E2E_RESET=1 ERP_RESET_INCLUDE_CATALOG=1 bash "${SCRIPT_DIR}/reset-db.sh"
-echo "== 准备完成：web-api 已运行，可用上列账号登录并直接开单 =="
+E2E_RESET=1 ERP_RESET_ONLY=0 ERP_RESET_INCLUDE_CATALOG=1 \
+    ERP_WEB_API_OWNED_PID_FILE="${OWNED_PID_FILE}" bash "${SCRIPT_DIR}/reset-db.sh"

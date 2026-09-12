@@ -3,7 +3,8 @@ export const COMPANY_PARTY = {
   partyNo: "FSY",
   legalName: "北京福尚云科技有限公司",
   shortName: "福尚云",
-  aliases: ["福尚云开发示例"],
+  // 开发环境将供应商模板中的主体简称映射到同一示例公司。
+  aliases: ["福尚云开发示例", "朱太帅", "科技"],
   unifiedCreditCode: "91110108MA01FSY01X",
 };
 

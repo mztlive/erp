@@ -582,9 +582,11 @@ async function verifySellable(token, spec) {
 async function verifyCompanyAccess(company) {
   for (const spec of [ACCOUNTS.procurement, ACCOUNTS.sysadmin]) {
     const token = await loginAccount(spec.account, spec.password);
-    const list = await call("GET", `/admin/companies?keyword=${encodeURIComponent(COMPANY_PARTY.aliases[0])}&status=active&page=1&page_size=100`, { token });
-    if (!(list.items ?? []).some((row) => row.id === company.id)) {
-      throw new Error(`${spec.label}无法按别名选择开发公司主体`);
+    for (const alias of COMPANY_PARTY.aliases) {
+      const list = await call("GET", `/admin/companies?keyword=${encodeURIComponent(alias)}&status=active&page=1&page_size=100`, { token });
+      if (!(list.items ?? []).some((row) => row.id === company.id && row.aliases?.includes(alias))) {
+        throw new Error(`${spec.label}无法按别名“${alias}”选择开发公司主体`);
+      }
     }
     const detail = await call("GET", `/admin/companies/${encodeURIComponent(company.id)}`, { token });
     if (detail.id !== company.id) throw new Error(`${spec.label}公司主体详情回显不一致`);

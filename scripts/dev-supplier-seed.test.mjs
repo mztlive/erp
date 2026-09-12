@@ -28,7 +28,7 @@ test("公司首次通过专用接口创建；包含别名、不混入旧接口�
   assert.equal(result.id, company.id);
   const write = calls.find((call) => call.method === "POST");
   assert.equal(write.path, "/admin/companies");
-  assert.deepEqual(write.body.aliases, COMPANY_PARTY.aliases);
+  assert.deepEqual(write.body.aliases, ["福尚云开发示例", "朱太帅", "科技"]);
   assert.equal(write.body.change_reason, undefined);
   assert.equal(write.body.version, null);
 });
@@ -44,6 +44,29 @@ test("公司重跑只回读；补种子别名时保留现有别名和版本", as
     assert.deepEqual(options.body.aliases, ["人工别名", ...COMPANY_PARTY.aliases]);
     return company;
   }, "token");
+});
+
+test("旧种子公司补齐模板主体别名后重跑零写入，保留原身份和人工资料", async () => {
+  let saved = { ...company, short_name: "人工简称", aliases: ["福尚云开发示例", "人工别名"] };
+  let writes = 0;
+  const call = async (method, path, options) => {
+    if (method === "GET") return { items: [saved] };
+    assert.equal(method, "PUT");
+    assert.equal(path, `/admin/companies/${company.id}`);
+    assert.deepEqual(options.body, {
+      party_no: company.party_no, version: company.version,
+      legal_name: company.legal_name, short_name: "人工简称",
+      aliases: ["福尚云开发示例", "人工别名", "朱太帅", "科技"],
+      unified_credit_code: company.unified_credit_code, status: "active",
+    });
+    writes++;
+    saved = { ...saved, ...options.body, version: saved.version + 1 };
+    return saved;
+  };
+  const first = await ensureCompanyParty(call, "token");
+  assert.equal(first.id, company.id);
+  assert.deepEqual(await ensureCompanyParty(call, "token"), first);
+  assert.equal(writes, 1);
 });
 
 test("旧普通主体、停用公司或资料冲突均停止，不创建重复身份", async () => {

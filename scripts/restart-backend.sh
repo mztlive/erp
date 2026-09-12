@@ -2,6 +2,7 @@
 # 启动（或重启）web-api 并等待健康。
 # 用法: bash scripts/restart-backend.sh [--build]
 #   --build  先执行 cargo build -p web-api（后端代码变更后使用）
+#   ERP_WEB_API_OWNED_PID_FILE 由调用方提供私有 PID 文件，并负责退出时关闭服务。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,12 +41,16 @@ fi
 
 echo "启动 web-api: ${WEB_API_BIN}"
 echo "后端日志: ${E2E_DIR}/logs/web-api.log"
-# python fork 完全脱离调用链（父进程立即退出，服务被 launchd 收养），
-# 并在子进程中 setsid 脱离会话/进程组（macOS 无 setsid 命令）：
-#   - 调用方进程组被终止时不会连带杀掉服务；
-#   - 脚本 stdout 为管道时，bash 退出不会因等待后台子进程而挂住。
 rm -f "${E2E_DIR}/logs/web-api.pid"
-(cd "${BACKEND_DIR}" && python3 -c "
+if [[ -n "${ERP_WEB_API_OWNED_PID_FILE:-}" ]]; then
+    # 受调用方管理的服务不脱离进程组；启动后立即登记 PID，健康检查失败也可清理。
+    (cd "${BACKEND_DIR}" && exec "${WEB_API_BIN}") > "${E2E_DIR}/logs/web-api.log" 2>&1 < /dev/null &
+    service_pid=$!
+    printf '%s\n' "${service_pid}" > "${ERP_WEB_API_OWNED_PID_FILE}"
+    printf '%s\n' "${service_pid}" > "${E2E_DIR}/logs/web-api.pid"
+else
+    # 默认模式通过 fork + setsid 脱离调用链，脚本结束后服务继续运行。
+    (cd "${BACKEND_DIR}" && python3 -c "
 import os, sys
 if os.fork() > 0:
     os._exit(0)
@@ -54,6 +59,7 @@ with open(sys.argv[2], 'w') as pid_file:
     pid_file.write(str(os.getpid()))
 os.execv(sys.argv[1], [sys.argv[1]])
 " "${WEB_API_BIN}" "${E2E_DIR}/logs/web-api.pid" > "${E2E_DIR}/logs/web-api.log" 2>&1 < /dev/null)
+fi
 
 started=${SECONDS}
 next_progress=0
