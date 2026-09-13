@@ -101,6 +101,8 @@ pub(super) fn project(
     export: bool,
     scope_label: &str,
 ) -> Result<ProfitLossView> {
+    let has_period_orders = !orders.is_empty();
+    let (user_options, org_options) = super::attribution::options(&orders);
     let matched: Vec<_> = orders.into_iter().filter(|o| matches_query(o, query)).collect();
     let coverage = summarize(&matched)?.coverage(matched.len());
     let selected: Vec<_> = matched
@@ -110,7 +112,20 @@ pub(super) fn project(
     let summary = summarize(&selected)?;
     let trend = trend(&selected)?;
     let rows = rows(&selected, query, export)?;
-    assemble(query, as_of, scope_label, coverage, summary, trend, rows)
+    let mut view = assemble(query, as_of, scope_label, coverage, summary, trend, rows)?;
+    if view.rows.total == 0 {
+        view.empty_reason = Some(
+            if has_period_orders {
+                "filtered_empty"
+            } else {
+                "no_data"
+            }
+            .into(),
+        );
+    }
+    view.attribution_user_options = user_options;
+    view.attribution_org_options = org_options;
+    Ok(view)
 }
 /// 从同一订单集合计算所有总额。
 fn summarize(orders: &[OrderResult]) -> Result<Summary> {
@@ -155,7 +170,8 @@ fn matches_query(order: &OrderResult, query: &ProfitLossQuery) -> bool {
         order.row.customer_label.as_deref().unwrap_or("")
     )
     .to_lowercase();
-    text.contains(&keyword)
+    super::attribution::matches(order, query)
+        && text.contains(&keyword)
         && query
             .benefit_scenario
             .as_ref()
@@ -173,19 +189,43 @@ fn group_rows(orders: &[OrderResult], dimension: &str) -> Result<Vec<ProfitLossR
     }
     let mut groups: BTreeMap<String, Vec<&OrderResult>> = BTreeMap::new();
     for order in orders {
-        let key = if dimension == "customer" {
-            order.row.customer_id.clone().unwrap_or_default()
-        } else if order.row.benefit_scenarios.is_empty() {
-            "未标注".into()
-        } else {
-            order.row.benefit_scenarios.join("、")
-        };
+        let key = group_key(&order.row, dimension);
         groups.entry(key).or_default().push(order);
     }
     groups
         .into_iter()
         .map(|(key, values)| group_row(&key, &values, dimension))
         .collect()
+}
+/// 人员和组织使用冻结身份分组；缺失快照单列，不用当前负责人回填。
+fn group_key(row: &ProfitLossRow, dimension: &str) -> String {
+    match dimension {
+        "customer" => row.customer_id.clone().unwrap_or_default(),
+        "attribution_user" => row.attribution_user_id.clone().unwrap_or_default(),
+        "attribution_org" => row.attribution_org_unit_id.clone().unwrap_or_default(),
+        _ if row.benefit_scenarios.is_empty() => "未标注".into(),
+        _ => row.benefit_scenarios.join("、"),
+    }
+}
+
+/// 名称只用于展示；同一身份存在不同历史名称时稳定列出，不依赖返回顺序。
+fn group_label(key: &str, values: &[&OrderResult], dimension: &str) -> String {
+    if dimension == "scenario" {
+        return key.into();
+    }
+    let names = values
+        .iter()
+        .filter_map(|order| match dimension {
+            "customer" => order.row.customer_label.as_deref(),
+            "attribution_user" => order.row.attribution_user_name.as_deref(),
+            "attribution_org" => order.row.attribution_org_unit_name.as_deref(),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    if names.is_empty() {
+        return "未知归属".into();
+    }
+    names.into_iter().collect::<Vec<_>>().join("／")
 }
 /// 分组完整性要求组内每单完整；混合组不输出完整利润。
 fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<ProfitLossRow> {
@@ -197,15 +237,22 @@ fn group_row(key: &str, values: &[&OrderResult], dimension: &str) -> Result<Prof
     row.row_id = format!("{dimension}:{key}");
     row.object_type = dimension.into();
     row.object_id = (dimension == "customer").then(|| key.into());
-    row.identity_label = if dimension == "customer" {
-        row.customer_label.clone().unwrap_or_else(|| "客户".into())
-    } else {
-        key.into()
-    };
+    row.identity_label = group_label(key, values, dimension);
     if dimension != "customer" {
         row.customer_id = None;
         row.customer_label = None;
     }
+    // 聚合行不得沿用首单其他人员或组织字段，避免把整组误标为首单归属。
+    row.attribution_user_id = (dimension == "attribution_user" && !key.is_empty()).then(|| key.into());
+    row.attribution_user_name = row
+        .attribution_user_id
+        .as_ref()
+        .map(|_| row.identity_label.clone());
+    row.attribution_org_unit_id = (dimension == "attribution_org" && !key.is_empty()).then(|| key.into());
+    row.attribution_org_unit_name = row
+        .attribution_org_unit_id
+        .as_ref()
+        .map(|_| row.identity_label.clone());
     group_totals(&mut row, &summary, values.len());
     group_sources(&mut row, values);
     Ok(row)
@@ -318,6 +365,12 @@ fn assemble(
     rows: Rows,
 ) -> Result<ProfitLossView> {
     Ok(ProfitLossView {
+        empty_reason: None,
+        scope_summary: scope_label.into(),
+        as_of: as_of.into(),
+        policy_version: 0,
+        organization_version: 0,
+        scope_version: String::new(),
         scope: scope(scope_label),
         period: period(q),
         business_type: "GOODS_SERVICE".into(),
@@ -336,6 +389,9 @@ fn assemble(
         rows,
         filter_summary: filter_summary(q),
         excluded_note: EXCLUDED.into(),
+        ownership_basis: "sales_order_first_effective_attribution".into(),
+        attribution_user_options: vec![],
+        attribution_org_options: vec![],
     })
 }
 const FORMULA: &str = "实际经营盈亏 = 不含税销售收入 − 实际采购成本 − 实际履约费用 + 成本冲减。利润和利润率仅汇总成本完整订单；收入、已登记成本同时展示所选订单全量。";
@@ -431,6 +487,8 @@ fn filter_summary(q: &ProfitLossQuery) -> String {
     let dimension = match q.dimension.as_str() {
         "customer" => "客户",
         "scenario" => "福利场景组合",
+        "attribution_user" => "首次生效归属销售",
+        "attribution_org" => "首次生效归属组织",
         _ => "销售单",
     };
     let types = cost_types()
@@ -465,5 +523,14 @@ fn append_filters(parts: &mut Vec<String>, q: &ProfitLossQuery, types: &str) {
     }
     if q.sales_order_id.is_some() {
         parts.push("已限定销售单".into());
+    }
+    if let Some(ids) = &q.attribution_user_ids {
+        parts.push(format!("历史归属销售：{}", ids.as_slice().join("、")));
+    }
+    if let Some(ids) = &q.attribution_org_unit_ids {
+        parts.push(format!("历史组织路径：{}", ids.as_slice().join("、")));
+    }
+    if let Some(group) = &q.attribution_group {
+        parts.push(format!("历史分组下钻：{group}"));
     }
 }

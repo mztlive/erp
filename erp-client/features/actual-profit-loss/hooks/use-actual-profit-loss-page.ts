@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { ApiErrorException } from "@/lib/api/errors"
 
 import { getErrorMessage } from "@/lib/api/errors"
 import { buildProfitLossColumns } from "@/features/actual-profit-loss/hooks/columns"
@@ -38,7 +40,19 @@ export function useActualProfitLossPage() {
         urlState.analysisReady,
     )
     const exportMutation = useStartProfitLossExportMutation()
-    const data = viewQuery.data
+    const { patchUrl } = urlState
+    const setPagination = React.useCallback(
+        (next: import("@tanstack/react-table").PaginationState) => {
+            patchUrl({
+                page: next.pageIndex > 0 ? String(next.pageIndex + 1) : null,
+                pageSize: next.pageSize === 20 ? null : String(next.pageSize),
+                scopeVersion:
+                    next.pageIndex > 0 ? viewQuery.data?.scopeVersion : null,
+            })
+        },
+        [patchUrl, viewQuery.data?.scopeVersion],
+    )
+    const queryClient = useQueryClient()
 
     const [costDetailRow, setCostDetailRow] =
         React.useState<ProfitLossRow | null>(null)
@@ -53,11 +67,64 @@ export function useActualProfitLossPage() {
         null,
     )
     const [refreshing, setRefreshing] = React.useState(false)
+    const [scopeError, setScopeError] = React.useState<unknown>(null)
+    const scopeBlockedAt = React.useRef(0)
+    const costIds = costDetailRow?.costEntryIds ?? []
+    const costEntriesQuery = useCostEntriesForRowQuery(
+        costIds,
+        viewQuery.data?.scopeVersion,
+    )
+    const detectedScopeError = [
+        viewQuery.error,
+        costEntriesQuery.error,
+        exportMutation.error,
+    ].find(
+        (error) =>
+            error instanceof ApiErrorException &&
+            [401, 403, 409].includes(error.status ?? 0),
+    )
+    const scopeFailed = Boolean(scopeError || detectedScopeError)
+    const data = scopeFailed ? undefined : viewQuery.data
+    const lastScopeVersion = React.useRef<string | undefined>(undefined)
+    React.useEffect(() => {
+        const changed =
+            lastScopeVersion.current != null &&
+            lastScopeVersion.current !== data?.scopeVersion
+        lastScopeVersion.current = data?.scopeVersion
+        if (!scopeFailed && !changed) return
+        if (detectedScopeError) {
+            scopeBlockedAt.current = Date.now()
+            setScopeError(detectedScopeError)
+        }
+        setCostDetailRow(null)
+        setSelectedCostEntryId(null)
+        setExportJob(null)
+        queryClient.removeQueries({
+            queryKey: ["actual-profit-loss"],
+            type: "inactive",
+        })
+    }, [scopeFailed, detectedScopeError, data?.scopeVersion, queryClient])
+    React.useEffect(() => {
+        if (
+            scopeError &&
+            !detectedScopeError &&
+            viewQuery.isSuccess &&
+            !viewQuery.isFetching &&
+            viewQuery.dataUpdatedAt > scopeBlockedAt.current
+        ) {
+            setScopeError(null)
+        }
+    }, [
+        scopeError,
+        detectedScopeError,
+        viewQuery.isSuccess,
+        viewQuery.isFetching,
+        viewQuery.dataUpdatedAt,
+    ])
+
     const rowFocusRef = React.useRef<Map<string, HTMLElement | null>>(new Map())
     const restoreFocusIdRef = React.useRef<string | null>(null)
 
-    const costIds = costDetailRow?.costEntryIds ?? []
-    const costEntriesQuery = useCostEntriesForRowQuery(costIds)
     const filterPresentation = useProfitLossFilterPresentation({
         data,
         qParam: urlState.qParam,
@@ -66,6 +133,9 @@ export function useActualProfitLossPage() {
         salesOrderId: urlState.salesOrderId,
         benefitScenario: urlState.benefitScenario,
         costTypes: urlState.costTypes,
+        attributionUserIds: urlState.attributionUserIds,
+        attributionOrgUnitIds: urlState.attributionOrgUnitIds,
+        attributionGroup: urlState.attributionGroup,
     })
 
     React.useEffect(() => {
@@ -94,9 +164,25 @@ export function useActualProfitLossPage() {
         setCostDetailRow(row)
         setSelectedCostEntryId(row.costEntryIds[0] ?? null)
     }, [])
+    /** 在原期间和筛选交集内精确下钻该历史分组，重置分页并重新授权。 */
+    const openHistoricalGroup = React.useCallback(
+        (row: ProfitLossRow) => {
+            patchUrl({
+                dimension: "sales_order",
+                attributionGroup: row.rowId,
+                page: null,
+            })
+        },
+        [patchUrl],
+    )
     const columns = React.useMemo(
-        () => buildProfitLossColumns({ openCostDetail, rowFocusRef }),
-        [openCostDetail],
+        () =>
+            buildProfitLossColumns({
+                openCostDetail,
+                openHistoricalGroup,
+                rowFocusRef,
+            }),
+        [openCostDetail, openHistoricalGroup],
     )
 
     const freshnessUi = data
@@ -115,6 +201,14 @@ export function useActualProfitLossPage() {
     }, [costEntriesQuery.data, selectedCostEntryId])
 
     async function handleRefresh() {
+        setScopeError(null)
+        exportMutation.reset()
+        setCostDetailRow(null)
+        setSelectedCostEntryId(null)
+        if (urlState.query?.scopeVersion) {
+            urlState.patchUrl({ page: null })
+            return
+        }
         setRefreshing(true)
         setRefreshFailed(null)
         try {
@@ -137,7 +231,7 @@ export function useActualProfitLossPage() {
         setExportFailed(null)
         try {
             const job = await exportMutation.mutateAsync({
-                query: urlState.query,
+                query: { ...urlState.query, scopeVersion: data.scopeVersion },
             })
             setExportJob(job)
 
@@ -165,9 +259,11 @@ export function useActualProfitLossPage() {
         exportMutation,
         costEntriesQuery,
         data,
+        scopeError: scopeError || detectedScopeError,
         ...urlState,
+        setPagination,
         ...filterPresentation,
-        costDetailRow,
+        costDetailRow: scopeFailed ? null : costDetailRow,
         setCostDetailRow,
         selectedCostEntryId,
         setSelectedCostEntryId,

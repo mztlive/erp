@@ -17,9 +17,10 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
  */
 export function buildProfitLossColumns(options: {
     openCostDetail: (row: ProfitLossRow) => void
+    openHistoricalGroup: (row: ProfitLossRow) => void
     rowFocusRef: React.MutableRefObject<Map<string, HTMLElement | null>>
 }): ColumnDef<ProfitLossRow>[] {
-    const { openCostDetail, rowFocusRef } = options
+    const { openCostDetail, openHistoricalGroup, rowFocusRef } = options
     return [
         {
             id: "identityLabel",
@@ -45,6 +46,17 @@ export function buildProfitLossColumns(options: {
                             >
                                 {r.identityLabel}
                             </Link>
+                        ) : ["attribution_user", "attribution_org"].includes(
+                              r.objectType,
+                          ) ? (
+                            <button
+                                id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-group`}
+                                type="button"
+                                className="text-left font-medium text-primary underline-offset-2 hover:underline"
+                                onClick={() => openHistoricalGroup(r)}
+                            >
+                                {r.identityLabel}
+                            </button>
                         ) : (
                             <span className="font-medium">
                                 {r.identityLabel}

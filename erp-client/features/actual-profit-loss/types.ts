@@ -4,7 +4,12 @@ import type { StatusTone } from "@/components/ui/status-badge"
 
 export type ProfitLossCoverage = "covered" | "uncovered" | "all"
 
-export type ProfitLossDimension = "sales_order" | "customer" | "scenario"
+export type ProfitLossDimension =
+    | "sales_order"
+    | "customer"
+    | "scenario"
+    | "attribution_user"
+    | "attribution_org"
 
 export type CostStage = "EXPECTED" | "CONFIRMED" | "ACTUAL" | "REDUCTION"
 type CostScope = "NON_VOUCHER_FULFILLMENT"
@@ -37,9 +42,13 @@ export type ProfitLossQuery = Readonly<{
     to: string
     periodBasis: string
     scopeId: string
+    scopeVersion?: string
     coverage: ProfitLossCoverage
     customerId?: string
     salesOrderId?: string
+    attributionUserIds?: readonly string[]
+    attributionOrgUnitIds?: readonly string[]
+    attributionGroup?: string
     benefitScenario?: string
     costTypes?: readonly string[]
     dimension: ProfitLossDimension
@@ -61,6 +70,10 @@ export type ProfitLossRow = Readonly<{
     identityLabel: string
     customerId?: string
     customerLabel?: string
+    attributionUserId?: string | null
+    attributionUserName?: string | null
+    attributionOrgUnitId?: string | null
+    attributionOrgUnitName?: string | null
     benefitScenarios?: readonly string[]
     netSalesRevenue: string
     actualProcurementCostNet?: string
@@ -103,6 +116,7 @@ type StageReferenceLine = Readonly<{
 }>
 
 export type ProfitLossView = Readonly<{
+    emptyReason?: "no_scope" | "no_data" | "filtered_empty" | null
     scope: {
         id: string
         label: string
@@ -156,6 +170,14 @@ export type ProfitLossView = Readonly<{
         items: readonly ProfitLossRow[]
         total: number
     }
+    scopeSummary?: string
+    asOf?: string
+    policyVersion?: number
+    organizationVersion?: number
+    scopeVersion?: string
+    ownershipBasis?: string
+    attributionUserOptions?: readonly { value: string; label: string }[]
+    attributionOrgOptions?: readonly { value: string; label: string }[]
     filterSummary: string
     excludedNote: string
     correctionPendingNotice?: string
@@ -208,6 +230,8 @@ export const DIMENSION_LABEL: Record<ProfitLossDimension, string> = {
     sales_order: "销售单",
     customer: "客户",
     scenario: "福利场景",
+    attribution_user: "历史归属销售",
+    attribution_org: "历史归属组织",
 }
 
 export const COVERAGE_FILTER_LABEL: Record<ProfitLossCoverage, string> = {

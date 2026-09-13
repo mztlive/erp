@@ -157,7 +157,7 @@ export function ActualProfitLossPage() {
                         </>
                     ) : null}
 
-                    {page.data || page.viewQuery.isError ? (
+                    {page.data || page.viewQuery.isError || page.scopeError ? (
                         <ProfitLossRowsPanel
                             data={page.data}
                             dimension={page.dimension}
@@ -183,6 +183,14 @@ export function ActualProfitLossPage() {
                             costTypesDraft={page.costTypesDraft}
                             onCostTypesDraftChange={page.setCostTypesDraft}
                             benefitScenarioOptions={page.benefitScenarioOptions}
+                            attributionUsersDraft={page.attributionUsersDraft}
+                            onAttributionUsersChange={
+                                page.setAttributionUsersDraft
+                            }
+                            attributionOrgsDraft={page.attributionOrgsDraft}
+                            onAttributionOrgsChange={
+                                page.setAttributionOrgsDraft
+                            }
                             costTypeOptions={page.costTypeOptions}
                             pageRows={page.pageRows}
                             columns={page.columns}
@@ -194,9 +202,12 @@ export function ActualProfitLossPage() {
                                 page.viewQuery.isFetching &&
                                 !page.viewQuery.isPending
                             }
-                            isError={page.viewQuery.isError}
-                            error={page.viewQuery.error}
-                            onRetry={() => void page.viewQuery.refetch()}
+                            isError={
+                                page.viewQuery.isError ||
+                                Boolean(page.scopeError)
+                            }
+                            error={page.scopeError || page.viewQuery.error}
+                            onRetry={() => void page.handleRefresh()}
                         />
                     ) : null}
                 </>

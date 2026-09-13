@@ -16,6 +16,7 @@
 mod order;
 pub mod profit_loss;
 mod revision;
+pub mod scope;
 mod submission;
 mod working_copy;
 

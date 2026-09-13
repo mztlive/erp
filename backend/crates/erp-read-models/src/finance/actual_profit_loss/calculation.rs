@@ -18,6 +18,7 @@ pub(super) struct OrderResult {
     pub costs: ProfitLossAmounts,
     pub composition: BTreeMap<String, Decimal>,
     pub month: String,
+    pub attribution_path: Vec<erp_sales::entity::sales_order::AttributionOrgNode>,
 }
 impl OrderResult {
     /// 把实际金额与完整性证据同时投影，完整性由全行实际供货成本和履约完成决定。
@@ -166,6 +167,11 @@ impl<'a> SalesIndex<'a> {
             costs: ProfitLossAmounts::default(),
             composition: BTreeMap::new(),
             month: (date + chrono::Duration::hours(8)).format("%Y-%m").to_string(),
+            attribution_path: order
+                .attribution
+                .as_ref()
+                .map(|a| a.org_path.clone())
+                .unwrap_or_default(),
         })
     }
 }
@@ -183,6 +189,19 @@ fn order_row(
         identity_label: order.order_no.clone(),
         customer_id: Some(order.customer_id.clone()),
         customer_label: Some(customer.into()),
+        attribution_user_id: order.attribution.as_ref().map(|a| a.attribution_user_id.clone()),
+        attribution_user_name: order
+            .attribution
+            .as_ref()
+            .map(|a| a.attribution_user_name.clone()),
+        attribution_org_unit_id: order
+            .attribution
+            .as_ref()
+            .map(|a| a.attribution_org_unit_id.clone()),
+        attribution_org_unit_name: order
+            .attribution
+            .as_ref()
+            .map(|a| a.attribution_org_unit_name.clone()),
         benefit_scenarios: scenarios.into_iter().collect(),
         fulfillment_modes: vec![],
         totals: Totals::default(),

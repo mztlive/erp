@@ -21,14 +21,33 @@ impl ProfitLossQuery {
         if !["covered", "uncovered", "all"].contains(&self.coverage.as_str()) {
             return invalid("成本覆盖筛选无效");
         }
-        if !["sales_order", "customer", "scenario"].contains(&self.dimension.as_str()) {
+        if ![
+            "sales_order",
+            "customer",
+            "scenario",
+            "attribution_user",
+            "attribution_org",
+        ]
+        .contains(&self.dimension.as_str())
+        {
             return invalid("不支持该盈亏分组");
         }
         if self.page == 0 || self.page > 1_000_000 || ![20, 50, 100].contains(&self.page_size) {
             return invalid("分页参数无效");
         }
+        if self.page > 1 && self.scope_version.as_deref().is_none_or(str::is_empty) {
+            return invalid("跨页查询必须携带范围版本，请从第一页刷新");
+        }
+        if self
+            .scope_version
+            .as_ref()
+            .is_some_and(|version| version.len() > 128)
+        {
+            return invalid("范围版本无效");
+        }
         self.validate_sort()?;
         self.validate_text()?;
+        self.validate_attribution_group()?;
         let from = parse_date(&self.from)?;
         let to = parse_date(&self.to)?;
         if to < from || (to - from).num_days() > 366 {
@@ -41,6 +60,24 @@ impl ProfitLossQuery {
             from: midnight(from),
             until: midnight(next),
         })
+    }
+    /// 下钻仅接受历史人员或组织的精确分组身份；空后缀明确表示未知归属。
+    fn validate_attribution_group(&self) -> Result<()> {
+        let Some(group) = &self.attribution_group else {
+            return Ok(());
+        };
+        let Some((dimension, id)) = group.split_once(':') else {
+            return invalid("历史分组下钻条件无效");
+        };
+        if !["attribution_user", "attribution_org"].contains(&dimension)
+            || id.len() > 128
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
+        {
+            return invalid("历史分组下钻必须使用有效的人员或组织身份");
+        }
+        Ok(())
     }
     /// 使用界面列排序白名单，空值统一排最后。
     fn validate_sort(&self) -> Result<()> {

@@ -75,6 +75,10 @@ export type ProfitLossRowsPanelProps = {
     costTypesDraft: readonly string[]
     onCostTypesDraftChange: (value: string[]) => void
     benefitScenarioOptions: readonly ComboboxOption[]
+    attributionUsersDraft: readonly string[]
+    onAttributionUsersChange: (values: string[]) => void
+    attributionOrgsDraft: readonly string[]
+    onAttributionOrgsChange: (values: string[]) => void
     costTypeOptions: readonly ComboboxOption[]
     pageRows: ProfitLossRow[]
     columns: ColumnDef<ProfitLossRow>[]
@@ -115,6 +119,10 @@ export function ProfitLossRowsPanel({
     onCostTypesDraftChange,
     benefitScenarioOptions,
     costTypeOptions,
+    attributionUsersDraft,
+    onAttributionUsersChange,
+    attributionOrgsDraft,
+    onAttributionOrgsChange,
     pageRows,
     columns,
     pagination,
@@ -128,7 +136,9 @@ export function ProfitLossRowsPanel({
 }: ProfitLossRowsPanelProps) {
     const moreCount = appliedChips.filter(
         ({ key }) =>
-            key === "benefitScenario" || key.startsWith(COST_TYPE_CHIP_PREFIX),
+            key === "benefitScenario" ||
+            key.startsWith("attribution") ||
+            key.startsWith(COST_TYPE_CHIP_PREFIX),
     ).length
     const listLoadFailed = isError && !data
 
@@ -140,7 +150,7 @@ export function ProfitLossRowsPanel({
                     ariaLabel="盈亏明细维度"
                     hint={
                         data
-                            ? "明细与指标、汇总同一数据范围 · 点击盈亏下钻销售单 · 点击成本金额打开成本记录详情"
+                            ? "明细与指标使用同一范围 · 点击历史归属查看该组订单 · 可用的成本金额支持下钻"
                             : undefined
                     }
                     items={(
@@ -196,6 +206,34 @@ export function ProfitLossRowsPanel({
                     }
                     morePanel={
                         <div className="grid min-w-0 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            <ListWorkspaceFilterField
+                                htmlFor="actual-profit-loss-filter-attribution-user"
+                                label="历史归属销售"
+                            >
+                                <MultiOptionCombobox
+                                    id="actual-profit-loss-filter-attribution-user"
+                                    className="w-full"
+                                    value={attributionUsersDraft}
+                                    onValueChange={onAttributionUsersChange}
+                                    options={data?.attributionUserOptions ?? []}
+                                    placeholder="全部历史归属销售"
+                                    aria-label="历史归属销售"
+                                />
+                            </ListWorkspaceFilterField>
+                            <ListWorkspaceFilterField
+                                htmlFor="actual-profit-loss-filter-attribution-org"
+                                label="历史归属组织（含当时下级）"
+                            >
+                                <MultiOptionCombobox
+                                    id="actual-profit-loss-filter-attribution-org"
+                                    className="w-full"
+                                    value={attributionOrgsDraft}
+                                    onValueChange={onAttributionOrgsChange}
+                                    options={data?.attributionOrgOptions ?? []}
+                                    placeholder="全部历史归属组织"
+                                    aria-label="历史归属组织"
+                                />
+                            </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
                                 htmlFor="actual-profit-loss-filter-benefit-scenario"
                                 label="福利场景"
@@ -275,16 +313,22 @@ export function ProfitLossRowsPanel({
                     <BusinessEmptyState
                         kind={hasFilters ? "filter" : "no-data"}
                         title={
-                            hasFilters ? "当前筛选无结果" : "期间内没有经营结果"
+                            data.emptyReason === "no_scope"
+                                ? "当前没有可查询的数据范围"
+                                : hasFilters
+                                  ? "当前筛选无结果"
+                                  : "期间内没有经营结果"
                         }
                         description={
-                            hasFilters
-                                ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                : "可调整统计期间或覆盖口径后重试。"
+                            data.emptyReason === "no_scope"
+                                ? "账号具备查询权限，但当前授权范围未包含可读取业务，请联系权限管理员核对范围。"
+                                : hasFilters
+                                  ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                  : "可调整统计期间或覆盖口径后重试。"
                         }
                         className={listWorkspaceEmptyStateClassName}
                         action={
-                            hasFilters ? (
+                            hasFilters && data.emptyReason !== "no_scope" ? (
                                 <Button
                                     id="actual-profit-loss-empty-clear-filters"
                                     type="button"

@@ -10,12 +10,17 @@ pub struct ProfitLossQuery {
     pub period_basis: String,
     #[serde(default)]
     pub scope_id: String,
+    pub scope_version: Option<String>,
     #[serde(default = "default_coverage")]
     pub coverage: String,
     pub customer_id: Option<String>,
     pub sales_order_id: Option<String>,
     pub benefit_scenario: Option<String>,
     pub cost_types: Option<String>,
+    pub attribution_user_ids: Option<application_core::QueryIds>,
+    pub attribution_org_unit_ids: Option<application_core::QueryIds>,
+    /// 精确历史分组下钻，取分组行 ID；空身份后缀表示未知归属。
+    pub attribution_group: Option<String>,
     #[serde(default = "default_dimension")]
     pub dimension: String,
     pub q: Option<String>,
@@ -88,6 +93,10 @@ pub struct ProfitLossRow {
     pub customer_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub customer_label: Option<String>,
+    pub attribution_user_id: Option<String>,
+    pub attribution_user_name: Option<String>,
+    pub attribution_org_unit_id: Option<String>,
+    pub attribution_org_unit_name: Option<String>,
     pub benefit_scenarios: Vec<String>,
     pub fulfillment_modes: Vec<String>,
     #[serde(flatten)]
@@ -182,6 +191,12 @@ pub struct Rows {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfitLossView {
+    pub empty_reason: Option<String>,
+    pub scope_summary: String,
+    pub as_of: String,
+    pub policy_version: u64,
+    pub organization_version: u64,
+    pub scope_version: String,
     pub scope: Scope,
     pub period: Period,
     pub business_type: String,
@@ -200,6 +215,9 @@ pub struct ProfitLossView {
     pub rows: Rows,
     pub filter_summary: String,
     pub excluded_note: String,
+    pub ownership_basis: String,
+    pub attribution_user_options: Vec<application_core::FilterOption>,
+    pub attribution_org_options: Vec<application_core::FilterOption>,
 }
 /// 同步完成的全量筛选导出；文件内容由服务端生成，不伪造后台任务。
 #[derive(Debug, Serialize)]

@@ -31,22 +31,10 @@ impl Sources {
         db: &Database,
         query: &ProfitLossQuery,
         bounds: PeriodBounds,
-        customers: Option<Vec<String>>,
+        authorized_scope: erp_sales::repository::sales_order::scope::SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<Self> {
-        let filter = ProfitLossOrderFilter {
-            from: bounds.from,
-            until: bounds.until,
-            customer_id: query.customer_id.clone(),
-            sales_order_id: query.sales_order_id.clone(),
-            authorized_customer_ids: customers,
-        };
-        let orders = db.sales_orders().profit_loss_orders(&filter, executor).await?;
-        if orders.len() > PROFIT_LOSS_ORDER_LIMIT {
-            return Err(Error::ValidationError(
-                "匹配销售单超过 10000 单，请缩小期间或指定客户".into(),
-            ));
-        }
+        let orders = authorized_orders(db, query, bounds, authorized_scope, executor).await?;
         let mut result = Self {
             orders,
             revisions: vec![],
@@ -117,4 +105,40 @@ impl Sources {
         }
         Ok(())
     }
+}
+
+/// 有界装载销售责任版本；用于首次查询及返回前撤权、责任交接复核。
+pub(super) async fn authorized_orders(
+    db: &Database,
+    query: &ProfitLossQuery,
+    bounds: PeriodBounds,
+    authorized_scope: erp_sales::repository::sales_order::scope::SalesReadScope,
+    executor: &mut dyn Executor,
+) -> Result<Vec<ProfitLossOrder>> {
+    let filter = ProfitLossOrderFilter {
+        from: bounds.from,
+        until: bounds.until,
+        customer_id: query.customer_id.clone(),
+        sales_order_id: query.sales_order_id.clone(),
+        authorized_scope,
+    };
+    let orders = db.sales_orders().profit_loss_orders(&filter, executor).await?;
+    if orders.len() > PROFIT_LOSS_ORDER_LIMIT {
+        return Err(Error::ValidationError(
+            "匹配销售单超过 10000 单，请缩小期间或指定客户".into(),
+        ));
+    }
+    Ok(orders)
+}
+
+/// 查询版本包含完整授权订单集合及责任版本，不返回订单身份集合。
+pub(super) fn version(scope_version: &str, orders: &[ProfitLossOrder]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+    let versions = orders
+        .iter()
+        .map(|o| (&o.id, o.version))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    versions.hash(&mut fingerprint);
+    format!("{scope_version}:{:x}", fingerprint.finish())
 }

@@ -23,7 +23,13 @@ export function parseCoverage(raw: string | null): ProfitLossCoverage {
 }
 
 export function parseDimension(raw: string | null): ProfitLossDimension {
-    if (raw === "customer" || raw === "scenario" || raw === "sales_order") {
+    if (
+        raw === "customer" ||
+        raw === "scenario" ||
+        raw === "sales_order" ||
+        raw === "attribution_user" ||
+        raw === "attribution_org"
+    ) {
         return raw
     }
     return "sales_order"

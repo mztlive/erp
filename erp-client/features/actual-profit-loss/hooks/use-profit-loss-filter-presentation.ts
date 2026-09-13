@@ -21,6 +21,9 @@ type Options = Readonly<{
     customerId: string | undefined
     salesOrderId: string | undefined
     benefitScenario: string | undefined
+    attributionUserIds: readonly string[]
+    attributionOrgUnitIds: readonly string[]
+    attributionGroup?: string
     costTypes: readonly string[]
 }>
 
@@ -33,6 +36,9 @@ export function useProfitLossFilterPresentation({
     salesOrderId,
     benefitScenario,
     costTypes,
+    attributionUserIds,
+    attributionOrgUnitIds,
+    attributionGroup,
 }: Options) {
     const selectedCustomerLabel = React.useMemo(
         () =>
@@ -59,6 +65,40 @@ export function useProfitLossFilterPresentation({
 
     const appliedChips = React.useMemo<readonly ProfitLossAppliedChip[]>(() => {
         const chips: ProfitLossAppliedChip[] = []
+        if (attributionGroup) {
+            const [dimension, id] = attributionGroup.split(":")
+            const options =
+                dimension === "attribution_org"
+                    ? data?.attributionOrgOptions
+                    : data?.attributionUserOptions
+            const label = id
+                ? (options?.find((option) => option.value === id)?.label ?? id)
+                : "未知归属"
+            chips.push({
+                key: "attributionGroup",
+                label: `历史分组下钻：${label}`,
+            })
+        }
+        for (const [key, ids, options, label] of [
+            [
+                "attributionUserIds",
+                attributionUserIds,
+                data?.attributionUserOptions,
+                "历史归属销售",
+            ],
+            [
+                "attributionOrgUnitIds",
+                attributionOrgUnitIds,
+                data?.attributionOrgOptions,
+                "历史归属组织",
+            ],
+        ] as const) {
+            if (ids.length)
+                chips.push({
+                    key,
+                    label: `${label}：${ids.map((id) => options?.find((o) => o.value === id)?.label ?? id).join("、")}`,
+                })
+        }
         const q = qParam.trim()
         if (q) chips.push({ key: "q", label: `搜索：${q}` })
         if (coverage !== "covered") {
@@ -93,6 +133,11 @@ export function useProfitLossFilterPresentation({
         }
         return chips
     }, [
+        attributionGroup,
+        attributionUserIds,
+        attributionOrgUnitIds,
+        data?.attributionUserOptions,
+        data?.attributionOrgOptions,
         benefitScenario,
         costTypeLabelMap,
         costTypes,

@@ -37,6 +37,8 @@ fn header() -> String {
     record(&[
         "对象",
         "客户",
+        "首次生效归属销售",
+        "首次生效归属组织",
         "不含税收入",
         "实际采购成本",
         "实际履约费用",
@@ -64,6 +66,8 @@ fn row(row: &super::dto::ProfitLossRow) -> String {
     record(&[
         &row.identity_label,
         row.customer_label.as_deref().unwrap_or(""),
+        row.attribution_user_name.as_deref().unwrap_or(""),
+        row.attribution_org_unit_name.as_deref().unwrap_or(""),
         &t.net_sales_revenue,
         &t.actual_procurement_cost_net,
         &t.actual_fulfillment_cost_net,

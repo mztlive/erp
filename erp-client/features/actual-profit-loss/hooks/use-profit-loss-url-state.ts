@@ -49,13 +49,37 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     const pageSize = parsePageSize(searchParams.get("pageSize"))
     const benefitScenario =
         searchParams.get("benefitScenario")?.trim() || undefined
+    const attributionUsersParam = searchParams.get("attributionUserIds")
+    const attributionOrgsParam = searchParams.get("attributionOrgUnitIds")
+    const attributionGroup = searchParams.get("attributionGroup") ?? undefined
+    const attributionUserIds = React.useMemo(
+        () => parseCsvValues(attributionUsersParam),
+        [attributionUsersParam],
+    )
+    const attributionOrgUnitIds = React.useMemo(
+        () => parseCsvValues(attributionOrgsParam),
+        [attributionOrgsParam],
+    )
+    const [attributionUsersDraft, setAttributionUsersDraft] =
+        React.useState<string[]>(attributionUserIds)
+    const [attributionOrgsDraft, setAttributionOrgsDraft] = React.useState<
+        string[]
+    >(attributionOrgUnitIds)
+    React.useEffect(() => {
+        setAttributionUsersDraft(attributionUserIds)
+        setAttributionOrgsDraft(attributionOrgUnitIds)
+    }, [attributionUserIds, attributionOrgUnitIds])
     const costTypesParam = searchParams.get("costType")
     const costTypes = React.useMemo(
         () => parseCsvValues(costTypesParam),
         [costTypesParam],
     )
     const hasStructuredFilters = Boolean(
-        benefitScenario || costTypes.length > 0,
+        attributionGroup ||
+        benefitScenario ||
+        costTypes.length > 0 ||
+        attributionUserIds.length > 0 ||
+        attributionOrgUnitIds.length > 0,
     )
 
     const [searchInput, setSearchInput] = React.useState(qParam)
@@ -75,13 +99,20 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
 
     const patchUrl = React.useCallback(
         (patch: ProfitLossUrlPatch, options?: { replace?: boolean }) => {
-            patchSearchParams({ router, pathname, searchParams }, patch, {
+            const scopedPatch =
+                patch.page === null ? { ...patch, scopeVersion: null } : patch
+            patchSearchParams({ router, pathname, searchParams }, scopedPatch, {
                 replace: options?.replace ?? true,
                 scroll: false,
             })
         },
         [pathname, router, searchParams],
     )
+
+    React.useEffect(() => {
+        if (page > 1 && !searchParams.get("scopeVersion"))
+            patchUrl({ page: null })
+    }, [page, searchParams, patchUrl])
 
     React.useEffect(() => {
         if (!basisConfig?.configuredPeriodBasis || periodBasisUrl) {
@@ -140,10 +171,14 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
               from,
               to,
               periodBasis: periodBasisUrl,
-              scopeId: "org-hq-finance",
+              scopeId: "authorized",
+              scopeVersion: searchParams.get("scopeVersion") ?? undefined,
               coverage,
               customerId,
               salesOrderId,
+              attributionUserIds,
+              attributionOrgUnitIds,
+              attributionGroup,
               benefitScenario,
               costTypes: costTypes.length > 0 ? costTypes : undefined,
               dimension,
@@ -216,22 +251,38 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     )
     const applyFilters = React.useCallback(() => {
         patchUrl({
+            attributionUserIds:
+                serializeCsvValues(attributionUsersDraft) || null,
+            attributionOrgUnitIds:
+                serializeCsvValues(attributionOrgsDraft) || null,
             q: searchInput.trim() || null,
             benefitScenario: benefitScenarioDraft.trim() || null,
             costType: serializeCsvValues(costTypesDraft) || null,
             page: null,
         })
         setFilterPanelOpen(false)
-    }, [benefitScenarioDraft, costTypesDraft, patchUrl, searchInput])
+    }, [
+        attributionUsersDraft,
+        attributionOrgsDraft,
+        benefitScenarioDraft,
+        costTypesDraft,
+        patchUrl,
+        searchInput,
+    ])
     const clearAllFilters = React.useCallback(() => {
         setSearchInput("")
         setBenefitScenarioDraft("")
         setCostTypesDraft([])
+        setAttributionUsersDraft([])
+        setAttributionOrgsDraft([])
         setFilterPanelOpen(false)
         patchUrl({
             q: null,
             coverage: null,
             customerId: null,
+            attributionUserIds: null,
+            attributionOrgUnitIds: null,
+            attributionGroup: null,
             salesOrderId: null,
             benefitScenario: null,
             fulfillmentMode: null,
@@ -242,15 +293,29 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
     const resetMoreFilters = React.useCallback(() => {
         setBenefitScenarioDraft("")
         setCostTypesDraft([])
+        setAttributionUsersDraft([])
+        setAttributionOrgsDraft([])
     }, [])
 
     const hasPendingChanges =
+        serializeCsvValues(attributionUsersDraft) !==
+            serializeCsvValues(attributionUserIds) ||
+        serializeCsvValues(attributionOrgsDraft) !==
+            serializeCsvValues(attributionOrgUnitIds) ||
         searchInput.trim() !== qParam.trim() ||
         benefitScenarioDraft.trim() !== (benefitScenario ?? "") ||
         serializeCsvValues(costTypesDraft) !== serializeCsvValues(costTypes)
     const removeFilter = React.useCallback(
         (key: string) => {
-            if (key === "q") {
+            if (key === "attributionGroup") {
+                patchUrl({ attributionGroup: null, page: null })
+            } else if (key === "attributionUserIds") {
+                setAttributionUsersDraft([])
+                patchUrl({ attributionUserIds: null, page: null })
+            } else if (key === "attributionOrgUnitIds") {
+                setAttributionOrgsDraft([])
+                patchUrl({ attributionOrgUnitIds: null, page: null })
+            } else if (key === "q") {
                 setSearchInput("")
                 patchUrl({ q: null, page: null })
             } else if (key === "coverage") {
@@ -305,6 +370,13 @@ export function useProfitLossUrlState({ basisConfig, basisResolved }: Options) {
 
     return {
         query,
+        attributionUserIds,
+        attributionOrgUnitIds,
+        attributionGroup,
+        attributionUsersDraft,
+        setAttributionUsersDraft,
+        attributionOrgsDraft,
+        setAttributionOrgsDraft,
         periodPresetRaw: searchParams.get("periodPreset") ?? "",
         from,
         to,

@@ -1,10 +1,9 @@
-//! 实际盈亏协议入口，沿用成本读取权限并复核收入权限及当前客户范围。
+//! 实际盈亏协议入口；资源范围及同角色权限在报表读取事务内重验。
 use crate::core::handler::customer::has_permission;
 use crate::{
     app_state::AppState,
     core::{
         errors::{Error, Result},
-        extractor::UserID,
         middleware::RbacSubject,
         response::ApiResponse,
     },
@@ -18,31 +17,14 @@ use erp_read_models::finance::actual_profit_loss::{
     ActualProfitLossReadModel, ProfitLossAccess,
 };
 
-/// 服务端重验收入读取资格，并解析当前有效客户归属。
-async fn access(
-    state: &AppState,
-    subject: &RbacSubject,
-    user: &str,
-) -> std::result::Result<ProfitLossAccess, Error> {
+/// 复核协议入口的读取权限，具体数据范围由组合层在事务内解析。
+async fn access(state: &AppState, subject: &RbacSubject) -> std::result::Result<ProfitLossAccess, Error> {
     if !has_permission(state, subject, "sales_order:list").await? {
         return Err(Error::Forbidden("查看经营盈亏还需要销售单查询权限".into()));
     }
-    let all = has_permission(state, subject, "customer_scope:detail").await?;
-    let scope = if all {
-        erp_customer::CustomerScope::AllAuthorized
-    } else {
-        erp_customer::CustomerScope::Assigned
-    };
-    let customer_ids = state
-        .customer_service()
-        .customer_ids_for_scope(scope, user)
-        .await?;
-    // 成本详情是整笔费用，分摊跨客户时只对全量客户范围开放，避免泄露其他客户成本。
-    let can_drill_cost = all && has_permission(state, subject, "cost_entry:detail").await?;
-    Ok(ProfitLossAccess {
-        customer_ids,
-        can_drill_cost,
-    })
+    // 组合层还须证明销售单 Company 范围及个人上限，才允许整笔费用下钻。
+    let can_drill_cost = has_permission(state, subject, "cost_entry:detail").await?;
+    Ok(ProfitLossAccess { can_drill_cost })
 }
 /// 期间口径元数据不包含经营金额，路由仍要求成本查询权限。
 #[permission_macros::permission(
@@ -68,13 +50,13 @@ pub async fn period_basis() -> Result<PeriodBasisConfig> {
 pub async fn view(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user)): Extension<UserID>,
+    Extension(actor): Extension<application_core::AuditActor>,
     Query(query): Query<ProfitLossQuery>,
 ) -> Result<ProfitLossView> {
-    let access = access(&state, &subject, &user).await?;
+    let access = access(&state, &subject).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.db())
-            .view(query, access)
+        ActualProfitLossReadModel::new(state.db(), state.rbac())
+            .view(query, access, &actor)
             .await?,
     ))
 }
@@ -89,13 +71,13 @@ pub async fn view(
 pub async fn export(
     State(state): State<AppState>,
     Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user)): Extension<UserID>,
+    Extension(actor): Extension<application_core::AuditActor>,
     Json(query): Json<ProfitLossQuery>,
 ) -> Result<ProfitLossExport> {
-    let access = access(&state, &subject, &user).await?;
+    let access = access(&state, &subject).await?;
     Ok(ApiResponse::ok_with_data(
-        ActualProfitLossReadModel::new(state.db())
-            .export(query, access)
+        ActualProfitLossReadModel::new(state.db(), state.rbac())
+            .export(query, access, &actor)
             .await?,
     ))
 }

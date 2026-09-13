@@ -122,6 +122,14 @@ fn sales_order_indexes() -> Vec<IndexModel> {
             doc! { "customer_id": 1, "business_type": 1, "commercial_status": 1, "deleted_at": 1, "effective_at": 1, "id": 1 },
         ),
         named_index(
+            "idx_sales_orders_profit_owner",
+            doc! { "sales_owner_user_id": 1, "business_type": 1, "commercial_status": 1, "deleted_at": 1, "effective_at": 1, "id": 1 },
+        ),
+        named_index(
+            "idx_sales_orders_profit_org",
+            doc! { "business_org_unit_id": 1, "business_type": 1, "commercial_status": 1, "deleted_at": 1, "effective_at": 1, "id": 1 },
+        ),
+        named_index(
             "idx_sales_orders_customer_status_created",
             doc! { "customer_id": 1, "commercial_status": 1, "created_at": -1 },
         ),

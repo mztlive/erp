@@ -19,10 +19,11 @@ const profitLossKeys = {
         [...profitLossKeys.all, "view", query] as const,
     costEntry: (id: string) =>
         [...profitLossKeys.all, "cost-entry", id] as const,
-    costEntries: (ids: readonly string[]) =>
+    costEntries: (ids: readonly string[], scopeVersion?: string) =>
         [
             ...profitLossKeys.all,
             "cost-entries",
+            scopeVersion,
             [...ids].sort().join(","),
         ] as const,
 }
@@ -58,11 +59,16 @@ export function useProfitLossViewQuery(
     })
 }
 
-export function useCostEntriesForRowQuery(costEntryIds: readonly string[]) {
+/** 成本读取缓存绑定本次范围版本，重新打开时重验独立详情接口。 */
+export function useCostEntriesForRowQuery(
+    costEntryIds: readonly string[],
+    scopeVersion?: string,
+) {
     return useQuery({
-        queryKey: profitLossKeys.costEntries(costEntryIds),
+        queryKey: profitLossKeys.costEntries(costEntryIds, scopeVersion),
         queryFn: () => fetchCostEntriesForRow(costEntryIds),
         enabled: costEntryIds.length > 0,
+        refetchOnMount: "always",
     })
 }
 

@@ -56,6 +56,9 @@ describe("profit-loss full export and cost enum contract", () => {
     it("exports all applied filters without trusting page amounts or scope permissions", async () => {
         const query = makeQuery({
             customerId: "c-1",
+            attributionUserIds: ["sales-a", "sales-b"],
+            attributionOrgUnitIds: ["old-org"],
+            attributionGroup: "attribution_org:old-org",
             salesOrderId: "so-1",
             q: "[客户]",
             benefitScenario: "常规福利",
@@ -74,6 +77,9 @@ describe("profit-loss full export and cost enum contract", () => {
             "/admin/actual-profit-loss/exports",
             expect.objectContaining({
                 customer_id: "c-1",
+                attribution_user_ids: "sales-a,sales-b",
+                attribution_org_unit_ids: "old-org",
+                attribution_group: "attribution_org:old-org",
                 sales_order_id: "so-1",
                 benefit_scenario: "常规福利",
                 cost_types: "delivery",

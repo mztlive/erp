@@ -41,6 +41,35 @@ describe("useProfitLossUrlState", () => {
 
     afterEach(cleanup)
 
+    it("keeps an exact unknown historical group across reload and removes it independently", () => {
+        navigation.searchParams = new URLSearchParams({
+            periodBasis: "recognized_at",
+            attributionGroup: "attribution_org:",
+            dimension: "sales_order",
+            coverage: "all",
+        })
+        const { result, rerender } = renderHook(() =>
+            useProfitLossUrlState({ basisConfig, basisResolved: true }),
+        )
+        expect(result.current.query?.attributionGroup).toBe("attribution_org:")
+        expect(result.current.hasFilters).toBe(true)
+        act(() => result.current.removeFilter("attributionGroup"))
+        let url = new URL(
+            navigation.replace.mock.lastCall![0],
+            "http://localhost",
+        )
+        expect(url.searchParams.has("attributionGroup")).toBe(false)
+        expect(url.searchParams.get("coverage")).toBe("all")
+        navigation.searchParams.set(
+            "attributionGroup",
+            "attribution_org:old-org",
+        )
+        rerender()
+        act(() => result.current.clearAllFilters())
+        url = new URL(navigation.replace.mock.lastCall![0], "http://localhost")
+        expect(url.searchParams.has("attributionGroup")).toBe(false)
+    })
+
     it("includes one-based page and page size in the server query", () => {
         navigation.searchParams = new URLSearchParams({
             from: "2026-08-01",
@@ -48,6 +77,7 @@ describe("useProfitLossUrlState", () => {
             periodBasis: "recognized_at",
             page: "2",
             pageSize: "50",
+            scopeVersion: "scope-v1",
         })
 
         const { result } = renderHook(() =>
@@ -66,7 +96,7 @@ describe("useProfitLossUrlState", () => {
             result.current.setPagination({ pageIndex: 2, pageSize: 50 })
         })
         expect(navigation.replace).toHaveBeenCalledWith(
-            "/finance/actual-profit-loss?from=2026-08-01&to=2026-08-31&periodBasis=recognized_at&page=3&pageSize=50",
+            "/finance/actual-profit-loss?from=2026-08-01&to=2026-08-31&periodBasis=recognized_at&page=3&pageSize=50&scopeVersion=scope-v1",
             { scroll: false },
         )
     })
@@ -101,5 +131,37 @@ describe("useProfitLossUrlState", () => {
             "/finance/actual-profit-loss?periodBasis=recognized_at",
             { scroll: false },
         )
+    })
+    it("applies and clears historical identity filters through the same URL state", () => {
+        navigation.searchParams = new URLSearchParams(
+            "periodBasis=recognized_at&attributionUserIds=sales-a&attributionOrgUnitIds=old-org&dimension=attribution_user&page=2&scopeVersion=old",
+        )
+        const { result, rerender } = renderHook(() =>
+            useProfitLossUrlState({ basisConfig, basisResolved: true }),
+        )
+        expect(result.current.query).toMatchObject({
+            attributionUserIds: ["sales-a"],
+            attributionOrgUnitIds: ["old-org"],
+            dimension: "attribution_user",
+            scopeVersion: "old",
+        })
+        act(() => result.current.setAttributionUsersDraft(["sales-b"]))
+        expect(result.current.query?.attributionUserIds).toEqual(["sales-a"])
+        expect(result.current.hasPendingChanges).toBe(true)
+        act(() => result.current.applyFilters())
+        let url = new URL(
+            navigation.replace.mock.lastCall![0],
+            "http://localhost",
+        )
+        expect(url.searchParams.get("attributionUserIds")).toBe("sales-b")
+        expect(url.searchParams.has("page")).toBe(false)
+        expect(url.searchParams.has("scopeVersion")).toBe(false)
+        navigation.searchParams = url.searchParams
+        rerender()
+        expect(result.current.query?.attributionUserIds).toEqual(["sales-b"])
+        act(() => result.current.clearAllFilters())
+        url = new URL(navigation.replace.mock.lastCall![0], "http://localhost")
+        expect(url.searchParams.has("attributionUserIds")).toBe(false)
+        expect(url.searchParams.has("attributionOrgUnitIds")).toBe(false)
     })
 })

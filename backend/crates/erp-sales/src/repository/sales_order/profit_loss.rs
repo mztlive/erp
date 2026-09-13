@@ -1,5 +1,5 @@
 //! 实际盈亏读取的有界销售单事实查询；权限范围在数据库过滤中交集执行。
-use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress};
+use crate::entity::sales_order::{CommercialStatus, FulfillmentProgress, SalesAttribution};
 use crate::repository::owned::SalesOrderRepository;
 use erp_core::common::time::Instant;
 use mongodb::{
@@ -17,10 +17,12 @@ pub const PROFIT_LOSS_ORDER_LIMIT: usize = 10_000;
 pub struct ProfitLossOrder {
     pub id: String,
     pub order_no: String,
+    pub version: u64,
     pub customer_id: String,
     pub current_revision_id: Option<String>,
     pub effective_at: Option<Instant>,
     pub fulfillment_progress: FulfillmentProgress,
+    pub attribution: Option<SalesAttribution>,
 }
 
 /// 生效日期区间为左闭右开，客户授权集合与显式筛选取交集。
@@ -29,7 +31,7 @@ pub struct ProfitLossOrderFilter {
     pub until: i64,
     pub customer_id: Option<String>,
     pub sales_order_id: Option<String>,
-    pub authorized_customer_ids: Option<Vec<String>>,
+    pub authorized_scope: super::scope::SalesReadScope,
 }
 impl ProfitLossOrderFilter {
     /// 不接受客户端范围标识替代授权集合；空集合必定无结果。
@@ -37,12 +39,11 @@ impl ProfitLossOrderFilter {
         let mut filter = doc! { "deleted_at": 0_i64, "business_type": "GOODS_SERVICE",
         "commercial_status": CommercialStatus::Effective.as_str(),
         "effective_at": { "$gte": self.from, "$lt": self.until } };
-        if let Some(ids) = &self.authorized_customer_ids {
-            filter.insert("customer_id", doc! { "$in": ids });
-        }
+        let mut conditions = vec![self.authorized_scope.document()];
         if let Some(id) = &self.customer_id {
-            filter.insert("$and", vec![doc! { "customer_id": id }]);
+            conditions.push(doc! { "customer_id": id });
         }
+        filter.insert("$and", conditions);
         if let Some(id) = &self.sales_order_id {
             filter.insert("id", id);
         }
@@ -61,7 +62,7 @@ impl SalesOrderRepository<'_> {
             .sort(doc! { "effective_at": 1, "id": 1 })
             .projection(
                 doc! { "id": 1, "order_no": 1, "customer_id": 1, "current_revision_id": 1,
-                "effective_at": 1, "fulfillment_progress": 1 },
+                "effective_at": 1, "fulfillment_progress": 1, "attribution": 1, "version": 1 },
             )
             .build();
         mongo_ops::find_many(
@@ -83,19 +84,14 @@ mod tests {
             until: 2,
             customer_id: Some("other".into()),
             sales_order_id: None,
-            authorized_customer_ids: Some(vec![]),
+            authorized_scope: super::super::scope::SalesReadScope::default(),
         }
         .document();
+        assert_eq!(filter.get_array("$and").unwrap().len(), 2);
         assert_eq!(
-            filter
-                .get_document("customer_id")
-                .unwrap()
-                .get_array("$in")
-                .unwrap()
-                .len(),
-            0
+            filter.get_array("$and").unwrap()[0].as_document().unwrap(),
+            &doc! { "$expr": false }
         );
-        assert_eq!(filter.get_array("$and").unwrap().len(), 1);
         assert_eq!(filter.get_str("business_type").unwrap(), "GOODS_SERVICE");
     }
 }
