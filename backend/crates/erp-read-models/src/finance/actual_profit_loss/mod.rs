@@ -78,10 +78,7 @@ impl ActualProfitLossReadModel {
     ) -> Result<ProfitLossView> {
         let (sources, query, context, no_scope) = self.snapshot(query, actor).await?;
         let as_of = context.as_of.as_utc();
-        let whole_scope = context.scope.role_clauses.iter().any(|c| c.company)
-            && context.scope.user_limit.as_ref().is_none_or(|c| c.company);
-        let orders =
-            calculation::calculate(&sources, as_of.timestamp(), access.can_drill_cost && whole_scope)?;
+        let orders = calculation::calculate(&sources, as_of.timestamp(), access.can_drill_cost)?;
         let mut view = projection::project(
             orders,
             &query,

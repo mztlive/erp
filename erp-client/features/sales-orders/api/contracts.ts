@@ -24,6 +24,7 @@ export type SalesOrderDetailView = SalesOrderListItem & {
 }
 
 export type SalesOrdersListQuery = {
+    scopeVersion?: string
     ownerUserIds?: string
     page: number
     pageSize: number
@@ -55,6 +56,11 @@ export type SalesOrdersListQuery = {
 }
 
 export type SalesOrderListView = {
+    emptyReason?: string | null
+    scopeVersion?: string
+    policyVersion?: number
+    organizationVersion?: number
+    scopeSummary?: string
     ownerOptions?: { value: string; label: string }[]
     items: SalesOrderListItem[]
     total: number

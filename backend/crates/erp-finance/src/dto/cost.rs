@@ -176,9 +176,62 @@ pub struct CostEntryView {
     pub allocations: Vec<CostAllocationView>,
 }
 
+/// 成本读取响应；受限整笔金额和来源引用使用 null，创建响应保持完整事实。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ScopedCostEntryView {
+    /// 实体主键。
+    pub id: String,
+    /// 成本类型。
+    pub cost_type: CostType,
+    /// 成本阶段。
+    pub cost_stage: CostStage,
+    /// 成本归属范围。
+    pub cost_scope: CostScope,
+    /// 成本取值基础。
+    pub cost_basis: Option<CostBasis>,
+    /// 成本供应商。
+    pub supplier_id: Option<String>,
+    /// 含税成本金额。
+    pub gross_amount: Option<Amount>,
+    /// 不含税成本金额（利润指标口径）。
+    pub net_amount: Option<Amount>,
+    /// 税额。
+    pub tax_amount: Option<Amount>,
+    /// 含税标识。
+    pub tax_inclusion: bool,
+    /// 进项税率。
+    pub input_tax_rate: Rate,
+    /// 成本发生时间（秒级时间戳）。
+    pub occurred_at: Instant,
+    /// 来源事实类型。
+    pub source_fact_type: String,
+    /// 来源单据 ID。
+    pub source_document_id: Option<String>,
+    /// 来源行 ID。
+    pub source_line_id: Option<String>,
+    /// 来源版本。
+    pub source_version: Option<String>,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+    /// 成本分配行。
+    pub allocations: Vec<CostAllocationView>,
+    /// 整笔成本及全部分配的独立读取资格。
+    pub whole_document_access: bool,
+    /// 当前授权份额的含税金额，不以整笔金额代替。
+    pub scope_gross_amount: Amount,
+    /// 当前授权份额的不含税金额。
+    pub scope_net_amount: Amount,
+    /// 部分读取时固定为 permission_limited。
+    pub access_restriction: Option<&'static str>,
+}
+
 /// 成本事实列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CostEntryListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 成本类型筛选。
     pub cost_type: Option<CostType>,
     /// 成本阶段筛选。
@@ -246,7 +299,11 @@ impl CostEntryListParams {
 
 /// 成本分配列表查询参数（按成本事实筛选）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CostAllocationListParams {
+    /// 跨页必须携带当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 成本事实筛选。
     pub cost_entry_id: Option<CostEntryId>,
     /// 经营归属销售单筛选。
@@ -319,6 +376,7 @@ mod tests {
     #[test]
     fn cost_entry_list_params_normalize_filters_and_paging() {
         let params = CostEntryListParams {
+            scope_version: None,
             cost_type: None,
             cost_stage: Some(CostStage::Actual),
             cost_scope: None,
@@ -340,6 +398,7 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = CostEntryListParams {
+            scope_version: None,
             cost_type: None,
             cost_stage: None,
             cost_scope: None,
@@ -353,6 +412,7 @@ mod tests {
         assert!(params.validate().is_err());
 
         let allocations = CostAllocationListParams {
+            scope_version: None,
             cost_entry_id: None,
             sales_order_id: None,
             page: Some(1),

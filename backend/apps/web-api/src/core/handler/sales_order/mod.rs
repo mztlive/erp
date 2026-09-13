@@ -9,14 +9,13 @@ use axum::{
     Extension, Json,
 };
 use erp_sales::dto::sales_order::{
-    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SalesOrderListParams, SaveWorkingCopyRequest,
-    SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SaveWorkingCopyRequest, SubmissionView,
+    SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 
 use erp_processes::order_to_cash::SalesOrderCommandProcess;
 use erp_read_models::sales_center::order::{
-    dto::{SalesOrderDetailView, SalesOrderView},
-    SalesOrderReadService,
+    dto::SalesOrderDetailView, SalesListParams, SalesListView, SalesOrderReadService,
 };
 
 use crate::{
@@ -44,10 +43,11 @@ use crate::{
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn sales_order_list(
     State(state): State<AppState>,
-    Query(params): Query<SalesOrderListParams>,
-) -> Result<application_core::FilteredPage<SalesOrderView>> {
-    let page = SalesOrderReadService::new(state.db())
-        .sales_order_list(&params)
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<SalesListParams>,
+) -> Result<SalesListView> {
+    let page = SalesOrderReadService::with_rbac(state.db(), state.rbac())
+        .sales_order_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -135,7 +135,7 @@ pub async fn sales_order_save_working_copy(
     Path(id): Path<String>,
     Json(req): Json<SaveWorkingCopyRequest>,
 ) -> Result<WorkingCopyView> {
-    let view = SalesOrderCommandProcess::new(state.db())
+    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read())
         .save_working_copy(&id, req, &actor)
         .await?;
@@ -228,7 +228,7 @@ pub async fn sales_order_void(
     Path(id): Path<String>,
     Json(req): Json<VoidSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    let view = SalesOrderCommandProcess::new(state.db())
+    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read())
         .void_sales_order(&id, req, &actor)
         .await?;
@@ -309,5 +309,24 @@ mod owner_query_tests {
             assert!(Query::<PurchaseOrderListParams>::try_from_uri(&uri).is_err());
             assert!(Query::<SalesOrderListParams>::try_from_uri(&uri).is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod scope_query_tests {
+    use super::*;
+    use axum::http::Uri;
+
+    #[test]
+    fn sales_scope_version_does_not_break_url_numbers_or_id_filters() {
+        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b&my_todo=true"
+            .parse()
+            .unwrap();
+        let Query(params) = Query::<SalesListParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(params.page, Some(2));
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        assert!(params.owner_user_ids.is_some());
+        let legacy: Uri = "/?owner_name=someone".parse().unwrap();
+        assert!(Query::<SalesListParams>::try_from_uri(&legacy).is_err());
     }
 }

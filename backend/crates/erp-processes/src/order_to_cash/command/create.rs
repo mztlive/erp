@@ -172,6 +172,9 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
+        let access = self
+            .command_access(actor, "create")?
+            .require_submit(req.intent == SalesOrderCreateIntent::Submit)?;
         let idempotency_key = req.idempotency_key.trim().to_string();
         if idempotency_key.is_empty() {
             return Err(Error::ValidationError("幂等键不能为空".to_string()));
@@ -180,7 +183,7 @@ impl SalesOrderCommandProcess {
         let audit_id = sales_order_create_audit_id(actor.id(), &idempotency_key);
         let fingerprint = sales_order_create_fingerprint(actor.id(), &req)?;
         if let Some(order_id) = self
-            .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
+            .replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access)
             .await?
         {
             return self
@@ -299,9 +302,11 @@ impl SalesOrderCommandProcess {
             let client = db.client().clone();
             let actor_owned = actor.clone();
             let mut document = document;
+            let access_for_tx = access.clone();
             let transaction_result = client
                 .with_transaction(move |session| {
                     Box::pin(async move {
+                        access_for_tx.creation(&submitted_order, session).await?;
                         erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                             .ensure_sellable_refs(
                                 &sellable_refs,
@@ -383,7 +388,7 @@ impl SalesOrderCommandProcess {
                 .await;
             if let Err(error) = transaction_result {
                 if let Some(order_id) = self
-                    .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
+                    .replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access)
                     .await?
                 {
                     return self
@@ -423,9 +428,11 @@ impl SalesOrderCommandProcess {
             erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
                 &working_copy_lines,
             )?;
+        let access_for_tx = access.clone();
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access_for_tx.creation(&order_for_tx, session).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs_for_tx,
@@ -470,7 +477,7 @@ impl SalesOrderCommandProcess {
             .await;
         if let Err(error) = transaction_result {
             if let Some(order_id) = self
-                .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
+                .replay_sales_order_creation(&audit_id, &fingerprint, actor.id(), &access)
                 .await?
             {
                 return self
@@ -494,6 +501,7 @@ impl SalesOrderCommandProcess {
         audit_id: &str,
         expected_fingerprint: &str,
         actor_id: &str,
+        access: &super::super::authorization::SalesCommandAccess,
     ) -> Result<Option<String>> {
         let Some(audit) = self
             .db
@@ -526,6 +534,15 @@ impl SalesOrderCommandProcess {
         if order.stable.created_by != actor_id {
             return Err(Error::Internal("销售建单幂等收据与创建人不一致".to_string()));
         }
+        let access = access.clone();
+        let check_id = order_id.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move { access.current(&check_id, executor).await })
+            })
+            .await?;
         Ok(Some(order_id))
     }
 }

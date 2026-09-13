@@ -142,7 +142,12 @@ impl SalesOrderService {
         &self,
         params: &crate::dto::sales_order::SalesOrderListParams,
         search: crate::repository::sales_order::SalesOrderSearch,
-    ) -> crate::Result<application_core::PageView<crate::repository::sales_order::SalesOrderRow>> {
+        scope: &crate::repository::sales_order::scope::SalesReadScope,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> crate::Result<(
+        application_core::PageView<crate::repository::sales_order::SalesOrderRow>,
+        Vec<crate::repository::sales_order::scope::SalesVersion>,
+    )> {
         use validator::Validate;
         type SalesOrderFilter = <mongodb::Database as crate::repository::SalesOrderExt>::SalesOrderFilter;
         params.validate()?;
@@ -174,14 +179,27 @@ impl SalesOrderService {
         let page = self
             .db
             .sales_orders()
-            .search_sales_orders(&filter, &mut NoTransaction)
+            .search_sales_orders(&filter, scope, executor)
             .await?;
 
-        Ok(application_core::PageView {
-            items: page.items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
-        })
+        let versions = self
+            .db
+            .sales_orders()
+            .query_versions(&filter, scope, executor)
+            .await?;
+        if versions.len() > 10_000 {
+            return Err(crate::Error::ValidationError(
+                "销售单查询超过上限，请收窄期间或客户条件".into(),
+            ));
+        }
+        Ok((
+            application_core::PageView {
+                items: page.items,
+                total: page.total,
+                page: filter.page,
+                page_size: filter.page_size,
+            },
+            versions,
+        ))
     }
 }

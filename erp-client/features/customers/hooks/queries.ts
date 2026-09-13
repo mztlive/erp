@@ -52,6 +52,7 @@ export function useCustomerCenterQuery(customerId: string) {
 export function useSaveCustomerDetailsMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: SaveCustomerDetailsInput) =>
             saveCustomerDetails(input),
         onSuccess: async (result) => {
@@ -67,6 +68,7 @@ export function useSaveCustomerDetailsMutation() {
 export function useCreateCustomerMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: CreateCustomerInput) => createCustomer(input),
         onSuccess: async (result) => {
             if (result.outcome === "succeeded") {
@@ -80,6 +82,7 @@ export function useCreateCustomerMutation() {
 
 export function useQueryCustomerIdempotencyMutation() {
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (idempotencyKey: string) =>
             queryCustomerMutationByIdempotency(idempotencyKey),
     })
@@ -89,6 +92,7 @@ export function useQueryCustomerIdempotencyMutation() {
 export function useApplyCustomerAssignmentMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (input: CustomerAssignmentChangeInput) =>
             applyCustomerAssignment(input),
         onSuccess: async () => {

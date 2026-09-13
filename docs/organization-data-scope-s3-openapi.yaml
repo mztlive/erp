@@ -1,0 +1,162 @@
+openapi: 3.1.0
+info:
+  title: 销售及成本范围读取增量合同
+  version: 1.0.0
+  description: 本文件规定 S3 读取接入的范围版本、部分金额和错误语义；原业务筛选及字段继续使用拥有领域 DTO。不得据此登记全部 S3 功能已交付。
+servers:
+  - url: http://localhost:10001
+security:
+  - bearerAuth: []
+paths:
+  /admin/sales-orders:
+    get:
+      operationId: sales_scope_list
+      summary: 当前授权范围内的销售单列表与负责人候选
+      description: 同事务执行范围过滤、业务筛选、总数、候选及业务版本读取；返回前复核。最多匹配 10000 张单，超过上限必须收窄期间或客户；跨页和 CSV 下载前须使用同一 scope_version。
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: owner_user_ids
+          in: query
+          schema: {type: string}
+          description: 逗号分隔稳定人员 ID，最多 100 项；同字段 OR，不同条件 AND。
+      responses:
+        '200':
+          description: 原 ApiResponse.data 分页及 owner_options，增加 ScopeMetadata；ownership_basis 为 document_sales_owner。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/ScopeMetadata'
+                      - type: object
+                        properties:
+                          items: {type: array, items: {type: object}}
+                          total: {type: integer}
+                          owner_options: {type: array, items: {type: object}}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/sales-orders/{id}:
+    get:
+      operationId: sales_scope_detail
+      summary: 独立重验当前授权后的销售详情
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': {description: 原销售详情；返回前再次验证当前详情权限、对象范围和业务版本。}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: 销售单不存在或不在当前范围内。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/cost-entries:
+    get:
+      operationId: cost_scope_list
+      summary: 当前授权成本分配份额列表
+      description: 成本与销售范围求交。裁剪全部候选后排序、计数和分页；金额排序采用可见分配合计。最多 10000 笔候选成本及 100000 条分配，超限拒绝；使用原成本类型、阶段、供应商和来源筛选。部分读取不能按隐藏来源单据筛选。
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': {description: ApiResponse.data 包含 ScopeMetadata、items、total、page、page_size；items 使用 ScopedCostEntry。}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/cost-entries/{id}:
+    get:
+      operationId: cost_scope_detail
+      summary: 当前授权范围内的成本详情
+      description: 同角色证明 cost_entry:detail 与 sales_order:list，再对两种资源的范围及个人上限求交。两种范围均为未收窄 Company 时允许整笔读取；其他情况只返回可见分配份额。
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: 完整或部分读取；部分读取不通过零值或差额泄露整笔金额。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/ScopeMetadata'
+                      - $ref: '#/components/schemas/ScopedCostEntry'
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: 成本不存在或无可见分配。}
+        '409': {$ref: '#/components/responses/Changed'}
+  /admin/cost-allocations:
+    get:
+      operationId: cost_allocation_scope_list
+      summary: 当前授权且匹配业务条件的成本分配
+      parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: cost_entry_id
+          in: query
+          schema: {type: string}
+        - name: sales_order_id
+          in: query
+          schema: {type: string}
+      responses:
+        '200': {description: 原分配分页 DTO 增加 ScopeMetadata；总数及分配均已裁剪，不返回不可见销售分配。}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Changed'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string}
+    ScopeVersion:
+      name: scope_version
+      in: query
+      description: 第二页起必填；第一页重验或下载前校验时也可提供。来源必须为本资源同一筛选的服务端响应，不使用盈亏报表版本替代成本版本。
+      schema: {type: string, minLength: 1, maxLength: 256}
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, default: 1}
+    PageSize:
+      name: page_size
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+  responses:
+    Invalid: {description: 参数、未知筛选字段、容量或金额合计非法。}
+    Forbidden: {description: 当前账号、动作或同角色完整授权失效。}
+    Changed: {description: DATA_SCOPE_CHANGED；清除旧结果并从第一页刷新，不拼接旧页面或输出旧文件。}
+  schemas:
+    ScopeMetadata:
+      type: object
+      required: [scope_version, policy_version, organization_version, as_of, scope_summary, ownership_basis]
+      properties:
+        scope_version: {type: string}
+        policy_version: {type: integer}
+        organization_version: {type: integer}
+        as_of: {type: string, format: date-time}
+        scope_summary: {type: string}
+        ownership_basis: {type: string}
+        empty_reason: {type: [string, 'null'], enum: [no_scope, null]}
+    ScopedCostEntry:
+      type: object
+      required: [id, whole_document_access, scope_gross_amount, scope_net_amount, gross_amount, net_amount, tax_amount, allocations]
+      properties:
+        id: {type: string}
+        whole_document_access: {type: boolean}
+        scope_gross_amount: {type: string, description: 可见分配含税合计。}
+        scope_net_amount: {type: string, description: 可见分配不含税合计。}
+        gross_amount: {type: [string, 'null'], description: 无整笔资格返回 null。}
+        net_amount: {type: [string, 'null'], description: 无整笔资格返回 null。}
+        tax_amount: {type: [string, 'null'], description: 无整笔资格返回 null。}
+        source_document_id: {type: [string, 'null']}
+        source_line_id: {type: [string, 'null']}
+        source_version: {type: [string, 'null']}
+        access_restriction: {type: [string, 'null'], enum: [permission_limited, null]}
+        allocations: {type: array, items: {type: object}, description: 仅当前获授权的分配，保持原金额与阶段方向。}

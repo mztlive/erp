@@ -440,6 +440,8 @@ pub(super) use erp_sales::service::sales_order::lifecycle::SalesOrderWorkingCopy
 /// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
 pub(super) async fn persist_sales_order_start(
     db: &Database,
+    access: super::authorization::SalesCommandAccess,
+    expected_order_version: u64,
     input: SalesOrderStartPersistInput,
 ) -> Result<SubmissionView> {
     let db = db.clone();
@@ -464,12 +466,27 @@ pub(super) async fn persist_sales_order_start(
         submission.clone(),
         submission_lines.clone(),
     );
+    let check = access.clone();
+    let check_id = order.base.id.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                check
+                    .revalidate(&check_id, expected_order_version, executor)
+                    .await
+            })
+        })
+        .await?;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(submission_view);
     };
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                access
+                    .revalidate(&order.base.id, expected_order_version, session)
+                    .await?;
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, session)
                     .await

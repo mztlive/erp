@@ -25,6 +25,8 @@ export type LoginResult = {
  * permissions 为 Casbin 隐式权限字符串，含通配如 `customer:*` / `*:*`。
  */
 export type AccountProfile = {
+    policy_version?: number
+    organization_version?: number
     userid: string
     account: string
     name: string

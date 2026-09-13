@@ -17,6 +17,7 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { buildSalesOrdersListColumns } from "./sales-orders-list-columns"
 
 export function SalesOrdersListTable(props: {
+    noScope?: boolean
     items: SalesOrderListItem[]
     total: number
     loading: boolean
@@ -76,18 +77,27 @@ export function SalesOrdersListTable(props: {
             onRetry={onRetry}
         />
     ) : undefined
+    const noScope = props.noScope === true
     const emptyState =
         !loading && items.length === 0 ? (
             <BusinessEmptyState
                 kind={filtersActive ? "filter" : "no-data"}
-                title={filtersActive ? undefined : "还没有销售单"}
+                title={
+                    noScope
+                        ? "暂无销售单数据范围"
+                        : filtersActive
+                          ? undefined
+                          : "还没有销售单"
+                }
                 description={
-                    filtersActive
-                        ? "换一个关键词或清除筛选后再试。"
-                        : "当前业务范围内还没有销售单，可新建第一张单。"
+                    noScope
+                        ? "请联系管理员配置可查看的业务范围。"
+                        : filtersActive
+                          ? "换一个关键词或清除筛选后再试。"
+                          : "当前业务范围内还没有销售单，可新建第一张单。"
                 }
                 action={
-                    filtersActive ? (
+                    noScope ? undefined : filtersActive ? (
                         <Button
                             id="sales-orders-list-empty-clear"
                             type="button"

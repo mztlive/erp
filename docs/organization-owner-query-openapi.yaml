@@ -87,8 +87,9 @@ paths:
     get:
       operationId: sales_orders_owner_query
       summary: 查询销售单负责销售范围内的数据
-      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      description: 使用 DataScope v2 当前销售责任范围；人员条件只收窄结果。范围版本、独立详情和导出复核按 organization-data-scope-s3-openapi.yaml 执行。
       parameters:
+        - $ref: './organization-data-scope-s3-openapi.yaml#/components/parameters/ScopeVersion'
         - $ref: '#/components/parameters/OwnerIds'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'

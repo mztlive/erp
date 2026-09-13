@@ -15,6 +15,8 @@ use crate::service::iam::SharedRbacService;
 pub struct AccountProfile {
     #[serde(rename = "userid")]
     pub user_id: String,
+    pub policy_version: u64,
+    pub organization_version: u64,
     pub account: String,
     pub name: String,
     pub email: Option<String>,
@@ -60,11 +62,27 @@ impl AccountProfileService {
     /// # 错误
     /// 当账号不存在时返回错误。
     pub async fn account_profile(&self, user_id: &str, account_kind: AccountKind) -> Result<AccountProfile> {
+        let policy_version = self.rbac.current_policy_revision().await?;
         let account = self.load_account(user_id, account_kind, "管理员不存在").await?;
         let role_ids = self.role_ids_for_account(&account).await?;
         let permissions = self.account_permissions(&account).await?;
         let avatar = Self::normalized_avatar(account.avatar.as_deref());
-        Ok(Self::build_profile(account, role_ids, permissions, avatar))
+        if !account.is_active_backoffice() {
+            return Err(crate::Error::Forbidden("账号已失效".into()));
+        }
+        let organization_version = crate::repository::OrganizationRepository::new(&self.db)
+            .revision(&mut NoTransaction)
+            .await?
+            .map_or(0, |row| row.revision);
+        if self.rbac.current_policy_revision().await? != policy_version {
+            return Err(crate::Error::ConflictError(
+                "DATA_SCOPE_CHANGED：权限已变化，请刷新".into(),
+            ));
+        }
+        let mut profile = Self::build_profile(account, role_ids, permissions, avatar);
+        profile.policy_version = policy_version;
+        profile.organization_version = organization_version;
+        Ok(profile)
     }
 
     /// 查询账号绑定的角色ID集合。
@@ -145,6 +163,8 @@ impl AccountProfileService {
 
         AccountProfile {
             user_id: base.id,
+            policy_version: 0,
+            organization_version: 0,
             account: secret.into_account(),
             name,
             email: None,

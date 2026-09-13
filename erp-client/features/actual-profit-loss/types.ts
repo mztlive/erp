@@ -184,6 +184,9 @@ export type ProfitLossView = Readonly<{
 }>
 
 export type CostEntryDetail = Readonly<{
+    wholeDocumentAccess?: boolean
+    scopeAmountGross?: string
+    scopeAmountNet?: string
     costEntryId: string
     costType: string
     costTypeLabel: string
@@ -193,10 +196,10 @@ export type CostEntryDetail = Readonly<{
     costScopeLabel: string
     supplierId?: string
     supplierName?: string
-    amountGross: string
+    amountGross: string | null
     taxRate: string
-    taxAmount: string
-    amountNet: string
+    taxAmount: string | null
+    amountNet: string | null
     occurredAt: string
     sourceType: string
     sourceTypeLabel: string

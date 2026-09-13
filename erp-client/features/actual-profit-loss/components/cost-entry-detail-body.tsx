@@ -20,6 +20,17 @@ import { cn } from "@/lib/utils"
 export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
     return (
         <div className="space-y-4">
+            {entry.wholeDocumentAccess === false ? (
+                <Alert>
+                    <AlertTitle>仅可查看授权范围内的成本分配</AlertTitle>
+                    <AlertDescription>
+                        范围内含税金额{" "}
+                        {formatMoneyDisplay(entry.scopeAmountGross)}，
+                        不含税金额 {formatMoneyDisplay(entry.scopeAmountNet)}。
+                        整笔金额、其他分配和完整来源资料受权限限制。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
             <DescriptionList columns="two">
                 <DescriptionItem>
                     <DescriptionTerm>费用类型</DescriptionTerm>

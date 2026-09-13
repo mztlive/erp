@@ -25,22 +25,25 @@ export type PeriodBasisConfigQuery = {
 
 /** 后端成本事实 DTO（CostEntryView）。 */
 type CostEntryDto = {
+    whole_document_access: boolean
+    scope_gross_amount: string
+    scope_net_amount: string
     id: string
     cost_type: string
     cost_stage: string
     cost_scope: string
     cost_basis?: string | null
     supplier_id?: string | null
-    gross_amount: string
-    net_amount: string
-    tax_amount: string
+    gross_amount: string | null
+    net_amount: string | null
+    tax_amount: string | null
     tax_inclusion: boolean
     input_tax_rate: string
     occurred_at: number
     source_fact_type: string
-    source_document_id: string
-    source_line_id: string
-    source_version: string
+    source_document_id: string | null
+    source_line_id: string | null
+    source_version: string | null
     created_at: number
     allocations: Array<{
         id: string
@@ -96,6 +99,9 @@ function mapCostEntry(dto: CostEntryDto): CostEntryDetail {
     const primary = dto.allocations[0]
     return {
         costEntryId: dto.id,
+        wholeDocumentAccess: dto.whole_document_access,
+        scopeAmountGross: dto.scope_gross_amount,
+        scopeAmountNet: dto.scope_net_amount,
         costType: dto.cost_type,
         costTypeLabel: COST_TYPE_LABEL[dto.cost_type] ?? dto.cost_type,
         stage: dto.cost_stage.toUpperCase() as CostStage,
@@ -105,17 +111,17 @@ function mapCostEntry(dto: CostEntryDto): CostEntryDetail {
         costScopeLabel:
             COST_SCOPE_LABEL[dto.cost_scope.toUpperCase()] ?? dto.cost_scope,
         supplierId: dto.supplier_id ?? undefined,
-        amountGross: String(dto.gross_amount),
+        amountGross: dto.gross_amount,
         taxRate: String(dto.input_tax_rate),
-        taxAmount: String(dto.tax_amount),
-        amountNet: String(dto.net_amount),
+        taxAmount: dto.tax_amount,
+        amountNet: dto.net_amount,
         occurredAt: unixToIso(dto.occurred_at),
         sourceType: dto.source_fact_type,
         sourceTypeLabel: dto.source_fact_type,
-        sourceDocumentId: dto.source_document_id,
-        sourceDocumentNo: dto.source_document_id,
+        sourceDocumentId: dto.source_document_id ?? "",
+        sourceDocumentNo: dto.source_document_id ?? "权限受限",
         sourceLineId: dto.source_line_id || undefined,
-        sourceVersion: dto.source_version,
+        sourceVersion: dto.source_version ?? "—",
         salesOrderId: primary?.sales_order_id ?? "",
         salesOrderNo: primary?.sales_order_id ?? "",
         salesOrderLineId: primary?.sales_order_line_id ?? undefined,

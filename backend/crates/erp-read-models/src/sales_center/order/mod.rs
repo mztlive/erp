@@ -3,6 +3,8 @@ mod adapter;
 mod approval_query;
 pub mod dto;
 mod query;
+mod scope;
+pub use scope::{SalesListParams, SalesListView};
 mod status;
 
 use crate::{Error, Result};

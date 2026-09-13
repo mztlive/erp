@@ -10,13 +10,12 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use erp_finance::dto::cost::CostAllocationListParams;
 use erp_finance::dto::cost::CostAllocationView;
-use erp_finance::dto::cost::CostEntryListParams;
 use erp_finance::dto::cost::CostEntryView;
 use erp_finance::dto::cost::CreateCostEntryRequest;
 use erp_finance::dto::cost::PageView;
-use erp_finance::service::cost::CostService;
+use erp_finance::dto::cost::ScopedCostEntryView;
+use erp_read_models::finance::cost::{AllocationReadParams, CostReadModel, CostReadParams, CostReadResult};
 
 use crate::{
     app_state::AppState,
@@ -40,9 +39,12 @@ use crate::{
 /// 返回契约形状的分页视图。
 pub async fn cost_entry_list(
     State(state): State<AppState>,
-    Query(params): Query<CostEntryListParams>,
-) -> Result<PageView<CostEntryView>> {
-    let page = CostService::new(state.db()).cost_entry_list(&params).await?;
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<CostReadParams>,
+) -> Result<CostReadResult<PageView<ScopedCostEntryView>>> {
+    let page = CostReadModel::new(state.db(), state.rbac())
+        .list(params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -64,9 +66,12 @@ pub async fn cost_entry_list(
 /// 返回完整成本视图。
 pub async fn cost_entry_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<CostEntryView> {
-    let view = CostService::new(state.db()).cost_entry_detail(&id).await?;
+) -> Result<CostReadResult<ScopedCostEntryView>> {
+    let view = CostReadModel::new(state.db(), state.rbac())
+        .detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -116,9 +121,31 @@ pub async fn cost_entry_create(
 /// 返回契约形状的分页视图。
 pub async fn cost_allocation_list(
     State(state): State<AppState>,
-    Query(params): Query<CostAllocationListParams>,
-) -> Result<PageView<CostAllocationView>> {
-    let page = CostService::new(state.db()).cost_allocation_list(&params).await?;
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<AllocationReadParams>,
+) -> Result<CostReadResult<PageView<CostAllocationView>>> {
+    let page = CostReadModel::new(state.db(), state.rbac())
+        .allocations(params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::Uri;
+
+    #[test]
+    fn scope_query_decodes_real_url_numbers_and_rejects_unregistered_filters() {
+        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&cost_stage=actual"
+            .parse()
+            .unwrap();
+        let Query(params) = Query::<CostReadParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(params.page, Some(2));
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        let unsupported: Uri = "/?owner_user_ids=someone".parse().unwrap();
+        assert!(Query::<CostReadParams>::try_from_uri(&unsupported).is_err());
+        assert!(Query::<AllocationReadParams>::try_from_uri(&unsupported).is_err());
+    }
 }

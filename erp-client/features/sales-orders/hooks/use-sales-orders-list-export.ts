@@ -13,13 +13,29 @@ export const useSalesOrdersListExport = (
 ) => {
     const mutation = useMutation({
         mutationFn: async () => {
+            let scopeVersion: string | undefined
             const items = await collectExportPages(
-                (page, pageSize) =>
-                    fetchSalesOrders({ ...query, page, pageSize }),
+                async (page, pageSize) => {
+                    const result = await fetchSalesOrders({
+                        ...query,
+                        page,
+                        pageSize,
+                        scopeVersion,
+                    })
+                    scopeVersion = result.scopeVersion
+                    return result
+                },
                 (row) => row.id,
             )
             const now = new Date()
             const { fileName, content } = buildSalesOrdersListCsv(items, now)
+            // 最后一页之后、生成文件后再次验证，撤权或业务变化时不下载旧文件。
+            await fetchSalesOrders({
+                ...query,
+                page: 1,
+                pageSize: 1,
+                scopeVersion,
+            })
             downloadListCsv(content, fileName)
             return {
                 jobId: "",

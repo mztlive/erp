@@ -44,9 +44,30 @@ export function useSalesOrdersQuery(
     query: SalesOrdersListQuery,
     enabled = true,
 ) {
+    const client = useQueryClient()
+    const firstPage = { ...query, page: 1, scopeVersion: undefined }
+    const baseline = client.getQueryData<
+        import("@/features/sales-orders/api/contracts").SalesOrderListView
+    >(salesOrderKeys.list(firstPage))
+    const scopeVersion =
+        query.scopeVersion ??
+        (query.page > 1 ? baseline?.scopeVersion : undefined)
+    const scoped = { ...query, scopeVersion }
     return useQuery({
-        queryKey: salesOrderKeys.list(query),
-        queryFn: () => fetchSalesOrders(query),
+        queryKey: salesOrderKeys.list(scoped),
+        queryFn: async () => {
+            if (query.page === 1 || scopeVersion)
+                return fetchSalesOrders(scoped)
+            // 直接打开后续页时先建立本次查询的第一页授权快照。
+            const first = await client.fetchQuery({
+                queryKey: salesOrderKeys.list(firstPage),
+                queryFn: () => fetchSalesOrders(firstPage),
+            })
+            return fetchSalesOrders({
+                ...query,
+                scopeVersion: first.scopeVersion,
+            })
+        },
         enabled,
     })
 }

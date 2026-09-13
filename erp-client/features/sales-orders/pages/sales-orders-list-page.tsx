@@ -185,6 +185,7 @@ export function SalesOrdersListPage() {
                 tableClassName={salesStyles.table}
                 table={
                     <SalesOrdersListTable
+                        noScope={ordersQuery.data?.emptyReason === "no_scope"}
                         items={items}
                         total={total}
                         loading={ordersQuery.isPending}

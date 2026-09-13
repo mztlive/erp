@@ -203,6 +203,8 @@ pub(super) struct SalesOrderCancelPersistInput {
 /// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
 pub(super) async fn persist_sales_order_cancel(
     db: &Database,
+    access: super::authorization::SalesCommandAccess,
+    expected_order_version: u64,
     input: SalesOrderCancelPersistInput,
 ) -> Result<()> {
     let SalesOrderCancelPersistInput {
@@ -214,6 +216,18 @@ pub(super) async fn persist_sales_order_cancel(
         now,
         audit,
     } = input;
+    let check = access.clone();
+    let check_id = order.base.id.clone();
+    db.client()
+        .clone()
+        .with_transaction(move |executor| {
+            Box::pin(async move {
+                check
+                    .revalidate(&check_id, expected_order_version, executor)
+                    .await
+            })
+        })
+        .await?;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
     };
@@ -223,6 +237,9 @@ pub(super) async fn persist_sales_order_cancel(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                access
+                    .revalidate(&order.base.id, expected_order_version, session)
+                    .await?;
                 claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                     .persist_order(&mut order, session)

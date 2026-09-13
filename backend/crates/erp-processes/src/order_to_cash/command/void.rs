@@ -38,12 +38,10 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
-        let mut order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        let access = self.command_access(actor, "delete")?;
+        let authorized_order = access.current(id, &mut NoTransaction).await?;
+        let mut order = authorized_order;
+        let expected_order_version = order.base.version;
         if !order.matches_version(req.version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
@@ -68,6 +66,9 @@ impl SalesOrderCommandProcess {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .revalidate(&order.base.id, expected_order_version, session)
+                        .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .persist_void(&mut order, working_copy.as_mut(), session)
                         .await?;

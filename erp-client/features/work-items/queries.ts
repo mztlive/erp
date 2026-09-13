@@ -98,6 +98,7 @@ export const useWorkItemStatsQuery = (params: WorkItemStatsParams) =>
 export function useWorkItemResponsibilityMutation() {
     const queryClient = useQueryClient()
     return useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: submitWorkItemResponsibility,
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: workItemKeys.all })

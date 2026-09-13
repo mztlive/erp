@@ -2,6 +2,7 @@
 
 mod adapter;
 pub mod adapters;
+mod authorization;
 mod cancel_approval;
 mod command;
 mod draft_working_copy;

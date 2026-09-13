@@ -42,15 +42,13 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<WorkingCopyView> {
         req.validate()?;
+        let access = self.command_access(actor, "update")?;
+        let authorized_order = access.current(id, &mut NoTransaction).await?;
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(&req.contract_id, req.draft)
             .await?;
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        let order = authorized_order;
+        let expected_order_version = order.base.version;
         if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
             return Err(Error::ConflictError(
                 "销售单合同归属已变化，请刷新后重试".to_string(),
@@ -92,6 +90,9 @@ impl SalesOrderCommandProcess {
         let working_copy = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .revalidate(&order.base.id, expected_order_version, session)
+                        .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs_for_tx,

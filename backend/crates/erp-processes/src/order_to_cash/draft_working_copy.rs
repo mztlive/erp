@@ -75,6 +75,7 @@ impl SalesOrderCommandProcess {
         let working_copy = self
             .persist_reopened_first_submission_working_copy(
                 order.base.id.as_str(),
+                order.base.version,
                 stable.created,
                 working_copy,
                 working_copy_lines,
@@ -111,6 +112,7 @@ impl SalesOrderCommandProcess {
     async fn persist_reopened_first_submission_working_copy(
         &self,
         order_id: &str,
+        expected_order_version: u64,
         created_stable_lines: Vec<SalesOrderLine>,
         working_copy: SalesOrderWorkingCopy,
         working_copy_lines: Vec<SalesOrderWorkingCopyLine>,
@@ -125,9 +127,14 @@ impl SalesOrderCommandProcess {
         let sellable_refs = erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
             &working_copy_lines,
         )?;
+        let access = self.command_access(actor, "update")?;
+        let order_id = order_id.to_string();
         let persisted = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .revalidate(&order_id, expected_order_version, session)
+                        .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(
                             &sellable_refs,

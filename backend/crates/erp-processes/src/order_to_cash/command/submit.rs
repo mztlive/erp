@@ -142,6 +142,8 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
     ) -> Result<SubmissionView> {
         req.validate()?;
+        let access = self.command_access(actor, "submit")?;
+        let authorized_order = access.current(id, &mut NoTransaction).await?;
         let idempotency_key = req.idempotency_key.trim().to_string();
         if idempotency_key.is_empty() {
             return Err(Error::ValidationError("幂等键不能为空".to_string()));
@@ -149,7 +151,7 @@ impl SalesOrderCommandProcess {
         let audit_id = sales_submission_audit_id(actor.id(), id, &idempotency_key);
         let fingerprint = sales_submission_fingerprint(actor.id(), id, &req)?;
         if let Some(existing) = self
-            .replay_sales_submission(&audit_id, &fingerprint, id, actor.id())
+            .replay_sales_submission(&audit_id, &fingerprint, id, actor)
             .await?
         {
             return Ok(existing);
@@ -157,12 +159,7 @@ impl SalesOrderCommandProcess {
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(&req.contract_id, req.draft)
             .await?;
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        let order = authorized_order;
         order
             .ensure_first_submission_working_copy_editable()
             .map_err(|error| Error::ConflictError(error.to_string()))?;
@@ -275,6 +272,8 @@ impl SalesOrderCommandProcess {
             copy_lines,
             working_copy_plan,
         } = start;
+        let access = self.command_access(actor, "submit")?;
+        let expected_order_version = order.base.version;
         let ports = sales_approval_ports(order.business_type)?;
         let subject = crate::order_to_cash::subject_ref_for_sales_business(order.business_type, id)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
@@ -348,6 +347,8 @@ impl SalesOrderCommandProcess {
         let recovery_subject_version = submission.submission_no;
         let persisted = persist_sales_order_start(
             &self.db,
+            access,
+            expected_order_version,
             SalesOrderStartPersistInput {
                 order,
                 working_copy,
@@ -391,7 +392,7 @@ impl SalesOrderCommandProcess {
         audit_id: &str,
         expected_fingerprint: &str,
         sales_order_id: &str,
-        actor_id: &str,
+        actor: &AuditActor,
     ) -> Result<Option<SubmissionView>> {
         let Some(audit) = self
             .db
@@ -414,7 +415,7 @@ impl SalesOrderCommandProcess {
             .find_by_id(submission_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Internal("销售提交幂等收据对应快照缺失".to_string()))?;
-        if !submission.matches_receipt_identity(sales_order_id, actor_id) {
+        if !submission.matches_receipt_identity(sales_order_id, actor.id()) {
             return Err(Error::Internal("销售提交幂等收据与业务对象不一致".to_string()));
         }
         let submission_id = SalesOrderSubmissionId::new(submission.base.id.clone());
@@ -422,6 +423,13 @@ impl SalesOrderCommandProcess {
             .db
             .sales_order_submission_lines()
             .list_lines_by_submissions(&[submission_id], &mut NoTransaction)
+            .await?;
+        let access = self.command_access(actor, "submit")?;
+        let id = sales_order_id.to_string();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| Box::pin(async move { access.current(&id, executor).await }))
             .await?;
         Ok(Some(submission_view(submission, lines)))
     }
@@ -451,16 +459,13 @@ impl SalesOrderCommandProcess {
             let actor_id = input.actor.id().to_string();
             let document_type = input.document_type;
             let subject_version = input.subject_version;
+            let access = self.command_access(input.actor, "submit")?;
             let recovered = self
                 .db
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
-                        let order = db
-                            .sales_orders()
-                            .find_by_id(&sales_order_id_owned, session)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+                        let order = access.current(&sales_order_id_owned, session).await?;
                         let current_ports = sales_approval_ports(order.business_type)?;
                         if current_ports.document_type != document_type {
                             return Err(Error::ConflictError(
@@ -501,7 +506,7 @@ impl SalesOrderCommandProcess {
                             input.audit_id,
                             input.fingerprint,
                             input.sales_order_id,
-                            input.actor.id(),
+                            input.actor,
                         )
                         .await?
                     {

@@ -23,7 +23,9 @@ export function useAccountProfileQuery() {
         queryKey: accountProfileKeys.current(),
         queryFn: fetchAccountProfile,
         enabled: typeof window !== "undefined" && isAuthenticated(),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 30_000,
+        refetchOnWindowFocus: "always",
+        refetchInterval: 30_000,
     })
 }
 

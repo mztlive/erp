@@ -220,11 +220,15 @@ impl<'a> SalesOrderRepository<'a> {
     ///
     /// # 错误
     /// 数据库查询失败向上传播。
-    pub async fn current_owner_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+    pub async fn current_owner_ids(
+        &self,
+        scope: &super::scope::SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
         let collection = self.collection();
         let mut query = collection.distinct(
             "sales_owner_user_id",
-            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON },
+            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
         );
         if let Some(session) = executor.session() {
             query = query.session(session);
@@ -350,6 +354,7 @@ impl<'a> SalesOrderRepository<'a> {
     pub async fn search_sales_orders(
         &self,
         filter: &SalesOrderFilter,
+        scope: &super::scope::SalesReadScope,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SalesOrderRow>> {
         let options = FindOptions::builder()
@@ -359,13 +364,49 @@ impl<'a> SalesOrderRepository<'a> {
             .projection(sales_order_projection())
             .build();
         let collection = self.collection().clone_with_type::<SalesOrderRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items = mongo_ops::find_many(
+            &collection,
+            doc! { "$and": [filter.to_doc(), scope.document()] },
+            options,
+            executor,
+        )
+        .await?;
+        let total = mongo_ops::count_documents(
+            &self.collection(),
+            doc! { "$and": [filter.to_doc(), scope.document()] },
+            executor,
+        )
+        .await?;
 
         Ok(PageResult {
             items,
             total: total as i64,
         })
+    }
+    /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
+    ///
+    /// # 返回
+    /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    pub async fn query_versions(
+        &self,
+        filter: &SalesOrderFilter,
+        scope: &super::scope::SalesReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<super::scope::SalesVersion>> {
+        mongo_ops::find_many(
+            &self.collection().clone_with_type::<super::scope::SalesVersion>(),
+            doc! { "$and": [filter.to_doc(), scope.document()] },
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "version": 1 })
+                .sort(doc! { "id": 1 })
+                .limit(10001)
+                .build(),
+            executor,
+        )
+        .await
     }
 }
 

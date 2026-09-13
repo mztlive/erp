@@ -48,9 +48,15 @@ export async function fetchSalesOrders(
 
     const page = await apiGet<
         PageView<BackendSalesOrderView> & {
+            empty_reason?: string | null
+            scope_version: string
+            policy_version: number
+            organization_version: number
+            scope_summary: string
             owner_options: { value: string; label: string }[]
         }
     >("/admin/sales-orders", {
+        scope_version: query.scopeVersion,
         page: query.page,
         page_size: query.pageSize,
         q: query.search?.trim() || undefined,
@@ -104,6 +110,11 @@ export async function fetchSalesOrders(
     return {
         items,
         ownerOptions: page.owner_options ?? [],
+        emptyReason: page.empty_reason,
+        scopeVersion: page.scope_version,
+        policyVersion: page.policy_version,
+        organizationVersion: page.organization_version,
+        scopeSummary: page.scope_summary,
         total: page.total,
         page: page.page,
         pageSize: page.page_size,

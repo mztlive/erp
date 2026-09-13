@@ -9,6 +9,8 @@ use crate::Result;
 /// 已接入 S2 的资源与完整动作目录；不得用通配符初始化范围。
 pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
     ("org_unit", &["list", "manage"]),
+    ("cost_entry", &["list", "detail"]),
+    ("cost_allocation", &["list"]),
     ("customer", &["list", "detail", "create", "update", "delete"]),
     ("contract", &["list", "detail", "create", "update"]),
     (
@@ -79,10 +81,12 @@ fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeDat
     match role {
         "role-root" => {}
         "role-sysadmin" if resource == "org_unit" => {}
-        "role-management" | "role-finance" => granted_actions = vec!["list", "detail"],
+        "role-management" | "role-finance" => {
+            granted_actions.retain(|action| matches!(*action, "list" | "detail"))
+        }
         "role-sales-leader" => {
             scope_types = vec![DataScopeType::Team];
-            granted_actions = vec!["list", "detail"];
+            granted_actions.retain(|action| matches!(*action, "list" | "detail"));
         }
         "role-sales" if resource != "purchase_order" => {
             scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]

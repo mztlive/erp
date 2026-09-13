@@ -25,7 +25,7 @@ use super::SalesOrderReadService;
 use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_identity::subject;
-use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SalesOrderListParams, SubmissionView};
+use erp_sales::dto::sales_order::{PageView, SalesOrderLineView, SubmissionView};
 use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::service::document_registry::find_approval_binding;
 
@@ -72,11 +72,28 @@ impl SalesOrderReadService {
     )]
     pub async fn sales_order_list(
         &self,
-        params: &SalesOrderListParams,
-    ) -> Result<application_core::FilteredPage<SalesOrderView>> {
+        params: &super::SalesListParams,
+        actor: &AuditActor,
+    ) -> Result<super::SalesListView> {
+        let expected = params.scope_version.as_deref();
+        if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
+            ));
+        }
         validator::Validate::validate(params)?;
         let search = self.keyword_search(params.q.as_deref()).await?;
-        let page = self.sales().list_rows(params, search).await?;
+        let super::scope::SalesSnapshot {
+            page,
+            owner_options,
+            context,
+            no_scope,
+        } = self.list_snapshot(params, search.clone(), actor).await?;
+        if expected.is_some_and(|value| value != context.scope_version) {
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
+            ));
+        }
 
         let owners = self
             .resolve_stage_owners_batch(
@@ -144,24 +161,30 @@ impl SalesOrderReadService {
             })
             .collect();
 
-        let owner_ids = self
-            .db
-            .sales_orders()
-            .current_owner_ids(&mut NoTransaction)
+        let current = self
+            .list_snapshot(params, self.keyword_search(params.q.as_deref()).await?, actor)
             .await?;
-        let owner_options = self
-            .db
-            .accounts()
-            .filter_options(&owner_ids, &mut NoTransaction)
-            .await?;
-        Ok(application_core::FilteredPage {
-            owner_options,
-            ownership_basis: "document_sales_owner",
-            page: PageView {
-                items,
-                total: page.total,
-                page: page.page,
-                page_size: page.page_size,
+        if current.context.scope_version != context.scope_version {
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
+            ));
+        }
+        Ok(super::SalesListView {
+            scope_version: context.scope_version,
+            policy_version: context.policy_version,
+            organization_version: context.organizations.version,
+            as_of: context.as_of.as_utc().to_rfc3339(),
+            empty_reason: no_scope.then_some("no_scope"),
+            scope_summary: "销售单当前负责人、业务组织及有效协作或参与范围",
+            data: application_core::FilteredPage {
+                owner_options,
+                ownership_basis: "document_sales_owner",
+                page: PageView {
+                    items,
+                    total: page.total,
+                    page: page.page,
+                    page_size: page.page_size,
+                },
             },
         })
     }
@@ -186,12 +209,21 @@ impl SalesOrderReadService {
         id: &str,
         actor: Option<&AuditActor>,
     ) -> Result<SalesOrderDetailView> {
-        let order = self
-            .db
-            .sales_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        let mut access_version = None;
+        let order = if let Some(actor) = actor {
+            let (order, version) =
+                crate::sales_center::access::SalesAccess::new(self.db.clone(), self.require_rbac()?.clone())
+                    .detail(actor, id)
+                    .await?;
+            access_version = Some(version);
+            order
+        } else {
+            self.db
+                .sales_orders()
+                .find_by_id(id, &mut NoTransaction)
+                .await?
+                .ok_or_else(|| Error::NotFound("销售单不存在".into()))?
+        };
 
         let order_id = SalesOrderId::new(order.base.id.clone());
 
@@ -342,6 +374,18 @@ impl SalesOrderReadService {
             )
             .await?,
         );
+
+        if let (Some(actor), Some(expected)) = (actor, access_version) {
+            let (_, current) =
+                crate::sales_center::access::SalesAccess::new(self.db.clone(), self.require_rbac()?.clone())
+                    .detail(actor, id)
+                    .await?;
+            if current != expected {
+                return Err(Error::ConflictError(
+                    "DATA_SCOPE_CHANGED：数据范围或销售单已变化，请刷新".into(),
+                ));
+            }
+        }
 
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),

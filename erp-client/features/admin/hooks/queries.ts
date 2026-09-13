@@ -64,10 +64,12 @@ export function useAdminMutations() {
     }
 
     const create = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (payload: CreateAdminPayload) => createAdmin(payload),
         onSuccess: invalidate,
     })
     const update = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: ({
             id,
             payload,
@@ -78,11 +80,13 @@ export function useAdminMutations() {
         onSuccess: invalidate,
     })
     const updateRole = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: ({ id, role_ids }: { id: string; role_ids: string[] }) =>
             updateAdminRole(id, { role_ids }),
         onSuccess: invalidate,
     })
     const remove = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (id: string) => deleteAdmin(id),
         onSuccess: invalidate,
     })
@@ -110,10 +114,12 @@ export function useRoleMutations() {
     }
 
     const create = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (payload: CreateRolePayload) => createRole(payload),
         onSuccess: invalidate,
     })
     const update = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: ({
             id,
             payload,
@@ -124,6 +130,7 @@ export function useRoleMutations() {
         onSuccess: invalidate,
     })
     const remove = useMutation({
+        meta: { affectsDataScope: true },
         mutationFn: (id: string) => deleteRole(id),
         onSuccess: invalidate,
     })

@@ -246,7 +246,7 @@ impl CostService {
 ///
 /// # 错误
 /// 分页参数或排序字段非法时返回验证错误。
-fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
+pub fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
     params.validate()?;
     let query = params.normalized()?;
     Ok(CostEntryFilter {
@@ -273,7 +273,7 @@ fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
 ///
 /// # 返回
 /// 返回完整成本事实列表视图。
-fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> CostEntryView {
+pub fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> CostEntryView {
     CostEntryView {
         id: row.id,
         cost_type: row.cost_type,
