@@ -38,6 +38,7 @@
 ## 编码约定
 
 - Rust 格式遵循 rustfmt（最大宽度 110）；模块 snake_case，类型 CamelCase，常量大写蛇形。
+- **导入约定**：不允许在代码中写完整路径引用（例如 `erp_workflow::service::approval::binding::binding_decision`）。所有引用必须在文件顶部通过 `use` 导入后再使用短名；发生命名冲突时允许定义别名（`use ... as ...`）。`use` 语句本身、`mod` 声明、以及必须用路径消歧的 `<Type as Trait>::item` 不受此条约束。
 - **分支表达约定**：
   - 固定模式匹配且分支语义清晰时可以使用 `match`。
   - 对于 `Option` 的简单透传/转换场景，避免使用 `match x { Some(v) => ..., None => None }`。
@@ -57,6 +58,7 @@
 - **Service 模块组织约定**：如果 service 层只有一个 service 文件，就把代码写到 `mod.rs` 中；只有当 service 层有多个 service 文件需要拆分时，才创建独立 `service.rs`。
 - **Service 方法命名约定**：查询类方法使用名词（如 `consumer_list`、`role_list`），操作类方法保持动词（`create`、`update`、`delete`）。
 - **流程控制约定**：优先守卫子句（guard clauses），避免深层嵌套 if-else。
+- **错误传播约定**：尽量不要使用 `map_err`。能用 `?` 直接传递的错误就用 `?`；需要转换错误类型时，优先通过 `thiserror` 的 `#[from]` 或显式 `From` 实现，而不是在调用点 `map_err`。
 - **方法长度约定**：
   - 业务代码方法（`apps/web-api/src/core/handler`、领域 crate 的 `service`、`repository`、`entity` 及命名 Process/ReadModel）应尽量控制在 30 行以内（有效代码行，不含空行与纯注释行）。
   - 超出 30 行时必须拆分私有 helper，保持单一职责和可测试性。
