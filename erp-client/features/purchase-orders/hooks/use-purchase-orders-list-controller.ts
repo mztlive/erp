@@ -85,6 +85,14 @@ export function usePurchaseOrdersListController() {
 
     const exportCsv = React.useCallback(async () => {
         const result = await exportQuery.refetch()
+        if (result.isError) {
+            setActionResult({
+                status: "failed",
+                title: "导出失败",
+                description: "请重新查询后重试",
+            })
+            return
+        }
         const rows = result.data ?? []
         if (rows.length === 0) return
         const csv = buildPurchaseOrdersCsv(rows)
@@ -115,6 +123,8 @@ export function usePurchaseOrdersListController() {
     return {
         searchInputRef,
         filters: {
+            ownerDraft: filters.ownerDraft,
+            setOwnerDraft: filters.setOwnerDraft,
             searchDraft: filters.searchDraft,
             setSearchDraft: filters.setSearchDraft,
             hasActiveFilters: filters.hasActiveFilters,

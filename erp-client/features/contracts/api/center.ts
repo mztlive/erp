@@ -115,7 +115,7 @@ export async function fetchContractCenter(
                 detail.customer_id,
             reference: customer?.customerNo,
         },
-        ownerLabel: customer?.ownerLabel ?? "—",
+        ownerLabel: detail.owner_user_name ?? "未指定",
         ownerKind: "current_customer_owner",
         currentRevision: {
             revisionId: current?.id ?? detail.current_revision_id ?? detail.id,

@@ -1,4 +1,5 @@
 "use client"
+import { ResponsibleUserFilter } from "@/features/entity-selectors/components/responsible-user-filter"
 
 import { FileUpIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -123,21 +124,13 @@ export function ContractsTablePanel({
                                     searchPlaceholder="搜索结算主体名称"
                                 />
                             </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor="card-contracts-list-filter-owner"
-                                label="负责人"
-                            >
-                                <OptionCombobox
-                                    id="card-contracts-list-filter-owner"
-                                    className="w-full"
-                                    value={ownerDraft}
-                                    aria-label="负责人"
-                                    onValueChange={setOwnerDraft}
-                                    options={ownerOptions}
-                                    placeholder="全部负责人"
-                                    searchPlaceholder="搜索负责人姓名"
-                                />
-                            </ListWorkspaceFilterField>
+                            <ResponsibleUserFilter
+                                id="card-contracts-list-filter-owner"
+                                label="当前跟进负责人"
+                                value={ownerDraft ?? ""}
+                                onChange={setOwnerDraft}
+                                options={ownerOptions}
+                            />
                         </div>
                     }
                     resultStatus={listWorkspaceFilterStatusText({

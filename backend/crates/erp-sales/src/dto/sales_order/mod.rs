@@ -242,7 +242,10 @@ pub struct CancelSalesOrderApprovalRequest {
 
 /// 销售单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SalesOrderListParams {
+    /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 销售单号、客户当前名称或合同号的字面量关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -296,6 +299,8 @@ pub struct SalesOrderListParams {
 /// 归一化后的销售单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SalesOrderListQuery {
+    /// 当前负责人精确身份条件。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 销售单号筛选。
     pub order_no: Option<String>,
     /// 客户筛选。
@@ -350,6 +355,7 @@ impl SalesOrderListParams {
             ));
         }
         Ok(SalesOrderListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
             order_no: normalized_text(self.order_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
             contract_id: self.contract_id.as_ref().map(ToString::to_string),

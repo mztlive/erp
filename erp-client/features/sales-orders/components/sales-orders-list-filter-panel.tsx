@@ -1,5 +1,10 @@
 "use client"
 
+import {
+    ResponsibleUserFilter,
+    type ResponsibleUserOption,
+} from "@/features/entity-selectors/components/responsible-user-filter"
+
 import * as React from "react"
 
 import {
@@ -26,6 +31,7 @@ import type { SalesOrdersListFilterDraft } from "@/features/sales-orders/lib/sal
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
 
 export function SalesOrdersListFilterPanel(props: {
+    ownerOptions: readonly ResponsibleUserOption[]
     draft: SalesOrdersListFilterDraft
     onDraftChange: React.Dispatch<
         React.SetStateAction<SalesOrdersListFilterDraft>
@@ -36,6 +42,15 @@ export function SalesOrdersListFilterPanel(props: {
 
     return (
         <div className="grid min-w-0 gap-5">
+            <ResponsibleUserFilter
+                id="sales-orders-list-owner"
+                label="负责销售"
+                value={filterDraft.ownerUserIds}
+                onChange={(ownerUserIds) =>
+                    setFilterDraft((draft) => ({ ...draft, ownerUserIds }))
+                }
+                options={props.ownerOptions}
+            />
             <fieldset className="min-w-0">
                 <legend className="mb-3 text-xs font-medium">来源与状态</legend>
                 <div className="grid min-w-0 gap-3">

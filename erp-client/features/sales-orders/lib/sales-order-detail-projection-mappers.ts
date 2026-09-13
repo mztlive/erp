@@ -90,7 +90,6 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
     amountGross?: string
     amountNet?: string
     taxAmount?: string
-    ownerUserId: string
     customerName?: string
     contractNo?: string
     settlementPartyName?: string
@@ -102,19 +101,13 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
     remark?: string
 } {
     const source = pickSalesOrderCommercialSource(detail)
-    const submitted = latestSubmission(detail)
     if (source) {
         const lines = source.lines ?? []
-        const ownerUserId =
-            "editor_user_id" in source
-                ? source.editor_user_id || submitted?.submitted_by || ""
-                : source.submitted_by || ""
         return {
             lines,
             amountGross: source.gross_amount,
             amountNet: source.net_amount,
             taxAmount: source.tax_amount,
-            ownerUserId,
             customerName: source.customer_name || undefined,
             contractNo: source.contract_no || undefined,
             settlementPartyName: source.settlement_party_name || undefined,
@@ -133,7 +126,6 @@ function pickCommercialContent(detail: BackendSalesOrderDetail): {
 
     return {
         lines: [],
-        ownerUserId: "",
         paymentTerms: "",
         taxRatePercent: "",
         welfareScene: "",
@@ -202,8 +194,8 @@ export function mapDetailToListItem(
             receivedAmount: detail.settled_total,
             invoicedAmount: detail.invoiced_total,
             lineItems: mapWorkingCopyLines(commercial.lines),
-            ownerUserId: extras?.ownerUserId || detail.owner_user_id || "",
-            ownerName: extras?.ownerName || "",
+            ownerUserId: detail.owner_user_id || "",
+            ownerName: detail.owner_user_name || "未指定",
             customerContact: extras?.customerContact,
             paymentTerms: commercial.paymentTerms,
             taxRatePercent: commercial.taxRatePercent,

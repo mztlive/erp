@@ -193,6 +193,7 @@ export type CustomerCenterView = Readonly<{
 }>
 
 export type CustomerDirectoryQuery = Readonly<{
+    ownerUserIds?: string
     scope: CustomerScope
     status: "active" | "disabled" | "all"
     query?: string
@@ -203,6 +204,7 @@ export type CustomerDirectoryQuery = Readonly<{
 }>
 
 export type CustomerDirectoryResult = Readonly<{
+    ownerOptions?: { value: string; label: string }[]
     /** False when role has no customer data scope at all. */
     hasCustomerScope: boolean
     items: readonly CustomerDirectoryItem[]

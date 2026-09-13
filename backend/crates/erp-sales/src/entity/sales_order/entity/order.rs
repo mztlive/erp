@@ -25,6 +25,8 @@ const SOURCE_STATUS_CODE_MAX_LEN: usize = 64;
 /// 销售单创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesOrderData {
+    /// 明确的内部销售责任身份；创建用例负责校验来源映射，禁止以系统执行人兜底。
+    pub sales_owner_user_id: String,
     /// 销售单号（唯一，创建后不可修改）。
     pub order_no: String,
     /// 业务性质（创建后永久不变）。
@@ -62,6 +64,8 @@ pub struct SalesOrderUpdate {
 /// `PartialEq`/`Eq`（全字段语义相等）以替代约定中的派生写法。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity)]
 pub struct SalesOrder {
+    /// 单据负责销售；ERP 创建时取认证建单人，普通编辑不得修改。
+    pub sales_owner_user_id: String,
     #[serde(flatten)]
     pub base: BaseModel,
     #[serde(flatten)]
@@ -106,7 +110,8 @@ pub struct SalesOrder {
 impl PartialEq for SalesOrder {
     /// 全字段语义相等。
     fn eq(&self, other: &Self) -> bool {
-        self.base == other.base
+        self.sales_owner_user_id == other.sales_owner_user_id
+            && self.base == other.base
             && self.stable.status == other.stable.status
             && self.stable.current_revision_id == other.stable.current_revision_id
             && self.stable.created_by == other.stable.created_by
@@ -164,7 +169,15 @@ impl SalesOrder {
             SOURCE_STATUS_CODE_MAX_LEN,
         )?;
 
+        let created_by = created_by.into();
+        let sales_owner_user_id = normalize_required_text(
+            data.sales_owner_user_id,
+            "负责销售不能为空",
+            128,
+            "负责销售 ID 过长",
+        )?;
         Ok(Self {
+            sales_owner_user_id,
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(CommercialStatus::Draft, created_by),
             order_no,

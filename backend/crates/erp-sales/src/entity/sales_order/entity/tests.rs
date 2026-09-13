@@ -12,6 +12,7 @@ use super::*;
 
 fn data() -> SalesOrderData {
     SalesOrderData {
+        sales_owner_user_id: "admin-1".to_string(),
         order_no: " SO-2026-0001 ".to_string(),
         business_type: BusinessType::GoodsService,
         origin_system: OriginSystem::Erp,
@@ -352,4 +353,18 @@ fn progress_enums_expose_labels() {
         serde_json::to_string(&CommercialStatus::PendingReview).unwrap(),
         "\"PENDING_REVIEW\""
     );
+}
+
+#[test]
+fn sales_owner_is_explicit_and_independent_of_system_actor() {
+    let mut data = data();
+    data.sales_owner_user_id = "sales-user".into();
+    let mut order =
+        SalesOrder::new(SalesOrderId::new("explicit-owner"), data.clone(), "system-sync").unwrap();
+    assert_eq!(order.sales_owner_user_id, "sales-user");
+    assert_eq!(order.stable.created_by, "system-sync");
+    order.stable.updated_by = "editor".into();
+    assert_eq!(order.sales_owner_user_id, "sales-user");
+    data.sales_owner_user_id = " ".into();
+    assert!(SalesOrder::new(SalesOrderId::new("missing-owner"), data, "system-sync").is_err());
 }

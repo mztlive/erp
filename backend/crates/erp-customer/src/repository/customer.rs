@@ -330,6 +330,50 @@ impl Pagination for CustomerAssignmentFilter {
 }
 
 impl<'a> CustomerAssignmentRepository<'a> {
+    /// 在客户域内批量读取当前主责；可见客户边界与人员筛选共同求交。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 可见客户边界；空集合保持为空，`None` 使用既有全量权限
+    /// * `owner_ids` - 额外收窄的负责人集合
+    /// * `as_of` - 归属有效期判定业务日期
+    /// * `executor` - 事务或无事务执行器
+    ///
+    /// # 返回值
+    /// 返回未删除客户的生效主责关系。
+    ///
+    /// # 错误
+    /// 查询或归属关系反序列化失败向上传播。
+    pub async fn current_owners(
+        &self,
+        customer_ids: Option<&[String]>,
+        owner_ids: Option<&[String]>,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>> {
+        let pipeline = current_owner_pipeline(customer_ids, owner_ids, as_of);
+        let collection = self.collection();
+        let mut result = Vec::new();
+        if let Some(session) = executor.session() {
+            let mut cursor = collection
+                .aggregate(pipeline)
+                .with_type::<CustomerAssignment>()
+                .session(&mut *session)
+                .await?;
+            while cursor.advance(session).await? {
+                result.push(cursor.deserialize_current()?);
+            }
+            return Ok(result);
+        }
+        let mut cursor = collection
+            .aggregate(pipeline)
+            .with_type::<CustomerAssignment>()
+            .await?;
+        while cursor.advance().await? {
+            result.push(cursor.deserialize_current()?);
+        }
+        Ok(result)
+    }
+
     /// 判断用户是否在指定日期拥有目标客户的有效归属。
     ///
     /// 查询同时约束客户、用户、OWNER/COLLABORATOR 角色与半开有效期；
@@ -687,13 +731,34 @@ impl<'a> CustomerProfileCommandRepository<'a> {
 /// * `allowed` - 允许的排序字段白名单
 ///
 /// # 返回
+/// 构造当前主责查询：未删除归属和未删除客户共同受有效期及可见边界限制。
+fn current_owner_pipeline(
+    customer_ids: Option<&[String]>,
+    owner_ids: Option<&[String]>,
+    as_of: BusinessDate,
+) -> Vec<Document> {
+    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "assignment_role": "OWNER", "valid_from": { "$lte": as_of.to_string() }, "$or": [{ "valid_to": null }, { "valid_to": { "$gt": as_of.to_string() } }] };
+    if let Some(ids) = customer_ids {
+        filter.insert("customer_id", doc! { "$in": ids });
+    }
+    if let Some(ids) = owner_ids {
+        filter.insert("user_id", doc! { "$in": ids });
+    }
+    vec![
+        doc! { "$match": filter },
+        doc! { "$lookup": { "from": <mongodb::Database as crate::repository::CustomerExt>::CUSTOMER_ACCOUNTS, "localField": "customer_id", "foreignField": "id", "as": "visible_customer" } },
+        doc! { "$match": { "visible_customer": { "$elemMatch": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON } } } },
+        doc! { "$unset": "visible_customer" },
+    ]
+}
+
 /// 返回排序条件文档。
 fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by
         .filter(|candidate| allowed.contains(candidate))
         .unwrap_or("created_at");
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 客户角色列表投影字段。
@@ -760,12 +825,39 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        active_customer_user_assignment_filter, distinct_sorted_customer_ids, sort_doc, CustomerAccountFilter,
+        active_customer_user_assignment_filter, current_owner_pipeline, distinct_sorted_customer_ids,
+        sort_doc, CustomerAccountFilter,
     };
     use crate::entity::customer::CustomerAccountStatus;
     use erp_core::common::time::BusinessDate;
     use mongodb::bson::doc;
     use persistence_core::QueryFilter;
+
+    #[test]
+    fn current_owners_preserve_empty_scope_and_exclude_deleted_assignments() {
+        let day = BusinessDate::from_ymd(2026, 9, 13).unwrap();
+        let pipeline = current_owner_pipeline(Some(&[]), Some(&["user-1".into()]), day);
+        let filter = pipeline[0].get_document("$match").unwrap();
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(filter.get_str("assignment_role").unwrap(), "OWNER");
+        assert_eq!(filter.get_document("customer_id").unwrap(), &doc! { "$in": [] });
+        assert_eq!(
+            filter.get_document("user_id").unwrap(),
+            &doc! { "$in": ["user-1"] }
+        );
+        assert_eq!(
+            filter.get_document("valid_from").unwrap(),
+            &doc! { "$lte": "2026-09-13" }
+        );
+        assert_eq!(
+            filter.get_array("$or").unwrap()[1],
+            mongodb::bson::Bson::Document(doc! { "valid_to": { "$gt": "2026-09-13" } })
+        );
+        assert_eq!(
+            pipeline[2],
+            doc! { "$match": { "visible_customer": { "$elemMatch": { "deleted_at": 0_i64 } } } }
+        );
+    }
 
     #[test]
     fn customer_account_filter_applies_keyword_and_status() {
@@ -801,11 +893,11 @@ mod tests {
     fn sort_doc_falls_back_to_created_at_when_field_is_not_whitelisted() {
         assert_eq!(
             sort_doc(Some("revised_at"), false, &["created_at", "customer_no"]),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
         assert_eq!(
             sort_doc(Some("customer_no"), true, &["created_at", "customer_no"]),
-            doc! { "customer_no": 1 }
+            doc! { "customer_no": 1, "id": 1 }
         );
     }
 

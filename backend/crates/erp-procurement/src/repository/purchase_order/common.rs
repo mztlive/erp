@@ -22,7 +22,7 @@ pub(super) fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending
         .filter(|field| whitelist.contains(field))
         .unwrap_or("created_at");
     let direction = if sort_ascending { 1 } else { -1 };
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 构建 `$in` 批量查询过滤（批量取回，禁止 N+1）。
@@ -48,15 +48,15 @@ mod tests {
     fn sort_doc_respects_whitelist_and_defaults_to_created_at() {
         assert_eq!(
             sort_doc(None, PURCHASE_ORDER_SORT_FIELDS, false),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
         assert_eq!(
             sort_doc(Some("purchase_no"), PURCHASE_ORDER_SORT_FIELDS, true),
-            doc! { "purchase_no": 1 }
+            doc! { "purchase_no": 1, "id": 1 }
         );
         assert_eq!(
             sort_doc(Some("status"), PURCHASE_ORDER_SORT_FIELDS, false),
-            doc! { "status": -1 }
+            doc! { "status": -1, "id": -1 }
         );
     }
 
@@ -64,7 +64,7 @@ mod tests {
     fn sort_doc_rejects_unknown_field_with_fallback() {
         assert_eq!(
             sort_doc(Some("arbitrary_field"), PURCHASE_ORDER_SORT_FIELDS, true),
-            doc! { "created_at": 1 },
+            doc! { "created_at": 1, "id": 1 },
             "未知排序字段必须回退 created_at"
         );
     }

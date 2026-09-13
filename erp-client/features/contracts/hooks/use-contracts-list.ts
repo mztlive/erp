@@ -21,7 +21,7 @@ export type ContractFilterKey =
     | "metric"
     | "customerId"
     | "settlementPartyId"
-    | "owner"
+    | "ownerUserIds"
 
 export type ContractAppliedChip = Readonly<{
     key: ContractFilterKey
@@ -54,7 +54,7 @@ export function useContractsList() {
         dir,
         customerId,
         settlementPartyId,
-        owner,
+        ownerUserIds,
         upload,
     } = url
 
@@ -71,10 +71,10 @@ export function useContractsList() {
         string | null
     >(settlementPartyId ?? null)
     const [ownerDraft, setOwnerDraft] = React.useState<string | null>(
-        owner ?? null,
+        ownerUserIds ?? null,
     )
 
-    const hasStructuredFilters = Boolean(settlementPartyId || owner)
+    const hasStructuredFilters = Boolean(settlementPartyId || ownerUserIds)
 
     // UI 态：初始深链带结构化条件时展开；URL 回填不重置展开态
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
@@ -94,7 +94,7 @@ export function useContractsList() {
         pushUrl({
             q: searchDraft.trim() || undefined,
             settlementPartyId: settlementPartyIdDraft ?? undefined,
-            owner: ownerDraft ?? undefined,
+            ownerUserIds: ownerDraft ?? undefined,
             page: 1,
         })
         setPanelOpen(false)
@@ -109,7 +109,7 @@ export function useContractsList() {
     const hasPendingChanges =
         searchDraft.trim() !== (q ?? "").trim() ||
         settlementPartyIdDraft !== (settlementPartyId ?? null) ||
-        ownerDraft !== (owner ?? null)
+        ownerDraft !== (ownerUserIds ?? null)
 
     /** 移除单个已生效条件；每个条件都有可移除 chip。 */
     const removeFilter = React.useCallback(
@@ -129,9 +129,9 @@ export function useContractsList() {
                     setSettlementPartyIdDraft(null)
                     pushUrl({ settlementPartyId: undefined, page: 1 })
                     break
-                case "owner":
+                case "ownerUserIds":
                     setOwnerDraft(null)
-                    pushUrl({ owner: undefined, page: 1 })
+                    pushUrl({ ownerUserIds: undefined, page: 1 })
                     break
             }
         },
@@ -149,7 +149,7 @@ export function useContractsList() {
             metric: "all",
             customerId: undefined,
             settlementPartyId: undefined,
-            owner: undefined,
+            ownerUserIds: undefined,
             page: 1,
         })
     }, [pushUrl])
@@ -161,8 +161,8 @@ export function useContractsList() {
 
     React.useEffect(() => {
         setSettlementPartyIdDraft(settlementPartyId ?? null)
-        setOwnerDraft(owner ?? null)
-    }, [owner, settlementPartyId])
+        setOwnerDraft(ownerUserIds ?? null)
+    }, [ownerUserIds, settlementPartyId])
 
     // `/` 聚焦搜索：忽略输入框/文本域/弹层（Dialog / Sheet）
     React.useEffect(() => {
@@ -241,13 +241,17 @@ export function useContractsList() {
                 label: `结算主体：${selectedSettlementPartyLabel}`,
             })
         }
-        if (owner) chips.push({ key: "owner", label: `负责人：${owner}` })
+        if (ownerUserIds)
+            chips.push({
+                key: "ownerUserIds",
+                label: `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`,
+            })
         return chips
     }, [
         customerId,
         lockedCustomerLabel,
         metric,
-        owner,
+        ownerUserIds,
         q,
         selectedSettlementPartyLabel,
         settlementPartyId,
@@ -261,7 +265,10 @@ export function useContractsList() {
         if (settlementPartyId) {
             parts.push(`结算主体：${selectedSettlementPartyLabel}`)
         }
-        if (owner) parts.push(`负责人：${owner}`)
+        if (ownerUserIds)
+            parts.push(
+                `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`,
+            )
         return parts.length
             ? `当前筛选：${parts.join(" · ")}`
             : "按将到期优先排序展示当前业务范围内的合同。"
@@ -269,7 +276,7 @@ export function useContractsList() {
         customerId,
         lockedCustomerLabel,
         metric,
-        owner,
+        ownerUserIds,
         q,
         selectedSettlementPartyLabel,
         settlementPartyId,
@@ -283,14 +290,16 @@ export function useContractsList() {
             settlementPartyId
                 ? `结算主体=${selectedSettlementPartyLabel}`
                 : null,
-            owner ? `负责人=${owner}` : null,
+            ownerUserIds
+                ? `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`
+                : null,
         ].filter(Boolean)
         return parts.join(" · ")
     }, [
         customerId,
         lockedCustomerLabel,
         metric,
-        owner,
+        ownerUserIds,
         q,
         selectedSettlementPartyLabel,
         settlementPartyId,
@@ -330,12 +339,12 @@ export function useContractsList() {
         metric !== "all" ||
         Boolean(customerId) ||
         Boolean(settlementPartyId) ||
-        Boolean(owner)
+        Boolean(ownerUserIds)
 
     return {
+        url,
         contractsQuery,
         total,
-        url,
         q,
         metric,
         page,
@@ -344,7 +353,7 @@ export function useContractsList() {
         dir,
         customerId,
         settlementPartyId,
-        owner,
+        ownerUserIds,
         upload,
         hasStructuredFilters,
         searchDraft,

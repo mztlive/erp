@@ -1,0 +1,199 @@
+openapi: 3.1.0
+info:
+  title: S1 负责人查询增量接口合同
+  version: 1.0.0
+  description: 本文件规定本批新增查询参数与响应字段；既有业务字段和动作权限继续按原领域 DTO 执行。S1 不提供组织隔离或销售责任改派。
+servers:
+  - url: http://localhost:10001
+security:
+  - bearerAuth: []
+paths:
+  /admin/customers:
+    get:
+      operationId: customers_owner_query
+      summary: 查询客户当前主负责人范围内的数据
+      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      parameters:
+        - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnerPage'
+        '400':
+          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
+        '401':
+          description: 未登录或会话失效。
+        '403':
+          description: 缺少原资源读取权限；人员条件不能授予权限。
+  /admin/customers/all-authorized:
+    get:
+      operationId: customers_all_authorized_owner_query
+      summary: 查询全部有权客户当前主负责人范围内的数据
+      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      parameters:
+        - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnerPage'
+        '400':
+          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
+        '401':
+          description: 未登录或会话失效。
+        '403':
+          description: 缺少原资源读取权限；人员条件不能授予权限。
+  /admin/contracts:
+    get:
+      operationId: contracts_owner_query
+      summary: 查询合同当前跟进负责人范围内的数据
+      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      parameters:
+        - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnerPage'
+        '400':
+          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
+        '401':
+          description: 未登录或会话失效。
+        '403':
+          description: 缺少原资源读取权限；人员条件不能授予权限。
+  /admin/sales-orders:
+    get:
+      operationId: sales_orders_owner_query
+      summary: 查询销售单负责销售范围内的数据
+      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      parameters:
+        - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnerPage'
+        '400':
+          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
+        '401':
+          description: 未登录或会话失效。
+        '403':
+          description: 缺少原资源读取权限；人员条件不能授予权限。
+  /admin/purchase-orders:
+    get:
+      operationId: purchase_orders_owner_query
+      summary: 查询采购单当前采购负责人范围内的数据
+      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      parameters:
+        - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnerPage'
+        '400':
+          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
+        '401':
+          description: 未登录或会话失效。
+        '403':
+          description: 缺少原资源读取权限；人员条件不能授予权限。
+  /admin/contracts/{id}:
+    get:
+      operationId: contract_current_owner_detail
+      summary: 合同详情增加当前跟进负责人
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 原合同详情 data 增加 owner_user_id、owner_user_name，可为空；权威来源是关联客户当前主负责人。
+        '403':
+          description: 无读取权限。
+        '404':
+          description: 合同不存在或不可见。
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    OwnerIds:
+      name: owner_user_ids
+      in: query
+      required: false
+      description: 逗号分隔的人员稳定 ID；去空白、去重，最多 100 项；省略表示不追加条件，显式空值拒绝。不得提交姓名。
+      schema:
+        type: string
+        minLength: 1
+        pattern: '^\s*[A-Za-z0-9_-]{1,128}\s*(,\s*[A-Za-z0-9_-]{1,128}\s*){0,99}$'
+      example: 'user-1,user-2'
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, default: 1}
+    PageSize:
+      name: page_size
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+  schemas:
+    OwnerPage:
+      type: object
+      required: [items, total, page, page_size, owner_options, ownership_basis]
+      properties:
+        items:
+          type: array
+          description: 原业务列表行；负责人 ID 是稳定身份，姓名只用于显示。
+          items: {type: object}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        owner_options:
+          type: array
+          description: 本资源完整可见对象的当前负责人候选；保留仍负责数据的停用账号，不作为改派资格证明。
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value: {type: string, description: 稳定人员 ID}
+              label: {type: string, description: 姓名、登录账号与适用的停用标记}
+        ownership_basis:
+          type: string
+          enum: [current_customer_owner, document_sales_owner, current_procurement_owner]

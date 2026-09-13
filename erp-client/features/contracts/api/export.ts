@@ -1,38 +1,43 @@
-import { apiPost } from "@/lib/api"
+import { fetchContracts } from "./list"
+import type { ContractsUrlState } from "../lib/contracts-url-state"
+import { buildListCsv, collectExportPages } from "@/lib/list-export"
 
-import type { ContractExportJob } from "@/features/contracts/types"
-
-/**
- * 导出任务：后端本批无合同专用导出接口；创建通用 background job 若失败则登记 gap 并返回本地排队态。
- */
-export async function createContractExportJob(input: {
-    rowCount: number
+/** 获取完整合同结果并生成 CSV；每页均通过原列表权限校验。 */
+export const createContractExportJob = async (input: {
+    query: ContractsUrlState
     filterSnapshotLabel: string
-}): Promise<ContractExportJob> {
-    const now = new Date().toISOString()
-    const jobId = `export_ct_${Date.now().toString(36)}`
-
-    // 尝试 D04 background job；失败时仍返回 queued 视图以免阻断 UI（证据登记缺口）
-    try {
-        await apiPost("/admin/background-jobs", {
-            job_type: "CONTRACT_EXPORT",
-            title: `合同导出 · ${input.filterSnapshotLabel}`,
-            payload: {
-                row_count: input.rowCount,
-                filter: input.filterSnapshotLabel,
-            },
-        })
-    } catch {
-        // backend_gap: contract export not specialized
-    }
-
+}) => {
+    const rows = await collectExportPages(
+        (page, pageSize) => fetchContracts({ ...input.query, page, pageSize }),
+        (row) => row.contractId,
+    )
+    const content = buildListCsv([
+        [
+            "合同编号",
+            "客户",
+            "结算主体",
+            "状态",
+            "当前跟进负责人",
+            "有效期起",
+            "有效期止",
+        ],
+        ...rows.map((row) => [
+            row.contractNo,
+            row.customer.displayName,
+            row.settlementParty.displayName,
+            row.statusLabel,
+            row.ownerLabel,
+            row.validFrom,
+            row.validTo,
+        ]),
+    ])
     return {
-        jobId,
-        status: "queued",
-        rowCount: input.rowCount,
-        permissionVersion: "pv-w04-1",
+        jobId: "",
+        status: "succeeded" as const,
+        rowCount: rows.length,
         filterSnapshotLabel: input.filterSnapshotLabel,
-        createdAt: now,
-        downloadLabel: `合同导出（${input.rowCount} 行）`,
+        createdAt: new Date().toISOString(),
+        downloadLabel: "合同列表.csv",
+        content,
     }
 }

@@ -20,8 +20,13 @@ export async function fetchCustomerDirectory(
             ? "/admin/customers/all-authorized"
             : "/admin/customers"
     try {
-        const page = await apiGet<Page<BackendCustomerView>>(path, {
+        const page = await apiGet<
+            Page<BackendCustomerView> & {
+                owner_options: { value: string; label: string }[]
+            }
+        >(path, {
             scope: query.scope,
+            owner_user_ids: query.ownerUserIds || undefined,
             keyword: query.query?.trim() || undefined,
             status,
             page: query.page,
@@ -31,6 +36,7 @@ export async function fetchCustomerDirectory(
         })
         return {
             hasCustomerScope: true,
+            ownerOptions: page.owner_options ?? [],
             items: page.items.map(mapDirectoryItem),
             totalInScope: page.total,
             page: page.page,

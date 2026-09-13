@@ -34,7 +34,7 @@ it("合同查询传递已生效条件和真实页码，并保留服务端总数�
         settlement_options: [
             { value: "party-outside-page", label: "其他结算主体" },
         ],
-        owner_options: [{ value: "负责人甲", label: "负责人甲" }],
+        owner_options: [{ value: "user-1", label: "负责人甲" }],
     } as never)
     const result = await fetchContracts({
         q: " 命中客户 ",
@@ -42,7 +42,7 @@ it("合同查询传递已生效条件和真实页码，并保留服务端总数�
         pageSize: 20,
         metric: "expiring_30d",
         settlementPartyId: "party-1",
-        owner: "负责人甲",
+        ownerUserIds: "user-1",
         sort: "validity",
         dir: "asc",
     })
@@ -54,7 +54,7 @@ it("合同查询传递已生效条件和真实页码，并保留服务端总数�
             page_size: 20,
             metric: "expiring_30d",
             settlement_party_id: "party-1",
-            owner: "负责人甲",
+            owner_user_ids: "user-1",
             sort_by: "validity",
         }),
     )

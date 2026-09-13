@@ -1,6 +1,9 @@
 "use client"
 
 import * as React from "react"
+import type { ContractsUrlState } from "../lib/contracts-url-state"
+import { downloadListCsv } from "@/lib/list-export"
+import { getErrorMessage } from "@/lib/api/errors"
 
 import { toast } from "@/components/ui/toast"
 import { useCreateContractExportJobMutation } from "@/features/contracts/hooks/queries"
@@ -20,9 +23,11 @@ export type ContractActionResult = {
 
 /** 列表页动作结果：上传用短暂 Toast；导出保留页内 FormalActionResult。 */
 export function useContractListActions({
+    query,
     filteredCount,
     filterSnapshotLabel,
 }: {
+    query: ContractsUrlState
     filteredCount: number
     filterSnapshotLabel: string
 }) {
@@ -53,23 +58,32 @@ export function useContractListActions({
 
     const handleExport = React.useCallback(async () => {
         if (filteredCount === 0) return
-        const job = await exportMutation.mutateAsync({
-            rowCount: filteredCount,
-            filterSnapshotLabel,
-        })
-        setExportJob(job)
-        setActionResult({
-            status: "succeeded",
-            title: "导出完成",
-            description:
-                "已生成 CSV 文件，内容按当前筛选生成；下载时将重新校验权限。",
-            facts: [
-                { label: "筛选结果", value: job.filterSnapshotLabel },
-                { label: "行数", value: String(job.rowCount) },
-                { label: "文件", value: job.downloadLabel },
-            ],
-        })
-    }, [exportMutation, filterSnapshotLabel, filteredCount])
+        try {
+            const job = await exportMutation.mutateAsync({
+                query,
+                filterSnapshotLabel,
+            })
+            downloadListCsv(job.content, job.downloadLabel)
+            setExportJob(job)
+            setActionResult({
+                status: "succeeded",
+                title: "导出完成",
+                description: "已下载 CSV 文件，包含当前筛选的完整结果。",
+                facts: [
+                    { label: "筛选结果", value: job.filterSnapshotLabel },
+                    { label: "行数", value: String(job.rowCount) },
+                    { label: "文件", value: job.downloadLabel },
+                ],
+            })
+        } catch (error) {
+            setExportJob(null)
+            setActionResult({
+                status: "blocked",
+                title: "导出失败",
+                description: getErrorMessage(error, "请重新查询后重试"),
+            })
+        }
+    }, [exportMutation, filterSnapshotLabel, filteredCount, query])
 
     return {
         exportJob,

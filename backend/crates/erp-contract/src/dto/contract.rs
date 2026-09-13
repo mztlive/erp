@@ -226,7 +226,10 @@ pub enum ContractListScope {
 
 /// 合同列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct ContractListParams {
+    /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 合同号、客户编号/名称、结算主体、当前负责人关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -235,7 +238,6 @@ pub struct ContractListParams {
     /// 结算主体精确筛选。
     pub settlement_party_id: Option<String>,
     /// 当前负责人显示名精确筛选，兼容已有 URL。
-    pub owner: Option<String>,
 
     /// 合同编号（字面量模糊筛选）。
     pub contract_no: Option<String>,
@@ -260,6 +262,8 @@ pub struct ContractListParams {
 /// 归一化后的合同列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ContractListQuery {
+    /// 当前负责人精确身份条件。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 合同号、客户编号/名称、结算主体、当前负责人关键词。
     pub q: Option<String>,
     /// 快捷状态或到期条件。
@@ -267,7 +271,6 @@ pub(crate) struct ContractListQuery {
     /// 结算主体精确筛选。
     pub settlement_party_id: Option<String>,
     /// 当前负责人显示名精确筛选，兼容已有 URL。
-    pub owner: Option<String>,
 
     /// 合同编号筛选。
     pub contract_no: Option<String>,
@@ -295,10 +298,10 @@ impl ContractListParams {
     pub(crate) fn normalized(&self) -> Result<ContractListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CONTRACT_SORT_FIELDS)?;
         Ok(ContractListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
             q: normalized_text(self.q.as_deref()),
             metric: self.metric,
             settlement_party_id: normalized_text(self.settlement_party_id.as_deref()),
-            owner: normalized_text(self.owner.as_deref()),
             contract_no: normalized_text(self.contract_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
             scope: self.scope.unwrap_or_default(),
@@ -378,6 +381,9 @@ pub struct ContractRevisionView {
 /// 合同详情视图（合同 + 全部版本时间线，W04 对象中心）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ContractDetailView {
+    /// 当前客户跟进负责人。
+    pub owner_user_id: Option<String>,
+    pub owner_user_name: Option<String>,
     /// 实体主键。
     pub id: String,
     /// 合同编号。
@@ -652,6 +658,8 @@ pub struct ContractFilterOption {
 /// 合同分页列表；保留 Page 字段并追加全范围指标和候选项。
 #[derive(Debug, Clone, Serialize)]
 pub struct ContractListView {
+    /// 当前客户负责人构成合同跟进责任；组织范围版本由 S2 接入。
+    pub ownership_basis: &'static str,
     #[serde(flatten)]
     pub page: PageView<ContractView>,
     pub metrics: ContractMetrics,

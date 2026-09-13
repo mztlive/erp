@@ -54,6 +54,7 @@ export function buildSalesOrdersListQuery(
         customerId: url.customerId,
         contractId: url.contractId,
         createdBy: url.createdBy,
+        ownerUserIds: url.ownerUserIds,
         nature: url.nature,
         summary: url.summary,
         currentUserId,

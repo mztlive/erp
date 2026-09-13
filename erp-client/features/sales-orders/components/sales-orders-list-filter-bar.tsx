@@ -1,5 +1,7 @@
 "use client"
 
+import type { ResponsibleUserOption } from "@/features/entity-selectors/components/responsible-user-filter"
+
 import { FixedOptionRadioFilter } from "@/components/business"
 import {
     ListSearchField,
@@ -26,16 +28,19 @@ const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
     "customerId",
     "contractId",
     "createdBy",
+    "ownerUserIds",
     "createdDate",
 ]
 
 export function SalesOrdersListFilterBar({
+    ownerOptions,
     filters: f,
     chips,
     resultCount,
     loading,
     failed,
 }: {
+    ownerOptions: readonly ResponsibleUserOption[]
     filters: ReturnType<typeof useSalesOrdersListFilters>
     chips: readonly SalesOrdersAppliedChip[]
     resultCount?: number
@@ -98,6 +103,7 @@ export function SalesOrdersListFilterBar({
             }
             morePanel={
                 <SalesOrdersListFilterPanel
+                    ownerOptions={ownerOptions}
                     draft={f.filterDraft}
                     onDraftChange={f.setFilterDraft}
                 />

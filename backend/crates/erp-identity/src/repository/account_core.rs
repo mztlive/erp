@@ -104,6 +104,42 @@ impl<'a> AccountCoreRepository<'a> {
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
+    /// 批量生成查询候选；保留停用账号，不包含密码或联系方式。
+    ///
+    /// # 参数
+    /// * `ids` - 调用方按业务资源可见对象限定的账号 ID 集合
+    /// * `executor` - 事务或无事务执行器
+    ///
+    /// # 返回值
+    /// 返回按标签与 ID 稳定排序的候选；不存在的账号省略。
+    ///
+    /// # 错误
+    /// 数据库读取或账号反序列化失败向上传播。
+    pub async fn filter_options(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<application_core::FilterOption>> {
+        let mut options = self
+            .list_by_ids(ids, executor)
+            .await?
+            .into_iter()
+            .map(|account| {
+                let status = if account.status.is_active() {
+                    ""
+                } else {
+                    " · 已停用"
+                };
+                application_core::FilterOption {
+                    value: account.base.id.clone(),
+                    label: format!("{}（{}）{}", account.name, account.secret.account(), status),
+                }
+            })
+            .collect::<Vec<_>>();
+        options.sort_by(|a, b| (&a.label, &a.value).cmp(&(&b.label, &b.value)));
+        Ok(options)
+    }
+
     /// 按账号 ID 集合批量读取展示名称。
     ///
     /// # 参数

@@ -22,6 +22,7 @@ import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
 export type SalesOrdersListFilterDraft = {
     customerId: string
     contractId: string
+    ownerUserIds: string
     createdBy: string
     nature: SalesOrderNatureFilter
     origin: SalesOrderOriginFilter
@@ -40,6 +41,7 @@ export function hasMoreSalesOrdersFilters(url: SalesOrdersUrlState): boolean {
         url.customerId ||
         url.contractId ||
         url.createdBy ||
+        url.ownerUserIds ||
         url.origin !== "all" ||
         url.commercialStatus !== "all" ||
         url.reviewStatus !== "all" ||
@@ -66,6 +68,7 @@ export function salesOrdersListFilterDraftsEqual(
         left.customerId === right.customerId &&
         left.contractId === right.contractId &&
         left.createdBy === right.createdBy &&
+        left.ownerUserIds === right.ownerUserIds &&
         left.nature === right.nature &&
         left.origin === right.origin &&
         left.commercialStatus === right.commercialStatus &&
@@ -95,6 +98,7 @@ export type SalesOrdersListFilterUrl = Pick<
     | "customerId"
     | "contractId"
     | "createdBy"
+    | "ownerUserIds"
     | "nature"
     | "origin"
     | "commercialStatus"
@@ -114,6 +118,7 @@ export function filterDraftFromUrl(
         customerId: url.customerId ?? "",
         contractId: url.contractId ?? "",
         createdBy: url.createdBy ?? "",
+        ownerUserIds: url.ownerUserIds ?? "",
         nature: url.nature,
         origin: url.origin,
         commercialStatus: url.commercialStatus,
@@ -132,6 +137,7 @@ export const EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT: SalesOrdersListFilterDraft =
         customerId: "",
         contractId: "",
         createdBy: "",
+        ownerUserIds: "",
         nature: "all",
         origin: "all",
         commercialStatus: "all",
@@ -175,6 +181,7 @@ export function resolveSalesOrdersListFilterPatch(input: {
         customerId: filterDraft.customerId || undefined,
         contractId: filterDraft.contractId || undefined,
         createdBy: filterDraft.createdBy || undefined,
+        ownerUserIds: filterDraft.ownerUserIds || undefined,
         nature: filterDraft.nature,
         ...(summaryConflictsWithDraft ? { summary: "all" as const } : {}),
         origin: filterDraft.origin,
@@ -219,6 +226,7 @@ export function salesOrdersListFilterDescription(
         url.customerId ? "已选客户" : null,
         url.contractId ? "已选合同" : null,
         url.createdBy ? "已选创建人" : null,
+        url.ownerUserIds ? "已选负责销售" : null,
         url.createdFrom || url.createdTo
             ? `创建日期 ${url.createdFrom || "不限"} 至 ${url.createdTo || "不限"}`
             : null,

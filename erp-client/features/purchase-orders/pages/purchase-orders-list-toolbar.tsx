@@ -1,4 +1,8 @@
 "use client"
+import {
+    ResponsibleUserFilter,
+    type ResponsibleUserOption,
+} from "@/features/entity-selectors/components/responsible-user-filter"
 
 import * as React from "react"
 
@@ -14,6 +18,9 @@ import type {
 const prefix = "procurement-orders-list"
 
 export type PurchaseOrdersListToolbarProps = {
+    ownerDraft: string
+    setOwnerDraft: (value: string) => void
+    ownerOptions: readonly ResponsibleUserOption[]
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: React.Dispatch<React.SetStateAction<string>>
@@ -28,6 +35,9 @@ export type PurchaseOrdersListToolbarProps = {
 }
 
 export function PurchaseOrdersListToolbar({
+    ownerDraft,
+    setOwnerDraft,
+    ownerOptions,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -54,6 +64,15 @@ export function PurchaseOrdersListToolbar({
                     onChange={setSearchDraft}
                     placeholder="采购单号、供应商、来源销售单"
                     aria-label="搜索采购单"
+                />
+            }
+            commonFilters={
+                <ResponsibleUserFilter
+                    id="procurement-orders-list-owner"
+                    label="采购负责人"
+                    value={ownerDraft}
+                    onChange={setOwnerDraft}
+                    options={ownerOptions}
                 />
             }
             queryButtonId={`${prefix}-apply-filters`}

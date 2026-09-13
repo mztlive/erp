@@ -5,6 +5,7 @@ import type {
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrdersUrlState = {
+    ownerUserIds?: string
     q?: string
     status: PurchaseOrderStatusFilter
     metric: PurchaseOrderMetricFilter
@@ -38,6 +39,7 @@ const METRIC_VALUES: readonly PurchaseOrderMetricFilter[] = [
 ]
 
 const codec = createUrlStateCodec<PurchaseOrdersUrlState>([
+    { key: "ownerUserIds", type: "string" },
     { key: "q", type: "string", trim: true },
     { key: "status", type: "enum", values: STATUS_VALUES, defaultValue: "all" },
     { key: "metric", type: "enum", values: METRIC_VALUES, defaultValue: "all" },

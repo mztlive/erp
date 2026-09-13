@@ -42,7 +42,7 @@ impl PurchaseOrderReadService {
     pub async fn purchase_order_list(
         &self,
         params: &PurchaseOrderListParams,
-    ) -> Result<PageView<PurchaseOrderListItemView>> {
+    ) -> Result<application_core::FilteredPage<PurchaseOrderListItemView>> {
         params.validate()?;
         let query = params.normalized()?;
         let (keyword_sales_order_ids, keyword_supplier_ids) =
@@ -53,6 +53,7 @@ impl PurchaseOrderReadService {
             )
             .await?;
         let filter = PurchaseOrderFilter {
+            owner_user_ids: query.owner_user_ids,
             keyword_sales_order_ids,
             keyword_supplier_ids,
             purchase_no: query.q,
@@ -118,11 +119,25 @@ impl PurchaseOrderReadService {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(PageView {
-            items,
-            total: page_rows.total,
-            page: filter.page,
-            page_size: filter.page_size,
+        let owner_ids = self
+            .db
+            .purchase_orders()
+            .current_owner_ids(&mut NoTransaction)
+            .await?;
+        let owner_options = self
+            .db
+            .accounts()
+            .filter_options(&owner_ids, &mut NoTransaction)
+            .await?;
+        Ok(application_core::FilteredPage {
+            owner_options,
+            ownership_basis: "current_procurement_owner",
+            page: PageView {
+                items,
+                total: page_rows.total,
+                page: filter.page,
+                page_size: filter.page_size,
+            },
         })
     }
 

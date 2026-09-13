@@ -168,10 +168,35 @@ impl CustomerService {
         &self,
         params: &CustomerListParams,
         actor_user_id: &str,
-    ) -> Result<PageView<CustomerView>> {
+    ) -> Result<application_core::FilteredPage<CustomerView>> {
         params.validate()?;
         let query = params.normalized()?;
         let customer_ids = self.customer_ids_for_scope(query.scope, actor_user_id).await?;
+        let owners = self
+            .db
+            .customer_assignments()
+            .current_owners(
+                customer_ids.as_deref(),
+                None,
+                BusinessDate::today(),
+                &mut NoTransaction,
+            )
+            .await?;
+        let owner_options = self
+            .accounts
+            .filter_options(&owners.iter().map(|o| o.user_id.clone()).collect::<Vec<_>>())
+            .await?;
+        let customer_ids = query
+            .owner_user_ids
+            .as_ref()
+            .map(|ids| {
+                owners
+                    .iter()
+                    .filter(|o| ids.as_slice().contains(&o.user_id))
+                    .map(|o| o.customer_id.to_string())
+                    .collect()
+            })
+            .or(customer_ids);
         let keyword_party_ids = match query.keyword.as_deref() {
             Some(keyword) => Some(self.party.matching_ids_by_name(keyword).await?),
             None => None,
@@ -197,11 +222,15 @@ impl CustomerService {
             .hydrate_customer_rows(page.items, actor_user_id, query.scope)
             .await?;
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+        Ok(application_core::FilteredPage {
+            owner_options,
+            ownership_basis: "current_customer_owner",
+            page: PageView {
+                items,
+                total: page.total,
+                page: filter.page,
+                page_size: filter.page_size,
+            },
         })
     }
 

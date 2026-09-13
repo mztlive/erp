@@ -6,6 +6,8 @@ mod error;
 pub mod owned_task;
 pub mod page;
 pub mod query;
+mod query_ids;
+pub use query_ids::{FilterOption, FilteredPage, QueryIds};
 
 pub use command::{
     CommandFingerprint, CommandIdentity, CommandReceipt, CommandReceiptFact, CommandReceiptMatch,

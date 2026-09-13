@@ -24,6 +24,7 @@ export type SalesOrderDetailView = SalesOrderListItem & {
 }
 
 export type SalesOrdersListQuery = {
+    ownerUserIds?: string
     page: number
     pageSize: number
     search?: string
@@ -54,6 +55,7 @@ export type SalesOrdersListQuery = {
 }
 
 export type SalesOrderListView = {
+    ownerOptions?: { value: string; label: string }[]
     items: SalesOrderListItem[]
     total: number
     page: number

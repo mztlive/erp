@@ -73,6 +73,8 @@ struct PurchaseOrderNoRow {
 /// 采购单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct PurchaseOrderFilter {
+    /// 当前采购负责人条件，不改变责任或任务。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 采购单号模糊匹配（字面量、忽略大小写）；`None` 表示不筛选。
     pub purchase_no: Option<String>,
     /// 与采购单号进行 OR 匹配的来源销售单身份，由消费方查询拥有领域后传入。
@@ -102,6 +104,9 @@ impl QueryFilter for PurchaseOrderFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(ids) = &self.owner_user_ids {
+            filter.insert("owner_user_id", doc! { "$in": ids.as_slice() });
+        }
         if !self.keyword_sales_order_ids.is_empty() || !self.keyword_supplier_ids.is_empty() {
             let mut number = Document::new();
             insert_literal_regex_filter(&mut number, "purchase_no", self.purchase_no.as_deref());
@@ -218,6 +223,32 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 }
 
 impl<'a> PurchaseOrderRepository<'a> {
+    /// 返回未删除单据的负责人集合。当前调用入口使用资源级列表权限；S2 必须传入 v2 对象边界。
+    ///
+    /// # 参数
+    /// * `executor` - 事务或无事务执行器
+    ///
+    /// # 返回值
+    /// 返回去重的负责人 ID；候选不按登录资格过滤，不能用于改派。
+    ///
+    /// # 错误
+    /// 数据库查询失败向上传播。
+    pub async fn current_owner_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        let collection = self.collection();
+        let mut query = collection.distinct(
+            "owner_user_id",
+            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect())
+    }
+
     /// 分页检索采购单列表（投影查询）。
     ///
     /// 只返回 [`PurchaseOrderRow`] 所需的列表字段，不加载整文档；排序字段
@@ -402,6 +433,7 @@ mod tests {
     #[test]
     fn filter_applies_optional_fields_and_deleted_filter() {
         let filter = PurchaseOrderFilter {
+            owner_user_ids: None,
             keyword_sales_order_ids: Vec::new(),
             keyword_supplier_ids: Vec::new(),
             purchase_no: Some("PO-2026".to_string()),
@@ -435,6 +467,7 @@ mod tests {
     #[test]
     fn keyword_matches_references_before_paging_and_preserves_filters() {
         let mut filter = PurchaseOrderFilter {
+            owner_user_ids: Some(serde_json::from_str("\"buyer-2,buyer-3\"").unwrap()),
             purchase_no: Some("XS.1".into()),
             keyword_sales_order_ids: vec![SalesOrderId::new("sales-1")],
             keyword_supplier_ids: vec![SupplierAccountId::new("supplier-1")],
@@ -447,6 +480,10 @@ mod tests {
             sort_ascending: false,
         };
         let document = filter.to_doc();
+        assert_eq!(
+            document.get_document("owner_user_id").unwrap(),
+            &doc! { "$in": ["buyer-2", "buyer-3"] }
+        );
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("supplier_id").unwrap(), "supplier-2");
         assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");
@@ -508,6 +545,7 @@ mod tests {
     #[test]
     fn filter_omits_absent_fields() {
         let filter = PurchaseOrderFilter {
+            owner_user_ids: None,
             keyword_sales_order_ids: Vec::new(),
             keyword_supplier_ids: Vec::new(),
             purchase_no: None,

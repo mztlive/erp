@@ -5,6 +5,7 @@ import type {
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderListQuery = {
+    ownerUserIds?: string
     q?: string
     salesOrderId?: string
     status?: PurchaseOrderStatusFilter
@@ -16,6 +17,7 @@ export type PurchaseOrderListQuery = {
 }
 
 export type PurchaseOrderListResult = {
+    ownerOptions?: { value: string; label: string }[]
     rows: PurchaseOrderListItem[]
     total: number
     page: number

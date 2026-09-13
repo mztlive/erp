@@ -175,7 +175,6 @@ export type ContractExportJob = {
     jobId: string
     status: "queued" | "running" | "succeeded" | "failed"
     rowCount: number
-    permissionVersion: string
     filterSnapshotLabel: string
     createdAt: string
     downloadLabel: string

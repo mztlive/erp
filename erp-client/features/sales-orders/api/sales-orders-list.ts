@@ -46,46 +46,44 @@ export async function fetchSalesOrders(
     const myTodo = query.summary === "mine"
     const exceptionOnly = query.summary === "exception"
 
-    const page = await apiGet<PageView<BackendSalesOrderView>>(
-        "/admin/sales-orders",
-        {
-            page: query.page,
-            page_size: query.pageSize,
-            q: query.search?.trim() || undefined,
-            customer_id: query.customerId,
-            contract_id: query.contractId,
-            business_type: businessType,
-            origin_system:
-                query.origin === "erp"
-                    ? "ERP"
-                    : query.origin === "mall"
-                      ? "MALL"
-                      : undefined,
-            commercial_status:
-                myTodo || exceptionOnly
-                    ? undefined
-                    : mapCommercialStatusFilterToBackend(
-                          query.commercialStatus,
-                      ),
-            review_status:
-                myTodo || exceptionOnly
-                    ? undefined
-                    : mapReviewStatusFilterToBackend(query.reviewStatus),
-            fulfillment_progress: mapFulfillmentFilterToBackend(
-                query.fulfillment,
-            ),
-            collection_progress: mapCollectionFilterToBackend(query.collection),
-            invoice_progress: mapInvoiceFilterToBackend(query.invoice),
-            close_status: mapCloseFilterToBackend(query.closeStatus),
-            created_from: query.createdFrom,
-            created_to: query.createdTo,
-            created_by: createdBy,
-            my_todo: myTodo || undefined,
-            exception_only: exceptionOnly || undefined,
-            sort_by: mapSortBy(query.sortBy),
-            sort_dir: query.sortDir,
-        },
-    )
+    const page = await apiGet<
+        PageView<BackendSalesOrderView> & {
+            owner_options: { value: string; label: string }[]
+        }
+    >("/admin/sales-orders", {
+        page: query.page,
+        page_size: query.pageSize,
+        q: query.search?.trim() || undefined,
+        customer_id: query.customerId,
+        owner_user_ids: query.ownerUserIds || undefined,
+        contract_id: query.contractId,
+        business_type: businessType,
+        origin_system:
+            query.origin === "erp"
+                ? "ERP"
+                : query.origin === "mall"
+                  ? "MALL"
+                  : undefined,
+        commercial_status:
+            myTodo || exceptionOnly
+                ? undefined
+                : mapCommercialStatusFilterToBackend(query.commercialStatus),
+        review_status:
+            myTodo || exceptionOnly
+                ? undefined
+                : mapReviewStatusFilterToBackend(query.reviewStatus),
+        fulfillment_progress: mapFulfillmentFilterToBackend(query.fulfillment),
+        collection_progress: mapCollectionFilterToBackend(query.collection),
+        invoice_progress: mapInvoiceFilterToBackend(query.invoice),
+        close_status: mapCloseFilterToBackend(query.closeStatus),
+        created_from: query.createdFrom,
+        created_to: query.createdTo,
+        created_by: createdBy,
+        my_todo: myTodo || undefined,
+        exception_only: exceptionOnly || undefined,
+        sort_by: mapSortBy(query.sortBy),
+        sort_dir: query.sortDir,
+    })
 
     const contractDisplays = await loadContractDisplays(
         page.items
@@ -105,6 +103,7 @@ export async function fetchSalesOrders(
 
     return {
         items,
+        ownerOptions: page.owner_options ?? [],
         total: page.total,
         page: page.page,
         pageSize: page.page_size,

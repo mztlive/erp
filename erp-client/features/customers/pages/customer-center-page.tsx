@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useCustomerDirectoryExport } from "../hooks/use-customer-directory-export"
+import type { CustomerDirectoryQuery } from "../types"
 import { useRouter } from "next/navigation"
 import { PlusIcon } from "lucide-react"
 
@@ -40,6 +42,7 @@ export function CustomerCenterPage() {
     const directoryState = useCustomerCenterDirectoryState()
     const { scope, status, q, sort, dir, page } = directoryState
     const { canCreate, canReadAll } = useCustomerCenterScopeGuard({
+        ownerUserIds: directoryState.ownerUserIds,
         scope,
         status,
         q,
@@ -51,15 +54,18 @@ export function CustomerCenterPage() {
 
     const [createOpen, setCreateOpen] = React.useState(false)
 
-    const directoryQuery = useCustomerDirectoryQuery({
+    const directoryInput: CustomerDirectoryQuery = {
         scope,
         status,
         query: q,
+        ownerUserIds: directoryState.ownerUserIds,
         sort: (SORT_COLUMN_TO_FIELD[sort] as "updated_at") ?? "updated_at",
         sortDir: dir,
         page,
         pageSize: 20,
-    })
+    }
+    const directoryQuery = useCustomerDirectoryQuery(directoryInput)
+    const exportMutation = useCustomerDirectoryExport(directoryInput)
 
     const data = directoryQuery.data
     const items = React.useMemo(() => data?.items ?? [], [data?.items])
@@ -104,7 +110,7 @@ export function CustomerCenterPage() {
             description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
         />
     ) : data && items.length === 0 ? (
-        data.totalInScope === 0 && !q.trim() && status === "active" ? (
+        data.totalInScope === 0 && !directoryState.hasActiveFilters ? (
             <BusinessEmptyState
                 kind="no-data"
                 className={listWorkspaceEmptyStateClassName}
@@ -189,6 +195,14 @@ export function CustomerCenterPage() {
                     </>
                 }
             >
+                <Button
+                    id="customers-directory-export"
+                    variant="outline"
+                    disabled={exportMutation.isPending || !data?.totalInScope}
+                    onClick={() => exportMutation.mutate()}
+                >
+                    {exportMutation.isPending ? "正在导出…" : "导出"}
+                </Button>
                 {canCreate ? (
                     <Button
                         id="customers-directory-create"
@@ -223,6 +237,9 @@ export function CustomerCenterPage() {
                 }
                 toolbar={
                     <CustomerCenterDirectoryToolbar
+                        ownerDraft={directoryState.ownerDraft}
+                        setOwnerDraft={directoryState.setOwnerDraft}
+                        ownerOptions={data?.ownerOptions ?? []}
                         searchInputRef={directoryState.searchInputRef}
                         searchDraft={directoryState.searchDraft}
                         setSearchDraft={directoryState.setSearchDraft}

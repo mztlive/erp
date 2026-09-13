@@ -258,7 +258,7 @@ pub async fn customer_list(
     State(state): State<AppState>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(params): Query<CustomerListParams>,
-) -> Result<PageView<CustomerView>> {
+) -> Result<application_core::FilteredPage<CustomerView>> {
     if params.scope == CustomerScope::AllAuthorized {
         return Err(Error::Forbidden(
             "全部有权客户必须通过专用授权范围查询".to_string(),
@@ -281,7 +281,7 @@ pub async fn customer_all_authorized_list(
     Extension(subject): Extension<RbacSubject>,
     Extension(UserID(user_id)): Extension<UserID>,
     Query(mut params): Query<CustomerListParams>,
-) -> Result<PageView<CustomerView>> {
+) -> Result<application_core::FilteredPage<CustomerView>> {
     ensure_permission(&state, &subject, "customer:list").await?;
     params.scope = CustomerScope::AllAuthorized;
     let page = state.customer_service().customer_list(&params, &user_id).await?;

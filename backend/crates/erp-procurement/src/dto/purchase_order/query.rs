@@ -25,7 +25,10 @@ pub struct PageParams {
 
 /// 采购单列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct PurchaseOrderListParams {
+    /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 采购单号模糊匹配。
     pub q: Option<String>,
     /// 来源销售单筛选。
@@ -51,6 +54,8 @@ pub struct PurchaseOrderListParams {
 /// 归一化后的采购单列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PurchaseOrderListQuery {
+    /// 当前负责人精确身份条件。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 采购单号模糊匹配。
     pub q: Option<String>,
     /// 来源销售单。
@@ -78,6 +83,7 @@ impl PurchaseOrderListParams {
     pub fn normalized(&self) -> Result<PurchaseOrderListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PURCHASE_ORDER_SORT_FIELDS)?;
         Ok(PurchaseOrderListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
             q: normalized_text(self.q.as_deref()),
             sales_order_id: normalized_text(self.sales_order_id.as_deref()),
             supplier_id: normalized_text(self.supplier_id.as_deref()),

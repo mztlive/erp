@@ -54,8 +54,8 @@ pub(crate) const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
 /// - 提交/版本是事实类集合，全部唯一约束直接建在身份组合上（无软删除语义）；
 /// - `(sales_order_id, content_hash)` 用于幂等与历史查询，但同一内容可能被合法
 ///   重建，故为普通索引而非唯一索引（幂等判定由 P3 结合来源快照完成）；
-/// - 数据模型「负责人参与人 + 状态」「履约期限」索引：负责人字段不落在
-///   `sales_order` 主表实体上（归属后续批次），本域以审核轨
+/// - 数据模型「负责人参与人 + 状态」「履约期限」索引：显式负责销售通过
+///   `sales_owner_user_id + deleted_at + created_at + id` 查询，本域以审核轨
 ///   `review_status + created_at` 覆盖审核列表，履约期限按版本行落地
 ///   `idx_sales_order_revision_lines_due`；
 /// - 销售单列表的「待我处理 / 我创建的」固定视图以 `created_by` 为首要等值条件，
@@ -104,6 +104,14 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `sales_order` 的身份约束与业务列表查询索引。
 fn sales_order_indexes() -> Vec<IndexModel> {
     vec![
+        IndexModel::builder()
+            .keys(doc! { "sales_owner_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_sales_order_owner_created".to_string())
+                    .build(),
+            )
+            .build(),
         unique_index("uk_sales_orders_order_no", doc! { "order_no": 1 }),
         named_index(
             "idx_sales_orders_profit_period",

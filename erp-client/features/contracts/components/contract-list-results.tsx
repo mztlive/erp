@@ -29,7 +29,7 @@ export function ContractListResults({
                 <FormalActionResult
                     status="succeeded"
                     title="合同导出完成"
-                    description={`共 ${exportJob.rowCount} 条，内容按当前筛选生成；下载时将重新校验权限。`}
+                    description={`共 ${exportJob.rowCount} 条，已按当前筛选下载完整 CSV。`}
                     facts={[
                         { label: "文件", value: exportJob.downloadLabel },
                         { label: "行数", value: String(exportJob.rowCount) },

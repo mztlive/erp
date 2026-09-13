@@ -48,7 +48,7 @@ use crate::{
 pub async fn purchase_order_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseOrderListParams>,
-) -> Result<PageView<PurchaseOrderListItemView>> {
+) -> Result<application_core::FilteredPage<PurchaseOrderListItemView>> {
     let page = PurchaseOrderReadService::new(state.db())
         .purchase_order_list(&params)
         .await?;

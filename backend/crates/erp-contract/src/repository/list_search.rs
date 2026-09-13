@@ -9,7 +9,6 @@ use erp_core::common::time::BusinessDate;
 use mongodb::bson::{doc, Document};
 use persistence_core::{insert_literal_regex_filter, Executor, Pagination, QueryFilter, Result};
 use serde::Deserialize;
-use std::collections::BTreeSet;
 
 /// 可见合同引用的客户搜索事实，外域数据由端口提供。
 pub struct ContractCustomer {
@@ -24,33 +23,25 @@ pub struct ContractSearch {
     pub q: Option<String>,
     pub metric: Option<ContractMetric>,
     pub settlement_party_id: Option<String>,
-    pub owner: Option<String>,
+    pub owner_user_ids: Option<application_core::QueryIds>,
     pub customers: Vec<ContractCustomer>,
 }
 
 impl ContractSearch {
-    /// 返回全可见合同范围的负责人候选值，不随页码或关键词变化。
-    pub fn owner_options(&self) -> Vec<ContractFilterOption> {
-        self.customers
-            .iter()
-            .map(|c| c.owner.clone())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .map(|label| ContractFilterOption {
-                value: label.clone(),
-                label,
-            })
-            .collect()
-    }
-
     /// 字面量关键词 OR 匹配多个业务字段，结构化条件继续收窄范围。
     fn filter(&self) -> Document {
         let mut filter = Document::new();
         if let Some(id) = &self.settlement_party_id {
             filter.insert("settlement_party_id", id);
         }
-        if let Some(owner) = &self.owner {
-            filter.insert("search_owner", owner);
+        if let Some(ids) = &self.owner_user_ids {
+            let customer_ids = self
+                .customers
+                .iter()
+                .filter(|c| c.owner_id.as_ref().is_some_and(|id| ids.as_slice().contains(id)))
+                .map(|c| c.id.clone())
+                .collect::<Vec<_>>();
+            filter.insert("customer_id", doc! { "$in": customer_ids });
         }
         apply_metric(&mut filter, self.metric);
         if let Some(q) = &self.q {
@@ -179,7 +170,7 @@ fn list_pipeline(filter: &ContractFilter, search: &ContractSearch, today: Busine
         doc! { "$facet": {
             "items": [doc! { "$match": search.filter() }, doc! { "$sort": list_sort(filter) }, doc! { "$skip": filter.skip() as i64 }, doc! { "$limit": filter.limit() }],
             "totals": [doc! { "$match": search.filter() }, doc! { "$count": "total" }],
-            "metrics": [doc! { "$group": metric_group() }],
+            "metrics": [doc! { "$match": search.filter() }, doc! { "$group": metric_group() }],
             "settlement_options": [doc! { "$sort": { "id": 1 } }, doc! { "$group": { "_id": "$settlement_party_id", "label": { "$first": "$search_settlement" } } }, doc! { "$project": { "_id": 0, "value": "$_id", "label": 1 } }, doc! { "$sort": { "label": 1, "value": 1 } }]
         } },
     ]
@@ -270,7 +261,7 @@ mod tests {
             q: Some("客户.[x]".into()),
             metric: Some(ContractMetric::Expiring30d),
             settlement_party_id: Some("party-1".into()),
-            owner: None,
+            owner_user_ids: None,
             customers: vec![],
         };
         let pipeline = list_pipeline(&filter, &search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
@@ -306,23 +297,23 @@ mod tests {
             q: Some("c-101".into()),
             metric: None,
             settlement_party_id: None,
-            owner: Some("张三".into()),
+            owner_user_ids: Some(serde_json::from_str("\"user-1\"").unwrap()),
             customers: vec![
                 ContractCustomer {
-                    owner_id: None,
+                    owner_id: Some("user-1".into()),
                     id: "customer-101".into(),
                     number: "C-101".into(),
                     owner: "张三".into(),
                 },
                 ContractCustomer {
-                    owner_id: None,
+                    owner_id: Some("user-2".into()),
                     id: "customer-102".into(),
                     number: "C-102".into(),
                     owner: "张三".into(),
                 },
             ],
         };
-        assert_eq!(search.owner_options().len(), 1);
+
         assert_eq!(
             search
                 .filter()
@@ -334,7 +325,10 @@ mod tests {
                 .unwrap(),
             &doc! { "customer_id": { "$in": ["customer-101"] } }
         );
-        assert_eq!(search.filter().get_str("search_owner").unwrap(), "张三");
+        assert_eq!(
+            search.filter().get_document("customer_id").unwrap(),
+            &doc! { "$in": ["customer-101"] }
+        );
     }
 
     /// 到期边界使用业务日并保留空页计数。
@@ -344,7 +338,7 @@ mod tests {
             q: None,
             metric: None,
             settlement_party_id: None,
-            owner: None,
+            owner_user_ids: None,
             customers: vec![],
         };
         let fields = display_fields(&search, BusinessDate::from_ymd(2026, 9, 8).unwrap());

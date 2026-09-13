@@ -20,9 +20,7 @@ use super::dto::{
     ActiveCardSalesApprovalView, PurchaseCreationAccessView, SalesOrderDetailView, SalesOrderView,
     SalesProcurementCoverageView,
 };
-use super::status::{
-    close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,
-};
+use super::status::{close_eligibility_view, compute_can_start_sales_change, stage_code_label_tone};
 use super::SalesOrderReadService;
 use crate::{Error, Result};
 use application_core::AuditActor;
@@ -72,7 +70,10 @@ impl SalesOrderReadService {
         skip_all,
         fields(layer = "service", domain = "sales_order", operation = "list")
     )]
-    pub async fn sales_order_list(&self, params: &SalesOrderListParams) -> Result<PageView<SalesOrderView>> {
+    pub async fn sales_order_list(
+        &self,
+        params: &SalesOrderListParams,
+    ) -> Result<application_core::FilteredPage<SalesOrderView>> {
         validator::Validate::validate(params)?;
         let search = self.keyword_search(params.q.as_deref()).await?;
         let page = self.sales().list_rows(params, search).await?;
@@ -91,7 +92,7 @@ impl SalesOrderReadService {
                 &page
                     .items
                     .iter()
-                    .map(|row| row.created_by.clone())
+                    .map(|row| row.sales_owner_user_id.clone())
                     .collect::<Vec<_>>(),
             )
             .await?;
@@ -108,7 +109,7 @@ impl SalesOrderReadService {
                 );
                 let (owner_role, stage_owner_user_id, stage_owner_user_name, due_at) =
                     owners.get(&row.id).cloned().unwrap_or_default();
-                let owner_user_id = row.created_by.clone();
+                let owner_user_id = row.sales_owner_user_id.clone();
                 let owner_user_name = owner_names.get(&owner_user_id).cloned();
                 SalesOrderView {
                     id: row.id,
@@ -143,11 +144,25 @@ impl SalesOrderReadService {
             })
             .collect();
 
-        Ok(PageView {
-            items,
-            total: page.total,
-            page: page.page,
-            page_size: page.page_size,
+        let owner_ids = self
+            .db
+            .sales_orders()
+            .current_owner_ids(&mut NoTransaction)
+            .await?;
+        let owner_options = self
+            .db
+            .accounts()
+            .filter_options(&owner_ids, &mut NoTransaction)
+            .await?;
+        Ok(application_core::FilteredPage {
+            owner_options,
+            ownership_basis: "document_sales_owner",
+            page: PageView {
+                items,
+                total: page.total,
+                page: page.page,
+                page_size: page.page_size,
+            },
         })
     }
 
@@ -235,15 +250,7 @@ impl SalesOrderReadService {
 
         let revisions = self.sales().load_revision_views(&order_id).await?;
 
-        let owner_user_id = detail_owner_user_id(
-            working_copy_view
-                .as_ref()
-                .map(|copy| copy.editor_user_id.as_str()),
-            submission_views
-                .first()
-                .map(|submission| submission.submitted_by.as_str()),
-            &order.stable.created_by,
-        );
+        let owner_user_id = order.sales_owner_user_id.clone();
 
         let owner_user_name = self.account_name(&owner_user_id).await?;
         let purchase_order_count = self

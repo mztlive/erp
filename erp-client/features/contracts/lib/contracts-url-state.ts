@@ -25,7 +25,7 @@ const CONTRACTS_URL_FIELDS = [
     { key: "dir", type: "enum", values: ["asc", "desc"] as const },
     { key: "customerId", type: "string" },
     { key: "settlementPartyId", type: "string" },
-    { key: "owner", type: "string" },
+    { key: "ownerUserIds", type: "string" },
     { key: "upload", type: "enum", values: ["1"] as const },
 ] as const
 
@@ -38,7 +38,7 @@ export type ContractsUrlState = {
     dir?: "asc" | "desc"
     customerId?: string
     settlementPartyId?: string
-    owner?: string
+    ownerUserIds?: string
     upload?: "1"
 }
 

@@ -163,6 +163,7 @@ impl SalesOrderService {
             created_from: query.created_from,
             created_to: query.created_to,
             created_by: query.created_by,
+            owner_user_ids: query.owner_user_ids,
             my_todo: query.my_todo,
             exception_only: query.exception_only,
             page: query.paging.page,

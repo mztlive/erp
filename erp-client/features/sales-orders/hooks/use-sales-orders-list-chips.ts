@@ -69,6 +69,13 @@ export function useSalesOrdersListChips(
                 onClear: () => removeFilter("contractId"),
             })
         }
+        if (url.ownerUserIds)
+            chips.push({
+                key: "ownerUserIds",
+                clearLabel: "清除负责销售条件",
+                label: `负责销售：已选 ${url.ownerUserIds.split(",").length} 人`,
+                onClear: () => removeFilter("ownerUserIds"),
+            })
         if (url.createdBy) {
             const ownerLabel = ownerOptionsQuery.data?.find(
                 (owner) => owner.userId === url.createdBy,
@@ -170,6 +177,7 @@ export function useSalesOrdersListChips(
         url.commercialStatus,
         url.contractId,
         url.createdBy,
+        url.ownerUserIds,
         url.createdFrom,
         url.createdTo,
         url.customerId,

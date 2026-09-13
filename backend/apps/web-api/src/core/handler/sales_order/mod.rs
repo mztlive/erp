@@ -9,8 +9,8 @@ use axum::{
     Extension, Json,
 };
 use erp_sales::dto::sales_order::{
-    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, PageView, SalesOrderListParams,
-    SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+    CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SalesOrderListParams, SaveWorkingCopyRequest,
+    SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 
 use erp_processes::order_to_cash::SalesOrderCommandProcess;
@@ -45,7 +45,7 @@ use crate::{
 pub async fn sales_order_list(
     State(state): State<AppState>,
     Query(params): Query<SalesOrderListParams>,
-) -> Result<PageView<SalesOrderView>> {
+) -> Result<application_core::FilteredPage<SalesOrderView>> {
     let page = SalesOrderReadService::new(state.db())
         .sales_order_list(&params)
         .await?;
@@ -270,5 +270,44 @@ mod tests {
         assert!(!production.contains("CardSalesManagerApproval"));
         assert!(!production.contains("CardSalesOperationApproval"));
         assert!(!production.contains("InternalApprovalRuntime"));
+    }
+}
+
+#[cfg(test)]
+mod owner_query_tests {
+    use axum::{extract::Query, http::Uri};
+    use erp_contract::dto::contract::ContractListParams;
+    use erp_customer::CustomerListParams;
+    use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
+    use erp_sales::dto::sales_order::SalesOrderListParams;
+
+    /// 实际 Query 解码器支持去重 ID，拒绝旧姓名和未接入组织参数，防止忽略后查全量。
+    #[test]
+    fn all_four_resources_validate_identity_queries() {
+        let valid: Uri = "/?owner_user_ids=user-2,user-1,user-2&page=2".parse().unwrap();
+        assert_eq!(
+            Query::<CustomerListParams>::try_from_uri(&valid)
+                .unwrap()
+                .0
+                .owner_user_ids
+                .unwrap()
+                .as_slice(),
+            &["user-1", "user-2"]
+        );
+        assert!(Query::<ContractListParams>::try_from_uri(&valid).is_ok());
+        assert!(Query::<PurchaseOrderListParams>::try_from_uri(&valid).is_ok());
+        assert!(Query::<SalesOrderListParams>::try_from_uri(&valid).is_ok());
+        for raw in [
+            "/?owner=Zhang",
+            "/?owner_user_ids=",
+            "/?org_unit_ids=org-1",
+            "/?handler_user_ids=user-1",
+        ] {
+            let uri: Uri = raw.parse().unwrap();
+            assert!(Query::<CustomerListParams>::try_from_uri(&uri).is_err());
+            assert!(Query::<ContractListParams>::try_from_uri(&uri).is_err());
+            assert!(Query::<PurchaseOrderListParams>::try_from_uri(&uri).is_err());
+            assert!(Query::<SalesOrderListParams>::try_from_uri(&uri).is_err());
+        }
     }
 }

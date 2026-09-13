@@ -215,7 +215,14 @@ impl ContractService {
             .list_by_contract(&contract.base.id.clone().into(), &mut NoTransaction)
             .await?;
         let view: ContractView = contract.into();
+        let owner = self
+            .list_customer_facts(std::slice::from_ref(&view.customer_id))
+            .await?
+            .into_iter()
+            .next();
         Ok(ContractDetailView {
+            owner_user_id: owner.as_ref().and_then(|c| c.owner_id.clone()),
+            owner_user_name: owner.filter(|c| c.owner_id.is_some()).map(|c| c.owner),
             id: view.id,
             contract_no: view.contract_no,
             customer_id: view.customer_id,

@@ -8,6 +8,7 @@ mod sales_order_entity {
 
     fn data() -> SalesOrderData {
         SalesOrderData {
+            sales_owner_user_id: "admin-1".to_string(),
             order_no: " SO-2026-0001 ".to_string(),
             business_type: BusinessType::GoodsService,
             origin_system: OriginSystem::Erp,
@@ -25,6 +26,9 @@ mod sales_order_entity {
         let roundtrip: SalesOrder =
             bson::deserialize_from_document(bson::serialize_to_document(&order).unwrap()).unwrap();
         assert_eq!(roundtrip, order);
+        let mut missing_owner = bson::serialize_to_document(&order).unwrap();
+        missing_owner.remove("sales_owner_user_id");
+        assert!(bson::deserialize_from_document::<SalesOrder>(missing_owner).is_err());
 
         let line = SalesOrderLine::new(
             SalesOrderLineId::new("l-1"),

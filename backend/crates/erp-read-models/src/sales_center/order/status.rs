@@ -7,18 +7,6 @@ use erp_sales::entity::sales_order::{
 
 use super::dto;
 
-/// 按“有效草稿负责人 → 最新提交人 → 建单人”确定销售单详情负责人。
-pub(super) fn detail_owner_user_id(
-    working_copy_editor: Option<&str>,
-    latest_submitter: Option<&str>,
-    created_by: &str,
-) -> String {
-    working_copy_editor
-        .or(latest_submitter)
-        .unwrap_or(created_by)
-        .to_string()
-}
-
 /// 销售单当前阶段 `(code, label, tone)`（服务端权威计算）。
 ///
 /// 移植自 erp-client `api.ts::mapPrimaryStatus`；用真实枚举类型消掉了原实现里
@@ -172,9 +160,7 @@ mod tests {
         InvoiceProgress, OriginSystem, ReviewStatus, SalesOrder, SalesOrderData,
     };
 
-    use super::{
-        close_eligibility_view, compute_can_start_sales_change, detail_owner_user_id, stage_code_label_tone,
-    };
+    use super::{close_eligibility_view, compute_can_start_sales_change, stage_code_label_tone};
 
     fn amt(value: &str) -> Amount {
         Amount::from_str(value).unwrap()
@@ -184,6 +170,7 @@ mod tests {
         SalesOrder::new(
             SalesOrderId::new("o-1"),
             SalesOrderData {
+                sales_owner_user_id: "admin-1".to_string(),
                 order_no: "SO-1".to_string(),
                 business_type,
                 origin_system: OriginSystem::Erp,
@@ -199,16 +186,10 @@ mod tests {
     }
 
     #[test]
-    fn detail_owner_prefers_working_copy_then_latest_submission_then_creator() {
-        assert_eq!(
-            detail_owner_user_id(Some("editor"), Some("submitter"), "creator"),
-            "editor"
-        );
-        assert_eq!(
-            detail_owner_user_id(None, Some("submitter"), "creator"),
-            "submitter"
-        );
-        assert_eq!(detail_owner_user_id(None, None, "creator"), "creator");
+    fn editing_does_not_replace_document_sales_owner() {
+        let mut order = order(BusinessType::GoodsService);
+        order.stable.updated_by = "another-editor".into();
+        assert_eq!(order.sales_owner_user_id, "admin-1");
     }
 
     #[test]

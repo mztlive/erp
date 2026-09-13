@@ -46,6 +46,7 @@ impl ContractService {
         let total = result.total();
         let items = self.contract_rows(result.items, &search.customers).await?;
         Ok(ContractListView {
+            ownership_basis: "current_customer_owner",
             page: PageView {
                 items,
                 total,
@@ -54,7 +55,22 @@ impl ContractService {
             },
             metrics: result.metrics.into_iter().next().unwrap_or_default(),
             settlement_options: result.settlement_options,
-            owner_options: search.owner_options(),
+            owner_options: self
+                .accounts
+                .filter_options(
+                    &search
+                        .customers
+                        .iter()
+                        .filter_map(|c| c.owner_id.clone())
+                        .collect::<Vec<_>>(),
+                )
+                .await?
+                .into_iter()
+                .map(|o| crate::dto::contract::ContractFilterOption {
+                    value: o.value,
+                    label: o.label,
+                })
+                .collect(),
         })
     }
 
@@ -73,13 +89,13 @@ impl ContractService {
             q: query.q.clone(),
             metric: query.metric,
             settlement_party_id: query.settlement_party_id.clone(),
-            owner: query.owner.clone(),
+            owner_user_ids: query.owner_user_ids.clone(),
             customers: self.list_customer_facts(&ids).await?,
         })
     }
 
     /// 按客户批量取得编号与当前负责人，同一批事实供搜索、排序与显示使用。
-    async fn list_customer_facts(&self, ids: &[String]) -> Result<Vec<ContractCustomer>> {
+    pub(super) async fn list_customer_facts(&self, ids: &[String]) -> Result<Vec<ContractCustomer>> {
         let customer_ids = ids
             .iter()
             .cloned()

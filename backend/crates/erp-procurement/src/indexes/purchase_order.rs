@@ -149,6 +149,14 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 服务端汇总派生，无法直接建索引，见 P2 报告）。
 fn purchase_order_indexes() -> Vec<IndexModel> {
     vec![
+        IndexModel::builder()
+            .keys(doc! { "owner_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_purchase_order_owner_created".to_string())
+                    .build(),
+            )
+            .build(),
         unique_partial_index(
             "uk_purchase_orders_purchase_no",
             doc! { "purchase_no": 1 },

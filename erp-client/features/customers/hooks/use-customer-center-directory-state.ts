@@ -17,6 +17,7 @@ import { hasPermission } from "@/lib/permissions"
 
 /** 目录筛选/分页/排序的 URL 参数增量。 */
 export type CustomerCenterDirectoryPatch = {
+    ownerUserIds?: string
     scope?: CustomerScope
     status?: DirectoryStatus
     q?: string
@@ -26,7 +27,7 @@ export type CustomerCenterDirectoryPatch = {
 }
 
 /** 可被单独移除的已生效筛选条件。 */
-export type CustomerFilterKey = "q" | "status"
+export type CustomerFilterKey = "q" | "status" | "ownerUserIds"
 
 export type CustomerAppliedChip = Readonly<{
     key: CustomerFilterKey
@@ -51,6 +52,9 @@ export function useCustomerCenterDirectoryState() {
             ? statusParam
             : "active"
     const q = searchParams.get("q") ?? ""
+    const ownerUserIds = searchParams.get("ownerUserIds") ?? ""
+    const [ownerDraft, setOwnerDraft] = React.useState(ownerUserIds)
+    React.useEffect(() => setOwnerDraft(ownerUserIds), [ownerUserIds])
     const sort = "business"
     const dir: "asc" | "desc" =
         searchParams.get("dir") === "asc" ? "asc" : "desc"
@@ -69,13 +73,14 @@ export function useCustomerCenterDirectoryState() {
             setSearchDraft(q)
         }
         setStatusDraft(status)
-    }, [q, status])
+    }, [q, status, ownerUserIds])
 
     const pushState = React.useCallback(
         (next: CustomerCenterDirectoryPatch) => {
             router.replace(
                 writeDirectoryUrl(pathname, {
                     scope: next.scope ?? scope,
+                    ownerUserIds: next.ownerUserIds ?? ownerUserIds,
                     status: next.status ?? status,
                     q: next.q ?? q,
                     sort: next.sort ?? sort,
@@ -85,13 +90,18 @@ export function useCustomerCenterDirectoryState() {
                 { scroll: false },
             )
         },
-        [dir, page, pathname, q, router, scope, sort, status],
+        [dir, page, pathname, q, router, scope, sort, status, ownerUserIds],
     )
 
     /** 单一提交路径：查询按钮与搜索框 Enter 共用。 */
     const applyFilters = React.useCallback(() => {
-        pushState({ q: searchDraft.trim(), status: statusDraft, page: 1 })
-    }, [pushState, searchDraft, statusDraft])
+        pushState({
+            q: searchDraft.trim(),
+            status: statusDraft,
+            ownerUserIds: ownerDraft,
+            page: 1,
+        })
+    }, [pushState, searchDraft, statusDraft, ownerDraft])
 
     /** 快捷筛选（客户范围）直接写 Applied；不改动关键词或状态草稿。 */
     const applyScope = React.useCallback(
@@ -104,6 +114,10 @@ export function useCustomerCenterDirectoryState() {
     /** 移除单个已生效条件；状态移除后回到业务默认「启用」。 */
     const removeFilter = React.useCallback(
         (key: CustomerFilterKey) => {
+            if (key === "ownerUserIds") {
+                setOwnerDraft("")
+                pushState({ ownerUserIds: "", page: 1 })
+            }
             if (key === "q") {
                 setSearchDraft("")
                 pushState({ q: "", page: 1 })
@@ -125,12 +139,18 @@ export function useCustomerCenterDirectoryState() {
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
         setStatusDraft("active")
-        pushState({ q: "", status: "active", page: 1 })
+        setOwnerDraft("")
+        pushState({ q: "", status: "active", ownerUserIds: "", page: 1 })
     }, [pushState])
 
     /** 所有已生效筛选均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly CustomerAppliedChip[]>(() => {
         const chips: CustomerAppliedChip[] = []
+        if (ownerUserIds)
+            chips.push({
+                key: "ownerUserIds",
+                label: `负责销售：已选 ${ownerUserIds.split(",").length} 人`,
+            })
         const trimmedQ = q.trim()
         if (trimmedQ) {
             chips.push({ key: "q", label: `搜索：${trimmedQ}` })
@@ -142,12 +162,14 @@ export function useCustomerCenterDirectoryState() {
             })
         }
         return chips
-    }, [q, status])
+    }, [q, status, ownerUserIds])
 
-    const hasStructuredFilters = status !== "active"
+    const hasStructuredFilters = status !== "active" || Boolean(ownerUserIds)
     const hasActiveFilters = hasStructuredFilters || q.trim().length > 0
     const hasPendingChanges =
-        searchDraft.trim() !== q.trim() || statusDraft !== status
+        searchDraft.trim() !== q.trim() ||
+        statusDraft !== status ||
+        ownerDraft !== ownerUserIds
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -175,6 +197,9 @@ export function useCustomerCenterDirectoryState() {
     )
 
     return {
+        ownerUserIds,
+        ownerDraft,
+        setOwnerDraft,
         scope,
         status,
         q,
@@ -207,6 +232,7 @@ export function useCustomerCenterDirectoryState() {
  * 我的客户视图（等账号资料加载完成后再判定，避免闪跳）。
  */
 export function useCustomerCenterScopeGuard(state: {
+    ownerUserIds: string
     scope: CustomerScope
     status: DirectoryStatus
     q: string
@@ -225,7 +251,7 @@ export function useCustomerCenterScopeGuard(state: {
         accountProfile.data?.permissions,
         "customer_scope:detail",
     )
-    const { scope, status, q, sort, dir, page } = state
+    const { scope, status, q, sort, dir, page, ownerUserIds } = state
 
     React.useEffect(() => {
         if (
@@ -236,6 +262,7 @@ export function useCustomerCenterScopeGuard(state: {
             router.replace(
                 writeDirectoryUrl(pathname, {
                     scope: "mine",
+                    ownerUserIds,
                     status,
                     q,
                     sort,
@@ -248,6 +275,7 @@ export function useCustomerCenterScopeGuard(state: {
     }, [
         accountProfile.isPending,
         canReadAll,
+        ownerUserIds,
         dir,
         page,
         pathname,

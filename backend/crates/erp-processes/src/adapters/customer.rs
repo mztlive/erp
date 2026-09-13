@@ -156,6 +156,13 @@ impl MongoCustomerAccountFacts {
 
 #[async_trait]
 impl AccountFactPort for MongoCustomerAccountFacts {
+    async fn filter_options(
+        &self,
+        ids: &[String],
+    ) -> erp_customer::Result<Vec<application_core::FilterOption>> {
+        Ok(self.db.accounts().filter_options(ids, &mut NoTransaction).await?)
+    }
+
     async fn ensure_can_login(&self, user_id: &str) -> erp_customer::Result<()> {
         let account = self
             .db

@@ -1,4 +1,8 @@
 "use client"
+import {
+    ResponsibleUserFilter,
+    type ResponsibleUserOption,
+} from "@/features/entity-selectors/components/responsible-user-filter"
 
 import * as React from "react"
 
@@ -26,6 +30,9 @@ const STATUS_RADIO_OPTIONS = [
  * 客户中心目录工具条：关键词草稿 + 常驻状态筛选，查询后统一生效。
  */
 export function CustomerCenterDirectoryToolbar({
+    ownerDraft,
+    setOwnerDraft,
+    ownerOptions,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -40,6 +47,9 @@ export function CustomerCenterDirectoryToolbar({
     loading,
     failed,
 }: {
+    ownerDraft: string
+    setOwnerDraft: (value: string) => void
+    ownerOptions: readonly ResponsibleUserOption[]
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -71,14 +81,23 @@ export function CustomerCenterDirectoryToolbar({
                 />
             }
             commonFilters={
-                <FixedOptionRadioFilter
-                    id="customers-directory-status"
-                    label="状态"
-                    variant="quiet"
-                    value={statusDraft}
-                    onValueChange={setStatusDraft}
-                    options={STATUS_RADIO_OPTIONS}
-                />
+                <>
+                    <ResponsibleUserFilter
+                        id="customers-directory-owner"
+                        label="负责销售"
+                        value={ownerDraft}
+                        onChange={setOwnerDraft}
+                        options={ownerOptions}
+                    />
+                    <FixedOptionRadioFilter
+                        id="customers-directory-status"
+                        label="状态"
+                        variant="quiet"
+                        value={statusDraft}
+                        onValueChange={setStatusDraft}
+                        options={STATUS_RADIO_OPTIONS}
+                    />
+                </>
             }
             resultStatus={listWorkspaceFilterStatusText({
                 loading,

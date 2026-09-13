@@ -1,3 +1,4 @@
+import { collectExportPages } from "@/lib/list-export"
 import { apiGet } from "@/lib/api"
 import type {
     PurchaseChangeOrderSummary,
@@ -58,23 +59,26 @@ export async function fetchPurchaseOrders(
         sortBy = query.sortBy
     }
 
-    const pageData = await apiGet<BackendPage<BackendListItem>>(
-        "/admin/purchase-orders",
-        {
-            q: query.q,
-            sales_order_id: query.salesOrderId,
-            status,
-            page,
-            page_size: pageSize,
-            sort_by: sortBy,
-            sort_dir: query.sortDir,
-        },
-    )
+    const pageData = await apiGet<
+        BackendPage<BackendListItem> & {
+            owner_options: { value: string; label: string }[]
+        }
+    >("/admin/purchase-orders", {
+        q: query.q,
+        sales_order_id: query.salesOrderId,
+        owner_user_ids: query.ownerUserIds || undefined,
+        status,
+        page,
+        page_size: pageSize,
+        sort_by: sortBy,
+        sort_dir: query.sortDir,
+    })
 
     const rows = (pageData.items ?? []).map(mapListItem)
 
     return {
         rows,
+        ownerOptions: pageData.owner_options ?? [],
         total: pageData.total ?? rows.length,
         page: pageData.page ?? page,
         pageSize: pageData.page_size ?? pageSize,
@@ -89,13 +93,17 @@ export async function fetchPurchaseOrders(
 export async function fetchPurchaseOrderExportData(
     query: PurchaseOrderListQuery = {},
 ): Promise<PurchaseOrderListItem[]> {
-    // 导出：拉大页聚合（后端无独立导出投影）
-    const result = await fetchPurchaseOrders({
-        ...query,
-        page: 1,
-        pageSize: PURCHASE_ORDER_MAX_PAGE_SIZE,
-    })
-    return result.rows
+    return collectExportPages(
+        async (page, pageSize) => {
+            const result = await fetchPurchaseOrders({
+                ...query,
+                page,
+                pageSize,
+            })
+            return { items: result.rows, total: result.total }
+        },
+        (row) => row.purchaseOrderId,
+    )
 }
 
 /**

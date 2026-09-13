@@ -192,6 +192,13 @@ impl MongoContractAccounts {
 
 #[async_trait]
 impl AccountNamePort for MongoContractAccounts {
+    async fn filter_options(
+        &self,
+        ids: &[String],
+    ) -> erp_contract::Result<Vec<application_core::FilterOption>> {
+        Ok(self.db.accounts().filter_options(ids, &mut NoTransaction).await?)
+    }
+
     async fn names_by_ids(&self, account_ids: &[String]) -> erp_contract::Result<HashMap<String, String>> {
         self.db
             .accounts()

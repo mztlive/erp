@@ -55,6 +55,8 @@ pub struct SalesOrderRow {
     pub updated_at: u64,
     /// 负责销售账号；ERP 建单负责人固定为建单人。
     pub created_by: String,
+    /// 显式单据负责销售。
+    pub sales_owner_user_id: String,
 }
 
 /// 销售单列表筛选条件。
@@ -90,6 +92,8 @@ pub struct SalesOrderFilter {
     pub created_to: Option<u64>,
     /// 创建人账号；`None` 表示不筛选（"我创建的"/"待我处理"视图用）。
     pub created_by: Option<String>,
+    /// 已规范化负责人条件，与其它条件求交。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单
     /// （`commercial_status=DRAFT` 或 `review_status IN [REJECTED, PENDING_LOW_MARGIN_SUPERIOR]`）。
     /// 与 `commercial_status`/`review_status` 互斥，调用方不应同时传两者。
@@ -154,6 +158,9 @@ impl QueryFilter for SalesOrderFilter {
             }
             filter.insert("created_at", created_at);
         }
+        if let Some(ids) = &self.owner_user_ids {
+            filter.insert("sales_owner_user_id", doc! { "$in": ids.as_slice() });
+        }
         if let Some(created_by) = &self.created_by {
             filter.insert("created_by", created_by);
         }
@@ -203,6 +210,32 @@ impl Pagination for SalesOrderFilter {
 }
 
 impl<'a> SalesOrderRepository<'a> {
+    /// 返回未删除单据的负责人集合。当前调用入口使用资源级列表权限；S2 必须传入 v2 对象边界。
+    ///
+    /// # 参数
+    /// * `executor` - 事务或无事务执行器
+    ///
+    /// # 返回值
+    /// 返回去重的负责人 ID；候选不按登录资格过滤，不能用于改派。
+    ///
+    /// # 错误
+    /// 数据库查询失败向上传播。
+    pub async fn current_owner_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+        let collection = self.collection();
+        let mut query = collection.distinct(
+            "sales_owner_user_id",
+            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON },
+        );
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect())
+    }
+
     /// 按销售单 ID 集合批量读取活跃销售单。
     ///
     /// # 参数
@@ -463,6 +496,7 @@ fn sales_order_projection() -> Document {
         "created_at": 1,
         "updated_at": 1,
         "created_by": 1,
+        "sales_owner_user_id": 1,
     }
 }
 
@@ -523,6 +557,7 @@ mod tests {
     #[test]
     fn sales_order_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SalesOrderFilter {
+            owner_user_ids: Some(serde_json::from_str("\"sales-2,sales-3\"").unwrap()),
             search: Default::default(),
             order_no: Some("SO-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
@@ -547,6 +582,10 @@ mod tests {
         };
 
         let document = filter.to_doc();
+        assert_eq!(
+            document.get_document("sales_owner_user_id").unwrap(),
+            &doc! { "$in": ["sales-2", "sales-3"] }
+        );
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(
             document
@@ -579,12 +618,16 @@ mod tests {
 
     #[test]
     fn sales_order_projection_includes_responsible_sales_account() {
-        assert_eq!(sales_order_projection().get_i32("created_by").unwrap(), 1);
+        assert_eq!(
+            sales_order_projection().get_i32("sales_owner_user_id").unwrap(),
+            1
+        );
     }
 
     #[test]
     fn sales_order_filter_escapes_regex_metacharacters() {
         let filter = SalesOrderFilter {
+            owner_user_ids: None,
             search: Default::default(),
             order_no: Some("SO-2026.[x]".to_string()),
             customer_id: None,
@@ -645,6 +688,7 @@ mod keyword_regression_tests {
     #[test]
     fn keyword_preserves_structural_scope() {
         let mut filter = SalesOrderFilter {
+            owner_user_ids: None,
             search: Default::default(),
             order_no: None,
             customer_id: None,

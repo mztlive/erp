@@ -403,6 +403,7 @@ mod isolation_tests {
     /// 构造列表筛选条件。
     fn list_filter() -> PurchaseOrderFilter {
         PurchaseOrderFilter {
+            owner_user_ids: None,
             purchase_no: None,
             keyword_sales_order_ids: Vec::new(),
             keyword_supplier_ids: Vec::new(),

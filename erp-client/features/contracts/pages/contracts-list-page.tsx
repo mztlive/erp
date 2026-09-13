@@ -39,6 +39,7 @@ export function ContractsListPage() {
     const paperDetailQuery = useContractCenterQuery(paperId ?? "")
 
     const actions = useContractListActions({
+        query: list.url,
         filteredCount: list.total,
         filterSnapshotLabel: list.filterSnapshotLabel,
     })

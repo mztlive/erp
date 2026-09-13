@@ -42,6 +42,8 @@ pub use application_core::SortDir;
 /// 归一化后的客户角色列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CustomerListQuery {
+    /// 当前负责人精确身份条件。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 客户编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID。
@@ -199,7 +201,10 @@ pub struct CustomerDetailView {
 
 /// 客户角色列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CustomerListParams {
+    /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
+    pub owner_user_ids: Option<application_core::QueryIds>,
     /// 客户编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID（精确匹配）。
@@ -234,6 +239,7 @@ impl CustomerListParams {
     pub(crate) fn normalized(&self) -> Result<CustomerListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_SORT_FIELDS)?;
         Ok(CustomerListQuery {
+            owner_user_ids: self.owner_user_ids.clone(),
             keyword: normalized_text(self.keyword.as_deref()),
             party_id: self.party_id.clone(),
             status: self.status,
@@ -693,6 +699,7 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = CustomerListParams {
+            owner_user_ids: None,
             keyword: Some(" C-20 ".to_string()),
             party_id: None,
             status: None,

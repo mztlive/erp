@@ -386,6 +386,7 @@ mod tests {
         SalesOrder::new(
             SalesOrderId::new("so-1"),
             SalesOrderData {
+                sales_owner_user_id: "admin-1".to_string(),
                 order_no: "SO-1".into(),
                 business_type: BusinessType::GoodsService,
                 origin_system: OriginSystem::Erp,

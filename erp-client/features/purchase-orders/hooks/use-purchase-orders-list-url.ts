@@ -61,6 +61,7 @@ export function usePurchaseOrdersListUrl() {
     const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
         () => ({
             q: url.q,
+            ownerUserIds: url.ownerUserIds,
             salesOrderId: url.salesOrderId,
             status: url.status,
             metric: effectiveMetric,

@@ -51,8 +51,7 @@ function mapListRow(row: BackendContractView): ContractListRow {
         ),
         salesOrderCount: 0,
         activeSalesOrderCount: 0,
-        ownerLabel:
-            row.owner_user_name?.trim() || row.owner_user_id?.trim() || "—",
+        ownerLabel: row.owner_user_name?.trim() || "未指定",
         ownerKind: "current_customer_owner",
         allowedActions: actions.allowedActions,
         actionBlockers: actions.actionBlockers,
@@ -88,7 +87,7 @@ export async function fetchContracts(
         metric: query.metric,
         customer_id: query.customerId,
         settlement_party_id: query.settlementPartyId,
-        owner: query.owner,
+        owner_user_ids: query.ownerUserIds,
         page: query.page,
         page_size: query.pageSize,
         sort_by:

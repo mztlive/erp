@@ -15,6 +15,7 @@ export function parsePage(value: string | null): number {
 export function writeDirectoryUrl(
     pathname: string,
     params: {
+        ownerUserIds?: string
         scope: CustomerScope
         status: DirectoryStatus
         q: string
@@ -24,6 +25,7 @@ export function writeDirectoryUrl(
     },
 ): string {
     const sp = new URLSearchParams()
+    if (params.ownerUserIds) sp.set("ownerUserIds", params.ownerUserIds)
     if (params.scope !== "mine") sp.set("scope", params.scope)
     if (params.status !== "active") sp.set("status", params.status)
     if (params.q.trim()) sp.set("q", params.q.trim())
