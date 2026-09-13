@@ -1,5 +1,6 @@
 //! `data_scope`：数据范围（能看哪些客户、团队、组织和单据，数据模型 §5.1 / W19 §5.1）。
 
+use super::{ScopeBinding, ScopeTargetMode};
 use std::collections::HashSet;
 
 use entity_core::BaseModel;
@@ -109,6 +110,9 @@ impl DataScopeType {
 /// 数据范围创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataScopeData {
+    /// 明确的资源动作与目标维度。
+    #[serde(flatten)]
+    pub binding: ScopeBinding,
     /// 范围主体类型。
     pub subject_type: DataScopeSubjectType,
     /// 范围主体 ID（角色 ID 或用户 ID）。
@@ -126,6 +130,9 @@ pub struct DataScopeData {
 /// 来自 `document_participant`，不依赖当前数据范围反推（W19 §2.2）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct DataScope {
+    /// 版本 2 资源动作与目标维度。
+    #[serde(flatten)]
+    pub binding: ScopeBinding,
     #[serde(flatten)]
     pub base: BaseModel,
     /// 范围主体类型。
@@ -162,9 +169,15 @@ impl DataScope {
             SUBJECT_ID_MAX_LEN,
             "范围主体ID过长",
         )?;
-        let scope_targets = normalize_scope_targets(data.scope_type, data.scope_targets)?;
+        data.binding.validate(data.scope_type, &data.scope_targets)?;
+        let mut scope_targets = Vec::new();
+        if data.binding.target_mode == Some(ScopeTargetMode::Explicit) || !data.scope_type.requires_targets()
+        {
+            scope_targets = normalize_scope_targets(data.scope_type, data.scope_targets)?;
+        }
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            binding: data.binding,
             subject_type: data.subject_type,
             subject_id,
             scope_type: data.scope_type,
@@ -207,6 +220,12 @@ fn normalize_scope_targets(scope_type: DataScopeType, targets: Vec<String>) -> R
     let mut normalized = Vec::with_capacity(targets.len());
     for target in targets {
         let target = normalize_required_text(target, "范围目标不能为空", TARGET_MAX_LEN, "范围目标过长")?;
+        if !target
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+        {
+            return Err(Error::from("范围目标必须为稳定身份，不允许通配符或显示名称"));
+        }
         if seen.insert(target.clone()) {
             normalized.push(target);
         }
@@ -221,6 +240,15 @@ mod tests {
 
     fn data() -> DataScopeData {
         DataScopeData {
+            binding: super::ScopeBinding {
+                schema_version: 2,
+                resource: "sales_order".into(),
+                actions: vec!["list".into()],
+                target_dimension: crate::access_control::ScopeDimension::InternalOrg,
+                target_mode: Some(super::ScopeTargetMode::Explicit),
+                include_descendants: Some(false),
+                enabled: true,
+            },
             subject_type: DataScopeSubjectType::Role,
             subject_id: " role-sales ".to_string(),
             scope_type: DataScopeType::Team,
@@ -287,10 +315,13 @@ mod tests {
             DataScopeType::SelfOwned,
             DataScopeType::Collaborative,
         ] {
+            let mut source = data();
+            source.binding.target_mode = None;
+            source.binding.include_descendants = None;
             let data = DataScopeData {
                 scope_type,
                 scope_targets: vec![],
-                ..data()
+                ..source
             };
             let scope = DataScope::new(DataScopeId::new("ds-1"), data).unwrap();
             assert!(scope.scope_targets.is_empty());

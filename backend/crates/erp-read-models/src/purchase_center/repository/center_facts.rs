@@ -269,6 +269,7 @@ mod isolation_tests {
         let mut created = PurchaseOrder::new(
             PurchaseOrderId::new(id),
             PurchaseOrderData {
+                business_org_unit_id: "org-procurement".to_string(),
                 purchase_no: format!("PO-{id}"),
                 sales_order_id: SalesOrderId::new("so-missing"),
                 sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("rev-1"),

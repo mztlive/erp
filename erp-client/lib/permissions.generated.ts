@@ -860,6 +860,42 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "组织管理",
+        description: "内部组织、成员与管理关系",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/org-units",
+                description: "查询组织",
+                permission: {
+                    resource: "org_unit",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/org-units/preview",
+                description: "管理组织",
+                permission: {
+                    resource: "org_unit",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/org-units/change",
+                description: "管理组织",
+                permission: {
+                    resource: "org_unit",
+                    action: "manage",
+                },
+            },
+        ],
+    },
+    {
         name: "权限与审计",
         description: "权限目录、数据范围、用户授权与审计查询",
         permissions: [

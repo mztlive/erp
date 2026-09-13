@@ -9,6 +9,7 @@ mod sales_order_entity {
     fn data() -> SalesOrderData {
         SalesOrderData {
             sales_owner_user_id: "admin-1".to_string(),
+            business_org_unit_id: "org-sales".to_string(),
             order_no: " SO-2026-0001 ".to_string(),
             business_type: BusinessType::GoodsService,
             origin_system: OriginSystem::Erp,

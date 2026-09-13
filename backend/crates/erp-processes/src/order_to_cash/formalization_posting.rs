@@ -91,6 +91,7 @@ impl PostingSteps for MongoPosting<'_> {
                 }
             }
             SalesRevision => {
+                crate::business_ownership::ensure_attribution(&write.db, &write.order, executor).await?;
                 erp_sales::service::sales_order::formalize::persist_revision(
                     &write.db,
                     &mut write.order,

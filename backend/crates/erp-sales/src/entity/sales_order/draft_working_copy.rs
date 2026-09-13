@@ -54,6 +54,7 @@ mod tests {
             SalesOrderId::new("o-1"),
             SalesOrderData {
                 sales_owner_user_id: "admin-1".to_string(),
+                business_org_unit_id: "org-sales".to_string(),
                 order_no: "SO-1".to_string(),
                 business_type: BusinessType::GoodsService,
                 origin_system: OriginSystem::Erp,
@@ -124,6 +125,7 @@ mod tests {
 
         let mut effective = order();
         effective.start_approval_submission("admin-1").unwrap();
+        crate::entity::sales_order::attribution::freeze_fixture(&mut effective);
         effective
             .approve(Instant::from_unix_secs(1_800_000_000), "approver")
             .unwrap();

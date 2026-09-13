@@ -3,6 +3,8 @@
 pub mod access_control;
 pub mod account_core;
 pub mod auth;
+pub mod organization;
+pub mod organization_change;
 pub mod rbac;
 pub mod role;
 

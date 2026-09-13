@@ -606,6 +606,17 @@ mod tests {
         DataScope::new(
             DataScopeId::new(id),
             DataScopeData {
+                binding: erp_identity::access_control::ScopeBinding {
+                    schema_version: 2,
+                    resource: "stock".into(),
+                    actions: vec!["list".into()],
+                    target_dimension: erp_identity::access_control::ScopeDimension::Warehouse,
+                    target_mode: scope_type
+                        .requires_targets()
+                        .then_some(erp_identity::access_control::ScopeTargetMode::Explicit),
+                    include_descendants: None,
+                    enabled: true,
+                },
                 subject_type,
                 subject_id: subject_id.to_string(),
                 scope_type,

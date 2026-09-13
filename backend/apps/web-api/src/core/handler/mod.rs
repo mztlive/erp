@@ -15,6 +15,7 @@ pub mod fulfillment;
 pub mod integration_ops;
 pub mod inventory;
 pub mod legacy_import;
+pub mod organization;
 pub mod party;
 pub mod payable;
 pub mod purchase_order;

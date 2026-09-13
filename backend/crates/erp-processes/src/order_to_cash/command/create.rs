@@ -207,11 +207,15 @@ impl SalesOrderCommandProcess {
             ));
         }
 
+        let business_org_unit_id =
+            crate::business_ownership::required_business_org(&self.db, actor.id(), &mut NoTransaction)
+                .await?;
         let order = erp_sales::service::sales_order::SalesOrderService::prepare_order(
             &req,
             customer_id,
             settlement_party_id,
             actor,
+            business_org_unit_id,
         )?;
         let order_id = SalesOrderId::new(order.base.id.clone());
         let document_type = crate::order_to_cash::document_type_of_sales_business(req.business_type);
@@ -331,6 +335,13 @@ impl SalesOrderCommandProcess {
                             now,
                         })?;
                         let prepared = prepare_start(start_input)?;
+                        crate::business_ownership::ensure_creation_org(
+                            &db,
+                            &submitted_order.sales_owner_user_id,
+                            &submitted_order.business_org_unit_id,
+                            session,
+                        )
+                        .await?;
                         erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                             .create_order(&submitted_order, session)
                             .await?;
@@ -424,6 +435,13 @@ impl SalesOrderCommandProcess {
                             session,
                         )
                         .await?;
+                    crate::business_ownership::ensure_creation_org(
+                        &db,
+                        &order_for_tx.sales_owner_user_id,
+                        &order_for_tx.business_org_unit_id,
+                        session,
+                    )
+                    .await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .create_order(&order_for_tx, session)
                         .await?;

@@ -250,6 +250,9 @@ impl PermissionListParams {
 /// 数据范围响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DataScopeView {
+    /// 版本 2 资源动作绑定。
+    #[serde(flatten)]
+    pub binding: crate::access_control::ScopeBinding,
     /// 实体主键。
     pub id: String,
     /// 范围主体类型。
@@ -275,6 +278,7 @@ impl From<DataScope> for DataScopeView {
             subject_id: scope.subject_id,
             scope_type: scope.scope_type,
             scope_targets: scope.scope_targets,
+            binding: scope.binding,
             version: scope.base.version,
             created_at: scope.base.created_at,
         }
@@ -283,7 +287,11 @@ impl From<DataScope> for DataScopeView {
 
 /// 数据范围创建请求（主体 + 范围类型唯一）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateDataScopeRequest {
+    /// 版本 2 资源动作绑定。
+    #[serde(flatten)]
+    pub binding: crate::access_control::ScopeBinding,
     /// 范围主体类型。
     pub subject_type: DataScopeSubjectType,
     /// 范围主体 ID（角色 ID 或用户 ID）。
@@ -307,6 +315,7 @@ impl CreateDataScopeRequest {
             subject_id: self.subject_id,
             scope_type: self.scope_type,
             scope_targets: self.scope_targets,
+            binding: self.binding,
         }
     }
 }
@@ -785,6 +794,8 @@ mod tests {
             "subject_id": "role-sales",
             "scope_type": "team",
             "scope_targets": ["team-1", "team-2"],
+            "schema_version": 2, "resource": "sales_order", "actions": ["list"],
+            "target_dimension": "internal_org", "target_mode": "explicit", "include_descendants": false, "enabled": true,
         }))
         .unwrap();
         let data = request.into_data();

@@ -80,11 +80,13 @@ impl SalesOrderService {
         customer_id: CustomerAccountId,
         settlement_party_id: PartyId,
         actor: &AuditActor,
+        business_org_unit_id: String,
     ) -> Result<SalesOrder> {
         Ok(SalesOrder::new(
             SalesOrderId::new(id_generator::next_id()),
             SalesOrderData {
                 sales_owner_user_id: actor.id().to_string(),
+                business_org_unit_id,
                 order_no: req.order_no.clone(),
                 business_type: req.business_type,
                 origin_system: crate::entity::sales_order::OriginSystem::Erp,

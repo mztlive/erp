@@ -63,7 +63,9 @@ pub async fn ensure_authorization(db: &Database) -> Result<()> {
     create_indexes(db, PERMISSIONS, permission_indexes()).await?;
     create_indexes(db, USER_ROLES, user_role_indexes()).await?;
     create_indexes(db, DATA_SCOPES, data_scope_indexes()).await?;
+    remove_obsolete_scope_index(db).await?;
     create_indexes(db, AUDIT_EVENTS, audit_event_indexes()).await?;
+    ensure_organizations(db).await?;
     Ok(())
 }
 
@@ -169,11 +171,12 @@ fn user_role_indexes() -> Vec<IndexModel> {
 /// 处理一致），软删除后不释放身份。
 fn data_scope_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_data_scopes_subject_scope",
-            doc! { "subject_type": 1, "subject_id": 1, "scope_type": 1 },
-        ),
+        unique_index("uk_data_scopes_id", doc! { "id": 1 }),
         named_index("idx_data_scopes_scope_type", doc! { "scope_type": 1 }),
+        named_index(
+            "idx_data_scopes_subject_resource_action",
+            doc! { "subject_type": 1, "subject_id": 1, "resource": 1, "actions": 1, "enabled": 1, "deleted_at": 1 },
+        ),
     ]
 }
 
@@ -212,6 +215,72 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
         .keys(keys)
         .options(IndexOptions::builder().name(name.into()).unique(true).build())
         .build()
+}
+
+/// 组织实体身份、成员有效期与管理范围的索引；跨行约束由全局版本事务防止写偏差。
+async fn ensure_organizations(db: &Database) -> Result<()> {
+    use crate::repository::organization::*;
+    for collection in [
+        ORG_UNITS,
+        ORG_MEMBERSHIPS,
+        ORG_MANAGEMENT,
+        ORG_REVISIONS,
+        ORG_CHANGES,
+    ] {
+        create_indexes(
+            db,
+            collection,
+            vec![unique_index(format!("uk_{collection}_id"), doc! { "id": 1 })],
+        )
+        .await?;
+    }
+    create_indexes(
+        db,
+        ORG_UNITS,
+        vec![named_index(
+            "idx_org_parent_status",
+            doc! { "parent_id": 1, "enabled": 1 },
+        )],
+    )
+    .await?;
+    create_indexes(
+        db,
+        ORG_MEMBERSHIPS,
+        vec![
+            named_index(
+                "idx_membership_user_validity",
+                doc! { "user_id": 1, "valid_from": 1, "valid_to": 1 },
+            ),
+            named_index(
+                "idx_membership_org_validity",
+                doc! { "org_unit_id": 1, "valid_from": 1, "valid_to": 1 },
+            ),
+        ],
+    )
+    .await?;
+    create_indexes(
+        db,
+        ORG_MANAGEMENT,
+        vec![named_index(
+            "idx_management_user_role_validity",
+            doc! { "user_id": 1, "role_id": 1, "valid_from": 1, "valid_to": 1 },
+        )],
+    )
+    .await
+}
+
+/// 移除阻止同主体按资源配置多条规则的旧索引；不回填或解释旧范围数据。
+async fn remove_obsolete_scope_index(db: &Database) -> Result<()> {
+    let collection = db.collection::<Document>(DATA_SCOPES);
+    if collection
+        .list_index_names()
+        .await?
+        .iter()
+        .any(|name| name == "uk_data_scopes_subject_scope")
+    {
+        collection.drop_index("uk_data_scopes_subject_scope").await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -293,12 +362,11 @@ mod tests {
     }
 
     #[test]
-    fn data_scope_subject_scope_is_unique() {
+    fn data_scope_identity_is_unique_and_resource_rules_can_coexist() {
         let indexes = data_scope_indexes();
 
         assert!(indexes.iter().any(|index| {
-            index.options.as_ref().and_then(|options| options.name.as_deref())
-                == Some("uk_data_scopes_subject_scope")
+            index.options.as_ref().and_then(|options| options.name.as_deref()) == Some("uk_data_scopes_id")
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
         assert!(indexes.iter().any(|index| index.keys == doc! { "scope_type": 1 }));

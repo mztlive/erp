@@ -13,7 +13,10 @@ use erp_identity::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::access_control, middleware::with_permission},
+    core::{
+        handler::{access_control, organization},
+        middleware::with_permission,
+    },
 };
 
 /// 返回本域管理端路由集合。
@@ -25,6 +28,26 @@ use crate::{
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .route(
+            "/org-units",
+            with_permission(get(organization::list), rbac, organization::list_permission_key()),
+        )
+        .route(
+            "/org-units/preview",
+            with_permission(
+                post(organization::preview),
+                rbac,
+                organization::preview_permission_key(),
+            ),
+        )
+        .route(
+            "/org-units/change",
+            with_permission(
+                post(organization::change),
+                rbac,
+                organization::change_permission_key(),
+            ),
+        )
         .route(
             "/permissions",
             with_permission(

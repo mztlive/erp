@@ -9,6 +9,7 @@ pub mod approval_dispatch;
 pub mod attachments;
 pub mod audit;
 pub mod background;
+pub mod business_ownership;
 pub mod catalog;
 pub mod contract;
 pub mod customer;

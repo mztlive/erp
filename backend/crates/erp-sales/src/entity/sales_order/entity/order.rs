@@ -25,6 +25,8 @@ const SOURCE_STATUS_CODE_MAX_LEN: usize = 64;
 /// 销售单创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesOrderData {
+    /// 创建时显式确定的内部业务组织。
+    pub business_org_unit_id: String,
     /// 明确的内部销售责任身份；创建用例负责校验来源映射，禁止以系统执行人兜底。
     pub sales_owner_user_id: String,
     /// 销售单号（唯一，创建后不可修改）。
@@ -64,6 +66,10 @@ pub struct SalesOrderUpdate {
 /// `PartialEq`/`Eq`（全字段语义相等）以替代约定中的派生写法。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity)]
 pub struct SalesOrder {
+    /// 单据业务组织不随负责人调岗变化。
+    pub business_org_unit_id: String,
+    /// 仅首次生效时冻结，普通编辑不可修改。
+    pub attribution: Option<super::super::SalesAttribution>,
     /// 单据负责销售；ERP 创建时取认证建单人，普通编辑不得修改。
     pub sales_owner_user_id: String,
     #[serde(flatten)]
@@ -131,6 +137,8 @@ impl PartialEq for SalesOrder {
             && self.close_status == other.close_status
             && self.source_status_code == other.source_status_code
             && self.effective_at == other.effective_at
+            && self.business_org_unit_id == other.business_org_unit_id
+            && self.attribution == other.attribution
             && self.closed_at == other.closed_at
             && self.procurement_guard_version == other.procurement_guard_version
     }
@@ -178,6 +186,13 @@ impl SalesOrder {
         )?;
         Ok(Self {
             sales_owner_user_id,
+            business_org_unit_id: normalize_required_text(
+                data.business_org_unit_id,
+                "业务组织不能为空",
+                128,
+                "业务组织身份过长",
+            )?,
+            attribution: None,
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(CommercialStatus::Draft, created_by),
             order_no,
@@ -482,12 +497,39 @@ impl SalesOrder {
     /// 非审核中态或审核轨不允许直接通过时返回
     /// [`Error::InvalidStateTransition`]。
     pub fn approve(&mut self, effective_at: Instant, updated_by: impl Into<String>) -> Result<()> {
+        if self
+            .attribution
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.attributed_at != effective_at)
+        {
+            return Err(Error::from("归属时点必须与首次生效时点一致"));
+        }
+        self.attribution
+            .as_ref()
+            .ok_or_else(|| Error::from("首次生效归属快照缺失"))?
+            .validate(&self.sales_owner_user_id, &self.business_org_unit_id)?;
         ensure_transition(self.commercial_status, CommercialStatus::Effective)?;
         ensure_transition(self.review_status, ReviewStatus::Approved)?;
         self.transition_commercial_status(CommercialStatus::Effective)?;
         self.review_status = ReviewStatus::Approved;
         self.effective_at = Some(effective_at);
         self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 冻结首次生效归属；已有快照不可覆盖。
+    ///
+    /// # 错误
+    /// 责任不一致、快照不完整或已经冻结时拒绝。
+    pub fn freeze_attribution(&mut self, snapshot: super::super::SalesAttribution) -> Result<()> {
+        if self.commercial_status != CommercialStatus::PendingReview {
+            return Err(Error::from("仅审核中的销售单可准备首次生效归属"));
+        }
+        if self.attribution.is_some() || self.effective_at.is_some() {
+            return Err(Error::from("首次生效归属不得重复冻结"));
+        }
+        snapshot.validate(&self.sales_owner_user_id, &self.business_org_unit_id)?;
+        self.attribution = Some(snapshot);
         Ok(())
     }
 

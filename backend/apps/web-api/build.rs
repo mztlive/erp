@@ -19,6 +19,7 @@ struct PermissionMeta {
 
 /// 权限扫描覆盖的业务域模块：既有 34 域加上独立的审批定义管理模块。
 const DOMAIN_MODULES: &[&str] = &[
+    "organization",
     "source_registry",
     "document_registry",
     "work_item",

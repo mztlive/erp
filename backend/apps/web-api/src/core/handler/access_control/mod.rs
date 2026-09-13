@@ -40,6 +40,7 @@ pub async fn permission_list(
     Query(params): Query<PermissionListParams>,
 ) -> Result<PageView<PermissionView>> {
     let page = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .permission_list(&params)
         .await?;
 
@@ -68,6 +69,7 @@ pub async fn permission_create(
     Json(req): Json<CreatePermissionRequest>,
 ) -> Result<PermissionView> {
     let view = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .create_permission(req, &actor)
         .await?;
 
@@ -98,6 +100,7 @@ pub async fn permission_update(
     Json(req): Json<UpdatePermissionRequest>,
 ) -> Result<PermissionView> {
     let view = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .update_permission(&id, req, &actor)
         .await?;
 
@@ -126,6 +129,7 @@ pub async fn permission_delete(
     Path(id): Path<String>,
 ) -> Result<()> {
     AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .delete_permission(&id, &actor)
         .await?;
 
@@ -152,6 +156,7 @@ pub async fn data_scope_list(
     Query(params): Query<DataScopeListParams>,
 ) -> Result<PageView<DataScopeView>> {
     let page = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .data_scope_list(&params)
         .await?;
 
@@ -180,6 +185,7 @@ pub async fn data_scope_create(
     Json(req): Json<CreateDataScopeRequest>,
 ) -> Result<DataScopeView> {
     let view = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .create_data_scope(req, &actor)
         .await?;
 
@@ -208,6 +214,7 @@ pub async fn data_scope_delete(
     Path(id): Path<String>,
 ) -> Result<()> {
     AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .delete_data_scope(&id, &actor)
         .await?;
 
@@ -234,6 +241,7 @@ pub async fn user_role_list(
     Query(params): Query<UserRoleListParams>,
 ) -> Result<Vec<UserRoleView>> {
     let items = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .user_role_list(&params)
         .await?;
 
@@ -262,6 +270,7 @@ pub async fn user_role_create(
     Json(req): Json<AssignUserRoleRequest>,
 ) -> Result<UserRoleView> {
     let view = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .assign_user_role(req, &actor)
         .await?;
 
@@ -292,6 +301,7 @@ pub async fn user_role_revoke(
     Json(req): Json<RevokeUserRoleRequest>,
 ) -> Result<UserRoleView> {
     let view = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .revoke_user_role(&id, req, &actor)
         .await?;
 
@@ -318,6 +328,7 @@ pub async fn audit_event_list(
     Query(params): Query<AuditEventListParams>,
 ) -> Result<PageView<AuditEventView>> {
     let page = AccessControlService::new(state.db())
+        .with_rbac(state.rbac())
         .audit_event_list(&params)
         .await?;
 

@@ -15,8 +15,12 @@
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;
+pub mod resolved_scope;
 pub mod responsibility_scope;
+pub use resolved_scope::{ResolvedScope, ScopeClause, ScopeResolution, ScopedObject};
+pub mod scope_binding;
 pub mod user_role;
+pub use scope_binding::{ScopeBinding, ScopeDimension, ScopeTargetMode};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids；
 // `role` 沿用 rbac::RoleId，见 ids.rs 映射表）。

@@ -543,6 +543,8 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
 
 /// 系统管理员（技术运维，非超级管理员）推荐权限。
 const SYSADMIN_PERMISSIONS: &[&str] = &[
+    "org_unit:list",
+    "org_unit:manage",
     "company:list",
     "company:detail",
     "company:create",

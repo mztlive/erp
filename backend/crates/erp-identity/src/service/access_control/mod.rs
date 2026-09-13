@@ -26,6 +26,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+pub mod resolve;
 
 use crate::error::{Error, Result};
 use application_core::AuditActor;
@@ -48,6 +49,7 @@ type AuditEventFilter = <mongodb::Database as crate::AccessControlExt>::AuditEve
 /// 提供权限目录、数据范围、用户角色绑定记录与审计事件的增补编排。
 pub struct AccessControlService {
     db: Database,
+    rbac: Option<crate::SharedRbacService>,
 }
 
 impl AccessControlService {
@@ -59,7 +61,16 @@ impl AccessControlService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self { db, rbac: None }
+    }
+
+    /// 装配范围配置所需的现有 RBAC。
+    ///
+    /// # 返回
+    /// 返回可执行范围变更的服务；未装配时变更失败关闭。
+    pub fn with_rbac(mut self, rbac: crate::SharedRbacService) -> Self {
+        self.rbac = Some(rbac);
+        self
     }
 
     /// 分页查询权限定义列表（权限目录）。
@@ -298,6 +309,7 @@ impl AccessControlService {
                 subject_id: row.subject_id,
                 scope_type: row.scope_type,
                 scope_targets: row.scope_targets,
+                binding: row.binding,
                 version: row.version,
                 created_at: row.created_at,
             })
@@ -346,10 +358,20 @@ impl AccessControlService {
         let db = self.db.clone();
         let client = db.client().clone();
         let scope_for_tx = scope.clone();
+        let rbac = self
+            .rbac
+            .clone()
+            .ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
+        let actor_for_tx = actor.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope_for_tx, "create", session)
+                        .await?;
                     db.data_scopes().create(&scope_for_tx, session).await?;
+                    crate::MongoCasbinAdapter::new(db.clone())
+                        .bump_policy_revision(session)
+                        .await?;
                     db.audit_events().create(&event, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -386,12 +408,21 @@ impl AccessControlService {
                 Vec::new(),
             )
             .await?;
+        let rbac = self
+            .rbac
+            .clone()
+            .ok_or_else(|| Error::Forbidden("未装配范围配置授权".into()))?;
+        let actor_for_tx = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    ensure_scope_configuration(&db, rbac, &actor_for_tx, &scope, "delete", session).await?;
                     db.data_scopes().soft_delete(&mut scope, session).await?;
+                    crate::MongoCasbinAdapter::new(db.clone())
+                        .bump_policy_revision(session)
+                        .await?;
                     db.audit_events().create(&event, session).await?;
                     Ok::<(), crate::error::Error>(())
                 })
@@ -678,4 +709,93 @@ impl AccessControlService {
         )
         .map_err(Into::into)
     }
+}
+
+/// 配置动作须由同一角色同时证明组织配置权与范围配置权，并具有明确公司配置边界。
+async fn ensure_scope_configuration(
+    db: &Database,
+    rbac: crate::SharedRbacService,
+    actor: &AuditActor,
+    scope: &DataScope,
+    action: &str,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<()> {
+    let permissions = [
+        crate::Permission::parse("org_unit:manage")?,
+        crate::Permission::parse(format!("data_scope:{action}"))?,
+    ];
+    let access = resolve::DataScopeService::new(db.clone(), rbac.clone())
+        .resolve_permissions(actor, "org_unit", "manage", &permissions, executor)
+        .await?;
+    if !access.scope.role_clauses.iter().any(|scope| scope.company)
+        || access
+            .scope
+            .user_limit
+            .as_ref()
+            .is_some_and(|limit| !limit.company)
+    {
+        return Err(Error::Forbidden("范围配置要求公司边界的组织配置权限".into()));
+    }
+    for scope_action in &scope.binding.actions {
+        resolve::ensure_resource(&scope.binding.resource, scope_action)?;
+    }
+    if scope.binding.target_dimension != crate::access_control::ScopeDimension::InternalOrg {
+        return Err(Error::ValidationError("该资源仅接受内部组织维度".into()));
+    }
+    if action == "delete" {
+        return Ok(());
+    }
+    ensure_scope_subject(db, &rbac, scope, executor).await?;
+    if scope.binding.target_mode == Some(crate::access_control::ScopeTargetMode::Explicit) {
+        let tree = crate::entity::organization::OrgTree::new(&access.organizations.units)?;
+        for id in &scope.scope_targets {
+            if tree.expand(id, false)?.is_empty() {
+                return Err(Error::ValidationError("目标组织已停用".into()));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 角色规则绑定的动作必须由目标角色实际持有；个人上限不产生直接动作授权。
+async fn ensure_scope_subject(
+    db: &Database,
+    rbac: &crate::SharedRbacService,
+    scope: &DataScope,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<()> {
+    use crate::access_control::DataScopeSubjectType;
+    if scope.subject_type == DataScopeSubjectType::User {
+        if db
+            .accounts()
+            .find_by_id(&scope.subject_id, executor)
+            .await?
+            .is_none()
+        {
+            return Err(Error::NotFound("范围主体账号不存在".into()));
+        }
+        return Ok(());
+    }
+    if db
+        .roles()
+        .enabled_roles(std::slice::from_ref(&scope.subject_id), executor)
+        .await?
+        .is_empty()
+    {
+        return Err(Error::ValidationError("范围主体角色不存在或已停用".into()));
+    }
+    for action in &scope.binding.actions {
+        if !rbac
+            .enforce(
+                &format!("role:{}", scope.subject_id),
+                &crate::Permission::parse(format!("{}:{action}", scope.binding.resource))?,
+            )
+            .await?
+        {
+            return Err(Error::ValidationError(
+                "目标角色不具备范围绑定的完整动作权限".into(),
+            ));
+        }
+    }
+    Ok(())
 }

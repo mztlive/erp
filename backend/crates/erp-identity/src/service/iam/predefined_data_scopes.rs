@@ -1,69 +1,156 @@
-//! 预定义角色的默认数据范围种子。
-//!
-//! 指定到人的人工任务仍要求责任人具备可证明的数据范围。第一期单公司部署下，
-//! 尚未配置任何范围的预定义岗位补齐公司级范围；管理员已配置、收窄或软删除的
-//! 范围不会被覆盖或重建。`role-root` 由 [`super::ensure_root_role`] 按同一规则单独补齐。
+//! S2 首次授权清单；范围身份固定，重跑不恢复已撤销记录。
 
-use super::predefined_roles::PREDEFINED_ROLES;
 use super::SharedRbacService;
-use crate::error::Result;
+use crate::access_control::{
+    DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode,
+};
+use crate::Result;
 
-/// 为全部业务预定义角色补齐缺失的公司级数据范围。
-///
-/// # 参数
-/// * `rbac` - 共享 RBAC 服务
-///
-/// # 返回值
-/// 全部角色检查或写入完成后返回 `Ok(())`。
+/// 已接入 S2 的资源与完整动作目录；不得用通配符初始化范围。
+pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
+    ("org_unit", &["list", "manage"]),
+    ("customer", &["list", "detail", "create", "update", "delete"]),
+    ("contract", &["list", "detail", "create", "update"]),
+    (
+        "sales_order",
+        &[
+            "list",
+            "detail",
+            "create",
+            "update",
+            "delete",
+            "submit",
+            "cancel_approval",
+        ],
+    ),
+    (
+        "purchase_order",
+        &[
+            "list",
+            "detail",
+            "create",
+            "update",
+            "delete",
+            "submit",
+            "cancel_approval",
+        ],
+    ),
+];
+
+/// 首次初始化显式岗位清单；没有条目的岗位不获得兜底范围。
 ///
 /// # 错误
-/// 角色查询或数据范围写入失败时返回错误。
-///
-/// # 业务约束
-/// 只追加空范围岗位的公司级范围，不删除、不扩大管理员已配置的组织/团队范围。
+/// 任一资源初始化失败时返回错误，日志携带角色及资源定位信息。
 pub async fn ensure_predefined_role_data_scopes(rbac: &SharedRbacService) -> Result<()> {
-    for role in PREDEFINED_ROLES {
-        if rbac.seed_role_company_data_scope_if_absent(role.id).await? {
-            tracing::info!(
-                role_id = role.id,
-                role_name = role.name,
-                "predefined role company data scope seeded"
-            );
+    for role in [
+        "role-sales",
+        "role-sales-leader",
+        "role-procurement",
+        "role-finance",
+        "role-management",
+        "role-sysadmin",
+    ] {
+        seed_role(rbac, role).await?;
+    }
+    Ok(())
+}
+
+/// 按清单初始化指定岗位，已有配置或撤销记录均保留。
+///
+/// # 错误
+/// 模型校验或事务写入失败时返回错误。
+pub(crate) async fn seed_role(rbac: &SharedRbacService, role: &str) -> Result<()> {
+    for (resource, actions) in RESOURCE_ACTIONS {
+        let definitions = definitions(role, resource, actions);
+        if !definitions.is_empty() {
+            rbac.seed_data_scope_manifest(role, resource, definitions).await?;
         }
     }
     Ok(())
 }
 
+/// 明确岗位、资源与动作的默认规则，RBAC 仍独立决定实际动作权限。
+fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
+    if resource == "org_unit" && !matches!(role, "role-root" | "role-sysadmin") {
+        return Vec::new();
+    }
+    let mut scope_types = vec![DataScopeType::Company];
+    let mut granted_actions = actions.to_vec();
+    match role {
+        "role-root" => {}
+        "role-sysadmin" if resource == "org_unit" => {}
+        "role-management" | "role-finance" => granted_actions = vec!["list", "detail"],
+        "role-sales-leader" => {
+            scope_types = vec![DataScopeType::Team];
+            granted_actions = vec!["list", "detail"];
+        }
+        "role-sales" if resource != "purchase_order" => {
+            scope_types = vec![DataScopeType::SelfOwned, DataScopeType::Collaborative]
+        }
+        "role-procurement" if resource == "purchase_order" => scope_types = vec![DataScopeType::SelfOwned],
+        _ => return Vec::new(),
+    }
+    scope_types
+        .into_iter()
+        .map(|scope_type| definition(role, resource, &granted_actions, scope_type))
+        .collect()
+}
+
+/// 构造清单中的单条规范化输入；动态管理范围必须显式授予管理关系才产生目标。
+fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScopeType) -> DataScopeData {
+    DataScopeData {
+        subject_type: DataScopeSubjectType::Role,
+        subject_id: role.into(),
+        scope_type,
+        scope_targets: vec![],
+        binding: ScopeBinding {
+            schema_version: 2,
+            resource: resource.into(),
+            actions: actions.iter().map(|value| (*value).into()).collect(),
+            target_dimension: ScopeDimension::InternalOrg,
+            target_mode: scope_type
+                .requires_targets()
+                .then_some(ScopeTargetMode::ManagedOrgs),
+            include_descendants: None,
+            enabled: true,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::PREDEFINED_ROLES;
-    use crate::entity::access_control::{
-        DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType,
-    };
+    use super::*;
+    use crate::access_control::{DataScope, DataScopeId};
 
     #[test]
-    fn predefined_roles_accept_company_data_scope() {
-        for role in PREDEFINED_ROLES {
-            let scope = DataScope::new(
-                DataScopeId::new(format!("data-scope-{}-company", role.id)),
-                DataScopeData {
-                    subject_type: DataScopeSubjectType::Role,
-                    subject_id: role.id.to_string(),
-                    scope_type: DataScopeType::Company,
-                    scope_targets: Vec::new(),
-                },
-            )
-            .unwrap_or_else(|error| panic!("{} 公司级范围不合法: {error}", role.id));
-            assert_eq!(scope.subject_id, role.id);
-            assert_eq!(scope.scope_type, DataScopeType::Company);
-            assert!(scope.scope_targets.is_empty());
-        }
+    fn explicit_manifest_has_no_company_fallback_for_operational_roles() {
+        assert!(definitions("role-warehouse", "sales_order", &["list"]).is_empty());
+        assert!(definitions("role-sales", "purchase_order", &["list"]).is_empty());
+        let sales = definitions("role-sales", "sales_order", &["list", "update"]);
+        assert!(sales.iter().all(|rule| rule.scope_type != DataScopeType::Company));
+        assert_eq!(sales.len(), 2);
+        let manager = definitions("role-sales-leader", "sales_order", &["list", "update"]);
+        assert_eq!(manager[0].binding.target_mode, Some(ScopeTargetMode::ManagedOrgs));
+        assert!(!manager[0].binding.actions.contains(&"update".into()));
     }
 
     #[test]
-    fn work_item_roles_include_procurement() {
-        assert!(PREDEFINED_ROLES
-            .iter()
-            .any(|role| role.id == "role-procurement" && role.permissions.contains(&"work_item:list")));
+    fn every_manifest_entry_uses_version_two_and_explicit_resource_actions() {
+        for role in [
+            "role-root",
+            "role-sales",
+            "role-sales-leader",
+            "role-procurement",
+            "role-finance",
+            "role-management",
+        ] {
+            for (resource, actions) in RESOURCE_ACTIONS {
+                for data in definitions(role, resource, actions) {
+                    let scope = DataScope::new(DataScopeId::new("test"), data).unwrap();
+                    assert_eq!(scope.binding.schema_version, 2);
+                    assert_eq!(scope.binding.resource, *resource);
+                }
+            }
+        }
     }
 }

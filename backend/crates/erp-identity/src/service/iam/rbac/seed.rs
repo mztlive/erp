@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::entity::{
-    access_control::{DataScope, DataScopeData, DataScopeId, DataScopeSubjectType, DataScopeType},
+    access_control::{DataScope, DataScopeData, DataScopeId},
     Permission, PermissionSet, RoleData,
 };
 use crate::AccessControlExt;
@@ -124,78 +124,54 @@ impl RbacService {
             .await
     }
 
-    /// 若角色尚无任何生效数据范围，则补齐公司级范围。
-    ///
-    /// 指定到人的人工任务与工作台 `managed` 队列要求角色具备可证明的责任范围；
-    /// 第一期单公司部署下，空范围无法证明组织覆盖。已配置或已软删除的范围不覆盖、不重建。
-    ///
-    /// # 参数
-    /// * `role_id` - 角色 ID（预定义岗位或 `role-root`）
-    ///
-    /// # 返回值
-    /// 本次新写入公司级范围返回 `true`；角色不存在、已有范围或唯一键冲突时返回 `false`。
+    /// 按资源原子登记首次授权清单，已有任意配置（含软删除）时不再初始化。
     ///
     /// # 错误
-    /// 范围构造失败，或非冲突的 MongoDB 写入失败时返回错误。
-    ///
-    /// # 业务约束
-    /// 只在角色当前没有任何生效数据范围时写入；管理员收窄或删除后重启不得回写。
-    pub async fn seed_role_company_data_scope_if_absent(self: &Arc<Self>, role_id: &str) -> Result<bool> {
-        if !self.active_role_exists(role_id).await? || self.role_has_live_data_scope(role_id).await? {
-            return Ok(false);
+    /// 查询、唯一冲突或事务失败返回原错误，禁止失败后扩大为 Company。
+    pub async fn seed_data_scope_manifest(
+        self: &Arc<Self>,
+        role_id: &str,
+        resource: &str,
+        definitions: Vec<DataScopeData>,
+    ) -> Result<()> {
+        if !self.active_role_exists(role_id).await? {
+            return Ok(());
         }
-        self.insert_company_data_scope(role_id).await
-    }
-
-    /// 判断角色是否已有未删除的数据范围。
-    ///
-    /// # 参数
-    /// * `role_id` - 角色 ID
-    ///
-    /// # 返回值
-    /// 存在至少一条生效范围时返回 `true`。
-    ///
-    /// # 错误
-    /// MongoDB 查询失败时返回错误。
-    ///
-    /// # 业务约束
-    /// 只统计未删除记录；软删除范围视为管理员已收回，不得据此跳过唯一键冲突处理。
-    async fn role_has_live_data_scope(&self, role_id: &str) -> Result<bool> {
-        Ok(self
+        let existing = self
             .db
             .data_scopes()
-            .exists_by_subject(DataScopeSubjectType::Role, role_id, &mut NoTransaction)
-            .await?)
-    }
-
-    /// 写入角色公司级数据范围；唯一键冲突视为另一实例已写入或历史身份仍占用。
-    ///
-    /// # 参数
-    /// * `role_id` - 角色 ID
-    ///
-    /// # 返回值
-    /// 新建成功返回 `true`；`uk_data_scopes_subject_scope` 冲突返回 `false`。
-    ///
-    /// # 错误
-    /// 实体校验失败，或非唯一键冲突的 MongoDB 写入失败时返回错误。
-    ///
-    /// # 业务约束
-    /// 内建种子不写操作人审计；公司级范围不携带组织/团队目标。
-    async fn insert_company_data_scope(&self, role_id: &str) -> Result<bool> {
-        let scope = DataScope::new(
-            DataScopeId::new(id_generator::next_id()),
-            DataScopeData {
-                subject_type: DataScopeSubjectType::Role,
-                subject_id: role_id.to_string(),
-                scope_type: DataScopeType::Company,
-                scope_targets: Vec::new(),
-            },
-        )?;
-        match self.db.data_scopes().create(&scope, &mut NoTransaction).await {
-            Ok(()) => Ok(true),
-            Err(persistence_core::Error::DuplicateKey(_)) => Ok(false),
-            Err(error) => Err(error.into()),
+            .has_subject_resource_history(role_id, resource, &mut NoTransaction)
+            .await?;
+        if existing {
+            return Ok(());
         }
+        let scopes = definitions
+            .into_iter()
+            .map(|data| {
+                DataScope::new(
+                    DataScopeId::new(format!(
+                        "s2:{}:{}:{}",
+                        role_id,
+                        resource,
+                        data.scope_type.as_str()
+                    )),
+                    data,
+                )
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let db = self.db.clone();
+        use persistence_core::Transactional;
+        db.client()
+            .clone()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    for scope in &scopes {
+                        db.data_scopes().create(scope, session).await?;
+                    }
+                    Ok::<(), Error>(())
+                })
+            })
+            .await
     }
 
     /// 判断未删除的预定义角色是否存在。

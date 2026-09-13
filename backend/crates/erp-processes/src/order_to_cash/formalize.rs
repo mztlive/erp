@@ -69,6 +69,9 @@ impl SalesOrderCommandProcess {
             return Ok(None);
         }
         ensure_final_approve_formalize(&order)?;
+        let attribution =
+            crate::business_ownership::sales_attribution(&self.db, &order, Instant::now(), executor).await?;
+        order.freeze_attribution(attribution)?;
         let (submission, lines) = load_latest_submission(&self.db, id, executor).await?;
         let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
         prepare_formalized_submission_write(
@@ -123,7 +126,11 @@ fn prepare_formalized_submission_write(
     procurement: Option<ProcurementFormalizationPlan>,
     actor: &AuditActor,
 ) -> Result<FormalizedSubmissionWrite> {
-    let now = Instant::now();
+    let now = order
+        .attribution
+        .as_ref()
+        .ok_or_else(|| Error::BusinessLogicError("销售归属快照缺失".into()))?
+        .attributed_at;
     let aggregate = build_revision_for_order(order, &submission, &lines, now)?;
     let procurement_items = procurement
         .as_ref()
@@ -283,6 +290,7 @@ mod tests {
             SalesOrderId::new("so-1"),
             SalesOrderData {
                 sales_owner_user_id: "admin-1".to_string(),
+                business_org_unit_id: "org-sales".to_string(),
                 order_no: "SO-1".into(),
                 business_type: BusinessType::GoodsService,
                 origin_system: erp_sales::entity::sales_order::OriginSystem::Erp,

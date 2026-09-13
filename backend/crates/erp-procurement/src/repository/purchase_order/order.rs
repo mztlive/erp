@@ -422,6 +422,21 @@ impl PurchaseOrderRepository<'_> {
     }
 }
 
+/// 未结业务组织查询用于组织停用准入。
+impl PurchaseOrderRepository<'_> {
+    /// 判断组织是否仍有需要交接的未结单据。
+    ///
+    /// # 错误
+    /// 查询失败返回仓储错误；失败不得解释为没有业务。
+    pub async fn has_unsettled_business_org(
+        &self,
+        org: &str,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<bool> {
+        self.exists(mongodb::bson::doc! { "business_org_unit_id": org, "status": { "$nin": ["COMPLETED", "VOIDED"] } }, executor).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{active_purchase_order_filter, PurchaseOrderFilter};

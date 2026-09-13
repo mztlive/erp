@@ -476,6 +476,7 @@ mod isolation_tests {
             let mut order = PurchaseOrder::new(
                 PurchaseOrderId::new("po-1"),
                 PurchaseOrderData {
+                    business_org_unit_id: "org-procurement".to_string(),
                     purchase_no: "PO-1".to_string(),
                     sales_order_id: SalesOrderId::new("so-1"),
                     sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("rev-1"),
@@ -600,6 +601,7 @@ mod isolation_tests {
                         let mut order = PurchaseOrder::new(
                             PurchaseOrderId::new("po-txn"),
                             PurchaseOrderData {
+                                business_org_unit_id: "org-procurement".to_string(),
                                 purchase_no: "PO-TXN".to_string(),
                                 sales_order_id: SalesOrderId::new("so-txn"),
                                 sales_order_revision_id: erp_core::ids::SalesOrderRevisionId::new("rev-1"),

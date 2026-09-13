@@ -18,6 +18,8 @@
 //! `entities/src/common/`。
 
 mod amount_validation;
+pub mod attribution;
+pub use attribution::{AttributionOrgNode, SalesAttribution};
 mod approval_quantity;
 mod closure;
 mod content_hash;

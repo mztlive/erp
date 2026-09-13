@@ -187,6 +187,8 @@ impl ProgressStatus {
 /// 采购单创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PurchaseOrderData {
+    /// 由采购责任人有效主属组织采集。
+    pub business_org_unit_id: String,
     /// 采购单号。
     pub purchase_no: String,
     /// 来源实物及服务销售单。
@@ -228,6 +230,8 @@ pub struct PurchaseOrderUpdate {
 /// `StableBase` 未派生 `PartialEq`，因此本实体手工实现全字段语义相等。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity)]
 pub struct PurchaseOrder {
+    /// 单据业务组织不随任务改派自动变化。
+    pub business_org_unit_id: String,
     #[serde(flatten)]
     pub base: BaseModel,
     #[serde(flatten)]
@@ -273,6 +277,7 @@ impl PartialEq for PurchaseOrder {
     /// 全字段语义相等。
     fn eq(&self, other: &Self) -> bool {
         self.base == other.base
+            && self.business_org_unit_id == other.business_org_unit_id
             && self.stable.status == other.stable.status
             && self.stable.current_revision_id == other.stable.current_revision_id
             && self.stable.created_by == other.stable.created_by
@@ -355,6 +360,12 @@ impl PurchaseOrder {
             payment_term_code,
             fulfillment_responsibility: data.fulfillment_responsibility,
             owner_user_id: Some(owner_user_id),
+            business_org_unit_id: normalize_required_text(
+                data.business_org_unit_id,
+                "业务组织不能为空",
+                128,
+                "业务组织身份过长",
+            )?,
             target_warehouse_id: data.target_warehouse_id,
             review_status: PurchaseReviewStatus::Pending,
             payment_progress: ProgressStatus::None,
@@ -882,6 +893,7 @@ mod tests {
 
     fn order_data() -> PurchaseOrderData {
         PurchaseOrderData {
+            business_org_unit_id: "org-procurement".to_string(),
             purchase_no: " PO-2026-0001 ".to_string(),
             sales_order_id: SalesOrderId::new("so-1"),
             sales_order_revision_id: SalesOrderRevisionId::new("sor-1"),
@@ -926,6 +938,7 @@ mod tests {
     #[test]
     fn new_allows_empty_purchase_no_and_rejects_overlong() {
         let empty = PurchaseOrderData {
+            business_org_unit_id: "org-procurement".to_string(),
             purchase_no: "   ".to_string(),
             ..order_data()
         };
@@ -939,6 +952,7 @@ mod tests {
         assert!(draft.purchase_no.is_empty());
 
         let overlong = PurchaseOrderData {
+            business_org_unit_id: "org-procurement".to_string(),
             purchase_no: "p".repeat(65),
             ..order_data()
         };
@@ -968,6 +982,7 @@ mod tests {
         let mut order = PurchaseOrder::new(
             PurchaseOrderId::new("po-empty"),
             PurchaseOrderData {
+                business_org_unit_id: "org-procurement".to_string(),
                 purchase_no: String::new(),
                 ..order_data()
             },

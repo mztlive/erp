@@ -5,9 +5,11 @@ mod contract;
 mod customer;
 mod import;
 mod inventory;
+mod organization;
 mod party;
 mod supplier;
 mod warehouse;
+pub use organization::organization_service;
 
 pub use catalog::{catalog_service, CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets};
 pub use contract::contract_service;

@@ -13,6 +13,7 @@ use super::*;
 fn data() -> SalesOrderData {
     SalesOrderData {
         sales_owner_user_id: "admin-1".to_string(),
+        business_org_unit_id: "org-sales".to_string(),
         order_no: " SO-2026-0001 ".to_string(),
         business_type: BusinessType::GoodsService,
         origin_system: OriginSystem::Erp,
@@ -22,6 +23,34 @@ fn data() -> SalesOrderData {
         settlement_party_id: PartyId::new("party-1"),
         source_status_code: None,
     }
+}
+
+#[test]
+fn approval_without_attribution_leaves_order_unchanged() {
+    let mut order = SalesOrder::new(SalesOrderId::new("missing-attribution"), data(), "admin-1").unwrap();
+    order.start_approval_submission("admin-1").unwrap();
+    let before = order.clone();
+    assert!(order
+        .approve(Instant::from_unix_secs(1_800_000_000), "approver")
+        .is_err());
+    assert_eq!(order, before);
+}
+
+#[test]
+fn attribution_is_frozen_once_and_effective_time_must_match() {
+    let mut order = SalesOrder::new(SalesOrderId::new("frozen-attribution"), data(), "admin-1").unwrap();
+    order.start_approval_submission("admin-1").unwrap();
+    crate::entity::sales_order::attribution::freeze_fixture(&mut order);
+    let frozen = order.attribution.clone().unwrap();
+    assert!(order.freeze_attribution(frozen.clone()).is_err());
+    assert!(order
+        .approve(Instant::from_unix_secs(1_800_000_001), "approver")
+        .is_err());
+    order.approve(frozen.attributed_at, "approver").unwrap();
+    order.stable.touch("another-editor");
+    assert_eq!(order.attribution, Some(frozen));
+    assert_eq!(order.sales_owner_user_id, "admin-1");
+    assert_eq!(order.business_org_unit_id, "org-sales");
 }
 
 #[test]
@@ -63,6 +92,7 @@ fn entity_rules_cover_versions_relations_and_operability() {
     );
 
     order.start_approval_submission("admin-1").unwrap();
+    crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .approve(Instant::from_unix_secs(1_800_000_000), "approver")
         .unwrap();
@@ -207,7 +237,10 @@ fn effective_order_rejects_direct_update() {
     order
         .submit_for_review("admin-1")
         .and_then(|()| order.transition_review(ReviewStatus::Approved, "reviewer"))
-        .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "reviewer"))
+        .and_then(|()| {
+            crate::entity::sales_order::attribution::freeze_fixture(&mut order);
+            order.approve(Instant::from_unix_secs(1_800_000_000), "reviewer")
+        })
         .unwrap();
 
     assert_eq!(order.commercial_status, CommercialStatus::Effective);
@@ -245,6 +278,7 @@ fn full_approval_flow_and_rejection_flow() {
     assert!(order
         .transition_review(ReviewStatus::PendingProcurementConfirmation, "approver")
         .is_err());
+    crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .transition_review(ReviewStatus::Approved, "approver")
         .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "approver"))
@@ -281,6 +315,7 @@ fn voucher_order_enters_unified_in_approval() {
     assert!(order
         .transition_review(ReviewStatus::PendingOperations, "approver")
         .is_err());
+    crate::entity::sales_order::attribution::freeze_fixture(&mut order);
     order
         .transition_review(ReviewStatus::Approved, "approver")
         .and_then(|()| order.approve(Instant::from_unix_secs(1_800_000_000), "approver"))

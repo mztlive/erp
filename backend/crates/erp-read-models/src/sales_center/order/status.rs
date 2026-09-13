@@ -171,6 +171,7 @@ mod tests {
             SalesOrderId::new("o-1"),
             SalesOrderData {
                 sales_owner_user_id: "admin-1".to_string(),
+                business_org_unit_id: "org-sales".to_string(),
                 order_no: "SO-1".to_string(),
                 business_type,
                 origin_system: OriginSystem::Erp,

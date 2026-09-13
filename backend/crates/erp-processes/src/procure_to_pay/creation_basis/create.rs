@@ -324,10 +324,13 @@ pub async fn persist_basis_draft(
         &command.req.work_item_id,
         target_warehouse_id.as_ref(),
     );
+    let business_org_unit_id =
+        crate::business_ownership::required_business_org(db, command.actor.id(), session).await?;
     let order_id = PurchaseOrderId::new(next_id());
     let mut order = PurchaseOrder::new(
         order_id.clone(),
         PurchaseOrderData {
+            business_org_unit_id,
             purchase_no: String::new(),
             sales_order_id: SalesOrderId::new(sales_order.base.id.clone()),
             sales_order_revision_id: group.revision.base.id.clone().into(),

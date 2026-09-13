@@ -52,10 +52,7 @@ pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
 /// # 业务约束
 /// `*:*` 不能替代 DataScope。角色无显式范围时工作台管理队列失败关闭为无组织覆盖。
 async fn ensure_root_company_data_scope(rbac: &SharedRbacService) -> Result<()> {
-    if rbac.seed_role_company_data_scope_if_absent(ROOT_ROLE_ID).await? {
-        tracing::info!(role_id = ROOT_ROLE_ID, "root role company data scope seeded");
-    }
-    Ok(())
+    super::super::predefined_data_scopes::seed_role(rbac, ROOT_ROLE_ID).await
 }
 
 /// 执行一次可重入的 root 角色校验或修复。
@@ -114,6 +111,15 @@ mod tests {
         DataScope::new(
             DataScopeId::new("data-scope-role-root-company"),
             DataScopeData {
+                binding: crate::access_control::ScopeBinding {
+                    schema_version: 2,
+                    resource: "sales_order".into(),
+                    actions: vec!["list".into()],
+                    target_dimension: crate::access_control::ScopeDimension::InternalOrg,
+                    target_mode: None,
+                    include_descendants: None,
+                    enabled: true,
+                },
                 subject_type: DataScopeSubjectType::Role,
                 subject_id: ROOT_ROLE_ID.to_string(),
                 scope_type: DataScopeType::Company,

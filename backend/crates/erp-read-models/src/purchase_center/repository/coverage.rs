@@ -313,6 +313,7 @@ mod isolation_tests {
         let mut order = PurchaseOrder::new(
             PurchaseOrderId::new(id),
             PurchaseOrderData {
+                business_org_unit_id: "org-procurement".to_string(),
                 purchase_no: format!("PO-{id}"),
                 sales_order_id: SalesOrderId::new("so-1"),
                 sales_order_revision_id: SalesOrderRevisionId::new("rev-1"),

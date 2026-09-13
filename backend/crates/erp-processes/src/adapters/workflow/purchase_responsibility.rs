@@ -225,6 +225,7 @@ mod tests {
         PurchaseOrder::new(
             PurchaseOrderId::new("po-1"),
             PurchaseOrderData {
+                business_org_unit_id: "org-procurement".to_string(),
                 purchase_no: "PO-1".into(),
                 sales_order_id: SalesOrderId::new("so-1"),
                 sales_order_revision_id: SalesOrderRevisionId::new("sor-1"),

@@ -168,6 +168,9 @@ impl<'a> UserRoleRepository<'a> {
 /// 数据范围列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DataScopeRow {
+    /// 版本 2 资源动作绑定。
+    #[serde(flatten)]
+    pub binding: crate::access_control::ScopeBinding,
     /// 实体主键。
     pub id: String,
     /// 范围主体类型。
@@ -234,6 +237,28 @@ impl Pagination for DataScopeFilter {
 }
 
 impl<'a> DataScopeRepository<'a> {
+    /// 查询主体资源的全部配置留痕，包含撤销记录，防止初始化恢复授权。
+    ///
+    /// # 错误
+    /// 底层读取失败时返回仓储错误。
+    pub async fn has_subject_resource_history(
+        &self,
+        role_id: &str,
+        resource: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let collection = self
+            .database()
+            .collection::<Document>(<mongodb::Database as crate::AccessControlExt>::DATA_SCOPES);
+        Ok(persistence_core::mongo_ops::find_one(
+            &collection,
+            doc! { "subject_type": "role", "subject_id": role_id, "resource": resource },
+            executor,
+        )
+        .await?
+        .is_some())
+    }
+
     /// 判断指定主体是否存在至少一个未软删除的数据范围。
     ///
     /// 查询只投影 `_id` 并在首条命中后停止，不反序列化完整范围集合。
@@ -654,6 +679,8 @@ fn data_scope_projection() -> Document {
         "subject_id": 1,
         "scope_type": 1,
         "scope_targets": 1,
+        "schema_version": 1, "resource": 1, "actions": 1, "target_dimension": 1,
+        "target_mode": 1, "include_descendants": 1, "enabled": 1,
         "version": 1,
         "created_at": 1,
     }
