@@ -5,7 +5,8 @@ use crate::error::{Error, Result};
 
 /// 已由真实消费者接入公共解析的资源动作及必需维度。
 ///
-/// 采购与工作流尚未接线，不得列入本表。初始化清单见 `predefined_data_scopes`。
+/// 工作流与工作台尚未接线，不得列入本表。采购变更单及退货入口未接线。
+/// 初始化清单见 `predefined_data_scopes`，不得当作本表替代。
 const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
     (
@@ -20,6 +21,19 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ),
     (
         "sales_order",
+        &[
+            "list",
+            "detail",
+            "create",
+            "update",
+            "delete",
+            "submit",
+            "cancel_approval",
+        ],
+        &[ScopeDimension::InternalOrg],
+    ),
+    (
+        "purchase_order",
         &[
             "list",
             "detail",
@@ -72,12 +86,21 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
 mod tests {
     use super::*;
 
-    /// 合同已接线可解析；采购未接线必须拒绝。
+    /// 合同与采购主单已接线可解析；未接线动作与工作流资源必须拒绝。
     #[test]
-    fn wired_contract_is_admitted_and_unwired_purchase_is_not() {
+    fn wired_contract_and_purchase_are_admitted_unwired_actions_are_not() {
         assert!(registration("contract", "list").is_ok());
         assert!(registration("contract", "detail").is_ok());
-        assert!(registration("purchase_order", "list").is_err());
+        assert!(registration("purchase_order", "list").is_ok());
+        assert!(registration("purchase_order", "detail").is_ok());
+        assert!(registration("purchase_order", "create").is_ok());
+        assert!(registration("purchase_order", "update").is_ok());
+        assert!(registration("purchase_order", "delete").is_ok());
+        assert!(registration("purchase_order", "submit").is_ok());
+        assert!(registration("purchase_order", "cancel_approval").is_ok());
         assert!(registration("contract", "delete").is_err());
+        assert!(registration("purchase_order", "transfer").is_err());
+        assert!(registration("work_item", "list").is_err());
+        assert!(registration("approval_instance", "decide").is_err());
     }
 }

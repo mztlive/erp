@@ -10,22 +10,24 @@
 //         默认：单批次 true，多批次 false。
 //   max_gate_rounds: 可选整数 1..16。第 9 章门禁「运行→整改」轮次上限，默认 8。
 // 门禁：docs/organization-data-scope-gate.md；入口 bash backend/scripts/check-org-data-scope.sh
-// 失败必须继续改代码并重跑，直到 STATIC_CHECKS_PASSED。不得白名单/忽略路径/把失败改警告。
+// 全仓脚本仍会扫描待接入项并非零退出（Jenkins P0）。本 workflow 只整改当前波次 owns 内命中。
+// 已知工作流/工作台待接入项写入报告，禁止在非 S2-05 波次改这些文件。
+// 全仓 STATIC_CHECKS_PASSED 只作为 s2-adapters / S2-05 清零条件。不得白名单/忽略路径/把失败改警告。
 // 选批：读 S2/S3 合同状态表，对照 catalog id。open/partial 才自动开做；
 // blocked_acceptance（仅 A34/A36/真实库/业务验收）与 S2-11/第10章自动跳过。
 // S2 未关闭（非本地检查通过/已验收）时不自动进入 S3/S4。
 
 let meta = #{
     name: "implement-org-data-scope",
-    description: "先读合同完成状态，从仍有可实施缺口的批次继续；S2 消费者/适配器/页面，S3 核心链路，S4 扩展。第 9 章静态门禁不通过则继续整改直到通过。不跑真实 MongoDB，不登记业务验收。",
-    when_to_use: "继续完成 organization-data-scope-contract 的剩余实现。可省略 wave，默认按合同从最早未完成波次开始。实现后必须通过第 9 章静态门禁。",
+    description: "先读合同完成状态，从仍有可实施缺口的批次继续；S2 消费者/适配器/页面，S3 核心链路，S4 扩展。第 9 章门禁只整改本波 owns 内命中；已知待接入项不扩批。不跑真实 MongoDB，不登记业务验收。",
+    when_to_use: "继续完成 organization-data-scope-contract 的剩余实现。可省略 wave，默认按合同从最早未完成波次开始。本波 owns 内静态命中必须清零；全仓 STATIC_CHECKS_PASSED 仅 S2-05 清零时要求。",
     phases: [
         #{ title: "Select", detail: "读合同状态表，过滤 catalog 后选出仍须实现的批次" },
         #{ title: "Implement", detail: "按批次实现 DataScope v2 消费者、查询、页面与测试" },
         #{ title: "Review", detail: "对照合同与代码做对抗评审" },
         #{ title: "Repair", detail: "至多一轮修复未通过评审的批次" },
         #{ title: "Verify", detail: "定向单测与静态核对，不跑真实库" },
-        #{ title: "Gate", detail: "执行第 9 章静态门禁；失败则整改并重跑直到通过" },
+        #{ title: "Gate", detail: "执行第 9 章静态门禁；只整改本波 owns 内命中并重跑" },
         #{ title: "Report", detail: "写入 scratch 报告并列出下一波" },
     ],
 };
@@ -139,6 +141,8 @@ let gate_fix_schema = #{
         },
         "exit_code": #{ "type": "integer" },
         "status": #{ "type": "string" },
+        "committed": #{ "type": "boolean" },
+        "commit_sha": #{ "type": "string" },
         "blockers": #{ "type": "array", "maxItems": 32, "items": #{ "type": "string" } },
     },
 };
@@ -200,22 +204,138 @@ fn is_gate_usable(r) {
     r != () && r.success && is_map(r.output) && is_text(r.output.status) && r.output.exit_code != () && r.output.passed != () && is_arr(r.output.findings)
 }
 
-fn gate_findings_json(r) {
+fn text_has(hay, needle) {
+    let found = false;
+    if is_text(hay) && is_text(needle) && needle != "" && hay.len() >= needle.len() {
+        let last = hay.len() - needle.len();
+        let i = 0;
+        while i <= last {
+            if hay.sub_string(i, needle.len()) == needle {
+                found = true;
+            }
+            i += 1;
+        }
+    }
+    found
+}
+
+fn legacy_consumer_needles() {
+    [
+        "erp-workflow/src/ports/authorization.rs",
+        "erp-workflow/src/service/work_item/access.rs",
+        "erp-workflow/src/service/approval/business_adapter.rs",
+        "erp-workflow/src/service/approval/scope.rs",
+        "erp-processes/src/adapters/workflow/authorization.rs",
+        "erp-read-models/src/workbench/access.rs",
+    ]
+}
+
+fn path_is_legacy_consumer(path) {
+    let hit = false;
+    if is_text(path) {
+        for needle in legacy_consumer_needles() {
+            if text_has(path, needle) {
+                hit = true;
+            }
+        }
+    }
+    hit
+}
+
+fn path_is_workbench(path) {
+    is_text(path) && text_has(path, "workbench/access.rs")
+}
+
+fn selected_has_id(selected, id) {
+    let hit = false;
+    if is_arr(selected) {
+        for batch in selected {
+            if is_map(batch) && batch.id == id {
+                hit = true;
+            }
+        }
+    }
+    hit
+}
+
+fn requires_chapter9_clearance(wave, selected) {
+    wave == "s2-adapters" || selected_has_id(selected, "S2-05")
+}
+
+fn finding_is_deferred(f, wave, selected) {
+    let deferred = false;
+    if is_map(f) && is_text(f.path) && path_is_legacy_consumer(f.path) {
+        if requires_chapter9_clearance(wave, selected) {
+            deferred = false;
+        } else if path_is_workbench(f.path) && (wave == "s3-workbench" || selected_has_id(selected, "S3-04")) {
+            deferred = false;
+        } else {
+            deferred = true;
+        }
+    }
+    deferred
+}
+
+fn gate_in_scope_findings(r, wave, selected) {
+    let out = [];
     if is_gate_usable(r) {
-        json_encode(r.output.findings)
+        for f in r.output.findings {
+            if !finding_is_deferred(f, wave, selected) {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
+fn gate_deferred_findings(r, wave, selected) {
+    let out = [];
+    if is_gate_usable(r) {
+        for f in r.output.findings {
+            if finding_is_deferred(f, wave, selected) {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
+fn is_wave_gate_pass(r, wave, selected) {
+    if requires_chapter9_clearance(wave, selected) {
+        is_gate_pass(r)
+    } else {
+        is_gate_usable(r) && gate_in_scope_findings(r, wave, selected).len() == 0
+    }
+}
+
+fn gate_findings_json(findings) {
+    if is_arr(findings) {
+        json_encode(findings)
     } else {
         "[]"
     }
 }
 
-fn gate_fingerprint(r) {
+fn gate_scope_fingerprint(r, wave, selected) {
     if is_gate_usable(r) {
-        fingerprint(json_encode(r.output.findings))
+        fingerprint(json_encode(gate_in_scope_findings(r, wave, selected)))
     } else if r != () {
         "unusable"
     } else {
         "missing"
     }
+}
+
+fn deferred_paths_prompt() {
+    let p = "";
+    p += "已知待接入、非 S2-05 波次禁止修改的路径：\n";
+    p += "- backend/crates/erp-workflow/src/ports/authorization.rs\n";
+    p += "- backend/crates/erp-workflow/src/service/work_item/access.rs\n";
+    p += "- backend/crates/erp-workflow/src/service/approval/business_adapter.rs\n";
+    p += "- backend/crates/erp-workflow/src/service/approval/scope.rs\n";
+    p += "- backend/crates/erp-processes/src/adapters/workflow/authorization.rs\n";
+    p += "- backend/crates/erp-read-models/src/workbench/access.rs\n";
+    p
 }
 
 fn all_true(flags) {
@@ -622,7 +742,7 @@ fn standards_block() {
     p += "8. 不得开放销售责任改派，除非批次是 S3-07。不得改审批指定到人。\n";
     p += "9. 只更新本批在 docs/organization-data-scope-s2.md 或 s3.md 中对应行的状态；不得把阶段改成已验收或已完成。\n";
     p += "10. 前端跟 sales-orders 的 scopeVersion、emptyReason、data-scope/cache.ts。筛选进 URL 与 Query key。\n";
-    p += "11. 提交前在仓库根目录执行 bash backend/scripts/check-org-data-scope.sh（合同 docs/organization-data-scope-gate.md）。退出码必须为 0 且 JSON status 为 STATIC_CHECKS_PASSED。禁止 --self-test-only 充当放行；禁止忽略路径、债务白名单、把失败改警告。待接入项与整改项均阻断，必须改生产代码接入公共解析。本检查只证明第 9 章静态门禁，不得登记功能或业务验收。不启动服务、不跑真实 MongoDB。\n";
+    p += "11. 提交前在仓库根目录执行 bash backend/scripts/check-org-data-scope.sh --json（合同 docs/organization-data-scope-gate.md）。禁止 --self-test-only 充当放行；禁止忽略路径、债务白名单、把失败改警告、改门禁脚本。本批 owns 内新出现的整改项必须改生产代码并提交。已知工作流/工作台待接入消费者禁止在本批修改，除非本批是 S2-05 或 wave=s2-adapters。全仓 STATIC_CHECKS_PASSED（exit 0）只作为 S2-05 清零条件；其他波次只要本批 owns 内无整改项即可提交。全仓仍可能因待接入项非零退出，把这些 findings 写入 still_open，不得据此改 S2-05 文件或用无资源动作的 grants 捷径。本检查只证明第 9 章静态规则，不得登记功能或业务验收。不启动服务、不跑真实 MongoDB。\n";
     p
 }
 
@@ -747,16 +867,16 @@ fn gate_run_prompt(wave, target_id, batch_csv) {
     p += "- 修改检查器、添加忽略路径、债务白名单、把失败改警告\n\n";
     p += "passed=true 当且仅当：你确实运行了上述命令，exit_code==0，且 JSON status 恰好是 STATIC_CHECKS_PASSED。\n";
     p += "exit_code=1 为源码规则或既有领域门禁阻断；exit_code=2 为参数/工具/自检/Cargo metadata/源码读取失败。\n";
-    p += "findings 必须逐条抄录 JSON：rule、path、line、message、category（整改项或待接入项）。待接入项同样阻断。\n";
+    p += "findings 必须逐条抄录 JSON 全部命中：rule、path、line、message、category（整改项或待接入项）。不要自行删除待接入项。本 workflow 会在脚本侧区分本波整改项与已知待接入项。\n";
     p += "not_proven 抄录 JSON 的 not_proven；这些不是本门禁通过条件，报告中保留。\n";
     p += "command 填实际执行的命令。summary 用一句话说明状态、扫描文件数、阻断条数。\n";
     p += "若命令无法执行：passed=false，exit_code=2，status=TOOL_ERROR，findings=[]，summary 写原因。\n";
     p
 }
 
-fn gate_fix_prompt(wave, target_id, batch_csv, findings_json, usable) {
+fn gate_fix_prompt(wave, target_id, batch_csv, in_scope_json, deferred_json, usable, require_clearance) {
     let p = "";
-    p += "第 9 章静态门禁未通过，必须改生产代码直到 bash backend/scripts/check-org-data-scope.sh 退出码 0 且 status=STATIC_CHECKS_PASSED。\n";
+    p += "第 9 章静态门禁本波仍有 in-scope 命中，只改这些生产代码。\n";
     p += "必读：docs/organization-data-scope-gate.md、docs/organization-data-scope-contract.md 第 9 章。\n";
     p += "wave=";
     p += wave;
@@ -766,18 +886,27 @@ fn gate_fix_prompt(wave, target_id, batch_csv, findings_json, usable) {
     p += batch_csv;
     p += "\n\n";
     if usable {
-        p += "本轮门禁 findings JSON：";
-        p += findings_json;
+        p += "必须整改的 in-scope findings JSON：";
+        p += in_scope_json;
+        p += "\n本波不整改、禁止修改对应文件的待接入项 JSON：";
+        p += deferred_json;
         p += "\n";
     } else {
-        p += "上一轮门禁运行结果不可用。你必须先亲自执行 bash backend/scripts/check-org-data-scope.sh --json，再按真实 findings 整改。\n";
+        p += "上一轮门禁运行结果不可用。你必须先亲自执行 bash backend/scripts/check-org-data-scope.sh --json，再只整改 in-scope 命中。\n";
     }
+    p += deferred_paths_prompt();
     p += "\n整改规则：\n";
-    p += "1. 待接入项与整改项均不得豁免。禁止忽略路径、债务白名单、把失败改警告、改门禁脚本放行、用 --self-test-only 充当通过。\n";
-    p += "2. 按规则修复：ODS-DOMAIN 修领域边界；ODS-OWNER/ENGINE 把范围类型与解析器留在身份域；ODS-PORT 从 Port 去掉身份内部类型；ODS-RAW 停止解释 scope_type/scope_targets，改为调用公共解析；ODS-REPOSITORY 禁止业务仓储加载授权；ODS-ADAPTER 在同一语句 DataScopeService::new(...).resolve/resolve_permissions 并传递 executor；ODS-EXECUTOR 禁止 NoTransaction/自开事务；ODS-FALLBACK 禁止 unwrap_or* 与 company:true / authorized_customer_ids:None 默认成功；ODS-REGISTRY/DIMENSIONS 去掉 RESOURCE_ACTIONS 准入和固定单一维度；ODS-SAMPLE 恢复客户样例生产结构。\n";
+    p += "1. 禁止忽略路径、债务白名单、把失败改警告、改门禁脚本放行、用 --self-test-only 充当通过。\n";
+    p += "2. 按规则修复 in-scope 命中：ODS-DOMAIN 修领域边界；ODS-OWNER/ENGINE 把范围类型与解析器留在身份域；ODS-PORT 从 Port 去掉身份内部类型；ODS-RAW 停止解释 scope_type/scope_targets，改为调用公共解析；ODS-REPOSITORY 禁止业务仓储加载授权；ODS-ADAPTER 在同一语句 DataScopeService::new(...).resolve/resolve_permissions 并传递 executor；ODS-EXECUTOR 禁止 NoTransaction/自开事务；ODS-FALLBACK 禁止 unwrap_or* 与 company:true / authorized_customer_ids:None 默认成功；ODS-REGISTRY/DIMENSIONS 去掉 RESOURCE_ACTIONS 准入和固定单一维度；ODS-SAMPLE 恢复客户样例生产结构。\n";
     p += "3. 不得以更名、拆分语句、宏包装、改 cfg 规避规则。adapter 若改为字段注入等结构，必须同步扩展门禁正反例，不得关闭检查。\n";
-    p += "4. 修复范围为使静态门禁通过的最小生产改动；不要新开未选中的功能批次，不要做第 4 节行为验收，不要启动服务或真实 MongoDB。\n";
-    p += "5. 改完后必须再跑 bash backend/scripts/check-org-data-scope.sh --json。fixed=true 仅当这次重跑 exit_code==0 且 status=STATIC_CHECKS_PASSED。remaining_findings 抄录仍存在的阻断；若已通过则为 []。\n";
+    p += "4. 不要新开未选中的功能批次。禁止修改上面列出的待接入路径，除非本波是 S2-05 / s2-adapters。禁止用无资源动作的 load_organization_grants/旧覆盖计算冒充 v2。不要做第 4 节行为验收，不要启动服务或真实 MongoDB。\n";
+    p += "5. 改完后 git add 仅 in-scope 文件并提交；隔离 worktree 提交到当前 org-scope 分支，不要合并到 main。message 用 fix(org-scope): 第9章本波门禁。\n";
+    p += "6. 再跑 bash backend/scripts/check-org-data-scope.sh --json。remaining_findings 抄录重跑后的全部 findings。\n";
+    if require_clearance {
+        p += "7. 本波必须清零全仓待接入项。fixed=true 仅当这次重跑 exit_code==0 且 status=STATIC_CHECKS_PASSED。\n";
+    } else {
+        p += "7. fixed=true 当且仅当 remaining_findings 中已无 in-scope 命中。全仓仍可因待接入项 exit 1，不得因此去改工作流/工作台。\n";
+    }
     p += standards_block();
     p
 }
@@ -1221,24 +1350,29 @@ while pending_idx.len() > 0 && gate_rounds < max_gate_rounds {
     for idx in pending_idx {
         let g = run_results[j];
         last_gate_by_id[gate_target_ids[idx]] = g;
-        if is_gate_pass(g) {
+        if is_wave_gate_pass(g, wave, selected) {
             gate_passed_flags[idx] = true;
             round_all_unusable = false;
-            log("ods-gate passed target=" + gate_target_ids[idx]);
+            if is_gate_pass(g) {
+                log("ods-gate STATIC_CHECKS_PASSED target=" + gate_target_ids[idx]);
+            } else {
+                log("ods-gate wave-scope passed target=" + gate_target_ids[idx] + " deferred=" + gate_deferred_findings(g, wave, selected).len().to_string());
+            }
         } else {
             let usable = is_gate_usable(g);
             if usable {
                 round_all_unusable = false;
             }
-            let fp = gate_fingerprint(g);
+            let fp = gate_scope_fingerprint(g, wave, selected);
             let prev = last_fp_by_id[gate_target_ids[idx]];
             if prev != () && prev == fp {
-                log("ods-gate unchanged findings target=" + gate_target_ids[idx]);
+                log("ods-gate unchanged in-scope findings target=" + gate_target_ids[idx]);
             }
             last_fp_by_id[gate_target_ids[idx]] = fp;
             next_pending.push(idx);
+            let require_clearance = requires_chapter9_clearance(wave, selected);
             let fix_opts = #{
-                prompt: gate_fix_prompt(wave, gate_target_ids[idx], batch_csv, gate_findings_json(g), usable),
+                prompt: gate_fix_prompt(wave, gate_target_ids[idx], batch_csv, gate_findings_json(gate_in_scope_findings(g, wave, selected)), gate_findings_json(gate_deferred_findings(g, wave, selected)), usable, require_clearance),
                 label: "ods-gate-fix:" + gate_target_ids[idx] + ":" + gate_rounds.to_string(),
                 capability_mode: "all",
                 output_schema: gate_fix_schema,
@@ -1288,13 +1422,26 @@ while pending_idx.len() > 0 && gate_rounds < max_gate_rounds {
 }
 
 let all_gates_passed = all_true(gate_passed_flags);
+let all_full_static = false;
 if gate_target_ids.len() == 0 {
     all_gates_passed = false;
     log("ods-gate skipped: no targets");
-} else if all_gates_passed {
-    log("ods-gate STATIC_CHECKS_PASSED after " + gate_rounds.to_string() + " round(s)");
 } else {
-    log("ods-gate still blocked after " + gate_rounds.to_string() + " round(s)");
+    all_full_static = true;
+    let gi = 0;
+    while gi < gate_target_ids.len() {
+        if !is_gate_pass(last_gate_by_id[gate_target_ids[gi]]) {
+            all_full_static = false;
+        }
+        gi += 1;
+    }
+    if all_full_static {
+        log("ods-gate STATIC_CHECKS_PASSED after " + gate_rounds.to_string() + " round(s)");
+    } else if all_gates_passed {
+        log("ods-gate WAVE_SCOPE_PASSED after " + gate_rounds.to_string() + " round(s)");
+    } else {
+        log("ods-gate still blocked after " + gate_rounds.to_string() + " round(s)");
+    }
 }
 
 let gate_json_src = last_gate_by_id["workspace"];
@@ -1328,8 +1475,10 @@ if deferred_ids.len() > 0 {
     md += next_wave_name(wave);
 }
 md += "\n- chapter9_static_gate: ";
-if all_gates_passed {
+if all_full_static {
     md += "STATIC_CHECKS_PASSED";
+} else if all_gates_passed {
+    md += "WAVE_SCOPE_PASSED";
 } else if gate_target_ids.len() == 0 {
     md += "skipped";
 } else {
@@ -1422,11 +1571,14 @@ for batch in selected {
 
 md += "\n## 第 9 章静态门禁\n\n";
 md += "入口：`bash backend/scripts/check-org-data-scope.sh`。合同：docs/organization-data-scope-gate.md。\n";
-md += "自动通过仅允许登记「第 9 章静态门禁通过」，不得据此登记功能符合合同或业务验收。\n\n";
-if all_gates_passed {
+md += "自动通过仅允许登记「第 9 章静态门禁通过」，不得据此登记功能符合合同或业务验收。\n";
+md += "本 workflow 只把当前波次 owns 内命中当作放行条件；已知工作流/工作台待接入项不在本波整改，除非 wave=s2-adapters 或批次含 S2-05。\n\n";
+if all_full_static {
     md += "结果：STATIC_CHECKS_PASSED。\n";
+} else if all_gates_passed {
+    md += "结果：WAVE_SCOPE_PASSED。本波 owns 内无整改项；全仓脚本仍可能因待接入项非零退出，不得登记第 9 章静态门禁通过。\n";
 } else {
-    md += "结果：未通过，提交批次不得质量放行。待接入项与整改项均不得豁免。\n";
+    md += "结果：未通过，本波 owns 内仍有整改项，提交批次不得质量放行。\n";
 }
 
 let dumped = [];
@@ -1449,9 +1601,27 @@ for gid in dumped {
         md += "\n- command: `";
         md += g.output.command;
         md += "`\n";
-        if is_arr(g.output.findings) && g.output.findings.len() > 0 {
-            md += "\n| 规则 | 分类 | 路径 | 行 | 说明 |\n| --- | --- | --- | --- | --- |\n";
-            for f in g.output.findings {
+        let scoped = gate_in_scope_findings(g, wave, selected);
+        let deferred = gate_deferred_findings(g, wave, selected);
+        if scoped.len() > 0 {
+            md += "\n本波必须整改：\n\n| 规则 | 分类 | 路径 | 行 | 说明 |\n| --- | --- | --- | --- | --- |\n";
+            for f in scoped {
+                md += "| ";
+                md += f.rule;
+                md += " | ";
+                md += f.category;
+                md += " | ";
+                md += f.path;
+                md += " | ";
+                md += json_encode(f.line);
+                md += " | ";
+                md += f.message;
+                md += " |\n";
+            }
+        }
+        if deferred.len() > 0 {
+            md += "\n本波不整改的待接入项（S2-05/工作台，禁止在本波修改）：\n\n| 规则 | 分类 | 路径 | 行 | 说明 |\n| --- | --- | --- | --- | --- |\n";
+            for f in deferred {
                 md += "| ";
                 md += f.rule;
                 md += " | ";
@@ -1501,6 +1671,7 @@ complete(#{
     skipped: skipped_notes,
     next_wave: reported_next,
     gate_passed: all_gates_passed,
+    gate_full_passed: all_full_static,
     gate_rounds: gate_rounds,
     s2_stage: s2_stage,
     s3_stage: s3_stage,
