@@ -215,6 +215,8 @@ export type CustomerDirectoryResult = Readonly<{
     policyVersion?: number
     organizationVersion?: number
     scopeSummary?: string
+    asOf?: string
+    ownershipBasis?: string
     items: readonly CustomerDirectoryItem[]
     totalInScope: number
     page: number

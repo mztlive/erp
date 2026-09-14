@@ -1,4 +1,5 @@
 import { expect, it } from "vitest"
+import { visibleCustomerScopes } from "./filter-customers"
 import { writeDirectoryUrl } from "./directory-url"
 
 it("客户组织、人员、范围和分页进入同一 URL", () => {
@@ -30,4 +31,13 @@ it("默认范围与未勾选下级不写入 URL", () => {
             page: 1,
         }),
     ).toBe("/sales/customers")
+})
+
+it("无全量授权权限时隐藏全部有权客户口径", () => {
+    expect(visibleCustomerScopes(true)).toEqual([
+        "mine",
+        "collaborating",
+        "all_authorized",
+    ])
+    expect(visibleCustomerScopes(false)).toEqual(["mine", "collaborating"])
 })

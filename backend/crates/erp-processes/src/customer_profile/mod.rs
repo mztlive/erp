@@ -13,14 +13,17 @@ mod update;
 mod views;
 use std::sync::Arc;
 
+use erp_identity::SharedRbacService;
 use mongodb::Database;
 
+use crate::{Error, Result};
 use erp_party::SensitiveDataCodec;
 
 /// 完整客户资料的根级服务。
 pub struct CustomerProfileService {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
+    rbac: Option<SharedRbacService>,
 }
 
 impl CustomerProfileService {
@@ -32,8 +35,55 @@ impl CustomerProfileService {
     ///
     /// # 返回
     /// 返回可执行客户资料用例的服务实例。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 写入前必须注入 RBAC，不得在缺授权源时按登录人推断范围。
     pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
-        Self { db, sensitive_data }
+        Self {
+            db,
+            sensitive_data,
+            rbac: None,
+        }
+    }
+
+    /// 注入当前 RBAC 快照，供资料写入在事务内重验 DataScope。
+    ///
+    /// # 参数
+    /// * `rbac` - 共享 RBAC 服务
+    ///
+    /// # 返回
+    /// 返回可在同一写入事务证明客户范围的资料服务。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// handler 事前检查不能代替事务内 `require_create` / `require_with`。
+    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
+        self.rbac = Some(rbac);
+        self
+    }
+
+    /// 取得资料写入所需的授权源。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已注入的 RBAC 服务。
+    ///
+    /// # 错误
+    /// 未注入时返回内部错误。
+    ///
+    /// # 关键业务约束
+    /// 缺少授权源不得写入客户资料。
+    pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
+        self.rbac
+            .as_ref()
+            .ok_or_else(|| Error::Internal("客户资料写入需要授权源".into()))
     }
 }
 

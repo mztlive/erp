@@ -14,6 +14,10 @@ export async function fetchCustomerDirectory(
     query: CustomerDirectoryQuery,
 ): Promise<CustomerDirectoryResult> {
     const status = query.status === "all" ? undefined : query.status
+    const path =
+        query.scope === "all_authorized"
+            ? "/admin/customers/all-authorized"
+            : "/admin/customers"
     const page = await apiGet<
         Page<BackendCustomerView> & {
             owner_options: { value: string; label: string }[]
@@ -22,9 +26,11 @@ export async function fetchCustomerDirectory(
             policy_version: number
             organization_version: number
             scope_summary: string
+            as_of: string
+            ownership_basis: string
         }
-    >("/admin/customers", {
-        scope: query.scope,
+    >(path, {
+        scope: query.scope === "all_authorized" ? undefined : query.scope,
         scope_version: query.scopeVersion,
         owner_user_ids: query.ownerUserIds || undefined,
         org_unit_ids: query.orgUnitIds || undefined,
@@ -44,11 +50,13 @@ export async function fetchCustomerDirectory(
         policyVersion: page.policy_version,
         organizationVersion: page.organization_version,
         scopeSummary: page.scope_summary,
+        asOf: page.as_of,
+        ownershipBasis: page.ownership_basis,
         ownerOptions: page.owner_options ?? [],
         items: page.items.map(mapDirectoryItem),
         totalInScope: page.total,
         page: page.page,
         pageSize: page.page_size,
-        queriedAt: new Date().toISOString(),
+        queriedAt: page.as_of,
     }
 }

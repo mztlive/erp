@@ -300,12 +300,52 @@ export function useCustomerCenterDirectoryState() {
  * 我的客户视图（等账号资料加载完成后再判定，避免闪跳）。
  */
 export function useCustomerCenterScopeGuard() {
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
     const accountProfile = useAccountProfileQuery()
     const canCreate = hasPermission(
         accountProfile.data?.permissions,
         "customer:create",
     )
-    return { accountProfile, canCreate, canReadAll: true }
+    const canReadAll = hasPermission(
+        accountProfile.data?.permissions,
+        "customer_scope:detail",
+    )
+    const scope = parseCustomerScope(searchParams.get("scope"))
+    const statusParam = searchParams.get("status")
+    const status: DirectoryStatus =
+        statusParam === "disabled" || statusParam === "all"
+            ? statusParam
+            : "active"
+    React.useEffect(() => {
+        if (!accountProfile.data) return
+        if (scope !== "all_authorized" || canReadAll) return
+        router.replace(
+            writeDirectoryUrl(pathname, {
+                scope: "mine",
+                ownerUserIds: searchParams.get("ownerUserIds") ?? "",
+                orgUnitIds: searchParams.get("orgUnitIds") ?? "",
+                includeDescendants:
+                    searchParams.get("includeDescendants") === "true",
+                status,
+                q: searchParams.get("q") ?? "",
+                sort: "business",
+                dir: searchParams.get("dir") === "asc" ? "asc" : "desc",
+                page: 1,
+            }),
+            { scroll: false },
+        )
+    }, [
+        accountProfile.data,
+        canReadAll,
+        pathname,
+        router,
+        scope,
+        searchParams,
+        status,
+    ])
+    return { accountProfile, canCreate, canReadAll }
 }
 
 /** 在非输入控件焦点、且无 Dialog/Sheet 打开时按 “/” 聚焦客户搜索框。 */

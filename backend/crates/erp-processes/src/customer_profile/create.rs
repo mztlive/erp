@@ -4,9 +4,10 @@ use erp_audit::AuditExt;
 use erp_core::ids::{PartyId, PartyRevisionId};
 use erp_customer::CustomerExt;
 use erp_customer::{
-    AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
-    CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, CustomerProfileCommand,
-    CustomerProfileCommandResultData, CustomerProfileOperation, CustomerProfileReplayContext,
+    AssignmentRole, CustomerAccess, CustomerAccount, CustomerAccountData, CustomerAccountId,
+    CustomerAccountStatus, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
+    CustomerProfileCommand, CustomerProfileCommandResultData, CustomerProfileOperation,
+    CustomerProfileReplayContext,
 };
 use erp_identity::AccessControlExt;
 use erp_party::PartyExt;
@@ -40,7 +41,10 @@ impl CustomerProfileService {
     /// 返回创建命令的稳定结果视图。
     ///
     /// # 错误
-    /// 输入非法、创建人账号不存在或已停用、身份重复、敏感值加密失败或事务失败时返回错误。
+    /// 输入非法、无创建范围、创建人账号不存在或已停用、身份重复、敏感值加密失败或事务失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 写入事务内必须调用 `CustomerAccess.require_create`；handler 事前检查不能代替。
     pub async fn create(
         &self,
         req: SaveCustomerProfileRequest,
@@ -56,15 +60,57 @@ impl CustomerProfileService {
         self.ensure_user_exists(&owner_user_id).await?;
         let prepared = self.prepare_create(req, owner_user_id, replay.clone(), actor)?;
         let intended = prepared.result.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let transaction = client
-            .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
-            .await;
+        let transaction = self.commit_create(prepared, actor).await;
         self.resolve_transaction(transaction, intended, &replay).await
     }
 
-    /// 构造完整创建事务载荷。
+    /// 在同一写入事务内重验创建范围并持久化资料。
+    ///
+    /// # 参数
+    /// * `prepared` - 已构造的创建事务载荷
+    /// * `actor` - 将写入首条主责的操作人
+    ///
+    /// # 返回
+    /// 事务成功时返回 `Ok`；失败时返回原事务错误供幂等恢复。
+    ///
+    /// # 错误
+    /// 无创建资格、范围为空或写入冲突时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 必须在原领域事务调用 `require_create`，handler 事前检查不能代替。
+    async fn commit_create(&self, prepared: PreparedCreate, actor: &AuditActor) -> Result<()> {
+        let rbac = self.require_rbac()?.clone();
+        let actor = actor.clone();
+        let db = self.db.clone();
+        db.client()
+            .clone()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    CustomerAccess::new(db.clone(), rbac)
+                        .require_create(&actor, session)
+                        .await?;
+                    prepared.persist(&db, session).await
+                })
+            })
+            .await
+    }
+
+    /// 构造完整创建事务载荷；不写入、不重验范围。
+    ///
+    /// # 参数
+    /// * `req` - 创建命令
+    /// * `owner_user_id` - 固定为首条主责的创建人
+    /// * `replay` - 幂等上下文
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回可在事务内持久化的创建载荷。
+    ///
+    /// # 错误
+    /// 身份、客户或归属构造失败时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 范围重验必须留在 `commit_create` 的同一写入事务内。
     fn prepare_create(
         &self,
         req: SaveCustomerProfileRequest,

@@ -348,6 +348,25 @@ impl CustomerAccess {
     }
 }
 
+/// 判断角色条款是否构成有效客户范围规则。
+///
+/// # 参数
+/// * `clauses` - 身份域已解析的角色正向范围
+///
+/// # 返回
+/// 任一条款含公司、主责、协作或组织目标时为 true。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 规则存在但当前无对象不得标为无范围；空条款保持空集且不得补公司。
+pub(super) fn has_scope_rules(clauses: &[ScopeClause]) -> bool {
+    clauses.iter().any(|clause| {
+        clause.company || clause.self_owned || clause.collaborative || !clause.org_unit_ids.is_empty()
+    })
+}
+
 /// 参与关系仅补充客户明确登记的读取动作。
 ///
 /// # 参数
@@ -763,5 +782,31 @@ mod tests {
             ..Default::default()
         };
         assert!(union_clauses(&[company], &[], &[]).is_none());
+    }
+
+    #[test]
+    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
+        assert!(!has_scope_rules(&[]));
+        assert!(!has_scope_rules(&[ScopeClause::default()]));
+        assert!(has_scope_rules(&[ScopeClause {
+            self_owned: true,
+            ..Default::default()
+        }]));
+        assert!(has_scope_rules(&[ScopeClause {
+            collaborative: true,
+            ..Default::default()
+        }]));
+        assert!(has_scope_rules(&[ScopeClause {
+            company: true,
+            ..Default::default()
+        }]));
+    }
+
+    #[test]
+    fn write_commands_deny_out_of_scope_as_forbidden() {
+        assert!(matches!(deny_object("update"), Error::Forbidden(_)));
+        assert!(matches!(deny_object("delete"), Error::Forbidden(_)));
+        assert!(matches!(deny_object("create"), Error::Forbidden(_)));
+        assert!(matches!(deny_object("detail"), Error::NotFound(_)));
     }
 }

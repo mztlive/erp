@@ -454,6 +454,9 @@ impl Error {
             Error::Internal(_) => "INTERNAL_ERROR",
             Error::BadRequest(_) | Error::Validation(_) => "INVALID_REQUEST",
             Error::NotFound(_) => "NOT_FOUND",
+            Error::Conflict(message) if data_scope_changed_user_message(message).is_some() => {
+                "DATA_SCOPE_CHANGED"
+            }
             Error::Conflict(_) => "CONFLICT",
             Error::Unprocessable(_) | Error::Logic(_) => "BUSINESS_RULE_BLOCKED",
             Error::Forbidden(_) => "PERMISSION_DENIED",
@@ -485,7 +488,7 @@ impl Error {
                 user_message_or(message, "没有找到所需资料，请刷新后重新选择", "请刷新后重新选择")
             }
             Error::Conflict(message) => user_message_or(
-                message,
+                data_scope_changed_user_message(message).unwrap_or(message),
                 "当前资料状态不允许继续操作，请刷新后核对",
                 "请核对当前资料后再操作",
             ),
@@ -560,6 +563,32 @@ impl Error {
         matches!(self, Error::Internal(_) | Error::RateLimited(_))
             || matches!(self, Error::Coded(code) if code.retryable())
     }
+}
+
+/// 从冲突文案中取出范围变化的用户说明。
+///
+/// # 参数
+/// * `message` - 领域冲突原因，可能以内部稳定码开头
+///
+/// # 返回
+/// 命中 `DATA_SCOPE_CHANGED` 时返回去掉内部码的中文说明。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// HTTP `code` 必须输出稳定码；用户文案不得再携带会被消毒的内部码。
+fn data_scope_changed_user_message(message: &str) -> Option<&str> {
+    const CODE: &str = "DATA_SCOPE_CHANGED";
+    let message = message.trim();
+    if message == CODE {
+        return Some("数据范围已变化，请从第一页刷新");
+    }
+    message
+        .strip_prefix("DATA_SCOPE_CHANGED：")
+        .or_else(|| message.strip_prefix("DATA_SCOPE_CHANGED:"))
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
 }
 
 /// 将业务原因规范为安全且包含下一步的用户说明。
@@ -775,6 +804,33 @@ mod tests {
 
         assert_eq!(body["errorMessage"], "主体编号已存在，请核对当前资料后再操作");
         assert_eq!(body["retryable"], false);
+    }
+
+    #[tokio::test]
+    async fn data_scope_changed_conflict_uses_stable_http_code() {
+        let sources = [
+            Error::from(erp_customer::Error::ConflictError(
+                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
+            )),
+            Error::from(erp_processes::Error::ConflictError(
+                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
+            )),
+        ];
+        for error in sources {
+            assert_eq!(error.error_code(), "DATA_SCOPE_CHANGED");
+            let response = error.into_response();
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("response body should be readable");
+            let body: Value = serde_json::from_slice(&body).expect("response body should be valid JSON");
+            assert_eq!(body["status"], 409);
+            assert_eq!(body["code"], "DATA_SCOPE_CHANGED");
+            let message = body["errorMessage"].as_str().unwrap();
+            assert!(message.contains("请"));
+            assert!(!message.contains("DATA_SCOPE_CHANGED"));
+            assert_eq!(body["retryable"], false);
+        }
     }
 
     #[tokio::test]

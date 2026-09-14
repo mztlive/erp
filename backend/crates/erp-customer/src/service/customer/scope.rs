@@ -6,7 +6,7 @@ use persistence_core::Transactional;
 use serde::Serialize;
 use std::hash::{Hash, Hasher};
 
-use super::access::{expand_org_filter, intersect_ids, member_ids, CustomerAccess};
+use super::access::{expand_org_filter, has_scope_rules, intersect_ids, member_ids, CustomerAccess};
 use super::CustomerService;
 use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView};
 use crate::error::{Error, Result};
@@ -27,7 +27,7 @@ pub struct CustomerListView {
     pub organization_version: u64,
     /// 授权解析时点。
     pub as_of: String,
-    /// 缺范围时为 `no_scope`；筛选无结果时为空。
+    /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
     pub empty_reason: Option<&'static str>,
     /// 当前客户范围口径摘要，不含内部授权证明。
     pub scope_summary: &'static str,
@@ -86,7 +86,7 @@ impl CustomerService {
                     let (mut context, scope) = CustomerAccess::new(db.clone(), rbac)
                         .resolve(&actor, "list", executor)
                         .await?;
-                    let no_scope = scope.is_empty();
+                    let no_scope = !has_scope_rules(&context.scope.role_clauses);
                     let authorized = apply_list_filters(&db, &context, &scope, &query, executor).await?;
                     let as_of = super::access::business_date(context.as_of)?;
                     let owners = db
@@ -153,6 +153,23 @@ impl CustomerService {
     }
 }
 
+/// 构造可被 HTTP 边界识别的范围变化冲突。
+///
+/// # 参数
+/// * `detail` - 面向用户的中文恢复说明
+///
+/// # 返回
+/// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 稳定码必须出现在错误载荷中，供 HTTP 映射为独立 `code`，不得只依赖展示文案。
+pub(super) fn data_scope_changed(detail: &str) -> Error {
+    Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
+}
+
 /// 后续页必须携带当前范围版本，禁止拼接不同授权快照。
 ///
 /// # 参数
@@ -169,9 +186,49 @@ impl CustomerService {
 /// 不得在缺版本时继续查询并默默使用新授权。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     if page > 1 && version.is_none_or(str::is_empty) {
-        return Err(Error::ConflictError(
-            "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
-        ));
+        return Err(data_scope_changed("请从第一页刷新后继续查询"));
+    }
+    Ok(())
+}
+
+/// 客户端回传的范围版本必须与当前快照一致。
+///
+/// # 参数
+/// * `expected` - 后续页携带的范围版本；第一页可为空
+/// * `actual` - 本次查询快照的范围版本
+///
+/// # 返回
+/// 未携带或完全一致时成功。
+///
+/// # 错误
+/// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
+///
+/// # 关键业务约束
+/// 不得把新旧授权结果拼接成同一列表。
+pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
+    if expected.is_some_and(|value| value != actual) {
+        return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
+    }
+    Ok(())
+}
+
+/// 同一查询内两次快照的范围版本必须一致。
+///
+/// # 参数
+/// * `first` - 首次快照版本
+/// * `second` - 复核快照版本
+///
+/// # 返回
+/// 两次版本相同时成功。
+///
+/// # 错误
+/// 查询过程中范围或客户资料变化时返回 `DATA_SCOPE_CHANGED`。
+///
+/// # 关键业务约束
+/// 复核失败必须整页拒绝，不得返回半新半旧结果。
+pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
+    if first != second {
+        return Err(data_scope_changed("数据范围或客户资料已变化，请刷新"));
     }
     Ok(())
 }
@@ -358,6 +415,31 @@ mod tests {
         assert!(ensure_page(2, None).is_err());
         assert!(ensure_page(2, Some("")).is_err());
         assert!(ensure_page(2, Some("v1")).is_ok());
+        match ensure_page(2, None) {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mismatched_scope_version_is_data_scope_changed() {
+        assert!(ensure_scope_version(None, "v1").is_ok());
+        assert!(ensure_scope_version(Some("v1"), "v1").is_ok());
+        match ensure_scope_version(Some("v1"), "v2") {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        match ensure_stable_snapshot("v1", "v9") {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        assert!(ensure_stable_snapshot("v1", "v1").is_ok());
     }
 
     #[test]

@@ -77,6 +77,34 @@ describe("scope cache across features", () => {
         stop()
         client.clear()
     })
+    it("clears cache when 409 carries DATA_SCOPE_CHANGED code", async () => {
+        const client = makeClient()
+        const stop = subscribeScopeCache(client)
+        const error = Object.assign(
+            new Error("数据范围已变化，请从第一页刷新"),
+            {
+                status: 409,
+                code: "DATA_SCOPE_CHANGED",
+            },
+        )
+        client.setQueryData(["customers", "directory"], { secret: "old" })
+        client.setQueryData(["sales-orders", "list"], { secret: "old sales" })
+        const observer = new QueryObserver(client, {
+            queryKey: ["customers", "directory"],
+            queryFn: async () => {
+                throw error
+            },
+            enabled: false,
+        })
+        const unobserve = observer.subscribe(() => {})
+        await observer.refetch()
+        expect(observer.getCurrentResult().data).toBeUndefined()
+        expect(observer.getCurrentResult().error).toBe(error)
+        expect(client.getQueryData(["sales-orders", "list"])).toBeUndefined()
+        unobserve()
+        stop()
+        client.clear()
+    })
     it.each([403, 404])(
         "clears active previous data on %s and removes cross-feature data",
         async (status) => {

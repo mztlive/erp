@@ -14,6 +14,17 @@ function authorizationVersion(data: unknown): string | null {
     ])
 }
 
+/** 跨页或导出范围变化必须清缓存并从第一页重查。 */
+export function isDataScopeChanged(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false
+    const value = error as { status?: number; code?: string; message?: string }
+    return (
+        value.code === "DATA_SCOPE_CHANGED" ||
+        (value.status === 409 &&
+            value.message?.startsWith("DATA_SCOPE_CHANGED") === true)
+    )
+}
+
 function scopeFailure(error: unknown): boolean {
     if (!error || typeof error !== "object") return false
     const value = error as { status?: number; code?: string; message?: string }
@@ -21,9 +32,7 @@ function scopeFailure(error: unknown): boolean {
         value.status === 401 ||
         value.status === 403 ||
         value.status === 404 ||
-        value.code === "DATA_SCOPE_CHANGED" ||
-        (value.status === 409 &&
-            value.message?.startsWith("DATA_SCOPE_CHANGED") === true)
+        isDataScopeChanged(error)
     )
 }
 

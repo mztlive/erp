@@ -519,7 +519,7 @@ impl AppState {
 
     /// Customer profile root process.
     pub fn customer_profile_service(&self) -> erp_processes::CustomerProfileService {
-        erp_processes::CustomerProfileService::new(self.db(), self.sensitive_data())
+        erp_processes::CustomerProfileService::new(self.db(), self.sensitive_data()).with_rbac(self.rbac())
     }
 
     /// Supplier list/detail service with party facts and reveal tokens.

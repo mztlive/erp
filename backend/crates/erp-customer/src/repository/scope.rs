@@ -324,6 +324,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn empty_role_scope_rejects_create() {
+        let empty = CustomerReadScope::default();
+        assert!(!empty.allows_creation("sales-a", Some("org-a")));
+        let self_owned = CustomerReadScope {
+            roles: vec![CustomerScopeClause {
+                owner_user_id: Some("sales-a".into()),
+                ..Default::default()
+            }],
+            authorized_customer_ids: Some(Vec::new()),
+            owned_customer_ids: vec![],
+            collaborative_customer_ids: vec![],
+            historical_customer_ids: vec![],
+            user_limit: None,
+        };
+        assert!(self_owned.is_empty());
+        assert!(self_owned.allows_creation("sales-a", Some("org-a")));
+    }
+
+    #[test]
     fn creation_requires_role_and_personal_limit_without_history() {
         let mut scope = CustomerReadScope {
             roles: vec![CustomerScopeClause {

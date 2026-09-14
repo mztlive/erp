@@ -30,8 +30,9 @@ import { useCustomerDirectoryQuery } from "@/features/customers/hooks/queries"
 import { SORT_COLUMN_TO_FIELD } from "@/features/customers/lib/directory-url"
 import {
     SCOPE_LABELS,
-    SCOPE_ORDER,
+    visibleCustomerScopes,
 } from "@/features/customers/lib/filter-customers"
+import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { CustomerCenterDirectoryTable } from "@/features/customers/pages/customer-center-directory-table"
 import { CustomerCenterDirectoryToolbar } from "@/features/customers/pages/customer-center-directory-toolbar"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -40,8 +41,8 @@ export function CustomerCenterPage() {
     const router = useRouter()
 
     const directoryState = useCustomerCenterDirectoryState()
-    const { scope, status, q, sort, dir, page } = directoryState
-    const { canCreate } = useCustomerCenterScopeGuard()
+    const { scope, status, q, sort, dir, page, pushState } = directoryState
+    const { canCreate, canReadAll } = useCustomerCenterScopeGuard()
     useCustomerCenterSearchShortcut()
 
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -58,8 +59,15 @@ export function CustomerCenterPage() {
         page,
         pageSize: 20,
     }
-    const directoryQuery = useCustomerDirectoryQuery(directoryInput)
+    const directoryQuery = useCustomerDirectoryQuery(directoryInput, {
+        enabled: scope !== "all_authorized" || canReadAll,
+    })
     const exportMutation = useCustomerDirectoryExport(directoryInput)
+
+    React.useEffect(() => {
+        if (!isDataScopeChanged(directoryQuery.error) || page <= 1) return
+        pushState({ page: 1 })
+    }, [directoryQuery.error, page, pushState])
 
     const data = directoryQuery.data
     const items = React.useMemo(() => data?.items ?? [], [data?.items])
@@ -178,9 +186,12 @@ export function CustomerCenterPage() {
                                 "查询失败"
                             ) : directoryQuery.isFetching ? (
                                 "正在更新…"
-                            ) : data?.queriedAt ? (
-                                <time dateTime={data.queriedAt}>
-                                    更新于 {data.queriedAt.slice(11, 16)}
+                            ) : data?.asOf || data?.queriedAt ? (
+                                <time dateTime={data.asOf ?? data.queriedAt}>
+                                    更新于{" "}
+                                    {formatAuthorizationTime(
+                                        data.asOf ?? data.queriedAt,
+                                    )}
                                 </time>
                             ) : (
                                 "正在查询"
@@ -215,7 +226,7 @@ export function CustomerCenterPage() {
                     <ListWorkspaceViews
                         ariaLabel="客户范围"
                         hint="选择客户查看详情"
-                        items={SCOPE_ORDER.map((key) => ({
+                        items={visibleCustomerScopes(canReadAll).map((key) => ({
                             id: `customers-directory-scope-${toAutomationIdSegment(key)}`,
                             label: SCOPE_LABELS[key],
                             count:
@@ -260,4 +271,15 @@ export function CustomerCenterPage() {
             />
         </PageScaffold>
     )
+}
+
+/** 展示服务端授权时点，不得改用本地时钟冒充查询时刻。 */
+function formatAuthorizationTime(asOf: string): string {
+    const date = new Date(asOf)
+    if (Number.isNaN(date.getTime())) return asOf
+    return date.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    })
 }

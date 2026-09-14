@@ -259,6 +259,7 @@ pub async fn customer_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CustomerListParams>,
 ) -> Result<CustomerListView> {
+    reject_all_authorized_on_regular_list(params.scope)?;
     let page = state
         .customer_service()
         .with_rbac(state.rbac())
@@ -401,7 +402,7 @@ pub async fn customer_delete(
     Path(id): Path<String>,
 ) -> Result<()> {
     ensure_customer_access(&state, &actor, "delete", &id).await?;
-    erp_processes::delete_customer(state.db(), id, actor).await?;
+    erp_processes::delete_customer(state.db(), state.rbac(), id, actor).await?;
     Ok(ApiResponse::ok())
 }
 
@@ -541,6 +542,26 @@ async fn ensure_permission(
     Err(Error::Forbidden("当前角色无权维护或查看该字段".to_string()))
 }
 
+/// 常规列表拒绝全量授权口径，避免只凭 `customer:list` 绕过专用入口。
+///
+/// # 参数
+/// * `scope` - 请求中的目录范围标签
+///
+/// # 返回
+/// 非 `all_authorized` 时成功。
+///
+/// # 错误
+/// 常规入口携带全量授权时返回校验错误。
+///
+/// # 关键业务约束
+/// 全部有权客户必须走 `customer_scope:detail` 专用入口。
+fn reject_all_authorized_on_regular_list(scope: CustomerScope) -> std::result::Result<(), Error> {
+    if scope == CustomerScope::AllAuthorized {
+        return Err(Error::BadRequest("全部有权客户请使用专用查询入口".to_string()));
+    }
+    Ok(())
+}
+
 /// 按资源动作重验客户对象范围；缺动作拒绝，缺范围不得补公司。
 pub(crate) async fn ensure_customer_access(
     state: &AppState,
@@ -586,5 +607,26 @@ mod tests {
         assert_eq!(params.include_descendants, Some(true));
         let legacy: Uri = "/?owner=张三".parse().unwrap();
         assert!(Query::<CustomerListParams>::try_from_uri(&legacy).is_err());
+    }
+
+    /// 常规列表不得接受 all_authorized，专用入口才覆盖该口径。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 组织范围内账号不能靠常规列表看到全部有权客户。
+    #[test]
+    fn regular_list_rejects_all_authorized_scope() {
+        assert!(reject_all_authorized_on_regular_list(CustomerScope::Mine).is_ok());
+        assert!(reject_all_authorized_on_regular_list(CustomerScope::Collaborating).is_ok());
+        assert!(reject_all_authorized_on_regular_list(CustomerScope::Assigned).is_ok());
+        assert!(reject_all_authorized_on_regular_list(CustomerScope::AllAuthorized).is_err());
     }
 }

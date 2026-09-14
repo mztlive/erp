@@ -13,6 +13,14 @@ export const SCOPE_ORDER: readonly CustomerScope[] = [
     "all_authorized",
 ]
 
+/** 无 `customer_scope:detail` 时隐藏全部有权客户口径。 */
+export function visibleCustomerScopes(
+    canReadAll: boolean,
+): readonly CustomerScope[] {
+    if (canReadAll) return SCOPE_ORDER
+    return SCOPE_ORDER.filter((scope) => scope !== "all_authorized")
+}
+
 export function parseCustomerScope(
     value: string | null | undefined,
 ): CustomerScope {

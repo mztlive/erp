@@ -3,10 +3,12 @@
 use application_core::AuditActor;
 
 use super::access::CustomerAccess;
-use super::scope::{ensure_page, CustomerListView, CustomerSnapshot};
+use super::scope::{
+    ensure_page, ensure_scope_version, ensure_stable_snapshot, CustomerListView, CustomerSnapshot,
+};
 use super::CustomerService;
 use crate::dto::customer::{CustomerDetailView, CustomerListParams, CustomerView};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use validator::Validate;
 
 impl CustomerService {
@@ -27,7 +29,7 @@ impl CustomerService {
     /// * `Forbidden` - 没有 list 动作
     ///
     /// # 关键业务约束
-    /// 缺范围返回空集并标记 `no_scope`；不得用公司范围兜底。
+    /// 角色无有效范围返回空集并标记 `no_scope`；有规则但对象为空不使用该标记。不得用公司范围兜底。
     pub async fn customer_list(
         &self,
         params: &CustomerListParams,
@@ -36,19 +38,10 @@ impl CustomerService {
         params.validate()?;
         let query = params.normalized()?;
         ensure_page(query.paging.page, params.scope_version.as_deref())?;
-        let expected = params.scope_version.as_deref();
         let snapshot = self.list_snapshot(params, query.clone(), actor).await?;
-        if expected.is_some_and(|value| value != snapshot.context.scope_version) {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
-            ));
-        }
+        ensure_scope_version(params.scope_version.as_deref(), &snapshot.context.scope_version)?;
         let current = self.list_snapshot(params, query, actor).await?;
-        if current.context.scope_version != snapshot.context.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或客户资料已变化，请刷新".into(),
-            ));
-        }
+        ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
     }
 
@@ -73,11 +66,7 @@ impl CustomerService {
         let expected = access.require(actor, "detail", id).await?;
         let view = self.load_customer_detail(id).await?;
         let current = access.require(actor, "detail", id).await?;
-        if current.scope_version != expected.scope_version {
-            return Err(Error::ConflictError(
-                "DATA_SCOPE_CHANGED：数据范围或客户资料已变化，请刷新".into(),
-            ));
-        }
+        ensure_stable_snapshot(&expected.scope_version, &current.scope_version)?;
         Ok(view)
     }
 
@@ -126,6 +115,36 @@ impl CustomerService {
             legal_name,
             owner_user_id,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot};
+    use crate::error::Error;
+
+    #[test]
+    fn later_page_and_version_drift_are_data_scope_changed() {
+        match ensure_page(3, None) {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        match ensure_scope_version(Some("scope-a"), "scope-b") {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        match ensure_stable_snapshot("scope-a", "scope-b") {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());
+        assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
     }
 }
 

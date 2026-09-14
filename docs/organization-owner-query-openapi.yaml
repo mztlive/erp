@@ -12,52 +12,67 @@ paths:
     get:
       operationId: customers_owner_query
       summary: 查询客户当前主负责人范围内的数据
-      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      description: |
+        使用 DataScope v2 当前客户范围；人员与组织条件只收窄结果。
+        需要 customer:list。scope=all_authorized 必须改用 /admin/customers/all-authorized，本接口拒绝。
+        列表、总数、导出复用相同条件；跨页与 CSV 必须携带同一 scope_version。
       parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
         - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+        - $ref: '#/components/parameters/IncludeDescendants'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
-          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          description: 原 ApiResponse 信封内的分页 data，增加授权时点、范围版本、口径摘要与当前主负责人候选。
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/OwnerPage'
+                    $ref: '#/components/schemas/CustomerPage'
         '400':
-          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
+          description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式、超过 100 个 ID，或常规列表提交 all_authorized。
         '401':
           description: 未登录或会话失效。
         '403':
-          description: 缺少原资源读取权限；人员条件不能授予权限。
+          description: 缺少 customer:list；人员或组织条件不能授予权限。
+        '409':
+          $ref: '#/components/responses/DataScopeChanged'
   /admin/customers/all-authorized:
     get:
       operationId: customers_all_authorized_owner_query
       summary: 查询全部有权客户当前主负责人范围内的数据
-      description: 仅在既有授权结果上按人员 ID 收窄；同字段 OR，不同字段 AND。owner、组织和处理人等未注册参数必须拒绝。列表、总数、导出复用相同条件。
+      description: |
+        需要 customer_scope:detail 与 customer:list。在 DataScope v2 已授权结果上列出全部有权客户，
+        不得解释为公司范围。人员与组织条件只收窄结果；跨页与 CSV 必须携带同一 scope_version。
       parameters:
+        - $ref: '#/components/parameters/ScopeVersion'
         - $ref: '#/components/parameters/OwnerIds'
+        - $ref: '#/components/parameters/OrgUnitIds'
+        - $ref: '#/components/parameters/IncludeDescendants'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200':
-          description: 原 ApiResponse 信封内的分页 data，增加完整可见范围候选与负责人口径。
+          description: 原 ApiResponse 信封内的分页 data，增加授权时点、范围版本、口径摘要与当前主负责人候选。
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/OwnerPage'
+                    $ref: '#/components/schemas/CustomerPage'
         '400':
           description: Query 解码拒绝未知参数、旧姓名参数、空 ID、非法格式或超过 100 个 ID。
         '401':
           description: 未登录或会话失效。
         '403':
-          description: 缺少原资源读取权限；人员条件不能授予权限。
+          description: 缺少 customer:list 或 customer_scope:detail；人员或组织条件不能授予权限。
+        '409':
+          $ref: '#/components/responses/DataScopeChanged'
   /admin/contracts:
     get:
       operationId: contracts_owner_query
@@ -156,6 +171,12 @@ components:
       type: http
       scheme: bearer
   parameters:
+    ScopeVersion:
+      name: scope_version
+      in: query
+      required: false
+      description: 第二页起必填；第一页重验或下载前校验时也可提供。必须来自本资源同一筛选的服务端响应。
+      schema: {type: string, minLength: 1, maxLength: 256}
     OwnerIds:
       name: owner_user_ids
       in: query
@@ -166,6 +187,22 @@ components:
         minLength: 1
         pattern: '^\s*[A-Za-z0-9_-]{1,128}\s*(,\s*[A-Za-z0-9_-]{1,128}\s*){0,99}$'
       example: 'user-1,user-2'
+    OrgUnitIds:
+      name: org_unit_ids
+      in: query
+      required: false
+      description: 逗号分隔的当前主负责人所属组织 ID；去空白、去重，最多 100 项；只收窄授权结果。包含下级时必须提供。
+      schema:
+        type: string
+        minLength: 1
+        pattern: '^\s*[A-Za-z0-9_-]{1,128}\s*(,\s*[A-Za-z0-9_-]{1,128}\s*){0,99}$'
+      example: 'org-1,org-2'
+    IncludeDescendants:
+      name: include_descendants
+      in: query
+      required: false
+      description: 组织筛选是否包含有效下级；缺省 false。为 true 时必须同时提供 org_unit_ids。
+      schema: {type: boolean, default: false}
     Page:
       name: page
       in: query
@@ -174,7 +211,25 @@ components:
       name: page_size
       in: query
       schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+  responses:
+    DataScopeChanged:
+      description: DATA_SCOPE_CHANGED；HTTP 稳定码为 DATA_SCOPE_CHANGED。清除旧结果并从第一页刷新，不拼接旧页面或输出旧文件。
   schemas:
+    CustomerPage:
+      allOf:
+        - $ref: '#/components/schemas/OwnerPage'
+        - type: object
+          required: [scope_version, policy_version, organization_version, as_of, scope_summary]
+          properties:
+            scope_version: {type: string}
+            policy_version: {type: integer, minimum: 0}
+            organization_version: {type: integer, minimum: 0}
+            as_of: {type: string, format: date-time, description: 授权解析时点；客户端不得用本地时钟代替。}
+            scope_summary: {type: string}
+            empty_reason: {type: [string, 'null'], enum: [no_scope, null], description: 仅角色无有效范围时为 no_scope；有规则但对象为空不使用该值。}
+            ownership_basis:
+              type: string
+              enum: [current_customer_owner]
     OwnerPage:
       type: object
       required: [items, total, page, page_size, owner_options, ownership_basis]
