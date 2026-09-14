@@ -1,6 +1,19 @@
 # application-core：共享应用合同
 
-## 职责合同
+提供多个业务用例共同使用的应用层约定：分页结果、调用人上下文、命令身份、重试匹配和错误分类。
+
+不同领域需要用一致方式表达“谁发起请求、怎样分页、重试的是不是同一个操作”。在这里统一这些与具体业务对象无关的类型和规则。
+
+## 使用场景
+
+- 复用分页参数、分页结果、查询规范化或调用人审计上下文。
+- 为命令构造稳定指纹，判断重放结果，或使用关键异步操作等待辅助。
+
+## 协作示例
+
+同一个命令再次提交时，调用方用 CommandIdentity 和 CommandFingerprint 判断是否与原请求一致；实际结果和审计记录由拥有领域保存。[erp-core](../erp-core/README.md) 提供金额等基础值类型，[persistence-core](../persistence-core/README.md) 提供数据库机制。
+
+## 负责的数据与能力
 
 - 分页与查询规范化、调用人审计上下文、应用错误分类。
 - 版本化命令指纹、命令身份、回执事实与幂等匹配。
@@ -20,6 +33,7 @@
 | [src/context.rs](src/context.rs) | AuditActor |
 | [src/page.rs](src/page.rs) | Page |
 | [src/query.rs](src/query.rs) | PageView、分页与排序规范化 |
+| [src/query_ids.rs](src/query_ids.rs) | QueryIds 及过滤结果类型 |
 | [src/error.rs](src/error.rs) | Error 与 ErrorClass |
 | [src/owned_task.rs](src/owned_task.rs) | await_owned |
 

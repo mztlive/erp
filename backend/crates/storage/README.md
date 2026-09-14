@@ -1,11 +1,23 @@
 # storage：S3 对象存储
 
-`storage` 负责 S3 对象存储，不包含 HTTP 或 Multipart 协议类型。
+将文件字节保存到 S3 或兼容服务，提供读取、删除、公开 URL 和大文件分片上传能力。
+
+上传合同 PDF、商品图片和导入文件都需要统一的对象键、客户端配置和存储错误处理。本 crate 封装这些文件存储操作。
+
+## 使用场景
+
+- 保存、读取、删除文件，或为对象生成公开 URL。
+- 调整 S3 兼容连接、对象路径校验和分片上传操作。
+
+## 协作示例
+
+上传合同 PDF 时，本 crate 保存文件字节；[erp-support](../erp-support/README.md) 记录文件资产及附件关系，[erp-contract](../erp-contract/README.md) 维护合同归档。[web-api](../../apps/web-api/README.md) 负责 HTTP 上传协议和文件校验。
 
 ## 能力
 
 - `S3Storage` 通过 AWS SDK 保存、读取和删除 S3 对象。
 - 支持自定义 endpoint、session token、对象键前缀和 path-style URL，可连接 MinIO 等 S3-compatible 服务。
+- 提供分片上传的创建、分片预签名、完成和取消操作，供大文件直传流程使用。
 - 拒绝绝对路径、父目录、根目录、Windows Prefix 和空文件路径。
 
 Multipart 解析、文件大小、扩展名、声明 MIME 与文件头真实类型校验位于

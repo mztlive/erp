@@ -1,6 +1,19 @@
 # entity-macros：实体与 ID 过程宏
 
-## 职责合同
+在编译时生成重复的实体基础字段访问代码，以及具有独立 Rust 类型的字符串 ID。
+
+多个实体都要实现相同的元数据访问，多种 ID 都需要字符串转换和序列化。过程宏将这些重复实现集中生成。
+
+## 使用场景
+
+- 给带 base 字段的实体派生 Entity，生成 HasBaseModel 实现。
+- 使用 id_type! 声明 ID 类型，避免不同对象的 ID 在类型层面混用。
+
+## 协作示例
+
+id_type!(ExampleId) 生成字符串包装类型及转换代码；真正的 ID 值由 [id-generator](../id-generator/README.md) 或调用方提供。Entity 宏使用 [entity-core](../entity-core/README.md) 的 BaseModel，实体的业务验证仍由领域代码实现。
+
+## 负责的数据与能力
 
 - Entity 派生宏，为带 base 字段的类型实现 entity_core::HasBaseModel。
 - id_type! 生成透明字符串 ID newtype 及访问、转换和序列化实现。

@@ -1,6 +1,19 @@
 # permission-macros：HTTP 权限标注宏
 
-## 职责合同
+为 HTTP Handler 声明权限标识，并在编译时生成取得该权限键的函数。
+
+路由权限与权限目录需要引用一致的 resource:action 标识。把声明放在 Handler 上，可供权限键使用和应用构建阶段的权限收集。
+
+## 使用场景
+
+- 新增接口时声明 resource、action 及权限描述元数据。
+- 修改权限属性参数解析，或权限键辅助函数的生成方式。
+
+## 协作示例
+
+在名为 list_examples 的函数上标注 resource="example"、action="read" 后，宏生成 list_examples_permission_key()，返回 example:read 对应的 Permission。运行时是否允许访问由 [erp-identity](../erp-identity/README.md) 与应用鉴权链路判断。
+
+## 负责的数据与能力
 
 - permission 属性宏保留被标注函数，并生成同名后缀为 _permission_key 的公开函数。
 - 生成函数返回 erp_identity::Permission，权限键由 resource:action 组成。

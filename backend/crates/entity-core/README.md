@@ -1,6 +1,19 @@
 # entity-core：实体基础元数据
 
-## 职责合同
+提供持久化实体共用的基础字段：ID、版本号、创建时间、更新时间和软删除时间。
+
+业务实体通过 BaseModel 使用相同的元数据结构，仓储通过 HasBaseModel 统一访问这些字段，减少重复的字段与访问实现。
+
+## 使用场景
+
+- 定义需要持久化的新业务实体，嵌入 BaseModel。
+- 调整基础元数据访问或软删除状态判断。
+
+## 协作示例
+
+一个销售单实体包含业务字段和 base 字段；base 记录 ID、版本及时间，销售状态规则仍由 [erp-sales](../erp-sales/README.md) 实现。[entity-macros](../entity-macros/README.md) 可以生成 HasBaseModel 的访问代码。
+
+## 负责的数据与能力
 
 - BaseModel 和 HasBaseModel，提供实体持久化元数据的统一访问。
 - 软删除的零值常量与删除状态判定。

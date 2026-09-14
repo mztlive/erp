@@ -1,23 +1,44 @@
 # erp-supply：供给、供应商连接、履约与结算
 
-## 职责合同
+管理公司 SKU 的供应来源，以及供应商接口连接、供应商侧订单执行结果和结算单。
 
-- 供应商供给及修订、可用性和资格合同。
-- 供应商 API 连接能力、命令意图、确认与引用登记。
-- 供应商履约、结果回执、退款结果及结算单和差异规则。
+供应商主档只说明合作对象；实际供应还需要商品供给、商业条款、接口能力、履约回执及结算记录。本 crate 按这四组业务维护相应规则和数据。
+
+## 使用场景
+
+- 修改供应商供给、商业条款修订、实时可供状态及资格校验。
+- 修改供应商 API 连接、命令意图、履约回执或结算差异规则。
+
+## 协作示例
+
+公司 SKU 由 [erp-catalog](../erp-catalog/README.md) 定义，供应商资质由 [erp-supplier](../erp-supplier/README.md) 定义；本 crate 建立“这个供应商供应这个 SKU”的供给关系，并维护供给价格、税率和可供状态。外部下单调用由 Process 执行，结果再按本域规则登记。
+
+## 负责的数据与能力
+
+| 业务组 | 负责内容 | 示例 |
+| --- | --- | --- |
+| supplier_offering | 公司 SKU 与供应商的供给关系、商业条款修订、实时可供状态 | 为一个 SKU 登记供应商报价，改价时保留原商业修订 |
+| supplier_api | 供应商 API 连接、能力、调用意图、确认与引用登记 | 登记连接支持的能力，保存一次调用意图及确认记录 |
+| supplier_fulfillment | 供应商侧履约订单、动作、状态历史、结果与退款事实 | 保存外部下单结果和供应商回执 |
+| supplier_settlement | 供应商结算单、明细、差异及复核规则 | 对账后保留结算差异及其处理结果 |
 
 ## 依赖与协作边界
 
-- 本 crate 拥有本域实体、DTO、规则、Service、Repository、集合访问器和索引。normal、build、dev 依赖均不得指向其他业务领域或组合层。
+术语与统一分工见[总索引](../README.md#代码中常见名称的含义)。
+
+- 本领域的数据结构、业务规则、服务和数据库仓储在此维护。常规、构建和测试依赖均不得指向其他业务领域或组合层。
 - 供应商账户、资质与商业档案由 erp-supplier 提供；通过 Port 获取资格和引用事实。
 - 外部网关调用与跨域事务由 erp-processes 的 supply_* 和 supplier_connection_execution 模块编排，不得把外部 I/O 放入数据库事务。
-- 外域适配器在组合层或应用组合根装配；公开入口以 [src/lib.rs](src/lib.rs) 为准。
+- 需要其他领域的能力时，由组合层或应用将本域接口接到实际提供方；公开入口见 [src/lib.rs](src/lib.rs)。
 
 ## 代码入口
 
 | 入口 | 用途 |
 | --- | --- |
-| [src/service/mod.rs](src/service/mod.rs) | 四组供应业务服务 |
+| [src/service/supplier_offering/mod.rs](src/service/supplier_offering/mod.rs) | 供给创建、商业修订与可供状态 |
+| [src/service/supplier_api/mod.rs](src/service/supplier_api/mod.rs) | 连接、能力和命令意图 |
+| [src/service/supplier_fulfillment/mod.rs](src/service/supplier_fulfillment/mod.rs) | 供应商侧订单与结果回执 |
+| [src/service/supplier_settlement/mod.rs](src/service/supplier_settlement/mod.rs) | 结算单、差异和复核 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 供给资格、网关及引用登记合同 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 四组索引入口 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
