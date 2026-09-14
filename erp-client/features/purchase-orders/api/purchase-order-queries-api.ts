@@ -61,9 +61,15 @@ export async function fetchPurchaseOrders(
 
     const pageData = await apiGet<
         BackendPage<BackendListItem> & {
+            empty_reason?: string | null
+            scope_version: string
+            policy_version: number
+            organization_version: number
+            scope_summary: string
             owner_options: { value: string; label: string }[]
         }
     >("/admin/purchase-orders", {
+        scope_version: query.scopeVersion,
         q: query.q,
         sales_order_id: query.salesOrderId,
         owner_user_ids: query.ownerUserIds || undefined,
@@ -79,6 +85,11 @@ export async function fetchPurchaseOrders(
     return {
         rows,
         ownerOptions: pageData.owner_options ?? [],
+        emptyReason: pageData.empty_reason,
+        scopeVersion: pageData.scope_version,
+        policyVersion: pageData.policy_version,
+        organizationVersion: pageData.organization_version,
+        scopeSummary: pageData.scope_summary,
         total: pageData.total ?? rows.length,
         page: pageData.page ?? page,
         pageSize: pageData.page_size ?? pageSize,
@@ -93,17 +104,28 @@ export async function fetchPurchaseOrders(
 export async function fetchPurchaseOrderExportData(
     query: PurchaseOrderListQuery = {},
 ): Promise<PurchaseOrderListItem[]> {
-    return collectExportPages(
+    let scopeVersion: string | undefined
+    const items = await collectExportPages(
         async (page, pageSize) => {
             const result = await fetchPurchaseOrders({
                 ...query,
                 page,
                 pageSize,
+                scopeVersion,
             })
+            scopeVersion = result.scopeVersion
             return { items: result.rows, total: result.total }
         },
         (row) => row.purchaseOrderId,
     )
+    // 最后一页之后、生成文件前再次验证，撤权或业务变化时不下载旧文件。
+    await fetchPurchaseOrders({
+        ...query,
+        page: 1,
+        pageSize: 1,
+        scopeVersion,
+    })
+    return items
 }
 
 /**

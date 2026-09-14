@@ -389,6 +389,7 @@ async fn persist_frozen_created_order_start(
             now: input.now,
             audit,
             receipt: None,
+            object_scope: None,
         },
         session,
     )

@@ -27,6 +27,9 @@ pub struct PageParams {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct PurchaseOrderListParams {
+    /// 跨页与导出必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
     pub owner_user_ids: Option<application_core::QueryIds>,
     /// 采购单号模糊匹配。

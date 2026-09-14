@@ -13,6 +13,7 @@ use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrd
 use mongodb::Database;
 
 use erp_identity::AccessControlExt;
+use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
 use persistence_core::Executor;
 use persistence_core::PageResult;
@@ -42,6 +43,7 @@ pub struct PurchaseOrderListFacts {
 /// # 参数
 /// * `db` - MongoDB 数据库句柄
 /// * `filter` - 采购单列表筛选与分页条件
+/// * `scope` - 已证明的对象范围，必须与筛选求交
 /// * `executor` - 数据访问执行器，由 Service 决定事务边界；事务内重验必须复用调用方 executor
 ///
 /// # 返回
@@ -57,9 +59,11 @@ pub struct PurchaseOrderListFacts {
 /// 当前版本各一次批量读取，不得出现逐行 N+1。提交指针只查提交集合、版本指针
 /// 只查版本集合，两种命名空间不得交叉；历史提交与历史版本不进入结果；分页
 /// 过滤、稳定排序与总数语义与 [`PurchaseOrderFilter`] 完全一致。
+/// 授权条件由调用方传入，本层不得按登录用户推断权限。
 pub async fn load_purchase_order_list_page(
     db: &Database,
     filter: &PurchaseOrderFilter,
+    scope: &PurchaseReadScope,
     executor: &mut dyn Executor,
 ) -> Result<(
     PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
@@ -67,7 +71,7 @@ pub async fn load_purchase_order_list_page(
 )> {
     let page = db
         .purchase_orders()
-        .search_purchase_orders(filter, executor)
+        .search_purchase_orders(filter, scope, executor)
         .await?;
     if page.items.is_empty() {
         return Ok((page, PurchaseOrderListFacts::default()));
@@ -398,7 +402,31 @@ mod isolation_tests {
     use persistence_core::{NoTransaction, Transactional};
 
     use super::load_purchase_order_list_page;
+    use erp_procurement::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
     use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
+
+    /// 隔离库测试使用公司范围，避免空授权掩盖事实加载断言。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回角色公司范围且无个人上限的授权。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 仅用于被忽略的 Mongo 夹具，不得作为生产缺范围兜底。
+    fn company_scope() -> PurchaseReadScope {
+        PurchaseReadScope {
+            roles: vec![PurchaseScopeClause {
+                company: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
 
     /// 构造列表筛选条件。
     fn list_filter() -> PurchaseOrderFilter {
@@ -438,10 +466,14 @@ mod isolation_tests {
                 .await
                 .expect("测试数据库创建失败");
             ensure_indexes(fixture.db()).await.expect("索引创建失败");
-            let (page, facts) =
-                load_purchase_order_list_page(fixture.db(), &list_filter(), &mut NoTransaction)
-                    .await
-                    .expect("事实加载失败");
+            let (page, facts) = load_purchase_order_list_page(
+                fixture.db(),
+                &list_filter(),
+                &company_scope(),
+                &mut NoTransaction,
+            )
+            .await
+            .expect("事实加载失败");
             assert_eq!(page.total, 0);
             assert!(page.items.is_empty());
             assert!(facts.supplier_names.is_empty());
@@ -560,10 +592,14 @@ mod isolation_tests {
                 .create(&history, &mut NoTransaction)
                 .await
                 .expect("历史提交写入失败");
-            let (page, facts) =
-                load_purchase_order_list_page(fixture.db(), &list_filter(), &mut NoTransaction)
-                    .await
-                    .expect("事实加载失败");
+            let (page, facts) = load_purchase_order_list_page(
+                fixture.db(),
+                &list_filter(),
+                &company_scope(),
+                &mut NoTransaction,
+            )
+            .await
+            .expect("事实加载失败");
             assert_eq!(page.total, 1);
             assert!(facts.submissions.contains_key("sub-current"));
             assert!(
@@ -620,7 +656,8 @@ mod isolation_tests {
                         order.current_submission_id = Some("sub-txn".to_string());
                         db.purchase_orders().create(&order, session).await?;
                         let (page, facts) =
-                            load_purchase_order_list_page(&db, &list_filter(), session).await?;
+                            load_purchase_order_list_page(&db, &list_filter(), &company_scope(), session)
+                                .await?;
                         assert_eq!(page.total, 1, "事务内应能 read-your-writes");
                         assert!(facts.submissions.is_empty() || page.items.len() == 1);
                         let _ = facts.sales_order_nos.len();

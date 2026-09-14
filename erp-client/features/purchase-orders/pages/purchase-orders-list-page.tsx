@@ -47,6 +47,7 @@ export function PurchaseOrdersListPage() {
 
     const { filters } = ctrl
     const listLoadFailed = ctrl.listQuery.isError
+    const noScope = ctrl.listQuery.data?.emptyReason === "no_scope"
     const updatedAt = ctrl.listQuery.data?.freshness.updatedAt
 
     return (
@@ -235,23 +236,29 @@ export function PurchaseOrdersListPage() {
                             !listLoadFailed && ctrl.pageRows.length === 0 ? (
                                 <BusinessEmptyState
                                     kind={
-                                        filters.hasActiveFilters
-                                            ? "filter"
-                                            : "no-data"
+                                        noScope
+                                            ? "no-data"
+                                            : filters.hasActiveFilters
+                                              ? "filter"
+                                              : "no-data"
                                     }
                                     className={listWorkspaceEmptyStateClassName}
                                     title={
-                                        filters.hasActiveFilters
-                                            ? "当前筛选无结果"
-                                            : "暂无采购单"
+                                        noScope
+                                            ? "暂无采购单数据范围"
+                                            : filters.hasActiveFilters
+                                              ? "当前筛选无结果"
+                                              : "暂无采购单"
                                     }
                                     description={
-                                        filters.hasActiveFilters
-                                            ? "没有记录符合当前筛选条件，可清除筛选后重试。"
-                                            : "还没有采购单，可新建采购单。"
+                                        noScope
+                                            ? "请联系管理员配置可查看的业务范围。"
+                                            : filters.hasActiveFilters
+                                              ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                                              : "当前业务范围内还没有采购单，可新建第一张单。"
                                     }
                                     action={
-                                        filters.hasActiveFilters ? (
+                                        noScope ? undefined : filters.hasActiveFilters ? (
                                             <Button
                                                 id="procurement-orders-list-clear-filters"
                                                 type="button"

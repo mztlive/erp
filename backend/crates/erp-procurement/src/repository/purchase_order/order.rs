@@ -223,21 +223,29 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 }
 
 impl<'a> PurchaseOrderRepository<'a> {
-    /// 返回未删除单据的负责人集合。当前调用入口使用资源级列表权限；S2 必须传入 v2 对象边界。
+    /// 返回未删除且落在已证明范围内的负责人集合。
     ///
     /// # 参数
+    /// * `scope` - 已由应用层完成资源动作授权的对象范围
     /// * `executor` - 事务或无事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回去重的负责人 ID；候选不按登录资格过滤，不能用于改派。
     ///
     /// # 错误
     /// 数据库查询失败向上传播。
-    pub async fn current_owner_ids(&self, executor: &mut dyn Executor) -> Result<Vec<String>> {
+    ///
+    /// # 关键业务约束
+    /// 候选必须与列表同一授权边界，不得按登录用户自行推断。
+    pub async fn current_owner_ids(
+        &self,
+        scope: &super::scope::PurchaseReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
         let collection = self.collection();
         let mut query = collection.distinct(
             "owner_user_id",
-            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON },
+            doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON, "$and": [scope.document()] },
         );
         if let Some(session) = executor.session() {
             query = query.session(session);
@@ -256,6 +264,7 @@ impl<'a> PurchaseOrderRepository<'a> {
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
+    /// * `scope` - 已证明的对象范围，必须与筛选求交
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -263,9 +272,13 @@ impl<'a> PurchaseOrderRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 授权条件由调用方传入，仓储不得按登录用户推断权限。
     pub async fn search_purchase_orders(
         &self,
         filter: &PurchaseOrderFilter,
+        scope: &super::scope::PurchaseReadScope,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PurchaseOrderRow>> {
         let options = FindOptions::builder()
@@ -279,8 +292,19 @@ impl<'a> PurchaseOrderRepository<'a> {
             .projection(purchase_order_projection())
             .build();
         let collection = self.collection().clone_with_type::<PurchaseOrderRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items = mongo_ops::find_many(
+            &collection,
+            doc! { "$and": [filter.to_doc(), scope.document()] },
+            options,
+            executor,
+        )
+        .await?;
+        let total = mongo_ops::count_documents(
+            &self.collection(),
+            doc! { "$and": [filter.to_doc(), scope.document()] },
+            executor,
+        )
+        .await?;
 
         Ok(PageResult {
             items,

@@ -71,9 +71,12 @@ impl PurchaseOrderProcess {
     /// 返回提交结果（正式号、提交 ID 与冻结版本）。
     ///
     /// # 错误
-    /// * `NotFound` - 采购单不存在
+    /// * `NotFound` - 采购单不存在或无权操作
     /// * `ConflictError` - 期望版本不一致、无绑定或重复提交
     /// * `BusinessLogicError` - 状态非草稿或草稿内容缺失
+    ///
+    /// # 关键业务约束
+    /// 提交必须按当前采购对象范围重验，历史参与不授予提交。
     pub async fn submit(
         &self,
         id: &str,
@@ -104,11 +107,9 @@ impl PurchaseOrderProcess {
         let adapter = purchase_order_adapter()?;
         let subject = purchase_order_subject_ref(id)?;
         let mut order = self
-            .db
-            .purchase_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+            .command_access(actor, "submit")?
+            .current(id, &mut NoTransaction)
+            .await?;
         order
             .ensure_expected_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
@@ -240,6 +241,7 @@ impl PurchaseOrderProcess {
                 organization_id,
                 now,
                 audit,
+                object_scope: Some(self.command_access(actor, "submit")?),
                 receipt: Some((
                     fingerprint.clone(),
                     PurchaseSubmitReceipt {

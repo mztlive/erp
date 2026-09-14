@@ -386,6 +386,8 @@ pub(super) struct PurchaseOrderStartPersistInput {
     pub audit: erp_audit::AuditLog,
     /// 采购提交收据：请求指纹与结果载荷；任务身份在事务内回填后编码进审计消息。
     pub receipt: Option<(String, super::submission::PurchaseSubmitReceipt)>,
+    /// 提交写事务内重验的对象范围；创建并提交路径已在同一事务检查建单范围。
+    pub object_scope: Option<super::authorization::PurchaseCommandAccess>,
 }
 
 /// 提交时草稿补丁的采购覆盖校验上下文。
@@ -445,7 +447,7 @@ pub(super) async fn persist_purchase_order_start(
 /// 独立提交通过本模块新建事务，因此审批收据是整笔事务第一写。创建并提交时，
 /// 外层创建命令已经完成自身幂等仲裁并持有同一事务；本方法不得再开事务，且其
 /// 审批写段仍必须按“启动收据 -> 带正式编号的注册行启动守卫 -> 业务提交 ->
-/// BPM 运行事实”顺序执行。
+/// BPM 运行事实”顺序执行。写事务必须重验采购对象范围，历史参与不授予提交。
 pub(super) async fn persist_purchase_order_start_with_session(
     db: &Database,
     input: PurchaseOrderStartPersistInput,
@@ -453,6 +455,9 @@ pub(super) async fn persist_purchase_order_start_with_session(
 ) -> Result<Option<(String, u64)>> {
     if !matches!(&input.prepared, PreparedExecution::Apply(_)) {
         return Ok(None);
+    }
+    if let Some(scope) = &input.object_scope {
+        scope.current(&input.order.base.id, session).await?;
     }
     let mut posting = StartPosting {
         db,

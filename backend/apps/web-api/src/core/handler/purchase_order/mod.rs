@@ -21,9 +21,8 @@ use erp_procurement::dto::purchase_order::{
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use erp_read_models::purchase_center::dto::{
     CreationBasisListParams, CreationBasisView, PurchaseChangeOrderView, PurchaseOrderCenterView,
-    PurchaseOrderListItemView,
 };
-use erp_read_models::purchase_center::PurchaseOrderReadService;
+use erp_read_models::purchase_center::{PurchaseListView, PurchaseOrderReadService};
 
 use crate::{
     app_state::AppState,
@@ -41,16 +40,24 @@ use crate::{
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 返回带范围版本、候选与空集原因的分页视图。
+///
+/// # 错误
+/// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
+///
+/// # 关键业务约束
+/// 缺动作返回 403；缺范围返回空集并标记 `no_scope`，不得补公司范围。
 pub async fn purchase_order_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseOrderListParams>,
-) -> Result<application_core::FilteredPage<PurchaseOrderListItemView>> {
-    let page = PurchaseOrderReadService::new(state.db())
-        .purchase_order_list(&params)
+) -> Result<PurchaseListView> {
+    let page = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
+        .purchase_order_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -67,17 +74,24 @@ pub async fn purchase_order_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `actor` - 当前已认证账号，用于服务端计算审核责任动作
+/// * `actor` - 已认证操作人
 /// * `id` - 采购单 ID
 ///
 /// # 返回
 /// 返回对象中心视图。
+///
+/// # 错误
+/// 无动作权限、不可见或不存在时拒绝；组装过程中范围变化返回冲突。
+///
+/// # 关键业务约束
+/// 列表已授权不能作为详情凭证；不可见对象不泄露存在性。
 pub async fn purchase_order_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
-    let view = PurchaseOrderReadService::new(state.db())
-        .purchase_order_detail(&id)
+    let view = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
+        .purchase_order_detail(&id, Some(&actor))
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -286,7 +300,7 @@ pub async fn purchase_creation_basis_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CreationBasisListParams>,
 ) -> Result<Vec<CreationBasisView>> {
-    let views = PurchaseOrderReadService::new(state.db())
+    let views = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
         .creation_basis_list(&params, &actor)
         .await?;
 
@@ -434,7 +448,7 @@ pub async fn purchase_change_list(
     State(state): State<AppState>,
     Query(params): Query<PurchaseChangeOrderListParams>,
 ) -> Result<PageView<PurchaseChangeOrderView>> {
-    let page = PurchaseOrderReadService::new(state.db())
+    let page = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
         .change_order_list(&params)
         .await?;
 
@@ -460,7 +474,7 @@ pub async fn purchase_change_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderReadService::new(state.db())
+    let view = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
         .change_order_detail(&id)
         .await?;
 
@@ -503,5 +517,36 @@ mod tests {
         assert!(!production.contains("definition_id"));
         assert!(!production.contains("PENDING_WAREHOUSE_IMPACT"));
         assert!(!production.contains("PENDING_FINANCE_REVIEW"));
+    }
+}
+
+#[cfg(test)]
+mod scope_query_tests {
+    use axum::{extract::Query, http::Uri};
+    use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
+
+    /// 跨页必须能解码范围版本，且不得把组织筛选静默当成全量。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 断言失败时测试失败。
+    ///
+    /// # 关键业务约束
+    /// 未接入的 `org_unit_ids` 必须拒绝，不得忽略后查全量。
+    #[test]
+    fn purchase_scope_version_is_consumed_and_org_filter_stays_unsupported() {
+        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b"
+            .parse()
+            .unwrap();
+        let query = Query::<PurchaseOrderListParams>::try_from_uri(&uri).unwrap().0;
+        assert_eq!(query.scope_version.as_deref(), Some("v1"));
+        assert_eq!(query.page, Some(2));
+        let org: Uri = "/?org_unit_ids=org-1".parse().unwrap();
+        assert!(Query::<PurchaseOrderListParams>::try_from_uri(&org).is_err());
     }
 }
