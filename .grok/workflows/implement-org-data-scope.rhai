@@ -1,4 +1,4 @@
-// 按波次实现组织数据范围合同剩余项。
+// 按波次实现组织数据范围合同剩余项，并以第 9 章静态门禁为放行条件。
 // 运行：/workflow implement-org-data-scope
 // Args:
 //   wave: 必填。s2-consumers | s2-sales | s2-ui | s2-import | s2-adapters | s2-tasks
@@ -7,17 +7,21 @@
 //   batch_ids: 可选字符串数组，只跑该波次中的指定批次
 //   land: 可选布尔。true=改父工作区（多批次时顺序执行）；false=隔离 worktree 并行。
 //         默认：单批次 true，多批次 false。
+//   max_gate_rounds: 可选整数 1..16。第 9 章门禁「运行→整改」轮次上限，默认 8。
+// 门禁：docs/organization-data-scope-gate.md；入口 bash backend/scripts/check-org-data-scope.sh
+// 失败必须继续改代码并重跑，直到 STATIC_CHECKS_PASSED。不得白名单/忽略路径/把失败改警告。
 
 let meta = #{
     name: "implement-org-data-scope",
-    description: "按波次实现组织数据范围合同剩余批次：S2 消费者/适配器/页面，S3 核心链路，S4 扩展。不跑真实 MongoDB，不登记业务验收。",
-    when_to_use: "继续完成 organization-data-scope-contract 的剩余实现。先跑 s2-consumers，再按依赖推进。",
+    description: "按波次实现组织数据范围合同剩余批次：S2 消费者/适配器/页面，S3 核心链路，S4 扩展。第 9 章静态门禁不通过则继续整改直到通过。不跑真实 MongoDB，不登记业务验收。",
+    when_to_use: "继续完成 organization-data-scope-contract 的剩余实现。先跑 s2-consumers，再按依赖推进。实现后必须通过第 9 章静态门禁。",
     phases: [
         #{ title: "Select", detail: "按 wave/batch_ids 选出仍须实现的批次" },
         #{ title: "Implement", detail: "按批次实现 DataScope v2 消费者、查询、页面与测试" },
         #{ title: "Review", detail: "对照合同与代码做对抗评审" },
         #{ title: "Repair", detail: "至多一轮修复未通过评审的批次" },
         #{ title: "Verify", detail: "定向单测与静态核对，不跑真实库" },
+        #{ title: "Gate", detail: "执行第 9 章静态门禁；失败则整改并重跑直到通过" },
         #{ title: "Report", detail: "写入 scratch 报告并列出下一波" },
     ],
 };
@@ -78,6 +82,63 @@ let verification_schema = #{
     },
 };
 
+let gate_schema = #{
+    "type": "object",
+    "required": ["passed", "exit_code", "status", "command", "findings", "summary"],
+    "properties": #{
+        "passed": #{ "type": "boolean" },
+        "exit_code": #{ "type": "integer" },
+        "status": #{ "type": "string", "minLength": 1 },
+        "command": #{ "type": "string", "minLength": 1 },
+        "files_scanned": #{ "type": "integer" },
+        "findings": #{
+            "type": "array",
+            "maxItems": 96,
+            "items": #{
+                "type": "object",
+                "required": ["rule", "path", "line", "message", "category"],
+                "properties": #{
+                    "rule": #{ "type": "string" },
+                    "path": #{ "type": "string" },
+                    "line": #{ "type": "integer" },
+                    "message": #{ "type": "string" },
+                    "category": #{ "type": "string" },
+                },
+            },
+        },
+        "not_proven": #{ "type": "array", "maxItems": 16, "items": #{ "type": "string" } },
+        "summary": #{ "type": "string", "minLength": 1 },
+    },
+};
+
+let gate_fix_schema = #{
+    "type": "object",
+    "required": ["fixed", "files_changed", "summary", "remaining_findings"],
+    "properties": #{
+        "fixed": #{ "type": "boolean" },
+        "files_changed": #{ "type": "array", "maxItems": 128, "items": #{ "type": "string" } },
+        "summary": #{ "type": "string", "minLength": 1 },
+        "remaining_findings": #{
+            "type": "array",
+            "maxItems": 96,
+            "items": #{
+                "type": "object",
+                "required": ["rule", "path", "line", "message", "category"],
+                "properties": #{
+                    "rule": #{ "type": "string" },
+                    "path": #{ "type": "string" },
+                    "line": #{ "type": "integer" },
+                    "message": #{ "type": "string" },
+                    "category": #{ "type": "string" },
+                },
+            },
+        },
+        "exit_code": #{ "type": "integer" },
+        "status": #{ "type": "string" },
+        "blockers": #{ "type": "array", "maxItems": 32, "items": #{ "type": "string" } },
+    },
+};
+
 fn is_text(value) {
     type_of(value) == "string" && value != ""
 }
@@ -100,6 +161,53 @@ fn contains_text(items, wanted) {
         }
     }
     found
+}
+
+fn is_gate_pass(r) {
+    r != () && r.success && is_map(r.output) && r.output.passed == true && r.output.exit_code == 0 && r.output.status == "STATIC_CHECKS_PASSED"
+}
+
+fn is_gate_usable(r) {
+    r != () && r.success && is_map(r.output) && is_text(r.output.status) && r.output.exit_code != () && r.output.passed != () && is_arr(r.output.findings)
+}
+
+fn gate_findings_json(r) {
+    if is_gate_usable(r) {
+        json_encode(r.output.findings)
+    } else {
+        "[]"
+    }
+}
+
+fn gate_fingerprint(r) {
+    if is_gate_usable(r) {
+        fingerprint(json_encode(r.output.findings))
+    } else if r != () {
+        "unusable"
+    } else {
+        "missing"
+    }
+}
+
+fn all_true(flags) {
+    let ok = flags.len() > 0;
+    for flag in flags {
+        if flag != true {
+            ok = false;
+        }
+    }
+    ok
+}
+
+fn batch_ids_csv(selected) {
+    let s = "";
+    for batch in selected {
+        if s != "" {
+            s += ",";
+        }
+        s += batch.id;
+    }
+    s
 }
 
 fn catalog() {
@@ -424,6 +532,7 @@ fn standards_block() {
     p += "8. 不得开放销售责任改派，除非批次是 S3-07。不得改审批指定到人。\n";
     p += "9. 只更新本批在 docs/organization-data-scope-s2.md 或 s3.md 中对应行的状态；不得把阶段改成已验收或已完成。\n";
     p += "10. 前端跟 sales-orders 的 scopeVersion、emptyReason、data-scope/cache.ts。筛选进 URL 与 Query key。\n";
+    p += "11. 提交前在仓库根目录执行 bash backend/scripts/check-org-data-scope.sh（合同 docs/organization-data-scope-gate.md）。退出码必须为 0 且 JSON status 为 STATIC_CHECKS_PASSED。禁止 --self-test-only 充当放行；禁止忽略路径、债务白名单、把失败改警告。待接入项与整改项均阻断，必须改生产代码接入公共解析。本检查只证明第 9 章静态门禁，不得登记功能或业务验收。不启动服务、不跑真实 MongoDB。\n";
     p
 }
 
@@ -509,6 +618,62 @@ fn verify_prompt(batch) {
     p
 }
 
+fn gate_run_prompt(wave, target_id, batch_csv) {
+    let p = "";
+    p += "执行组织与数据范围第 9 章静态门禁。这是质量放行依据，不是自检演示。\n";
+    p += "必读 docs/organization-data-scope-gate.md 第 1–3 节。\n";
+    p += "当前 wave=";
+    p += wave;
+    p += " target=";
+    p += target_id;
+    p += " batches=";
+    p += batch_csv;
+    p += "\n\n必须用 run_terminal_command 在仓库根目录真实执行：\n";
+    p += "bash backend/scripts/check-org-data-scope.sh --json\n";
+    p += "不要 cd 到无关目录。JSON 在 stdout，规则自检与领域门禁日志在 stderr。记录该命令的退出码。\n\n";
+    p += "禁止：\n";
+    p += "- 使用 --self-test-only（仅工具自检，不得作为工作区放行）\n";
+    p += "- 未执行命令就填 passed=true\n";
+    p += "- 把 BLOCKED / TOOL_ERROR / SELF_TEST_ONLY 当成通过\n";
+    p += "- 启动服务、连接 MongoDB、跑数据库集成测试\n";
+    p += "- 修改检查器、添加忽略路径、债务白名单、把失败改警告\n\n";
+    p += "passed=true 当且仅当：你确实运行了上述命令，exit_code==0，且 JSON status 恰好是 STATIC_CHECKS_PASSED。\n";
+    p += "exit_code=1 为源码规则或既有领域门禁阻断；exit_code=2 为参数/工具/自检/Cargo metadata/源码读取失败。\n";
+    p += "findings 必须逐条抄录 JSON：rule、path、line、message、category（整改项或待接入项）。待接入项同样阻断。\n";
+    p += "not_proven 抄录 JSON 的 not_proven；这些不是本门禁通过条件，报告中保留。\n";
+    p += "command 填实际执行的命令。summary 用一句话说明状态、扫描文件数、阻断条数。\n";
+    p += "若命令无法执行：passed=false，exit_code=2，status=TOOL_ERROR，findings=[]，summary 写原因。\n";
+    p
+}
+
+fn gate_fix_prompt(wave, target_id, batch_csv, findings_json, usable) {
+    let p = "";
+    p += "第 9 章静态门禁未通过，必须改生产代码直到 bash backend/scripts/check-org-data-scope.sh 退出码 0 且 status=STATIC_CHECKS_PASSED。\n";
+    p += "必读：docs/organization-data-scope-gate.md、docs/organization-data-scope-contract.md 第 9 章。\n";
+    p += "wave=";
+    p += wave;
+    p += " target=";
+    p += target_id;
+    p += " batches=";
+    p += batch_csv;
+    p += "\n\n";
+    if usable {
+        p += "本轮门禁 findings JSON：";
+        p += findings_json;
+        p += "\n";
+    } else {
+        p += "上一轮门禁运行结果不可用。你必须先亲自执行 bash backend/scripts/check-org-data-scope.sh --json，再按真实 findings 整改。\n";
+    }
+    p += "\n整改规则：\n";
+    p += "1. 待接入项与整改项均不得豁免。禁止忽略路径、债务白名单、把失败改警告、改门禁脚本放行、用 --self-test-only 充当通过。\n";
+    p += "2. 按规则修复：ODS-DOMAIN 修领域边界；ODS-OWNER/ENGINE 把范围类型与解析器留在身份域；ODS-PORT 从 Port 去掉身份内部类型；ODS-RAW 停止解释 scope_type/scope_targets，改为调用公共解析；ODS-REPOSITORY 禁止业务仓储加载授权；ODS-ADAPTER 在同一语句 DataScopeService::new(...).resolve/resolve_permissions 并传递 executor；ODS-EXECUTOR 禁止 NoTransaction/自开事务；ODS-FALLBACK 禁止 unwrap_or* 与 company:true / authorized_customer_ids:None 默认成功；ODS-REGISTRY/DIMENSIONS 去掉 RESOURCE_ACTIONS 准入和固定单一维度；ODS-SAMPLE 恢复客户样例生产结构。\n";
+    p += "3. 不得以更名、拆分语句、宏包装、改 cfg 规避规则。adapter 若改为字段注入等结构，必须同步扩展门禁正反例，不得关闭检查。\n";
+    p += "4. 修复范围为使静态门禁通过的最小生产改动；不要新开未选中的功能批次，不要做第 4 节行为验收，不要启动服务或真实 MongoDB。\n";
+    p += "5. 改完后必须再跑 bash backend/scripts/check-org-data-scope.sh --json。fixed=true 仅当这次重跑 exit_code==0 且 status=STATIC_CHECKS_PASSED。remaining_findings 抄录仍存在的阻断；若已通过则为 []。\n";
+    p += standards_block();
+    p
+}
+
 fn inventory_report(all_batches) {
     let md = "";
     md += "# 组织数据范围剩余批次\n\n";
@@ -532,6 +697,7 @@ fn inventory_report(all_batches) {
 let wave = "";
 let requested_ids = [];
 let land_arg = ();
+let max_gate_rounds = 8;
 if args != () {
     if args.wave != () {
         wave = args.wave;
@@ -542,6 +708,15 @@ if args != () {
     if args.land != () {
         land_arg = args.land;
     }
+    if args.max_gate_rounds != () {
+        max_gate_rounds = args.max_gate_rounds;
+    }
+}
+if max_gate_rounds < 1 {
+    max_gate_rounds = 1;
+}
+if max_gate_rounds > 16 {
+    max_gate_rounds = 16;
 }
 if !is_text(wave) {
     pause("verification", "Pass args.wave（如 s2-consumers）。inventory 只输出编目。");
@@ -720,6 +895,161 @@ for r in verify_results {
     }
 }
 
+// ---- chapter 9 static gate: run, fix, re-run until pass ----
+phase("Gate");
+let batch_csv = batch_ids_csv(selected);
+let gate_target_ids = [];
+let gate_resume = [];
+let gate_passed_flags = [];
+if land {
+    gate_target_ids.push("workspace");
+    gate_resume.push("");
+    gate_passed_flags.push(false);
+} else {
+    i = 0;
+    for batch in selected {
+        if is_text(impl_ids[i]) {
+            gate_target_ids.push(batch.id);
+            gate_resume.push(impl_ids[i]);
+            gate_passed_flags.push(false);
+        }
+        i += 1;
+    }
+}
+
+let pending_idx = [];
+i = 0;
+while i < gate_target_ids.len() {
+    pending_idx.push(i);
+    i += 1;
+}
+
+let last_gate_by_id = #{};
+let gate_rounds = 0;
+let unusable_rounds = 0;
+let last_fp_by_id = #{};
+
+while pending_idx.len() > 0 && gate_rounds < max_gate_rounds {
+    let remaining = budget().remaining;
+    if remaining < pending_idx.len() {
+        await_user("back_off", "剩余 agent 预算不足以继续第 9 章门禁。请提高 agent_budget 后 resume。");
+        remaining = budget().remaining;
+        if remaining < pending_idx.len() {
+            log("gate stop: budget remaining=" + remaining.to_string());
+            break;
+        }
+    }
+
+    gate_rounds += 1;
+    log("ods-gate round=" + gate_rounds.to_string() + " pending=" + pending_idx.len().to_string());
+
+    let run_jobs = [];
+    for idx in pending_idx {
+        let opts = #{
+            prompt: gate_run_prompt(wave, gate_target_ids[idx], batch_csv),
+            label: "ods-gate:" + gate_target_ids[idx] + ":" + gate_rounds.to_string(),
+            capability_mode: "execute",
+            output_schema: gate_schema,
+        };
+        if is_text(gate_resume[idx]) {
+            opts.resume_from = gate_resume[idx];
+        }
+        run_jobs.push(opts);
+    }
+    let run_results = parallel(run_jobs);
+
+    let next_pending = [];
+    let fix_jobs = [];
+    let fix_idx = [];
+    let round_all_unusable = true;
+    let j = 0;
+    for idx in pending_idx {
+        let g = run_results[j];
+        last_gate_by_id[gate_target_ids[idx]] = g;
+        if is_gate_pass(g) {
+            gate_passed_flags[idx] = true;
+            round_all_unusable = false;
+            log("ods-gate passed target=" + gate_target_ids[idx]);
+        } else {
+            let usable = is_gate_usable(g);
+            if usable {
+                round_all_unusable = false;
+            }
+            let fp = gate_fingerprint(g);
+            let prev = last_fp_by_id[gate_target_ids[idx]];
+            if prev != () && prev == fp {
+                log("ods-gate unchanged findings target=" + gate_target_ids[idx]);
+            }
+            last_fp_by_id[gate_target_ids[idx]] = fp;
+            next_pending.push(idx);
+            let fix_opts = #{
+                prompt: gate_fix_prompt(wave, gate_target_ids[idx], batch_csv, gate_findings_json(g), usable),
+                label: "ods-gate-fix:" + gate_target_ids[idx] + ":" + gate_rounds.to_string(),
+                capability_mode: "all",
+                output_schema: gate_fix_schema,
+            };
+            if is_text(gate_resume[idx]) {
+                fix_opts.resume_from = gate_resume[idx];
+            }
+            fix_jobs.push(fix_opts);
+            fix_idx.push(idx);
+        }
+        j += 1;
+    }
+
+    if round_all_unusable {
+        unusable_rounds += 1;
+    } else {
+        unusable_rounds = 0;
+    }
+    if unusable_rounds >= 2 {
+        log("ods-gate stop: two unusable runner rounds");
+        break;
+    }
+
+    pending_idx = next_pending;
+    if pending_idx.len() == 0 {
+        log("ods-gate all targets passed");
+    } else if fix_jobs.len() > 0 {
+        remaining = budget().remaining;
+        if remaining < fix_jobs.len() {
+            await_user("back_off", "剩余 agent 预算不足以启动第 9 章门禁整改。请提高 agent_budget 后 resume。");
+            remaining = budget().remaining;
+            if remaining < fix_jobs.len() {
+                log("gate-fix stop: budget remaining=" + remaining.to_string());
+                break;
+            }
+        }
+        let fix_results = parallel(fix_jobs);
+        let k = 0;
+        for idx in fix_idx {
+            let fx = fix_results[k];
+            if fx != () && is_text(fx.agent_id) {
+                gate_resume[idx] = fx.agent_id;
+            }
+            k += 1;
+        }
+    }
+}
+
+let all_gates_passed = all_true(gate_passed_flags);
+if gate_target_ids.len() == 0 {
+    all_gates_passed = false;
+    log("ods-gate skipped: no targets");
+} else if all_gates_passed {
+    log("ods-gate STATIC_CHECKS_PASSED after " + gate_rounds.to_string() + " round(s)");
+} else {
+    log("ods-gate still blocked after " + gate_rounds.to_string() + " round(s)");
+}
+
+let gate_json_src = last_gate_by_id["workspace"];
+if gate_json_src == () && gate_target_ids.len() == 1 {
+    gate_json_src = last_gate_by_id[gate_target_ids[0]];
+}
+if gate_json_src != () && gate_json_src.success && is_map(gate_json_src.output) {
+    write_scratch_file("org-data-scope-gate.json", json_encode(gate_json_src.output));
+}
+
 // ---- report ----
 phase("Report");
 let md = "";
@@ -730,7 +1060,19 @@ md += "\n- land: ";
 md += json_encode(land);
 md += "\n- next_wave: ";
 md += next_wave_name(wave);
-md += "\n\n| 批次 | 实现 | 评审 | 验证 | 摘要 |\n| --- | --- | --- | --- | --- |\n";
+md += "\n- chapter9_static_gate: ";
+if all_gates_passed {
+    md += "STATIC_CHECKS_PASSED";
+} else if gate_target_ids.len() == 0 {
+    md += "skipped";
+} else {
+    md += "BLOCKED";
+}
+md += "\n- gate_rounds: ";
+md += gate_rounds.to_string();
+md += "\n- max_gate_rounds: ";
+md += max_gate_rounds.to_string();
+md += "\n\n| 批次 | 实现 | 评审 | 验证 | 第9章门禁 | 摘要 |\n| --- | --- | --- | --- | --- | --- |\n";
 
 i = 0;
 let completed_ids = [];
@@ -739,13 +1081,37 @@ for batch in selected {
     let impl_state = "failed";
     let review_state = "skipped";
     let verify_state = "skipped";
+    let gate_state = "skipped";
     let summary = "";
     let r = impl_results[i];
+    if land {
+        if all_gates_passed {
+            gate_state = "pass";
+        } else if gate_target_ids.len() > 0 {
+            gate_state = "fail";
+        }
+    } else {
+        let gi = 0;
+        for gid in gate_target_ids {
+            if gid == batch.id {
+                if gate_passed_flags[gi] == true {
+                    gate_state = "pass";
+                } else {
+                    gate_state = "fail";
+                }
+            }
+            gi += 1;
+        }
+    }
     if impl_ok[i] {
         impl_state = "ok";
-        completed_ids.push(batch.id);
         if is_map(r.output) && is_text(r.output.summary) {
             summary = r.output.summary;
+        }
+        if gate_state == "fail" {
+            blocked_ids.push(batch.id);
+        } else {
+            completed_ids.push(batch.id);
         }
     } else {
         blocked_ids.push(batch.id);
@@ -780,12 +1146,70 @@ for batch in selected {
     md += " | ";
     md += verify_state;
     md += " | ";
+    md += gate_state;
+    md += " | ";
     md += summary;
     md += " |\n";
     i += 1;
 }
 
-md += "\n未纳入本 workflow 的强制人工项：S2-11、第 10 章上线准入、A01-A32 真实账号与数据库验收。本地检查通过不得登记已验收。\n";
+md += "\n## 第 9 章静态门禁\n\n";
+md += "入口：`bash backend/scripts/check-org-data-scope.sh`。合同：docs/organization-data-scope-gate.md。\n";
+md += "自动通过仅允许登记「第 9 章静态门禁通过」，不得据此登记功能符合合同或业务验收。\n\n";
+if all_gates_passed {
+    md += "结果：STATIC_CHECKS_PASSED。\n";
+} else {
+    md += "结果：未通过，提交批次不得质量放行。待接入项与整改项均不得豁免。\n";
+}
+
+let dumped = [];
+if land {
+    dumped.push("workspace");
+} else {
+    for batch in selected {
+        dumped.push(batch.id);
+    }
+}
+for gid in dumped {
+    let g = last_gate_by_id[gid];
+    if g != () && is_gate_usable(g) {
+        md += "\n### ";
+        md += gid;
+        md += "\n\n- status: ";
+        md += g.output.status;
+        md += "\n- exit_code: ";
+        md += json_encode(g.output.exit_code);
+        md += "\n- command: `";
+        md += g.output.command;
+        md += "`\n";
+        if is_arr(g.output.findings) && g.output.findings.len() > 0 {
+            md += "\n| 规则 | 分类 | 路径 | 行 | 说明 |\n| --- | --- | --- | --- | --- |\n";
+            for f in g.output.findings {
+                md += "| ";
+                md += f.rule;
+                md += " | ";
+                md += f.category;
+                md += " | ";
+                md += f.path;
+                md += " | ";
+                md += json_encode(f.line);
+                md += " | ";
+                md += f.message;
+                md += " |\n";
+            }
+        }
+        if is_arr(g.output.not_proven) && g.output.not_proven.len() > 0 {
+            md += "\n本门禁不证明：\n";
+            for item in g.output.not_proven {
+                md += "- ";
+                md += item;
+                md += "\n";
+            }
+        }
+    }
+}
+
+md += "\n未纳入本 workflow 的强制人工项：第 4 节行为核验、S2-11、第 10 章上线准入、A01-A32 真实账号与数据库验收。静态门禁通过不得登记已验收。\n";
 let report_path = write_scratch_file("org-data-scope-wave-report.md", md);
 complete(#{
     path: report_path,
@@ -794,4 +1218,6 @@ complete(#{
     completed: completed_ids,
     blocked: blocked_ids,
     next_wave: next_wave_name(wave),
+    gate_passed: all_gates_passed,
+    gate_rounds: gate_rounds,
 });
