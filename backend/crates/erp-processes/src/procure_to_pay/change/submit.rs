@@ -139,10 +139,13 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<PurchaseChangeOrderView> {
         self.submit_change(change_id, req, actor).await?;
-        erp_read_models::purchase_center::PurchaseOrderReadService::new(self.db.clone())
-            .change_order_detail(change_id)
-            .await
-            .map_err(crate::Error::from)
+        erp_read_models::purchase_center::PurchaseOrderReadService::with_scope(
+            self.db.clone(),
+            crate::adapters::MongoPurchaseDataScope::shared(self.db.clone(), self.require_rbac()?.clone()),
+        )
+        .change_order_detail(change_id, actor)
+        .await
+        .map_err(crate::Error::from)
     }
 
     /// 撤回审批中的采购变更单，回到可修正草稿且 `subject_version` 不回退。
@@ -408,6 +411,8 @@ impl PurchaseOrderProcess {
                 organization_id,
                 now,
                 audit,
+                actor: actor.clone(),
+                rbac: self.require_rbac()?.clone(),
             },
         )
         .await;
@@ -577,6 +582,8 @@ impl PurchaseOrderProcess {
                 reason: req.reason.clone(),
                 now,
                 audit,
+                actor: actor.clone(),
+                rbac: self.require_rbac()?.clone(),
             },
         )
         .await
@@ -646,6 +653,15 @@ async fn persist_created_change_order(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                crate::adapters::purchase_access(db.clone(), rbac.clone())
+                    .require_object(
+                        &actor,
+                        "update",
+                        change_order.purchase_order_id.as_ref(),
+                        &[],
+                        session,
+                    )
+                    .await?;
                 persist_bound_change_document(
                     &db,
                     &rbac,

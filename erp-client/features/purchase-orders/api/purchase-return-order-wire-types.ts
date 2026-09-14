@@ -29,4 +29,9 @@ export type BackendPurchaseReturnOrderPage = {
     total: number
     page?: number
     page_size?: number
+    empty_reason?: string | null
+    scope_version?: string
+    policy_version?: number
+    organization_version?: number
+    scope_summary?: string
 }

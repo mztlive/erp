@@ -353,6 +353,10 @@ pub(super) struct PurchaseChangeStartPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: erp_audit::AuditLog,
+    /// 已认证操作人，用于事务内重验来源采购单范围。
+    pub actor: application_core::AuditActor,
+    /// 与写事务绑定的授权源。
+    pub rbac: erp_identity::SharedRbacService,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -388,6 +392,8 @@ pub(super) async fn persist_purchase_change_start(
         organization_id,
         now,
         audit,
+        actor,
+        rbac,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
@@ -395,6 +401,15 @@ pub(super) async fn persist_purchase_change_start(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                crate::adapters::purchase_access(db.clone(), rbac.clone())
+                    .require_object(
+                        &actor,
+                        "submit",
+                        change_order.purchase_order_id.as_ref(),
+                        &[],
+                        session,
+                    )
+                    .await?;
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, session)
                     .await

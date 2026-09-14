@@ -1,3 +1,4 @@
+import { isDataScopeChanged } from "@/features/data-scope/cache"
 import { collectExportPages } from "@/lib/list-export"
 import { apiGet } from "@/lib/api"
 import type {
@@ -168,14 +169,16 @@ export async function fetchActivePurchaseChangeOrder(
     }
 
     try {
-        const page = await apiGet<BackendPage<BackendPurchaseChangeOrder>>(
-            "/admin/purchase-change-orders",
-            {
-                purchase_order_id: purchaseOrderId,
-                page: 1,
-                page_size: 10,
-            },
-        )
+        const page = await apiGet<
+            BackendPage<BackendPurchaseChangeOrder> & {
+                empty_reason?: string | null
+                scope_version?: string
+            }
+        >("/admin/purchase-change-orders", {
+            purchase_order_id: purchaseOrderId,
+            page: 1,
+            page_size: 10,
+        })
         const active =
             (page.items ?? []).find(
                 (change) =>
@@ -188,7 +191,8 @@ export async function fetchActivePurchaseChangeOrder(
         } catch {
             return mapPurchaseChangeOrder(active)
         }
-    } catch {
+    } catch (error) {
+        if (isDataScopeChanged(error)) throw error
         return null
     }
 }

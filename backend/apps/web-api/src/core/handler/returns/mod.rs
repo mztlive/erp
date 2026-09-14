@@ -8,13 +8,14 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
+use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::dto::{
     CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView,
     PurchaseReturnOrderListParams, PurchaseReturnOrderView, ReceiptReversalView, SalesReturnCaseListParams,
     SalesReturnCaseView, SupplierRefundView,
 };
-use erp_read_models::returns_center::ReturnsReadService;
+use erp_read_models::returns_center::{PurchaseReturnListView, ReturnsReadService};
 use erp_returns::dto::{
     CancelCustomerRefundApprovalRequest, CancelPaymentReversalApprovalRequest,
     CancelReceiptReversalApprovalRequest, CancelSupplierRefundApprovalRequest, CommitCustomerRefundRequest,
@@ -124,16 +125,25 @@ pub async fn sales_return_case_create(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（扁平传递）
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回带范围版本的分页视图。
+///
+/// # 错误
+/// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
+///
+/// # 关键业务约束
+/// 沿来源采购单责任接入；缺范围返回空集并标记 `no_scope`。
 pub async fn purchase_return_order_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseReturnOrderListParams>,
-) -> Result<PageView<PurchaseReturnOrderView>> {
+) -> Result<PurchaseReturnListView> {
     let page = ReturnsReadService::new(state.db())
-        .purchase_return_order_list(&params)
+        .with_purchase_scope(MongoPurchaseDataScope::shared(state.db(), state.rbac()))
+        .purchase_return_order_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -150,16 +160,25 @@ pub async fn purchase_return_order_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `id` - 退货单 ID
 ///
 /// # 返回
 /// 返回完整退货单视图。
+///
+/// # 错误
+/// 无动作权限、不可见或不存在时拒绝。
+///
+/// # 关键业务约束
+/// 列表已授权不能作为详情凭证；沿来源采购单 detail 动作重验。
 pub async fn purchase_return_order_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseReturnOrderView> {
     let view = ReturnsReadService::new(state.db())
-        .purchase_return_order_detail(&id)
+        .with_purchase_scope(MongoPurchaseDataScope::shared(state.db(), state.rbac()))
+        .purchase_return_order_detail(&id, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

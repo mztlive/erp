@@ -8,7 +8,6 @@ use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrd
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use super::access::PurchaseAccess;
 use super::approval_query::load_document_approval;
 use super::dto::{PurchaseOrderCenterView, PurchaseOrderListItemView};
 use super::repository::{load_purchase_order_center_facts, PurchaseOrderListFacts};
@@ -73,7 +72,7 @@ impl PurchaseOrderReadService {
         Ok(PurchaseListView {
             scope_version: snapshot.context.scope_version,
             policy_version: snapshot.context.policy_version,
-            organization_version: snapshot.context.organizations.version,
+            organization_version: snapshot.context.organization_version,
             as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
             empty_reason: snapshot.no_scope.then_some("no_scope"),
             scope_summary: "采购单当前负责人及单据业务组织范围",
@@ -113,9 +112,7 @@ impl PurchaseOrderReadService {
     ) -> Result<PurchaseOrderCenterView> {
         let mut access_version = None;
         if let Some(actor) = actor {
-            let (_, version) = PurchaseAccess::new(self.db.clone(), self.require_rbac()?.clone())
-                .detail(actor, id)
-                .await?;
+            let (_, version) = self.access().detail(actor, id).await?;
             access_version = Some(version);
         }
         let facts = load_purchase_order_center_facts(&self.db, id, &mut NoTransaction).await?;
@@ -274,9 +271,7 @@ impl PurchaseOrderReadService {
             created_at: order.base.created_at,
         };
         if let (Some(actor), Some(expected)) = (actor, access_version) {
-            let (_, current) = PurchaseAccess::new(self.db.clone(), self.require_rbac()?.clone())
-                .detail(actor, id)
-                .await?;
+            let (_, current) = self.access().detail(actor, id).await?;
             if current != expected {
                 return Err(Error::ConflictError(
                     "DATA_SCOPE_CHANGED：数据范围或采购单已变化，请刷新".into(),

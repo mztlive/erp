@@ -3,7 +3,7 @@
 use erp_identity::AccessControlExt;
 use erp_identity::Permission;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
-use erp_read_models::purchase_center::access::PurchaseAccess;
+use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
@@ -86,7 +86,7 @@ impl PurchaseOrderProcess {
         action: &'static str,
     ) -> Result<PurchaseCommandAccess> {
         Ok(PurchaseCommandAccess {
-            access: PurchaseAccess::new(self.db.clone(), self.require_rbac()?.clone()),
+            access: crate::adapters::purchase_access(self.db.clone(), self.require_rbac()?.clone()),
             actor: actor.clone(),
             action,
         })

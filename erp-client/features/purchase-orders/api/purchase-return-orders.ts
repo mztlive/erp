@@ -37,24 +37,43 @@ export function projectPurchaseReturnOrder(
     }
 }
 
+export type PurchaseReturnOrderListResult = {
+    rows: PurchaseReturnOrderRow[]
+    emptyReason?: string | null
+    scopeVersion?: string
+    policyVersion?: number
+    organizationVersion?: number
+    scopeSummary?: string
+}
+
 /**
  * 按原采购单读取关联采购退货。PurchaseReturnOrder 为 NO_APPROVAL，
  * 列表投影不含审批绑定。
  *
  * @param purchaseOrderId 原采购单 ID。
+ * @param scopeVersion 跨页必须回传的范围版本。
  */
 export async function fetchPurchaseReturnOrders(
     purchaseOrderId: string,
-): Promise<PurchaseReturnOrderRow[]> {
+    scopeVersion?: string,
+): Promise<PurchaseReturnOrderListResult> {
     const page = await apiGet<BackendPurchaseReturnOrderPage>(
         "/admin/purchase-return-orders",
         {
             purchase_order_id: purchaseOrderId,
+            scope_version: scopeVersion,
             page: 1,
             page_size: PURCHASE_RETURN_ORDER_MAX_PAGE_SIZE,
             sort_by: "created_at",
             sort_dir: "desc",
         },
     )
-    return (page.items ?? []).map(projectPurchaseReturnOrder)
+    return {
+        rows: (page.items ?? []).map(projectPurchaseReturnOrder),
+        emptyReason: page.empty_reason,
+        scopeVersion: page.scope_version,
+        policyVersion: page.policy_version,
+        organizationVersion: page.organization_version,
+        scopeSummary: page.scope_summary,
+    }
 }

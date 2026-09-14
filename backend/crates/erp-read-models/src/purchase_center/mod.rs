@@ -9,15 +9,16 @@ pub mod procurement_responsibility;
 mod query;
 pub mod repository;
 mod scope;
+pub use change::query::PurchaseChangeListView;
 pub use scope::{PurchaseListParams, PurchaseListView};
 
-use crate::{Error, Result};
-use erp_identity::SharedRbacService;
+use erp_procurement::{FailClosedPurchaseDataScopePort, PurchaseDataScopePort};
+use std::sync::Arc;
 
 /// 使用提供方公开事实装配采购视图；构造本身不访问数据库。
 pub struct PurchaseOrderReadService {
     db: mongodb::Database,
-    rbac: Option<SharedRbacService>,
+    data_scope: Arc<dyn PurchaseDataScopePort>,
 }
 impl PurchaseOrderReadService {
     /// 以数据库句柄构造只读服务；查询各自保留原无事务读取边界。
@@ -26,22 +27,25 @@ impl PurchaseOrderReadService {
     /// * `db` - MongoDB 数据库
     ///
     /// # 返回
-    /// 返回未注入 RBAC 的服务。
+    /// 返回未注入范围 Port 的服务。
     ///
     /// # 错误
     /// 无。
     ///
     /// # 关键业务约束
-    /// 列表、详情与导出必须改用 `with_rbac`，未注入时拒绝放行。
+    /// 列表、详情与导出必须改用 `with_scope`，未注入时失败关闭。
     pub fn new(db: mongodb::Database) -> Self {
-        Self { db, rbac: None }
+        Self {
+            db,
+            data_scope: FailClosedPurchaseDataScopePort::shared(),
+        }
     }
 
-    /// 使用数据库句柄和当前 RBAC 服务构造只读查询服务。
+    /// 使用数据库句柄和采购范围 Port 构造只读查询服务。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
-    /// * `rbac` - 共享授权源
+    /// * `data_scope` - 组合层注入的采购范围 Port
     ///
     /// # 返回
     /// 返回可解析采购范围的服务；构造不执行查询。
@@ -50,28 +54,26 @@ impl PurchaseOrderReadService {
     /// 无。
     ///
     /// # 关键业务约束
-    /// HTTP 列表、详情、候选与导出必须经此入口。
-    pub fn with_rbac(db: mongodb::Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac: Some(rbac) }
+    /// HTTP 列表、详情、候选、导出、变更单与退货必须经此入口。
+    pub fn with_scope(db: mongodb::Database, data_scope: Arc<dyn PurchaseDataScopePort>) -> Self {
+        Self { db, data_scope }
     }
 
-    /// 获取采购范围解析使用的授权源；未注入时保持失败关闭。
+    /// 构造绑定当前 Port 的采购访问器。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 返回已注入的 RBAC 服务。
+    /// 返回无授权缓存的访问器。
     ///
     /// # 错误
-    /// 未注入时返回内部错误，不得跳过范围解析。
+    /// 无。
     ///
     /// # 关键业务约束
-    /// 不得回退为无范围的全量读取。
-    fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("采购单范围解析需要授权源".into()))
+    /// 不得在此回退构造身份域 Service。
+    fn access(&self) -> access::PurchaseAccess {
+        access::PurchaseAccess::new(self.db.clone(), Arc::clone(&self.data_scope))
     }
 }
 

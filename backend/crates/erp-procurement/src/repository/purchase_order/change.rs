@@ -25,6 +25,7 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// # 参数
     /// * `purchase_order_id` - 可选原采购单筛选
     /// * `status` - 可选状态代码筛选
+    /// * `authorized_purchase_order_ids` - 已证明可见的来源采购单；`None` 表示公司范围不限制
     /// * `page` - 页码，从 1 开始
     /// * `page_size` - 单页条数
     /// * `sort_ascending` - `true` 按创建时间升序，否则降序
@@ -39,12 +40,13 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
         &self,
         purchase_order_id: Option<&str>,
         status: Option<&str>,
+        authorized_purchase_order_ids: Option<&[String]>,
         page: u64,
         page_size: u32,
         sort_ascending: bool,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PurchaseChangeOrder>> {
-        let filter = change_order_filter(purchase_order_id, status);
+        let filter = change_order_filter(purchase_order_id, status, authorized_purchase_order_ids);
         let skip = page.saturating_sub(1).saturating_mul(u64::from(page_size));
         let direction = if sort_ascending { 1 } else { -1 };
         let options = FindOptions::builder()
@@ -115,8 +117,46 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
             .build();
         mongo_ops::find_many(
             &self.db.collection::<PurchaseChangeOrder>(PURCHASE_CHANGE_ORDERS),
-            change_order_filter(Some(purchase_order_id.as_ref()), None),
+            change_order_filter(Some(purchase_order_id.as_ref()), None, None),
             options,
+            executor,
+        )
+        .await
+    }
+
+    /// 装载变更单查询的有界身份与版本集合，用于跨页一致性校验。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 可选原采购单筛选
+    /// * `status` - 可选状态代码筛选
+    /// * `authorized_purchase_order_ids` - 已证明可见的来源采购单；`None` 表示公司范围不限制
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 行；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 版本集合必须与列表同一授权条件和筛选快照。
+    pub async fn query_change_versions(
+        &self,
+        purchase_order_id: Option<&str>,
+        status: Option<&str>,
+        authorized_purchase_order_ids: Option<&[String]>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<super::scope::PurchaseVersion>> {
+        persistence_core::mongo_ops::find_many(
+            &self
+                .db
+                .collection::<super::scope::PurchaseVersion>(PURCHASE_CHANGE_ORDERS),
+            change_order_filter(purchase_order_id, status, authorized_purchase_order_ids),
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "version": 1 })
+                .sort(doc! { "id": 1 })
+                .limit(10001)
+                .build(),
             executor,
         )
         .await
@@ -247,18 +287,69 @@ impl<'a> PurchaseChangeSubmissionRepository<'a> {
 /// # 参数
 /// * `purchase_order_id` - 可选原采购单筛选
 /// * `status` - 可选状态代码筛选
+/// * `authorized_purchase_order_ids` - 已证明可见的来源采购单；`None` 表示不额外限制
 ///
 /// # 返回
 /// 返回 MongoDB 查询条件。
-fn change_order_filter(purchase_order_id: Option<&str>, status: Option<&str>) -> Document {
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 授权空集必须保持无结果，不得退化为查询全部变更单。
+fn change_order_filter(
+    purchase_order_id: Option<&str>,
+    status: Option<&str>,
+    authorized_purchase_order_ids: Option<&[String]>,
+) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-    if let Some(purchase_order_id) = purchase_order_id {
-        filter.insert("purchase_order_id", purchase_order_id);
-    }
     if let Some(status) = status {
         filter.insert("status", status);
     }
+    match (purchase_order_id, authorized_purchase_order_ids) {
+        (Some(purchase_order_id), None) => {
+            filter.insert("purchase_order_id", purchase_order_id);
+        }
+        (Some(purchase_order_id), Some(authorized)) => {
+            if authorized.iter().any(|id| id == purchase_order_id) {
+                filter.insert("purchase_order_id", purchase_order_id);
+            } else {
+                filter.insert("$expr", false);
+            }
+        }
+        (None, Some(authorized)) => {
+            if authorized.is_empty() {
+                filter.insert("$expr", false);
+            } else {
+                filter.insert("purchase_order_id", doc! { "$in": authorized });
+            }
+        }
+        (None, None) => {}
+    }
     filter
+}
+
+#[cfg(test)]
+mod tests {
+    use super::change_order_filter;
+    use mongodb::bson::doc;
+
+    #[test]
+    fn missing_authorized_source_ids_stay_empty() {
+        use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+        assert_eq!(
+            change_order_filter(None, None, Some(&[])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+        assert_eq!(
+            change_order_filter(Some("po-1"), None, Some(&["po-2".into()])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+        assert_eq!(
+            change_order_filter(Some("po-1"), None, Some(&["po-1".into()])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1" }
+        );
+    }
 }
 
 impl<'a> PurchaseChangeSubmissionLineRepository<'a> {

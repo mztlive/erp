@@ -145,6 +145,8 @@ pub struct PurchaseReturnOrderFilter {
     pub purchase_return_no: Option<String>,
     /// 原采购单；`None` 表示不筛选。
     pub purchase_order_id: Option<PurchaseOrderId>,
+    /// 已证明可见的来源采购单；`None` 表示公司范围不限制。
+    pub authorized_purchase_order_ids: Option<Vec<String>>,
     /// 退货单状态；`None` 表示不筛选。
     pub status: Option<PurchaseReturnStatus>,
     /// 页码（1 起）。
@@ -169,11 +171,31 @@ impl QueryFilter for PurchaseReturnOrderFilter {
             "purchase_return_no",
             self.purchase_return_no.as_deref(),
         );
-        if let Some(purchase_order_id) = &self.purchase_order_id {
-            filter.insert("purchase_order_id", purchase_order_id.to_string());
-        }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        match (
+            self.purchase_order_id.as_ref().map(ToString::to_string),
+            self.authorized_purchase_order_ids.as_deref(),
+        ) {
+            (Some(purchase_order_id), None) => {
+                filter.insert("purchase_order_id", purchase_order_id);
+            }
+            (Some(purchase_order_id), Some(authorized)) => {
+                if authorized.iter().any(|id| id == &purchase_order_id) {
+                    filter.insert("purchase_order_id", purchase_order_id);
+                } else {
+                    filter.insert("$expr", false);
+                }
+            }
+            (None, Some(authorized)) => {
+                if authorized.is_empty() {
+                    filter.insert("$expr", false);
+                } else {
+                    filter.insert("purchase_order_id", doc! { "$in": authorized });
+                }
+            }
+            (None, None) => {}
         }
         filter
     }
@@ -379,6 +401,47 @@ impl<'a> PurchaseReturnOrderRepository<'a> {
             total: total as i64,
         })
     }
+
+    /// 装载采购退货查询的有界身份与版本集合，用于跨页一致性校验。
+    ///
+    /// # 参数
+    /// * `filter` - 与列表相同的筛选
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 行主键与版本；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 版本集合必须与列表同一授权条件和筛选快照。
+    pub async fn query_purchase_return_versions(
+        &self,
+        filter: &PurchaseReturnOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseReturnVersion>> {
+        persistence_core::mongo_ops::find_many(
+            &self.collection().clone_with_type::<PurchaseReturnVersion>(),
+            filter.to_doc(),
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "version": 1 })
+                .sort(doc! { "id": 1 })
+                .limit(10001)
+                .build(),
+            executor,
+        )
+        .await
+    }
+}
+
+/// 跨页校验使用的采购退货身份和版本。
+#[derive(Debug, serde::Deserialize, Hash)]
+pub struct PurchaseReturnVersion {
+    /// 采购退货单稳定主键。
+    pub id: String,
+    /// 采购退货单乐观锁版本。
+    pub version: u64,
 }
 
 impl<'a> PurchaseReturnLineRepository<'a> {
@@ -806,6 +869,7 @@ mod tests {
         let filter = PurchaseReturnOrderFilter {
             purchase_return_no: None,
             purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
+            authorized_purchase_order_ids: None,
             status: Some(PurchaseReturnStatus::Returned),
             page: 1,
             page_size: 20,

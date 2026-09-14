@@ -8,11 +8,12 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
+use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
-    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest, PageView,
+    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest,
     PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseOrderListParams,
     SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, StartPurchaseChangeRequest,
     StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
@@ -22,12 +23,32 @@ use erp_procurement::service::purchase_order::PurchaseOrderService;
 use erp_read_models::purchase_center::dto::{
     CreationBasisListParams, CreationBasisView, PurchaseChangeOrderView, PurchaseOrderCenterView,
 };
-use erp_read_models::purchase_center::{PurchaseListView, PurchaseOrderReadService};
+use erp_read_models::purchase_center::{PurchaseChangeListView, PurchaseListView, PurchaseOrderReadService};
 
 use crate::{
     app_state::AppState,
     core::{errors::Result, response::ApiResponse},
 };
+
+/// 构造已注入采购范围 Port 的只读服务。
+///
+/// # 参数
+/// * `state` - 应用状态
+///
+/// # 返回
+/// 返回可解析采购范围的读服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// HTTP 列表、详情、候选、导出和变更单必须经此入口，不得回退失败关闭 Port。
+fn purchase_reads(state: &AppState) -> PurchaseOrderReadService {
+    PurchaseOrderReadService::with_scope(
+        state.db(),
+        MongoPurchaseDataScope::shared(state.db(), state.rbac()),
+    )
+}
 
 #[permission_macros::permission(
     group = "采购单",
@@ -56,7 +77,7 @@ pub async fn purchase_order_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseOrderListParams>,
 ) -> Result<PurchaseListView> {
-    let page = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
+    let page = purchase_reads(&state)
         .purchase_order_list(&params, &actor)
         .await?;
 
@@ -90,7 +111,7 @@ pub async fn purchase_order_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
-    let view = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
+    let view = purchase_reads(&state)
         .purchase_order_detail(&id, Some(&actor))
         .await?;
 
@@ -300,7 +321,7 @@ pub async fn purchase_creation_basis_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<CreationBasisListParams>,
 ) -> Result<Vec<CreationBasisView>> {
-    let views = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
+    let views = purchase_reads(&state)
         .creation_basis_list(&params, &actor)
         .await?;
 
@@ -440,16 +461,24 @@ pub async fn purchase_change_cancel_approval(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数（扁平传递，含跨页 `scope_version`）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回带范围版本的分页视图。
+///
+/// # 错误
+/// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
+///
+/// # 关键业务约束
+/// 沿来源采购单责任接入；缺范围返回空集并标记 `no_scope`。
 pub async fn purchase_change_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseChangeOrderListParams>,
-) -> Result<PageView<PurchaseChangeOrderView>> {
-    let page = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
-        .change_order_list(&params)
+) -> Result<PurchaseChangeListView> {
+    let page = purchase_reads(&state)
+        .change_order_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -466,16 +495,24 @@ pub async fn purchase_change_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `id` - 变更单 ID
 ///
 /// # 返回
 /// 返回变更单视图。
+///
+/// # 错误
+/// 无动作权限、不可见或不存在时拒绝。
+///
+/// # 关键业务约束
+/// 列表已授权不能作为详情凭证；沿来源采购单 detail 动作重验。
 pub async fn purchase_change_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = PurchaseOrderReadService::with_rbac(state.db(), state.rbac())
-        .change_order_detail(&id)
+    let view = purchase_reads(&state)
+        .change_order_detail(&id, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

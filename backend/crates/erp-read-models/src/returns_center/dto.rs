@@ -206,6 +206,9 @@ pub struct PurchaseReturnOrderView {
 /// 采购退货单列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PurchaseReturnOrderListParams {
+    /// 跨页必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 采购退货单号模糊筛选。
     pub purchase_return_no: Option<String>,
     /// 原采购单筛选。
@@ -587,6 +590,7 @@ mod tests {
     #[test]
     fn return_and_refund_list_params_normalize() {
         let purchase = PurchaseReturnOrderListParams {
+            scope_version: None,
             purchase_return_no: Some("PR-1".to_string()),
             purchase_order_id: None,
             status: Some(PurchaseReturnStatus::Draft),

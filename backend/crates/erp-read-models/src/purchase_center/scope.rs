@@ -2,16 +2,17 @@
 
 use super::dto::PurchaseOrderListItemView;
 use super::repository::{load_purchase_order_list_page, PurchaseOrderListFacts};
-use super::{access::PurchaseAccess, PurchaseOrderReadService};
+use super::PurchaseOrderReadService;
 use crate::{Error, Result};
 use application_core::{AuditActor, FilterOption, FilteredPage};
-use erp_identity::{service::access_control::resolve::AuthorizedDataScope, AccessControlExt};
+use erp_identity::AccessControlExt;
 use erp_procurement::{
     dto::purchase_order::{PurchaseOrderListParams, SortDir},
     repository::{
         purchase_order::{PurchaseOrderFilter, PurchaseOrderRow},
         PurchaseOrderExt,
     },
+    PurchaseResolvedScope,
 };
 use persistence_core::Transactional;
 use serde::Serialize;
@@ -54,7 +55,7 @@ pub(super) struct PurchaseSnapshot {
     /// 当前范围内的负责人候选。
     pub owner_options: Vec<FilterOption>,
     /// 身份授权上下文。
-    pub context: AuthorizedDataScope,
+    pub context: PurchaseResolvedScope,
     /// 授权集合本身为空。
     pub no_scope: bool,
 }
@@ -80,7 +81,7 @@ impl PurchaseOrderReadService {
         actor: &AuditActor,
     ) -> Result<PurchaseSnapshot> {
         let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
+        let access = self.access();
         let params = params.clone();
         let actor = actor.clone();
         self.db
@@ -88,9 +89,7 @@ impl PurchaseOrderReadService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope) = PurchaseAccess::new(db.clone(), rbac)
-                        .resolve(&actor, "list", &[], executor)
-                        .await?;
+                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
                     params.validate()?;
                     let query = params.normalized()?;
                     let (keyword_sales_order_ids, keyword_supplier_ids) =

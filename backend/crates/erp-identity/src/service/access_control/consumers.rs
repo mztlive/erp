@@ -5,7 +5,8 @@ use crate::error::{Error, Result};
 
 /// 已由真实消费者接入公共解析的资源动作及必需维度。
 ///
-/// 工作流与工作台尚未接线，不得列入本表。采购变更单及退货入口未接线。
+/// 工作流与工作台尚未接线，不得列入本表。采购变更单及退货沿 `purchase_order`
+/// 资源动作接入，不单独登记平行资源。
 /// 初始化清单见 `predefined_data_scopes`，不得当作本表替代。
 const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("org_unit", &["list", "manage"], &[ScopeDimension::InternalOrg]),
@@ -98,6 +99,8 @@ mod tests {
         assert!(registration("purchase_order", "delete").is_ok());
         assert!(registration("purchase_order", "submit").is_ok());
         assert!(registration("purchase_order", "cancel_approval").is_ok());
+        assert!(registration("purchase_change_order", "list").is_err());
+        assert!(registration("purchase_return_order", "list").is_err());
         assert!(registration("contract", "delete").is_err());
         assert!(registration("purchase_order", "transfer").is_err());
         assert!(registration("work_item", "list").is_err());

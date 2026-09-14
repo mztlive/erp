@@ -69,7 +69,7 @@ export function PurchaseReturnOrderRelatedSection({
         <DetailRecordSection
             title="采购退货"
             count={query.data?.length}
-            compact={query.isSuccess && query.data.length === 0}
+            compact={query.isSuccess && (query.data?.length ?? 0) === 0}
         >
             {query.isPending ? (
                 <p className="text-sm text-muted-foreground">

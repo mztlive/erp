@@ -56,7 +56,11 @@ impl ReturnsProcess {
         )
         .await?;
         ReturnsReadService::new(self.db.clone())
-            .purchase_return_order_detail(&order_id)
+            .with_purchase_scope(crate::adapters::MongoPurchaseDataScope::shared(
+                self.db.clone(),
+                self.rbac.clone(),
+            ))
+            .purchase_return_order_detail(&order_id, actor)
             .await
             .map_err(crate::Error::from)
     }
@@ -269,6 +273,15 @@ async fn persist_created_purchase_return_order(
                     actor: &actor,
                     audit: &audit,
                 };
+                crate::adapters::purchase_access(db.clone(), rbac.clone())
+                    .require_object(
+                        &actor,
+                        "update",
+                        order.purchase_order_id.as_ref(),
+                        &[],
+                        session,
+                    )
+                    .await?;
                 persist_creation(&mut creation, session).await?;
                 Ok::<(), crate::Error>(())
             })

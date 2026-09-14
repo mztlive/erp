@@ -367,7 +367,7 @@ pub async fn persist_basis_draft(
         submission_lines.push(build_submission_line(&submission_id, (index + 1) as u32, line)?);
     }
     order.attach_draft_submission(submission.base.id.clone().into())?;
-    erp_read_models::purchase_center::access::PurchaseAccess::new(db.clone(), rbac.clone())
+    crate::adapters::purchase_access(db.clone(), rbac.clone())
         .ensure_create_and_submit(command.actor, &order, session)
         .await?;
     let write = PreparedDraftWrite {

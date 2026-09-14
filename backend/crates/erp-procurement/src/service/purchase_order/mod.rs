@@ -1,5 +1,6 @@
 //! 采购订单单域构造、状态校验与调用方事务内持久化。
 use mongodb::Database;
+pub mod access;
 pub mod allocation_maintenance;
 pub mod cancel_approval;
 pub mod change;

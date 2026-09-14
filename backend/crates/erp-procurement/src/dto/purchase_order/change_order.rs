@@ -115,6 +115,9 @@ pub struct PurchaseChangeEffectResult {
 /// 采购变更单列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PurchaseChangeOrderListParams {
+    /// 跨页必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 原采购单筛选。
     pub purchase_order_id: Option<String>,
     /// 状态筛选。

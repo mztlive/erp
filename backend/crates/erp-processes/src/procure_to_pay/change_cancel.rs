@@ -205,6 +205,10 @@ pub(super) struct PurchaseChangeCancelPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: erp_audit::AuditLog,
+    /// 已认证操作人，用于事务内重验来源采购单范围。
+    pub actor: application_core::AuditActor,
+    /// 与写事务绑定的授权源。
+    pub rbac: erp_identity::SharedRbacService,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回变更单。
@@ -236,12 +240,23 @@ pub(super) async fn persist_purchase_change_cancel(
         reason,
         now,
         audit,
+        actor,
+        rbac,
     } = input;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                crate::adapters::purchase_access(db.clone(), rbac.clone())
+                    .require_object(
+                        &actor,
+                        "cancel_approval",
+                        change_order.purchase_order_id.as_ref(),
+                        &[],
+                        session,
+                    )
+                    .await?;
                 if let PreparedExecution::Apply(writes) = prepared {
                     persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, session)
                         .await?;
