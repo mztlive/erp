@@ -2,19 +2,16 @@
 
 use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
-use erp_identity::access_control::ScopeClause;
-use erp_identity::entity::organization::OrgTree;
-use erp_identity::entity::organization_change::OrganizationState;
-use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
-use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use crate::entity::customer::AssignmentRole;
 use crate::error::{Error, Result};
+use crate::ports::{CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope};
 use crate::repository::scope::{CustomerReadScope, CustomerScopeClause};
 use crate::repository::CustomerExt;
 
@@ -22,15 +19,15 @@ use crate::repository::CustomerExt;
 #[derive(Clone)]
 pub struct CustomerAccess {
     db: Database,
-    rbac: SharedRbacService,
+    scope: Arc<dyn CustomerDataScopePort>,
 }
 
 impl CustomerAccess {
-    /// 绑定身份与客户归属事实来源。
+    /// 绑定客户归属事实来源与范围授权 Port。
     ///
     /// # 参数
-    /// * `db` - 身份与客户集合所在数据库
-    /// * `rbac` - 现有 RBAC 快照服务
+    /// * `db` - 客户集合所在数据库
+    /// * `scope` - 组合层注入的客户范围 Port
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
@@ -39,9 +36,9 @@ impl CustomerAccess {
     /// 无。
     ///
     /// # 关键业务约束
-    /// 不得在构造时补公司范围或读取登录人默认组织。
-    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
-        Self { db, rbac }
+    /// 不得在构造时补公司范围或读取登录人默认组织；不得直接构造身份域 Service。
+    pub fn new(db: Database, scope: Arc<dyn CustomerDataScopePort>) -> Self {
+        Self { db, scope }
     }
 
     /// 在调用方事务内证明资源动作并映射客户责任条件。
@@ -52,7 +49,7 @@ impl CustomerAccess {
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回身份上下文和客户授权条件。
+    /// 返回已解析范围事实和客户授权条件。
     ///
     /// # 错误
     /// 无动作权限返回 Forbidden；查询超限或组织关系非法时拒绝。
@@ -64,10 +61,8 @@ impl CustomerAccess {
         actor: &AuditActor,
         action: &str,
         executor: &mut dyn Executor,
-    ) -> Result<(AuthorizedDataScope, CustomerReadScope)> {
-        let mut access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-            .resolve(actor, "customer", action, executor)
-            .await?;
+    ) -> Result<(CustomerResolvedScope, CustomerReadScope)> {
+        let mut access = self.scope.resolve(actor, action, executor).await?;
         let as_of = business_date(access.as_of)?;
         let assignments = self
             .db
@@ -124,7 +119,7 @@ impl CustomerAccess {
         actor: &AuditActor,
         action: &str,
         customer_id: &str,
-    ) -> Result<AuthorizedDataScope> {
+    ) -> Result<CustomerResolvedScope> {
         let this = self.clone();
         let actor = actor.clone();
         let action = action.to_string();
@@ -160,7 +155,7 @@ impl CustomerAccess {
         action: &str,
         customer_id: &str,
         executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
+    ) -> Result<CustomerResolvedScope> {
         let (access, scope) = self.resolve(&actor, action, executor).await?;
         let found = self
             .db
@@ -186,7 +181,7 @@ impl CustomerAccess {
     ///
     /// # 关键业务约束
     /// 资料根命令与客户角色创建共用本检查，不得把请求中的负责销售当作授权。
-    pub async fn ensure_create(&self, actor: &AuditActor) -> Result<AuthorizedDataScope> {
+    pub async fn ensure_create(&self, actor: &AuditActor) -> Result<CustomerResolvedScope> {
         let this = self.clone();
         let actor = actor.clone();
         self.db
@@ -216,10 +211,10 @@ impl CustomerAccess {
         &self,
         actor: &AuditActor,
         executor: &mut dyn Executor,
-    ) -> Result<AuthorizedDataScope> {
+    ) -> Result<CustomerResolvedScope> {
         let (access, scope) = self.resolve(actor, "create", executor).await?;
-        let owner_org = access.organizations.own_org(actor.id(), access.as_of)?;
-        if !scope.allows_creation(actor.id(), owner_org) {
+        let owner_org = self.scope.own_org(actor.id(), access.as_of, executor).await?;
+        if !scope.allows_creation(actor.id(), owner_org.as_deref()) {
             return Err(Error::Forbidden("当前账号无权在授权范围内创建客户".into()));
         }
         Ok(access)
@@ -257,7 +252,7 @@ impl CustomerAccess {
     /// 按各角色组织目标批量解析当前主负责人所属组织对应的客户。
     ///
     /// # 参数
-    /// * `access` - 已解析的身份范围
+    /// * `access` - 已解析的客户范围事实
     /// * `as_of` - 客户归属自然日
     /// * `executor` - 调用方执行器
     ///
@@ -271,72 +266,59 @@ impl CustomerAccess {
     /// 组织筛选与授权都只看当前主负责人所属组织，不看协作人员组织。
     async fn org_owned_customers(
         &self,
-        access: &AuthorizedDataScope,
+        access: &CustomerResolvedScope,
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<(Vec<String>, Vec<String>)>> {
         let mut sets = Vec::new();
-        for clause in access
-            .scope
-            .role_clauses
-            .iter()
-            .chain(access.scope.user_limit.iter())
-        {
+        for clause in access.role_clauses.iter().chain(access.user_limit.iter()) {
             if clause.org_unit_ids.is_empty() {
                 continue;
             }
-            let orgs = clause.org_unit_ids.iter().cloned().collect::<Vec<_>>();
+            let orgs = clause.org_unit_ids.clone();
             if sets.iter().any(|(existing, _)| existing == &orgs) {
                 continue;
             }
-            let customers = self
-                .customers_owned_in_orgs(
-                    &access.organizations,
-                    &clause.org_unit_ids,
-                    access.as_of,
-                    as_of,
-                    executor,
-                )
+            let org_ids = orgs.iter().cloned().collect::<BTreeSet<_>>();
+            let members = self
+                .scope
+                .org_member_ids(&org_ids, access.as_of, executor)
                 .await?;
+            ensure_limit(members.len(), "组织成员超过查询上限")?;
+            let customers = self.customers_owned_by_members(&members, as_of, executor).await?;
             sets.push((orgs, customers));
         }
         Ok(sets)
     }
 
-    /// 将内部组织展开为当前主属成员，再取其当前负责的客户。
+    /// 按已解析成员读取其当前负责的客户。
     ///
     /// # 参数
-    /// * `state` - 同一授权时点的组织事实
-    /// * `org_ids` - 已由 DataScope 展开的内部组织
-    /// * `at` - 授权时点，用于成员有效期
+    /// * `members` - 组织在授权时点的有效主属成员
     /// * `as_of` - 客户归属自然日
     /// * `executor` - 调用方执行器
     ///
     /// # 返回
-    /// 返回这些组织当前成员作为主责的客户 ID。
+    /// 返回这些成员作为主责的客户 ID。
     ///
     /// # 错误
-    /// 成员或客户集合超过查询上限时拒绝。
+    /// 客户集合超过查询上限时拒绝。
     ///
     /// # 关键业务约束
     /// 空成员集保持空结果，不得查询全部客户。
-    async fn customers_owned_in_orgs(
+    async fn customers_owned_by_members(
         &self,
-        state: &OrganizationState,
-        org_ids: &BTreeSet<String>,
-        at: Instant,
+        members: &[String],
         as_of: BusinessDate,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let members = member_ids(state, org_ids, at);
-        ensure_limit(members.len(), "组织成员超过查询上限")?;
         if members.is_empty() {
             return Ok(Vec::new());
         }
         let mut customers = self
             .db
             .customer_assignments()
-            .current_owners(None, Some(&members), as_of, executor)
+            .current_owners(None, Some(members), as_of, executor)
             .await?
             .into_iter()
             .map(|assignment| assignment.customer_id.to_string())
@@ -346,25 +328,6 @@ impl CustomerAccess {
         ensure_limit(customers.len(), "组织主责客户超过查询上限")?;
         Ok(customers)
     }
-}
-
-/// 判断角色条款是否构成有效客户范围规则。
-///
-/// # 参数
-/// * `clauses` - 身份域已解析的角色正向范围
-///
-/// # 返回
-/// 任一条款含公司、主责、协作或组织目标时为 true。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 规则存在但当前无对象不得标为无范围；空条款保持空集且不得补公司。
-pub(super) fn has_scope_rules(clauses: &[ScopeClause]) -> bool {
-    clauses.iter().any(|clause| {
-        clause.company || clause.self_owned || clause.collaborative || !clause.org_unit_ids.is_empty()
-    })
 }
 
 /// 参与关系仅补充客户明确登记的读取动作。
@@ -402,38 +365,10 @@ pub(super) fn business_date(at: Instant) -> Result<BusinessDate> {
     Ok(date.format("%Y-%m-%d").to_string().parse()?)
 }
 
-/// 展开查询参数中的组织及其可选下级。
-///
-/// # 参数
-/// * `state` - 当前组织事实
-/// * `org_ids` - 请求中的组织 ID
-/// * `include_descendants` - 是否包含有效下级
-///
-/// # 返回
-/// 返回启用节点的组织 ID 集合。
-///
-/// # 错误
-/// 未知组织拒绝；不得忽略后查询全部组织。
-///
-/// # 关键业务约束
-/// 筛选只能收窄授权结果，展开失败必须返回校验错误。
-pub(super) fn expand_org_filter(
-    state: &OrganizationState,
-    org_ids: &[String],
-    include_descendants: bool,
-) -> Result<BTreeSet<String>> {
-    let tree = OrgTree::new(&state.units)?;
-    let mut expanded = BTreeSet::new();
-    for id in org_ids {
-        expanded.extend(tree.expand(id, include_descendants)?);
-    }
-    Ok(expanded)
-}
-
 /// 映射同角色正向范围和独立个人上限。
 ///
 /// # 参数
-/// * `access` - 身份域解析结果
+/// * `access` - 已解析的客户范围事实
 /// * `user` - 当前账号
 /// * `owned` - 当前主责客户
 /// * `collaborating` - 当前协作客户
@@ -449,7 +384,7 @@ pub(super) fn expand_org_filter(
 /// # 关键业务约束
 /// 角色并集与个人上限分别保留；缺范围保持空集。
 fn customer_scope(
-    access: &AuthorizedDataScope,
+    access: &CustomerResolvedScope,
     user: &str,
     owned: &[String],
     collaborating: &[String],
@@ -457,13 +392,11 @@ fn customer_scope(
     org_owned: &[(Vec<String>, Vec<String>)],
 ) -> CustomerReadScope {
     let roles = access
-        .scope
         .role_clauses
         .iter()
         .map(|clause| map_clause(clause, user, collaborating, org_owned))
         .collect::<Vec<_>>();
     let user_limit = access
-        .scope
         .user_limit
         .as_ref()
         .map(|clause| map_clause(clause, user, collaborating, org_owned));
@@ -484,10 +417,10 @@ fn customer_scope(
     }
 }
 
-/// 将身份域条款映射为客户责任条款。
+/// 将已解析条款映射为客户责任条款。
 ///
 /// # 参数
-/// * `clause` - 身份域正向范围
+/// * `clause` - Port 返回的正向范围
 /// * `user` - 当前账号
 /// * `collaborating` - 当前协作客户
 /// * `org_owned` - 组织到客户的预计算结果
@@ -501,7 +434,7 @@ fn customer_scope(
 /// # 关键业务约束
 /// 协作客户集合只在条款声明 Collaborative 时填入。
 fn map_clause(
-    clause: &ScopeClause,
+    clause: &CustomerResolvedClause,
     user: &str,
     collaborating: &[String],
     _org_owned: &[(Vec<String>, Vec<String>)],
@@ -514,7 +447,7 @@ fn map_clause(
         } else {
             Vec::new()
         },
-        owner_org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
+        owner_org_unit_ids: clause.org_unit_ids.clone(),
     }
 }
 
@@ -585,9 +518,7 @@ fn union_clauses(
     let mut result: Option<Vec<String>> = Some(Vec::new());
     for clause in roles {
         result = union_ids(result, clause_ids(clause, owned, org_owned));
-        if result.is_none() {
-            return None;
-        }
+        result.as_ref()?;
     }
     result
 }
@@ -684,37 +615,6 @@ fn ensure_limit(count: usize, message: &str) -> Result<()> {
     Ok(())
 }
 
-/// 读取指定组织在给定时点的有效主属成员。
-///
-/// # 参数
-/// * `state` - 组织事实
-/// * `org_ids` - 内部组织集合
-/// * `at` - 授权时点
-///
-/// # 返回
-/// 返回排序去重后的人员 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 过期或未生效成员不得进入当前主责组织筛选。
-pub(super) fn member_ids(state: &OrganizationState, org_ids: &BTreeSet<String>, at: Instant) -> Vec<String> {
-    let mut ids = state
-        .memberships
-        .iter()
-        .filter(|membership| {
-            !membership.base.is_deleted()
-                && org_ids.contains(&membership.org_unit_id)
-                && membership.validity.contains(at)
-        })
-        .map(|membership| membership.user_id.clone())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -782,24 +682,6 @@ mod tests {
             ..Default::default()
         };
         assert!(union_clauses(&[company], &[], &[]).is_none());
-    }
-
-    #[test]
-    fn configured_self_owned_is_not_no_scope_when_objects_are_empty() {
-        assert!(!has_scope_rules(&[]));
-        assert!(!has_scope_rules(&[ScopeClause::default()]));
-        assert!(has_scope_rules(&[ScopeClause {
-            self_owned: true,
-            ..Default::default()
-        }]));
-        assert!(has_scope_rules(&[ScopeClause {
-            collaborative: true,
-            ..Default::default()
-        }]));
-        assert!(has_scope_rules(&[ScopeClause {
-            company: true,
-            ..Default::default()
-        }]));
     }
 
     #[test]

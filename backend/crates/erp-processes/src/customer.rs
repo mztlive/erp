@@ -3,11 +3,11 @@
 use crate::Result;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
-use erp_customer::{CustomerAccess, CustomerExt};
+use erp_customer::CustomerExt;
 use erp_identity::SharedRbacService;
 use mongodb::Database;
 
-use crate::adapters::customer_service;
+use crate::adapters::{customer_access, customer_service};
 use crate::audit::run_audited;
 
 /// Process module name.
@@ -45,7 +45,7 @@ pub async fn delete_customer(
     let customer_id = id.clone();
     run_audited(&db, audit, move |db, session| {
         Box::pin(async move {
-            CustomerAccess::new(db.clone(), rbac)
+            customer_access(db.clone(), rbac)
                 .require_with(actor_for_tx, "delete", &customer_id, session)
                 .await?;
             db.customer_accounts().soft_delete(&mut account, session).await?;

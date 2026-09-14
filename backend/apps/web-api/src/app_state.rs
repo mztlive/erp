@@ -509,12 +509,12 @@ impl AppState {
 
     /// Customer account service with composition adapters.
     pub fn customer_service(&self) -> erp_customer::CustomerService {
-        erp_processes::adapters::customer_service(self.db())
+        erp_processes::adapters::scoped_customer_service(self.db(), self.rbac())
     }
 
     /// Customer assignment service with composition adapters.
     pub fn customer_assignment_service(&self) -> erp_customer::CustomerAssignmentService {
-        erp_processes::adapters::customer_assignment_service(self.db())
+        erp_processes::adapters::scoped_customer_assignment_service(self.db(), self.rbac())
     }
 
     /// Customer profile root process.

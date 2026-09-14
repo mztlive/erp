@@ -17,11 +17,10 @@ use crate::entity::customer::{
     EndCustomerAssignment,
 };
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, CustomerAuditPort};
+use crate::ports::{AccountFactPort, CustomerAuditPort, CustomerDataScopePort};
 use crate::repository::CustomerExt;
 use application_core::{normalize_sort, page_or_default, page_size_or_default, AuditActor};
 use erp_core::ids::CustomerAccountId;
-use erp_identity::SharedRbacService;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -37,7 +36,7 @@ pub struct CustomerAssignmentService {
     db: Database,
     audit: Arc<dyn CustomerAuditPort>,
     accounts: Arc<dyn AccountFactPort>,
-    rbac: Option<SharedRbacService>,
+    data_scope: Arc<dyn CustomerDataScopePort>,
 }
 
 impl CustomerAssignmentService {
@@ -47,53 +46,45 @@ impl CustomerAssignmentService {
     /// * `db` - 数据库实例
     /// * `audit` - 审计写入端口
     /// * `accounts` - 账号事实端口
+    /// * `data_scope` - 客户范围授权端口
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database, audit: Arc<dyn CustomerAuditPort>, accounts: Arc<dyn AccountFactPort>) -> Self {
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 归属变更必须通过注入的 Port 证明 customer:update 范围。
+    pub fn new(
+        db: Database,
+        audit: Arc<dyn CustomerAuditPort>,
+        accounts: Arc<dyn AccountFactPort>,
+        data_scope: Arc<dyn CustomerDataScopePort>,
+    ) -> Self {
         Self {
             db,
             audit,
             accounts,
-            rbac: None,
+            data_scope,
         }
     }
 
-    /// 注入当前 RBAC 快照，供归属变更在事务内重验客户范围。
-    ///
-    /// # 参数
-    /// * `rbac` - 共享 RBAC 服务
-    ///
-    /// # 返回
-    /// 返回可在事务内证明客户更新范围的归属服务。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 归属变更必须证明 customer:update 范围，不得只依赖入口事前检查。
-    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
-        self.rbac = Some(rbac);
-        self
-    }
-
-    /// 取得归属变更所需的授权源。
+    /// 构造复用本服务授权 Port 的客户访问器。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 返回已注入的 RBAC 服务。
+    /// 返回绑定当前数据库与范围 Port 的访问器。
     ///
     /// # 错误
-    /// 未注入时返回内部错误。
+    /// 无。
     ///
     /// # 关键业务约束
-    /// 缺少授权源不得按登录人自行推断客户范围。
-    fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("客户归属变更需要授权源".into()))
+    /// 不得在此回退构造身份域 Service。
+    fn access(&self) -> CustomerAccess {
+        CustomerAccess::new(self.db.clone(), Arc::clone(&self.data_scope))
     }
 
     /// 分页查询客户归属列表。
@@ -260,12 +251,12 @@ impl CustomerAssignmentService {
         let audit_port = self.audit.clone();
         let customer_id_for_tx = customer_id.to_string();
         let new_for_tx = new_assignment.clone();
-        let rbac = self.require_rbac()?.clone();
+        let access = self.access();
         let actor_for_tx = actor.clone();
         let changed = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    CustomerAccess::new(db.clone(), rbac)
+                    access
                         .require_with(actor_for_tx, "update", &customer_id_for_tx, session)
                         .await?;
                     let changed = persist_assign(&db, &customer_id_for_tx, &new_for_tx, session).await?;
@@ -311,13 +302,13 @@ impl CustomerAssignmentService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let mut assignment_for_tx = assignment.clone();
-        let rbac = self.require_rbac()?.clone();
+        let access = self.access();
         let actor_for_tx = actor.clone();
         let customer_id_for_tx = customer_id.to_string();
         let ended = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    CustomerAccess::new(db.clone(), rbac)
+                    access
                         .require_with(actor_for_tx, "update", &customer_id_for_tx, session)
                         .await?;
                     db.customer_assignments()

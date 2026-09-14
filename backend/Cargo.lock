@@ -1730,7 +1730,6 @@ dependencies = [
  "entity-core",
  "entity-macros",
  "erp-core",
- "erp-identity",
  "hex",
  "id-generator",
  "mongodb",

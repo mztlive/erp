@@ -2,7 +2,6 @@
 
 use application_core::AuditActor;
 
-use super::access::CustomerAccess;
 use super::scope::{
     ensure_page, ensure_scope_version, ensure_stable_snapshot, CustomerListView, CustomerSnapshot,
 };
@@ -61,8 +60,7 @@ impl CustomerService {
     /// # 关键业务约束
     /// 详情必须独立重验当前权限；历史参与只补充读取。
     pub async fn customer_detail(&self, id: &str, actor: &AuditActor) -> Result<CustomerDetailView> {
-        let rbac = self.require_rbac()?.clone();
-        let access = CustomerAccess::new(self.db.clone(), rbac);
+        let access = self.access();
         let expected = access.require(actor, "detail", id).await?;
         let view = self.load_customer_detail(id).await?;
         let current = access.require(actor, "detail", id).await?;
@@ -118,6 +116,40 @@ impl CustomerService {
     }
 }
 
+/// 将内部快照转换为对外列表视图。
+///
+/// # 参数
+/// * `snapshot` - 同一事务读取的授权与业务快照
+///
+/// # 返回
+/// 返回可序列化的列表响应。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 不把内部授权证明或全量人员集合返回给客户端。
+fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
+    CustomerListView {
+        scope_version: snapshot.context.scope_version,
+        policy_version: snapshot.context.policy_version,
+        organization_version: snapshot.context.organization_version,
+        as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
+        empty_reason: snapshot.no_scope.then_some("no_scope"),
+        scope_summary: "客户当前主负责人、协作关系及负责人所属组织范围",
+        data: application_core::FilteredPage {
+            owner_options: snapshot.owner_options,
+            ownership_basis: "current_customer_owner",
+            page: application_core::PageView {
+                items: snapshot.items,
+                total: snapshot.total,
+                page: snapshot.page,
+                page_size: snapshot.page_size,
+            },
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::scope::{ensure_page, ensure_scope_version, ensure_stable_snapshot};
@@ -145,39 +177,5 @@ mod tests {
         }
         assert!(ensure_scope_version(Some("scope-a"), "scope-a").is_ok());
         assert!(ensure_stable_snapshot("scope-a", "scope-a").is_ok());
-    }
-}
-
-/// 将内部快照转换为对外列表视图。
-///
-/// # 参数
-/// * `snapshot` - 同一事务读取的授权与业务快照
-///
-/// # 返回
-/// 返回可序列化的列表响应。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 不把内部授权证明或全量人员集合返回给客户端。
-fn to_list_view(snapshot: CustomerSnapshot) -> CustomerListView {
-    CustomerListView {
-        scope_version: snapshot.context.scope_version,
-        policy_version: snapshot.context.policy_version,
-        organization_version: snapshot.context.organizations.version,
-        as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
-        empty_reason: snapshot.no_scope.then_some("no_scope"),
-        scope_summary: "客户当前主负责人、协作关系及负责人所属组织范围",
-        data: application_core::FilteredPage {
-            owner_options: snapshot.owner_options,
-            ownership_basis: "current_customer_owner",
-            page: application_core::PageView {
-                items: snapshot.items,
-                total: snapshot.total,
-                page: snapshot.page,
-                page_size: snapshot.page_size,
-            },
-        },
     }
 }

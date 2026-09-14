@@ -7,8 +7,8 @@ use erp_core::{
 };
 use erp_customer::CustomerExt;
 use erp_customer::{
-    CustomerAccess, CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand,
-    CustomerProfileCommandResultData, CustomerProfileOperation, CustomerProfileReplayContext,
+    CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand, CustomerProfileCommandResultData,
+    CustomerProfileOperation, CustomerProfileReplayContext,
 };
 use erp_party::PartyExt;
 use erp_party::{Party, PartyRevision, PartyRevisionData, PartyUpdate};
@@ -16,6 +16,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
+use crate::adapters::customer_access;
 use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
@@ -92,7 +93,7 @@ impl CustomerProfileService {
             .clone()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    CustomerAccess::new(db.clone(), rbac)
+                    customer_access(db.clone(), rbac)
                         .require_with(actor, "update", &customer_id, session)
                         .await?;
                     prepared.persist(&db, session).await

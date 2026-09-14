@@ -15,39 +15,6 @@ impl From<application_core::Error> for Error {
     }
 }
 
-impl From<erp_identity::Error> for Error {
-    /// 将身份域范围解析错误映射为客户领域错误。
-    ///
-    /// # 参数
-    /// * `error` - 身份域错误
-    ///
-    /// # 返回
-    /// 返回同构载荷的客户错误；RBAC 内部失败归入系统错误。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 不得把身份域 Forbidden 改写成校验通过后的空集。
-    fn from(error: erp_identity::Error) -> Self {
-        match error {
-            erp_identity::Error::Internal(payload) => Self::Internal(payload),
-            erp_identity::Error::NotFound(payload) => Self::NotFound(payload),
-            erp_identity::Error::ValidationError(payload) => Self::ValidationError(payload),
-            erp_identity::Error::BusinessLogicError(payload) => Self::BusinessLogicError(payload),
-            erp_identity::Error::ConflictError(payload) => Self::ConflictError(payload),
-            erp_identity::Error::ReceiptDuplicate(payload) => Self::ReceiptDuplicate(payload),
-            erp_identity::Error::TransientTransaction(payload) => Self::TransientTransaction(payload),
-            erp_identity::Error::Forbidden(payload) => Self::Forbidden(payload),
-            erp_identity::Error::Unauthenticated(payload) => Self::Unauthenticated(payload),
-            erp_identity::Error::Logic(payload) => Self::Logic(payload),
-            erp_identity::Error::Rbac(payload) => Self::Internal(payload),
-            erp_identity::Error::OutcomeUnknown(payload) => Self::OutcomeUnknown(payload),
-            erp_identity::Error::RepositoryError(payload) => Self::RepositoryError(payload),
-        }
-    }
-}
-
 /// Customer account, assignment and profile-command errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

@@ -4,10 +4,9 @@ use erp_audit::AuditExt;
 use erp_core::ids::{PartyId, PartyRevisionId};
 use erp_customer::CustomerExt;
 use erp_customer::{
-    AssignmentRole, CustomerAccess, CustomerAccount, CustomerAccountData, CustomerAccountId,
-    CustomerAccountStatus, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
-    CustomerProfileCommand, CustomerProfileCommandResultData, CustomerProfileOperation,
-    CustomerProfileReplayContext,
+    AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
+    CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, CustomerProfileCommand,
+    CustomerProfileCommandResultData, CustomerProfileOperation, CustomerProfileReplayContext,
 };
 use erp_identity::AccessControlExt;
 use erp_party::PartyExt;
@@ -16,6 +15,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
+use crate::adapters::customer_access;
 use crate::{Error, Result};
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
@@ -86,7 +86,7 @@ impl CustomerProfileService {
             .clone()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    CustomerAccess::new(db.clone(), rbac)
+                    customer_access(db.clone(), rbac)
                         .require_create(&actor, session)
                         .await?;
                     prepared.persist(&db, session).await

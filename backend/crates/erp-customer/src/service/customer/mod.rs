@@ -20,7 +20,9 @@ use crate::entity::customer::{
     CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
 };
 use crate::error::{Error, Result};
-use crate::ports::{AccountFactPort, CustomerAuditPort, PartyFactPort, PartyIdentityFact};
+use crate::ports::{
+    AccountFactPort, CustomerAuditPort, CustomerDataScopePort, PartyFactPort, PartyIdentityFact,
+};
 use crate::repository::{CustomerAccountRow, CustomerExt};
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
@@ -30,7 +32,6 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
 
 pub mod access;
 pub mod assignment;
@@ -51,7 +52,7 @@ pub struct CustomerService {
     audit: Arc<dyn CustomerAuditPort>,
     party: Arc<dyn PartyFactPort>,
     accounts: Arc<dyn AccountFactPort>,
-    rbac: Option<SharedRbacService>,
+    data_scope: Arc<dyn CustomerDataScopePort>,
 }
 
 impl CustomerService {
@@ -62,59 +63,47 @@ impl CustomerService {
     /// * `audit` - 审计写入端口
     /// * `party` - 主体事实端口
     /// * `accounts` - 账号事实端口
+    /// * `data_scope` - 客户范围授权端口
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 范围解析必须走注入的 Port；未接线端口失败关闭，不得补公司范围。
     pub fn new(
         db: Database,
         audit: Arc<dyn CustomerAuditPort>,
         party: Arc<dyn PartyFactPort>,
         accounts: Arc<dyn AccountFactPort>,
+        data_scope: Arc<dyn CustomerDataScopePort>,
     ) -> Self {
         Self {
             db,
             audit,
             party,
             accounts,
-            rbac: None,
+            data_scope,
         }
     }
 
-    /// 注入当前 RBAC 快照，供 DataScope 解析使用。
-    ///
-    /// # 参数
-    /// * `rbac` - 共享 RBAC 服务
-    ///
-    /// # 返回
-    /// 返回可解析客户范围的服务。
-    ///
-    /// # 错误
-    /// 无。
-    ///
-    /// # 关键业务约束
-    /// 列表、详情和写命令必须注入授权源，不得在缺 RBAC 时补公司范围。
-    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
-        self.rbac = Some(rbac);
-        self
-    }
-
-    /// 取得客户范围解析所需的授权源。
+    /// 构造复用本服务授权 Port 的客户访问器。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 返回已注入的 RBAC 服务。
+    /// 返回绑定当前数据库与范围 Port 的访问器。
     ///
     /// # 错误
-    /// 未注入时返回内部错误。
+    /// 无。
     ///
     /// # 关键业务约束
-    /// 缺少授权源不得按登录人自行推断范围。
-    fn require_rbac(&self) -> Result<&SharedRbacService> {
-        self.rbac
-            .as_ref()
-            .ok_or_else(|| Error::Internal("客户范围解析需要授权源".into()))
+    /// 不得在此回退构造身份域 Service。
+    fn access(&self) -> access::CustomerAccess {
+        access::CustomerAccess::new(self.db.clone(), Arc::clone(&self.data_scope))
     }
 
     /// 创建客户（跨集合事务：customer_account + 首条 OWNER 归属 + 审计原子写入）。
@@ -156,14 +145,12 @@ impl CustomerService {
         let audit_port = self.audit.clone();
         let account_for_tx = account.clone();
         let assignment_for_tx = assignment.clone();
-        let rbac = self.require_rbac()?.clone();
+        let access = self.access();
         let actor_for_tx = actor.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access::CustomerAccess::new(db.clone(), rbac)
-                        .require_create(&actor_for_tx, session)
-                        .await?;
+                    access.require_create(&actor_for_tx, session).await?;
                     persist_new_account(&db, &account_for_tx, &assignment_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
@@ -293,13 +280,13 @@ impl CustomerService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let mut account_for_tx = account.clone();
-        let rbac = self.require_rbac()?.clone();
+        let access = self.access();
         let actor_for_tx = actor.clone();
         let customer_id = id.to_string();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    access::CustomerAccess::new(db.clone(), rbac)
+                    access
                         .require_with(actor_for_tx, "update", &customer_id, session)
                         .await?;
                     persist_account_update(&db, &mut account_for_tx, session).await?;

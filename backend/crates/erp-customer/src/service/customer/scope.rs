@@ -1,15 +1,15 @@
 //! 客户列表与候选的一致授权快照；范围与业务版本跨页携带。
 
 use application_core::{AuditActor, FilterOption, FilteredPage};
-use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use persistence_core::Transactional;
 use serde::Serialize;
 use std::hash::{Hash, Hasher};
 
-use super::access::{expand_org_filter, has_scope_rules, intersect_ids, member_ids, CustomerAccess};
+use super::access::intersect_ids;
 use super::CustomerService;
 use crate::dto::customer::{CustomerListParams, CustomerListQuery, CustomerScope, CustomerView};
 use crate::error::{Error, Result};
+use crate::ports::{CustomerDataScopePort, CustomerResolvedScope};
 use crate::repository::scope::CustomerReadScope;
 use crate::repository::{CustomerAccountFilter, CustomerExt};
 
@@ -46,7 +46,7 @@ pub(super) struct CustomerSnapshot {
     /// 当前范围内的负责人候选。
     pub owner_options: Vec<FilterOption>,
     /// 身份授权上下文。
-    pub context: AuthorizedDataScope,
+    pub context: CustomerResolvedScope,
     /// 授权集合本身为空。
     pub no_scope: bool,
 }
@@ -74,7 +74,8 @@ impl CustomerService {
         actor: &AuditActor,
     ) -> Result<CustomerSnapshot> {
         let db = self.db.clone();
-        let rbac = self.require_rbac()?.clone();
+        let access = self.access();
+        let data_scope = self.data_scope.clone();
         let party = self.party.clone();
         let accounts = self.accounts.clone();
         let actor = actor.clone();
@@ -83,11 +84,11 @@ impl CustomerService {
             .clone()
             .with_transaction(move |executor| {
                 Box::pin(async move {
-                    let (mut context, scope) = CustomerAccess::new(db.clone(), rbac)
-                        .resolve(&actor, "list", executor)
-                        .await?;
-                    let no_scope = !has_scope_rules(&context.scope.role_clauses);
-                    let authorized = apply_list_filters(&db, &context, &scope, &query, executor).await?;
+                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
+                    let no_scope = !context.has_scope_rules();
+                    let authorized =
+                        apply_list_filters(&db, data_scope.as_ref(), &context, &scope, &query, executor)
+                            .await?;
                     let as_of = super::access::business_date(context.as_of)?;
                     let owners = db
                         .customer_assignments()
@@ -129,8 +130,7 @@ impl CustomerService {
                     context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
                     let items = hydrate_rows(
                         &db,
-                        party.as_ref(),
-                        accounts.as_ref(),
+                        (party.as_ref(), accounts.as_ref()),
                         page.items,
                         actor.id(),
                         query.scope,
@@ -237,7 +237,8 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `context` - 授权上下文
+/// * `data_scope` - 组织展开与成员事实 Port
+/// * `context` - 已解析的客户范围事实
 /// * `scope` - 已映射的客户范围
 /// * `query` - 归一化查询
 /// * `executor` - 调用方执行器
@@ -252,7 +253,8 @@ pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
 /// Mine/协作只是收窄条件；AllAuthorized 不得绕过 DataScope。
 async fn apply_list_filters(
     db: &mongodb::Database,
-    context: &AuthorizedDataScope,
+    data_scope: &dyn CustomerDataScopePort,
+    context: &CustomerResolvedScope,
     scope: &CustomerReadScope,
     query: &CustomerListQuery,
     executor: &mut dyn persistence_core::Executor,
@@ -261,42 +263,99 @@ async fn apply_list_filters(
     let mut ids = scope.authorized_customer_ids.clone();
     ids = intersect_ids(ids, assignment_filter(scope, query.scope));
     if let Some(owners) = &query.owner_user_ids {
-        let owned = db
-            .customer_assignments()
-            .current_owners(ids.as_deref(), Some(owners.as_slice()), as_of, executor)
-            .await?
-            .into_iter()
-            .map(|assignment| assignment.customer_id.to_string())
-            .collect();
-        ids = Some(owned);
+        ids = Some(current_owner_customer_ids(db, ids.as_deref(), owners.as_slice(), as_of, executor).await?);
     }
-    if let Some(org_ids) = &query.org_unit_ids {
-        if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
+    apply_org_unit_filter(db, data_scope, context, ids, query, as_of, executor).await
+}
+
+/// 按请求中的组织筛选收窄已授权客户集合。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `data_scope` - 组织展开与成员事实 Port
+/// * `context` - 已解析的客户范围事实
+/// * `ids` - 当前授权客户集合
+/// * `query` - 归一化查询
+/// * `as_of` - 客户归属自然日
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 无组织筛选时原样返回；否则返回主负责人属于筛选组织的客户。
+///
+/// # 错误
+/// 包含下级但未提供组织、展开失败或成员超限时拒绝。
+///
+/// # 关键业务约束
+/// 组织筛选只看当前主负责人所属组织，不得用协作人员组织代替。
+async fn apply_org_unit_filter(
+    db: &mongodb::Database,
+    data_scope: &dyn CustomerDataScopePort,
+    context: &CustomerResolvedScope,
+    ids: Option<Vec<String>>,
+    query: &CustomerListQuery,
+    as_of: erp_core::common::time::BusinessDate,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<Option<Vec<String>>> {
+    let Some(org_ids) = &query.org_unit_ids else {
+        if query.include_descendants == Some(true) {
             return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
         }
-        let expanded = expand_org_filter(
-            &context.organizations,
-            org_ids.as_slice(),
-            query.include_descendants.unwrap_or(false),
-        )?;
-        let members = member_ids(&context.organizations, &expanded, context.as_of);
-        if members.len() > 10_000 {
-            return Err(Error::ValidationError(
-                "组织成员超过查询上限，请收窄组织筛选".into(),
-            ));
-        }
-        let owned = db
-            .customer_assignments()
-            .current_owners(ids.as_deref(), Some(&members), as_of, executor)
-            .await?
-            .into_iter()
-            .map(|assignment| assignment.customer_id.to_string())
-            .collect();
-        ids = Some(owned);
-    } else if query.include_descendants == Some(true) {
+        return Ok(ids);
+    };
+    if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
     }
-    Ok(ids)
+    let expanded = data_scope
+        .expand_org_units(
+            org_ids.as_slice(),
+            query.include_descendants.unwrap_or(false),
+            executor,
+        )
+        .await?;
+    let members = data_scope
+        .org_member_ids(&expanded, context.as_of, executor)
+        .await?;
+    if members.len() > 10_000 {
+        return Err(Error::ValidationError(
+            "组织成员超过查询上限，请收窄组织筛选".into(),
+        ));
+    }
+    Ok(Some(
+        current_owner_customer_ids(db, ids.as_deref(), &members, as_of, executor).await?,
+    ))
+}
+
+/// 读取指定负责人集合的当前主责客户。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `customer_ids` - 已授权客户；`None` 表示公司范围
+/// * `owners` - 主负责人 ID
+/// * `as_of` - 客户归属自然日
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回这些负责人当前主责的客户 ID。
+///
+/// # 错误
+/// 归属查询失败时拒绝。
+///
+/// # 关键业务约束
+/// 空负责人集合保持空结果，不得查询全部客户。
+async fn current_owner_customer_ids(
+    db: &mongodb::Database,
+    customer_ids: Option<&[String]>,
+    owners: &[String],
+    as_of: erp_core::common::time::BusinessDate,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<Vec<String>> {
+    Ok(db
+        .customer_assignments()
+        .current_owners(customer_ids, Some(owners), as_of, executor)
+        .await?
+        .into_iter()
+        .map(|assignment| assignment.customer_id.to_string())
+        .collect())
 }
 
 /// 将目录范围标签转换为授权集合上的额外收窄。
@@ -332,8 +391,7 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
 ///
 /// # 参数
 /// * `db` - 数据库
-/// * `party` - 主体事实端口
-/// * `accounts` - 账号事实端口
+/// * `facts` - 主体与账号事实端口
 /// * `rows` - 当前页客户行
 /// * `actor_user_id` - 当前账号
 /// * `requested_scope` - 目录范围标签
@@ -350,14 +408,17 @@ fn assignment_filter(scope: &CustomerReadScope, requested: CustomerScope) -> Opt
 /// 范围标签只描述命中原因，不授予额外权限。
 async fn hydrate_rows(
     db: &mongodb::Database,
-    party: &dyn crate::ports::PartyFactPort,
-    accounts: &dyn crate::ports::AccountFactPort,
+    facts: (
+        &dyn crate::ports::PartyFactPort,
+        &dyn crate::ports::AccountFactPort,
+    ),
     rows: Vec<crate::repository::CustomerAccountRow>,
     actor_user_id: &str,
     requested_scope: CustomerScope,
     as_of: erp_core::common::time::BusinessDate,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Vec<CustomerView>> {
+    let (party, accounts) = facts;
     if rows.is_empty() {
         return Ok(Vec::new());
     }

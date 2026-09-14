@@ -10,11 +10,10 @@ use axum::{
 };
 use erp_core::common::time::Instant;
 use erp_customer::{
-    CreateCustomerRequest, CustomerAccess, CustomerAssignmentListParams, CustomerAssignmentRequest,
-    CustomerAssignmentView, CustomerDetailView, CustomerListParams, CustomerListView,
-    CustomerProfileDetailView, CustomerProfileMutationView, CustomerScope, CustomerSensitiveRevealView,
-    CustomerView, PageView, RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, SensitiveFieldKind,
-    UpdateCustomerRequest,
+    CreateCustomerRequest, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
+    CustomerDetailView, CustomerListParams, CustomerListView, CustomerProfileDetailView,
+    CustomerProfileMutationView, CustomerScope, CustomerSensitiveRevealView, CustomerView, PageView,
+    RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, SensitiveFieldKind, UpdateCustomerRequest,
 };
 use erp_identity::Permission;
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
@@ -51,7 +50,7 @@ pub async fn customer_profile_create(
     if req.bank_accounts.is_some() {
         ensure_permission(&state, &subject, "party_bank_account:create").await?;
     }
-    CustomerAccess::new(state.db(), state.rbac())
+    erp_processes::adapters::customer_access(state.db(), state.rbac())
         .ensure_create(&actor)
         .await?;
     let view = state.customer_profile_service().create(req, &actor).await?;
@@ -260,11 +259,7 @@ pub async fn customer_list(
     Query(params): Query<CustomerListParams>,
 ) -> Result<CustomerListView> {
     reject_all_authorized_on_regular_list(params.scope)?;
-    let page = state
-        .customer_service()
-        .with_rbac(state.rbac())
-        .customer_list(&params, &actor)
-        .await?;
+    let page = state.customer_service().customer_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -284,11 +279,7 @@ pub async fn customer_all_authorized_list(
 ) -> Result<CustomerListView> {
     ensure_permission(&state, &subject, "customer:list").await?;
     params.scope = CustomerScope::AllAuthorized;
-    let page = state
-        .customer_service()
-        .with_rbac(state.rbac())
-        .customer_list(&params, &actor)
-        .await?;
+    let page = state.customer_service().customer_list(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -313,11 +304,7 @@ pub async fn customer_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateCustomerRequest>,
 ) -> Result<CustomerView> {
-    let view = state
-        .customer_service()
-        .with_rbac(state.rbac())
-        .create_customer(req, &actor)
-        .await?;
+    let view = state.customer_service().create_customer(req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -341,11 +328,7 @@ pub async fn customer_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CustomerDetailView> {
-    let view = state
-        .customer_service()
-        .with_rbac(state.rbac())
-        .customer_detail(&id, &actor)
-        .await?;
+    let view = state.customer_service().customer_detail(&id, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -372,11 +355,7 @@ pub async fn customer_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateCustomerRequest>,
 ) -> Result<CustomerView> {
-    let view = state
-        .customer_service()
-        .with_rbac(state.rbac())
-        .update_customer(&id, req, &actor)
-        .await?;
+    let view = state.customer_service().update_customer(&id, req, &actor).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -462,7 +441,6 @@ pub async fn customer_assignment_apply(
     ensure_customer_access(&state, &actor, "update", &id).await?;
     let views = state
         .customer_assignment_service()
-        .with_rbac(state.rbac())
         .apply_assignment(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(views))
@@ -569,7 +547,7 @@ pub(crate) async fn ensure_customer_access(
     action: &str,
     customer_id: &str,
 ) -> std::result::Result<(), Error> {
-    CustomerAccess::new(state.db(), state.rbac())
+    erp_processes::adapters::customer_access(state.db(), state.rbac())
         .require(actor, action, customer_id)
         .await?;
     Ok(())
