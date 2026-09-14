@@ -20,7 +20,11 @@ use erp_read_models::sales_center::order::{
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, handler::customer::ensure_customer_access, response::ApiResponse},
+    core::{
+        errors::Result,
+        handler::{contract::ensure_contract_access, customer::ensure_customer_access},
+        response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -66,6 +70,12 @@ pub async fn sales_order_list(
 ///
 /// # 返回
 /// 返回销售单详情视图。
+///
+/// # 错误
+/// 所选合同或客户不在 v2 范围内时拒绝。
+///
+/// # 关键业务约束
+/// 关联合同与客户必须各自按 detail 动作重验，不得用客户范围代替合同。
 pub async fn sales_order_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -73,6 +83,7 @@ pub async fn sales_order_create(
 ) -> Result<SalesOrderDetailView> {
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
+    ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
     let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
@@ -124,16 +135,24 @@ pub async fn sales_order_detail(
 ///
 /// # 返回
 /// 返回保存后的工作副本视图。
+///
+/// # 错误
+/// 所选合同或客户不在 v2 范围内时拒绝。
+///
+/// # 关键业务约束
+/// 关联合同与客户必须各自按 detail 动作重验。
 pub async fn sales_order_save_working_copy(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SaveWorkingCopyRequest>,
 ) -> Result<WorkingCopyView> {
-    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .save_working_copy(&id, req, &actor)
-        .await?;
+    ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
+    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read());
+    let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
+    ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
+    let view = service.save_working_copy(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -155,16 +174,24 @@ pub async fn sales_order_save_working_copy(
 ///
 /// # 返回
 /// 返回提交快照视图。
+///
+/// # 错误
+/// 所选合同或客户不在 v2 范围内时拒绝。
+///
+/// # 关键业务约束
+/// 关联合同与客户必须各自按 detail 动作重验。
 pub async fn sales_order_submit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SubmitSalesOrderRequest>,
 ) -> Result<SubmissionView> {
-    let view = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
-        .with_object_read(state.approval_object_read())
-        .submit_sales_order(&id, req, &actor)
-        .await?;
+    ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
+    let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
+        .with_object_read(state.approval_object_read());
+    let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
+    ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
+    let view = service.submit_sales_order(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -276,7 +303,7 @@ mod owner_query_tests {
     use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
     use erp_sales::dto::sales_order::SalesOrderListParams;
 
-    /// 实际 Query 解码器支持去重 ID，拒绝旧姓名和未接入组织参数，防止忽略后查全量。
+    /// 实际 Query 解码器支持去重 ID，拒绝旧姓名；客户、合同、销售已接入组织筛选，采购仍拒绝。
     #[test]
     fn all_four_resources_validate_identity_queries() {
         let valid: Uri = "/?owner_user_ids=user-2,user-1,user-2&page=2".parse().unwrap();
@@ -301,9 +328,9 @@ mod owner_query_tests {
         }
         let org: Uri = "/?org_unit_ids=org-1".parse().unwrap();
         assert!(Query::<CustomerListParams>::try_from_uri(&org).is_ok());
-        assert!(Query::<ContractListParams>::try_from_uri(&org).is_err());
+        assert!(Query::<ContractListParams>::try_from_uri(&org).is_ok());
         assert!(Query::<PurchaseOrderListParams>::try_from_uri(&org).is_err());
-        assert!(Query::<SalesOrderListParams>::try_from_uri(&org).is_err());
+        assert!(Query::<SalesOrderListParams>::try_from_uri(&org).is_ok());
     }
 }
 
@@ -314,13 +341,15 @@ mod scope_query_tests {
 
     #[test]
     fn sales_scope_version_does_not_break_url_numbers_or_id_filters() {
-        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b&my_todo=true"
+        let uri: Uri = "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b&org_unit_ids=org-1&include_descendants=true&my_todo=true"
             .parse()
             .unwrap();
         let Query(params) = Query::<SalesListParams>::try_from_uri(&uri).unwrap();
         assert_eq!(params.page, Some(2));
         assert_eq!(params.scope_version.as_deref(), Some("v1"));
         assert!(params.owner_user_ids.is_some());
+        assert_eq!(params.org_unit_ids.unwrap().as_slice(), &["org-1".to_string()]);
+        assert_eq!(params.include_descendants, Some(true));
         let legacy: Uri = "/?owner_name=someone".parse().unwrap();
         assert!(Query::<SalesListParams>::try_from_uri(&legacy).is_err());
     }

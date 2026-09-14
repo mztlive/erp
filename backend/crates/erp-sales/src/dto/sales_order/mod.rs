@@ -249,6 +249,10 @@ pub struct SalesOrderListParams {
     pub scope_version: Option<String>,
     /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前单据业务组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 销售单号、客户当前名称或合同号的字面量关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -304,6 +308,10 @@ pub struct SalesOrderListParams {
 pub(crate) struct SalesOrderListQuery {
     /// 当前负责人精确身份条件。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前单据业务组织，只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 销售单号筛选。
     pub order_no: Option<String>,
     /// 客户筛选。
@@ -345,11 +353,17 @@ impl SalesOrderListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无；读取 `self` 的原始查询字段。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 排序字段不在白名单、排序方向非法、时间区间倒置，或包含下级但未提供组织时返回 `ValidationError`。
+    ///
+    /// # 关键业务约束
+    /// `include_descendants=true` 必须同时提供 `org_unit_ids`，不得忽略后查全量。
     pub(crate) fn normalized(&self) -> Result<SalesOrderListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, SALES_ORDER_SORT_FIELDS)?;
         if matches!((self.created_from, self.created_to), (Some(from), Some(to)) if from > to) {
@@ -357,8 +371,13 @@ impl SalesOrderListParams {
                 "创建时间下界不能晚于上界".to_string(),
             ));
         }
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(SalesOrderListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             order_no: normalized_text(self.order_no.as_deref()),
             customer_id: self.customer_id.as_ref().map(ToString::to_string),
             contract_id: self.contract_id.as_ref().map(ToString::to_string),
@@ -652,6 +671,8 @@ mod tests {
             "order_no": " SO-2026 ",
             "customer_id": "cust-1",
             "contract_id": "contract-1",
+            "org_unit_ids": "org-1,org-2",
+            "include_descendants": true,
             "origin_system": "ERP",
             "business_type": "GOODS_SERVICE",
             "fulfillment_progress": "PARTIALLY_FULFILLED",
@@ -665,6 +686,11 @@ mod tests {
         .unwrap();
         let query = params.normalized().unwrap();
         assert_eq!(query.order_no.as_deref(), Some("SO-2026"));
+        assert_eq!(
+            query.org_unit_ids.as_ref().unwrap().as_slice(),
+            &["org-1".to_string(), "org-2".to_string()]
+        );
+        assert_eq!(query.include_descendants, Some(true));
         assert_eq!(query.customer_id.as_deref(), Some("cust-1"));
         assert_eq!(query.contract_id.as_deref(), Some("contract-1"));
         assert_eq!(query.origin_system, Some(super::OriginSystem::Erp));
@@ -690,6 +716,18 @@ mod tests {
         }))
         .unwrap();
 
+        assert!(params.normalized().is_err());
+    }
+
+    #[test]
+    fn list_params_reject_descendants_without_org_units() {
+        use super::SalesOrderListParams;
+        use serde_json::json;
+
+        let params: SalesOrderListParams = serde_json::from_value(json!({
+            "include_descendants": true
+        }))
+        .unwrap();
         assert!(params.normalized().is_err());
     }
 }

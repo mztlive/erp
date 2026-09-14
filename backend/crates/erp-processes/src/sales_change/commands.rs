@@ -66,6 +66,9 @@ impl SalesChangeProcess {
         actor: &AuditActor,
         rbac: &SharedRbacService,
     ) -> Result<SalesChangeOrderDetailView> {
+        self.command_access(actor, "update")?
+            .current(req.sales_order_id.as_ref(), &mut NoTransaction)
+            .await?;
         let sales_write = SalesReviewService::new(self.db.clone())
             .prepare_creation(req, actor)
             .await?;
@@ -104,8 +107,8 @@ impl SalesChangeProcess {
         )
         .await?;
 
-        SalesChangeReadService::new(self.db.clone())
-            .sales_change_order_detail(&change_id)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            .sales_change_order_detail(&change_id, actor)
             .await
             .map_err(crate::Error::from)
     }
@@ -134,6 +137,15 @@ impl SalesChangeProcess {
     ) -> Result<SalesChangeOrderDetailView> {
         req.validate()?;
         let adapter = sales_change_order_adapter()?;
+        let preview = self
+            .db
+            .sales_change_orders()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".to_string()))?;
+        self.command_access(actor, "submit")?
+            .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
+            .await?;
         let change_order = SalesReviewService::new(self.db.clone())
             .load_for_submission(id, req.version)
             .await?;
@@ -160,6 +172,15 @@ impl SalesChangeProcess {
         req: VoidSalesChangeOrderRequest,
         actor: &AuditActor,
     ) -> Result<SalesChangeOrderDetailView> {
+        let preview = self
+            .db
+            .sales_change_orders()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".to_string()))?;
+        self.command_access(actor, "update")?
+            .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
+            .await?;
         let mut sales_write = SalesReviewService::new(self.db.clone())
             .prepare_void(id, req, actor)
             .await?;
@@ -169,9 +190,21 @@ impl SalesChangeProcess {
                 .resource_log("sales_change_order.void", "sales_change_order", id.to_string())?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let rbac = self.require_rbac()?;
+        let actor_for_tx = actor.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
+                        .require_object(
+                            &actor_for_tx,
+                            "update",
+                            sales_write.sales_order_id(),
+                            &[],
+                            session,
+                        )
+                        .await
+                        .map_err(crate::Error::from)?;
                     sales_write.persist(&db, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::Error>(())
@@ -179,8 +212,8 @@ impl SalesChangeProcess {
             })
             .await?;
 
-        SalesChangeReadService::new(self.db.clone())
-            .sales_change_order_detail(id)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
     }
@@ -204,6 +237,15 @@ impl SalesChangeProcess {
         actor: &AuditActor,
     ) -> Result<SalesChangeOrderDetailView> {
         req.validate()?;
+        let preview = self
+            .db
+            .sales_change_orders()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售变更单不存在或无权操作".to_string()))?;
+        self.command_access(actor, "cancel_approval")?
+            .current(preview.sales_order_id.as_ref(), &mut NoTransaction)
+            .await?;
         let mut change_order = SalesReviewService::new(self.db.clone())
             .load_for_cancellation(id, req.expected_version)
             .await?;
@@ -236,11 +278,13 @@ impl SalesChangeProcess {
                 reason: req.reason.clone(),
                 now,
                 audit,
+                actor: actor.clone(),
+                rbac: self.require_rbac()?,
             },
         )
         .await?;
-        SalesChangeReadService::new(self.db.clone())
-            .sales_change_order_detail(id)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
     }
@@ -327,6 +371,8 @@ impl SalesChangeProcess {
                 organization_id,
                 now,
                 audit,
+                actor: actor.clone(),
+                rbac: self.require_rbac()?,
             },
         )
         .await;
@@ -337,8 +383,8 @@ impl SalesChangeProcess {
             self.recover_sales_change_start(id, recovery_subject_version, &idempotency_key, actor, error)
                 .await?;
         }
-        SalesChangeReadService::new(self.db.clone())
-            .sales_change_order_detail(id)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
     }
@@ -474,6 +520,10 @@ async fn persist_created_change_order(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac.clone())
+                    .require_object(&actor, "update", sales_write.sales_order_id(), &[], session)
+                    .await
+                    .map_err(crate::Error::from)?;
                 persist_bound_change_document(
                     &db,
                     &rbac,
@@ -528,6 +578,42 @@ async fn persist_bound_change_document(
 
 #[cfg(test)]
 mod tests {
+    /// 创建、提交、撤回必须在状态与版本校验前按来源销售单动作重验。
+    #[test]
+    fn create_and_submit_revalidate_source_sales_order_before_state_checks() {
+        let source = include_str!("commands.rs");
+        let create = source
+            .split("pub async fn create_sales_change_order")
+            .nth(1)
+            .expect("创建命令");
+        let submit = source
+            .split("pub async fn submit_sales_change")
+            .nth(1)
+            .expect("提交命令");
+        let cancel = source
+            .split("pub async fn cancel_approval")
+            .nth(1)
+            .expect("撤回命令");
+        assert!(
+            create
+                .find(r#"command_access(actor, "update")"#)
+                .expect("创建须先证明原单")
+                < create.find("prepare_creation").expect("创建准备")
+        );
+        assert!(
+            submit
+                .find(r#"command_access(actor, "submit")"#)
+                .expect("提交须先证明原单")
+                < submit.find("load_for_submission").expect("提交版本校验")
+        );
+        assert!(
+            cancel
+                .find(r#"command_access(actor, "cancel_approval")"#)
+                .expect("撤回须先证明原单")
+                < cancel.find("load_for_cancellation").expect("撤回版本校验")
+        );
+    }
+
     /// 创建必须注册 BusinessDocument 并调用统一绑定端口。
     #[test]
     fn create_registers_document_and_binds_published_definition() {

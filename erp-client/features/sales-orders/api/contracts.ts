@@ -26,6 +26,8 @@ export type SalesOrderDetailView = SalesOrderListItem & {
 export type SalesOrdersListQuery = {
     scopeVersion?: string
     ownerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
     page: number
     pageSize: number
     search?: string

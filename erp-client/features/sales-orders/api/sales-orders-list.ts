@@ -62,6 +62,9 @@ export async function fetchSalesOrders(
         q: query.search?.trim() || undefined,
         customer_id: query.customerId,
         owner_user_ids: query.ownerUserIds || undefined,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants:
+            query.orgUnitIds && query.includeDescendants ? true : undefined,
         contract_id: query.contractId,
         business_type: businessType,
         origin_system:

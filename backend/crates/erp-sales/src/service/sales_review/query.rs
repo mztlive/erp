@@ -27,6 +27,7 @@ impl SalesReviewService {
         let query = params.normalized()?;
         let filter = SalesChangeOrderFilter {
             sales_order_id: query.sales_order_id.map(SalesOrderId::new),
+            authorized_sales_order_ids: None,
             status: query.status,
             page: query.paging.page,
             page_size: query.paging.page_size,

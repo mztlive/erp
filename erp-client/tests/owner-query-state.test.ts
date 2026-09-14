@@ -40,6 +40,36 @@ it("销售负责人应用、刷新、分页与清除使用同一URL键，不积�
     expect(new URLSearchParams(cleared).has("ownerUserIds")).toBe(false)
 })
 
+it("销售组织筛选进入 URL 与查询草稿，含下级必须绑定组织", () => {
+    const url = parseSalesOrdersSearchParams(
+        new URLSearchParams("orgUnitIds=org-1&includeDescendants=1&page=2"),
+    )
+    expect(url.orgUnitIds).toBe("org-1")
+    expect(url.includeDescendants).toBe(true)
+    const applied = resolveSalesOrdersListFilterPatch({
+        summary: "all",
+        searchDraft: "",
+        filterDraft: {
+            ...filterDraftFromUrl(url),
+            orgUnitIds: "org-1,org-2",
+            includeDescendants: true,
+        },
+    })
+    expect(applied).toMatchObject({
+        page: 1,
+        orgUnitIds: "org-1,org-2",
+        includeDescendants: true,
+    })
+    const built = buildSalesOrdersSearchParams({
+        ...url,
+        orgUnitIds: "org-1",
+        includeDescendants: true,
+        page: 1,
+    })
+    expect(built).toContain("orgUnitIds=org-1")
+    expect(built).toContain("includeDescendants=1")
+})
+
 it("客户、合同、采购人员条件序列化和分页保持稳定身份", () => {
     const contract = contractsUrlCodec.parse(
         new URLSearchParams("ownerUserIds=user-2&page=5"),

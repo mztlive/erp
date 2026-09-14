@@ -33,6 +33,23 @@ impl CreatedChangeWrite {
     pub fn settlement_party_id(&self) -> &erp_core::ids::PartyId {
         &self.working_copy.settlement_party_id
     }
+
+    /// 来源销售单主键，供事务内沿原单范围重验。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回原销售单稳定身份。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 变更单不得改写该来源身份。
+    pub fn sales_order_id(&self) -> &str {
+        self.change_order.sales_order_id.as_ref()
+    }
     /// 在绑定登记成功后，按原序写入变更单、工作副本和行，不启动事务。
     ///
     /// # 错误

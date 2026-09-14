@@ -136,7 +136,8 @@ pub async fn contract_upload(
     )
     .await?;
     let object_key = asset_request.storage_object_key.clone();
-    let result = erp_processes::upload_contract(state.db(), state.rbac(), command, asset_request, actor).await;
+    let result =
+        erp_processes::upload_contract(state.db(), state.rbac(), command, asset_request, actor).await;
     let view = match result {
         Ok(view) => view,
         Err(error) => {
@@ -239,10 +240,14 @@ pub async fn contract_file_preview(
     if view.content_type.as_str() != "application/pdf" {
         return Err(Error::Unprocessable("当前文件类型不支持在线预览".to_string()));
     }
-    let content = state.storage().read(&view.storage_object_key).await.map_err(|storage_error| {
-        error!(error = %storage_error, file_asset_id = %file_id, "Failed to read contract PDF");
-        Error::Internal("Object storage operation failed".to_string())
-    })?;
+    let content = state
+        .storage()
+        .read(&view.storage_object_key)
+        .await
+        .map_err(|storage_error| {
+            error!(error = %storage_error, file_asset_id = %file_id, "Failed to read contract PDF");
+            Error::Internal("Object storage operation failed".to_string())
+        })?;
     let content_type = HeaderValue::from_str(&view.content_type)
         .unwrap_or_else(|_| HeaderValue::from_static("application/pdf"));
     let mut response = Response::new(Body::from(content));
@@ -317,6 +322,34 @@ pub async fn contract_terminate(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+/// 按资源动作重验合同对象范围；缺动作拒绝，缺范围不得补公司。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `action` - 已注册的合同动作
+/// * `contract_id` - 目标合同
+///
+/// # 返回
+/// 对象在范围内时成功。
+///
+/// # 错误
+/// 读取动作对不可见对象返回 NotFound；写动作返回 Forbidden。
+///
+/// # 关键业务约束
+/// 销售建单所选合同必须独立走合同 v2，不得用客户范围代替。
+pub(crate) async fn ensure_contract_access(
+    state: &AppState,
+    actor: &AuditActor,
+    action: &str,
+    contract_id: &str,
+) -> std::result::Result<(), Error> {
+    erp_processes::adapters::contract_access(state.db(), state.rbac())
+        .require(actor, action, contract_id)
+        .await?;
+    Ok(())
 }
 
 #[cfg(test)]

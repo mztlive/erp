@@ -177,6 +177,9 @@ pub async fn file_asset_upload(
     let service = state.file_asset_service();
     let result = match fields.document_id {
         Some(document_id) => {
+            erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
+                .require_attachment(&actor, "update", document_id.as_ref())
+                .await?;
             service
                 .register_file_asset_with_attachment(request, document_id, fields.usage, &actor)
                 .await
@@ -278,11 +281,20 @@ pub async fn file_asset_register(
 ///
 /// # 返回
 /// 返回新建的附件关联视图。
+///
+/// # 错误
+/// 销售单据或销售变更单不可见时拒绝。
+///
+/// # 关键业务约束
+/// 销售附件必须独立重验来源销售单范围。
 pub async fn document_attachment_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<AttachToDocumentRequest>,
 ) -> Result<DocumentAttachmentView> {
+    erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
+        .require_attachment(&actor, "update", req.document_id.as_ref())
+        .await?;
     let view = state.file_asset_service().attach_to_document(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -299,14 +311,25 @@ pub async fn document_attachment_create(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `id` - 业务单据 ID
 ///
 /// # 返回
 /// 返回附件关联视图列表。
+///
+/// # 错误
+/// 销售单据或销售变更单不可见时拒绝。
+///
+/// # 关键业务约束
+/// 列表已授权不能作为附件凭证；销售附件独立重验来源销售单。
 pub async fn document_attachment_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<Vec<DocumentAttachmentView>> {
+    erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
+        .require_attachment(&actor, "detail", &id)
+        .await?;
     let items = state
         .file_asset_service()
         .document_attachment_list(&erp_core::ids::BusinessDocumentId::new(id))

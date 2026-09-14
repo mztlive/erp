@@ -44,6 +44,8 @@ it("销售关键词与客户、合同、责任视图同时提交，保留服务�
             q: "客户.[x]",
             customer_id: "c1",
             contract_id: "ct1",
+            org_unit_ids: undefined,
+            include_descendants: undefined,
             my_todo: true,
             created_by: "u1",
             page: 2,

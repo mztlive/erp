@@ -76,6 +76,13 @@ export function useSalesOrdersListChips(
                 label: `负责销售：已选 ${url.ownerUserIds.split(",").length} 人`,
                 onClear: () => removeFilter("ownerUserIds"),
             })
+        if (url.orgUnitIds)
+            chips.push({
+                key: "orgUnitIds",
+                clearLabel: "清除组织筛选",
+                label: `组织：已选 ${url.orgUnitIds.split(",").length} 个${url.includeDescendants ? "（含下级）" : ""}`,
+                onClear: () => removeFilter("orgUnitIds"),
+            })
         if (url.createdBy) {
             const ownerLabel = ownerOptionsQuery.data?.find(
                 (owner) => owner.userId === url.createdBy,
@@ -178,6 +185,8 @@ export function useSalesOrdersListChips(
         url.contractId,
         url.createdBy,
         url.ownerUserIds,
+        url.orgUnitIds,
+        url.includeDescendants,
         url.createdFrom,
         url.createdTo,
         url.customerId,

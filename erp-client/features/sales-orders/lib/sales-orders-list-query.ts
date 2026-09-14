@@ -55,6 +55,8 @@ export function buildSalesOrdersListQuery(
         contractId: url.contractId,
         createdBy: url.createdBy,
         ownerUserIds: url.ownerUserIds,
+        orgUnitIds: url.orgUnitIds,
+        includeDescendants: url.includeDescendants,
         nature: url.nature,
         summary: url.summary,
         currentUserId,

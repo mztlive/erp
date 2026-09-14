@@ -16,6 +16,23 @@ pub struct VoidChangeWrite {
     working_copy: Option<crate::entity::sales_order::SalesOrderWorkingCopy>,
 }
 impl VoidChangeWrite {
+    /// 来源销售单主键，供事务内沿原单范围重验。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回原销售单稳定身份。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 作废不得改写来源销售单身份。
+    pub fn sales_order_id(&self) -> &str {
+        self.change_order.sales_order_id.as_ref()
+    }
+
     /// 在同一执行器内先写作废变更，再写放弃的工作副本。
     ///
     /// # 错误

@@ -359,6 +359,10 @@ pub(super) struct SalesChangeStartPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: erp_audit::AuditLog,
+    /// 已认证操作人，用于事务内重验来源销售单范围。
+    pub actor: application_core::AuditActor,
+    /// 与写事务绑定的授权源。
+    pub rbac: erp_identity::SharedRbacService,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -393,6 +397,8 @@ pub(super) async fn persist_sales_change_start(
         organization_id,
         now,
         audit,
+        actor,
+        rbac,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
@@ -400,6 +406,16 @@ pub(super) async fn persist_sales_change_start(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                erp_read_models::sales_center::access::SalesAccess::new(db.clone(), rbac)
+                    .require_object(
+                        &actor,
+                        "submit",
+                        sales_write.change().sales_order_id.as_ref(),
+                        &[],
+                        session,
+                    )
+                    .await
+                    .map_err(crate::Error::from)?;
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, session)
                     .await

@@ -59,6 +59,9 @@ use application_core::non_blank;
 /// 销售变更单列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SalesChangeOrderListParams {
+    /// 跨页必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 原销售单筛选。
     pub sales_order_id: Option<erp_core::ids::SalesOrderId>,
     /// 变更状态筛选。
@@ -225,5 +228,17 @@ mod tests {
             serde_json::to_string(&SalesChangeType::Quantity).unwrap(),
             "\"QUANTITY\""
         );
+    }
+
+    #[test]
+    fn change_list_params_consume_scope_version() {
+        let params: super::SalesChangeOrderListParams = serde_json::from_value(serde_json::json!({
+            "page": 2,
+            "scope_version": "v1",
+            "sales_order_id": "so-1"
+        }))
+        .unwrap();
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        assert_eq!(params.page, Some(2));
     }
 }

@@ -148,11 +148,19 @@ impl super::super::owned::SalesOrderRepository<'_> {
     }
     /// 按独立授权条件读取销售单，ID 条件不能替换范围交集。
     ///
+    /// # 参数
+    /// * `id` - 销售单主键
+    /// * `scope` - 已证明的对象范围
+    /// * `executor` - 调用方执行器
+    ///
     /// # 返回
     /// 不存在或不在范围内均返回 None。
     ///
     /// # 错误
     /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仓储不得按登录用户自行推断权限。
     pub async fn find_authorized(
         &self,
         id: &str,
@@ -161,6 +169,42 @@ impl super::super::owned::SalesOrderRepository<'_> {
     ) -> persistence_core::Result<Option<crate::entity::sales_order::SalesOrder>> {
         self.find_one(doc! { "$and": [{ "id": id }, scope.document()] }, executor)
             .await
+    }
+
+    /// 列出当前范围内的销售单主键，供变更单沿原单接入。
+    ///
+    /// # 参数
+    /// * `scope` - 已证明的对象范围
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 个主键；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 仓储不得按登录用户自行推断权限；公司范围应由调用方跳过本方法。
+    pub async fn list_authorized_ids(
+        &self,
+        scope: &SalesReadScope,
+        executor: &mut dyn persistence_core::Executor,
+    ) -> persistence_core::Result<Vec<String>> {
+        let versions = persistence_core::mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesVersion>(),
+            doc! {
+                "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
+                "$and": [scope.document()]
+            },
+            mongodb::options::FindOptions::builder()
+                .projection(doc! { "id": 1, "version": 1 })
+                .sort(doc! { "id": 1 })
+                .limit(10001)
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(versions.into_iter().map(|row| row.id).collect())
     }
 }
 

@@ -135,14 +135,29 @@ impl SalesOrderService {
 }
 
 impl SalesOrderService {
-    /// Search sales rows with the original validated filters and pagination.
+    /// 按已证明范围和业务筛选检索销售单行与版本集合。
     ///
-    /// Cross-domain stage owners and account names are composed by the read model.
+    /// # 参数
+    /// * `params` - 原始列表查询
+    /// * `search` - 跨域关键词解析结果
+    /// * `scope` - 已证明的销售对象范围
+    /// * `business_org_unit_ids` - 已展开的单据业务组织；`None` 表示不额外收窄
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回当前页行和同一筛选快照的版本集合。
+    ///
+    /// # 错误
+    /// 分页非法、组织筛选非法或查询超过上限时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 组织筛选只收窄 `business_org_unit_id`；仓储不得按登录用户推断权限。
     pub async fn list_rows(
         &self,
         params: &crate::dto::sales_order::SalesOrderListParams,
         search: crate::repository::sales_order::SalesOrderSearch,
         scope: &crate::repository::sales_order::scope::SalesReadScope,
+        business_org_unit_ids: Option<Vec<String>>,
         executor: &mut dyn persistence_core::Executor,
     ) -> crate::Result<(
         application_core::PageView<crate::repository::sales_order::SalesOrderRow>,
@@ -169,6 +184,7 @@ impl SalesOrderService {
             created_to: query.created_to,
             created_by: query.created_by,
             owner_user_ids: query.owner_user_ids,
+            business_org_unit_ids,
             my_todo: query.my_todo,
             exception_only: query.exception_only,
             page: query.paging.page,

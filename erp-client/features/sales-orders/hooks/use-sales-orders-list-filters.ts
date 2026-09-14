@@ -18,6 +18,7 @@ export type SalesOrdersListFilterKey =
     | "contractId"
     | "createdBy"
     | "ownerUserIds"
+    | "orgUnitIds"
     | "nature"
     | "origin"
     | "commercialStatus"
@@ -49,6 +50,8 @@ export function useSalesOrdersListFilters(
         contractId,
         createdBy,
         ownerUserIds,
+        orgUnitIds,
+        includeDescendants,
         nature,
         origin,
         commercialStatus,
@@ -70,6 +73,8 @@ export function useSalesOrdersListFilters(
                 contractId,
                 createdBy,
                 ownerUserIds,
+                orgUnitIds,
+                includeDescendants,
                 nature,
                 origin,
                 commercialStatus,
@@ -89,6 +94,8 @@ export function useSalesOrdersListFilters(
         contractId,
         createdBy,
         ownerUserIds,
+        orgUnitIds,
+        includeDescendants,
         createdFrom,
         createdTo,
         customerId,
@@ -133,6 +140,13 @@ export function useSalesOrdersListFilters(
                     break
                 case "ownerUserIds":
                     pushUrl({ ownerUserIds: undefined, page: 1 })
+                    break
+                case "orgUnitIds":
+                    pushUrl({
+                        orgUnitIds: undefined,
+                        includeDescendants: false,
+                        page: 1,
+                    })
                     break
                 case "createdBy":
                     pushUrl({ createdBy: undefined, page: 1 })
@@ -196,6 +210,8 @@ export function useSalesOrdersListFilters(
             contractId: undefined,
             createdBy: undefined,
             ownerUserIds: undefined,
+            orgUnitIds: undefined,
+            includeDescendants: false,
             nature: "all",
             origin: "all",
             commercialStatus: "all",

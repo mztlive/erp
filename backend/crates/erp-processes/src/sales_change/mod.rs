@@ -10,6 +10,7 @@ use mongodb::{ClientSession, Database};
 use persistence_core::{NoTransaction, Transactional};
 
 mod adapter;
+mod authorization;
 mod cancel_approval;
 mod commands;
 mod posting;
@@ -20,15 +21,47 @@ use posting::persist_effective_writes;
 /// 销售变更最终通过流程，所有写入共享审批会话或本流程唯一根事务。
 pub struct SalesChangeProcess {
     db: Database,
+    rbac: SharedRbacService,
     object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 impl SalesChangeProcess {
-    /// 使用组合根数据库创建流程；授权仍由审批运行时在调用前完成。
-    pub fn new(db: Database, _rbac: SharedRbacService) -> Self {
+    /// 使用组合根数据库和授权源创建流程。
+    ///
+    /// # 参数
+    /// * `db` - 数据库
+    /// * `rbac` - 当前 RBAC 快照
+    ///
+    /// # 返回
+    /// 返回未注入对象读取端口的流程。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 变更命令必须沿原销售单范围独立重验，不得退回路由级授权。
+    pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self {
             db,
+            rbac,
             object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
         }
+    }
+
+    /// 返回写命令使用的授权源。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回构造时注入的 RBAC。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 不得用空授权源补公司范围。
+    fn require_rbac(&self) -> Result<SharedRbacService> {
+        Ok(self.rbac.clone())
     }
 
     /// 创建时注入组合根的审批对象读取能力，未注入时失败关闭。
@@ -75,8 +108,8 @@ impl SalesChangeProcess {
                 Box::pin(async move { persist_effective_writes(&db, write, delta, &audit, session).await })
             })
             .await?;
-        SalesChangeReadService::new(self.db.clone())
-            .sales_change_order_detail(id)
+        SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
+            .sales_change_order_detail(id, actor)
             .await
             .map_err(crate::Error::from)
     }

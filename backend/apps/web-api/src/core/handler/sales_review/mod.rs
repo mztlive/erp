@@ -8,13 +8,14 @@ use axum::{
     Extension, Json,
 };
 use erp_sales::dto::sales_review::{
-    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeOrderListParams,
-    SalesChangeOrderView, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
+    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, SalesChangeOrderListParams,
+    SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
 
 use erp_processes::sales_change::SalesChangeProcess;
-use erp_read_models::sales_center::review::{SalesChangeOrderDetailView, SalesChangeReadService};
-use erp_sales::service::sales_review::SalesReviewService;
+use erp_read_models::sales_center::review::{
+    SalesChangeListView, SalesChangeOrderDetailView, SalesChangeReadService,
+};
 
 use crate::{
     app_state::AppState,
@@ -32,16 +33,24 @@ use crate::{
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sales_order_id`/`status` 扁平传递）
+/// * `actor` - 已认证操作人
+/// * `query` - 分页与筛选参数（`sales_order_id`/`status` 扁平传递，含跨页 `scope_version`）
 ///
 /// # 返回
-/// 返回契约形状的分页视图。
+/// 返回带范围版本的分页视图。
+///
+/// # 错误
+/// 无动作权限、范围变化、筛选非法或仓储失败时拒绝。
+///
+/// # 关键业务约束
+/// 沿来源销售单责任接入；缺范围返回空集并标记 `no_scope`。
 pub async fn sales_change_order_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<SalesChangeOrderListParams>,
-) -> Result<PageView<SalesChangeOrderView>> {
-    let page = SalesReviewService::new(state.db())
-        .sales_change_order_list(&params)
+) -> Result<SalesChangeListView> {
+    let page = SalesChangeReadService::with_rbac(state.db(), state.rbac())
+        .sales_change_order_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(page))
@@ -58,16 +67,24 @@ pub async fn sales_change_order_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `id` - 变更单 ID
 ///
 /// # 返回
 /// 返回详情视图。
+///
+/// # 错误
+/// 无动作权限、不可见或不存在时拒绝。
+///
+/// # 关键业务约束
+/// 列表已授权不能作为详情凭证；沿来源销售单 detail 动作重验。
 pub async fn sales_change_order_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesChangeOrderDetailView> {
-    let view = SalesChangeReadService::new(state.db())
-        .sales_change_order_detail(&id)
+    let view = SalesChangeReadService::with_rbac(state.db(), state.rbac())
+        .sales_change_order_detail(&id, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

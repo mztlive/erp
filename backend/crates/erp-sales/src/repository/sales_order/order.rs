@@ -94,6 +94,8 @@ pub struct SalesOrderFilter {
     pub created_by: Option<String>,
     /// 已规范化负责人条件，与其它条件求交。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 已展开的单据业务组织；`None` 表示不额外收窄，空集合保持空结果。
+    pub business_org_unit_ids: Option<Vec<String>>,
     /// "待我处理"视图：仅草稿或被驳回/低毛利待处理回销售的单
     /// （`commercial_status=DRAFT` 或 `review_status IN [REJECTED, PENDING_LOW_MARGIN_SUPERIOR]`）。
     /// 与 `commercial_status`/`review_status` 互斥，调用方不应同时传两者。
@@ -160,6 +162,13 @@ impl QueryFilter for SalesOrderFilter {
         }
         if let Some(ids) = &self.owner_user_ids {
             filter.insert("sales_owner_user_id", doc! { "$in": ids.as_slice() });
+        }
+        if let Some(ids) = &self.business_org_unit_ids {
+            if ids.is_empty() {
+                filter.insert("$expr", false);
+            } else {
+                filter.insert("business_org_unit_id", doc! { "$in": ids });
+            }
         }
         if let Some(created_by) = &self.created_by {
             filter.insert("created_by", created_by);
@@ -614,6 +623,7 @@ mod tests {
     fn sales_order_filter_applies_optional_fields_and_deleted_filter() {
         let filter = SalesOrderFilter {
             owner_user_ids: Some(serde_json::from_str("\"sales-2,sales-3\"").unwrap()),
+            business_org_unit_ids: Some(vec!["org-1".into()]),
             search: Default::default(),
             order_no: Some("SO-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
@@ -641,6 +651,10 @@ mod tests {
         assert_eq!(
             document.get_document("sales_owner_user_id").unwrap(),
             &doc! { "$in": ["sales-2", "sales-3"] }
+        );
+        assert_eq!(
+            document.get_document("business_org_unit_id").unwrap(),
+            &doc! { "$in": ["org-1"] }
         );
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(
@@ -673,6 +687,36 @@ mod tests {
     }
 
     #[test]
+    fn empty_business_org_unit_filter_stays_empty() {
+        let filter = SalesOrderFilter {
+            owner_user_ids: None,
+            business_org_unit_ids: Some(Vec::new()),
+            search: Default::default(),
+            order_no: None,
+            customer_id: None,
+            contract_id: None,
+            origin_system: None,
+            commercial_status: None,
+            review_status: None,
+            business_type: None,
+            fulfillment_progress: None,
+            collection_progress: None,
+            invoice_progress: None,
+            close_status: None,
+            created_from: None,
+            created_to: None,
+            created_by: None,
+            my_todo: false,
+            exception_only: false,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        assert_eq!(filter.to_doc().get_bool("$expr").unwrap(), false);
+    }
+
+    #[test]
     fn sales_order_projection_includes_responsible_sales_account() {
         assert_eq!(
             sales_order_projection().get_i32("sales_owner_user_id").unwrap(),
@@ -684,6 +728,7 @@ mod tests {
     fn sales_order_filter_escapes_regex_metacharacters() {
         let filter = SalesOrderFilter {
             owner_user_ids: None,
+            business_org_unit_ids: None,
             search: Default::default(),
             order_no: Some("SO-2026.[x]".to_string()),
             customer_id: None,
@@ -745,6 +790,7 @@ mod keyword_regression_tests {
     fn keyword_preserves_structural_scope() {
         let mut filter = SalesOrderFilter {
             owner_user_ids: None,
+            business_org_unit_ids: None,
             search: Default::default(),
             order_no: None,
             customer_id: None,

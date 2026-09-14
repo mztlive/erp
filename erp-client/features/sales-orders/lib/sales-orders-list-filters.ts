@@ -23,6 +23,8 @@ export type SalesOrdersListFilterDraft = {
     customerId: string
     contractId: string
     ownerUserIds: string
+    orgUnitIds: string
+    includeDescendants: boolean
     createdBy: string
     nature: SalesOrderNatureFilter
     origin: SalesOrderOriginFilter
@@ -42,6 +44,7 @@ export function hasMoreSalesOrdersFilters(url: SalesOrdersUrlState): boolean {
         url.contractId ||
         url.createdBy ||
         url.ownerUserIds ||
+        url.orgUnitIds ||
         url.origin !== "all" ||
         url.commercialStatus !== "all" ||
         url.reviewStatus !== "all" ||
@@ -69,6 +72,8 @@ export function salesOrdersListFilterDraftsEqual(
         left.contractId === right.contractId &&
         left.createdBy === right.createdBy &&
         left.ownerUserIds === right.ownerUserIds &&
+        left.orgUnitIds === right.orgUnitIds &&
+        left.includeDescendants === right.includeDescendants &&
         left.nature === right.nature &&
         left.origin === right.origin &&
         left.commercialStatus === right.commercialStatus &&
@@ -99,6 +104,8 @@ export type SalesOrdersListFilterUrl = Pick<
     | "contractId"
     | "createdBy"
     | "ownerUserIds"
+    | "orgUnitIds"
+    | "includeDescendants"
     | "nature"
     | "origin"
     | "commercialStatus"
@@ -119,6 +126,8 @@ export function filterDraftFromUrl(
         contractId: url.contractId ?? "",
         createdBy: url.createdBy ?? "",
         ownerUserIds: url.ownerUserIds ?? "",
+        orgUnitIds: url.orgUnitIds ?? "",
+        includeDescendants: url.includeDescendants,
         nature: url.nature,
         origin: url.origin,
         commercialStatus: url.commercialStatus,
@@ -138,6 +147,8 @@ export const EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT: SalesOrdersListFilterDraft =
         contractId: "",
         createdBy: "",
         ownerUserIds: "",
+        orgUnitIds: "",
+        includeDescendants: false,
         nature: "all",
         origin: "all",
         commercialStatus: "all",
@@ -182,6 +193,10 @@ export function resolveSalesOrdersListFilterPatch(input: {
         contractId: filterDraft.contractId || undefined,
         createdBy: filterDraft.createdBy || undefined,
         ownerUserIds: filterDraft.ownerUserIds || undefined,
+        orgUnitIds: filterDraft.orgUnitIds.trim() || undefined,
+        includeDescendants: Boolean(filterDraft.orgUnitIds.trim())
+            ? filterDraft.includeDescendants
+            : false,
         nature: filterDraft.nature,
         ...(summaryConflictsWithDraft ? { summary: "all" as const } : {}),
         origin: filterDraft.origin,
@@ -227,6 +242,9 @@ export function salesOrdersListFilterDescription(
         url.contractId ? "已选合同" : null,
         url.createdBy ? "已选创建人" : null,
         url.ownerUserIds ? "已选负责销售" : null,
+        url.orgUnitIds
+            ? `组织：已选 ${url.orgUnitIds.split(",").length} 个${url.includeDescendants ? "（含下级）" : ""}`
+            : null,
         url.createdFrom || url.createdTo
             ? `创建日期 ${url.createdFrom || "不限"} 至 ${url.createdTo || "不限"}`
             : null,

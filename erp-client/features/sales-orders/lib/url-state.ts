@@ -24,6 +24,8 @@ export type SalesOrdersUrlState = {
     customerId?: string
     contractId?: string
     ownerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants: boolean
     createdBy?: string
     nature: SalesOrderNatureFilter
     summary: SalesOrderSummaryFilter
@@ -108,6 +110,8 @@ const MANAGED_QUERY_KEYS = [
     "contractId",
     "createdBy",
     "ownerUserIds",
+    "orgUnitIds",
+    "includeDescendants",
     "nature",
     "businessType",
     "summary",
@@ -139,6 +143,8 @@ const codec = createUrlStateCodec<SalesOrdersUrlState>([
     { key: "customerId", type: "string", trim: true },
     { key: "contractId", type: "string", trim: true },
     { key: "ownerUserIds", type: "string" },
+    { key: "orgUnitIds", type: "string" },
+    { key: "includeDescendants", type: "boolean", defaultValue: false },
     { key: "createdBy", type: "string", trim: true },
     {
         key: "nature",

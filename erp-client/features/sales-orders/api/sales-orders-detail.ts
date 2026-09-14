@@ -5,9 +5,9 @@
  * ApiError（@/lib/api），禁止 throw new Error("string")。
  */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
-import { downloadFileAsset } from "@/features/file-assets/api"
+import { isDataScopeChanged } from "@/features/data-scope/cache"
 import {
     PERMISSION_VERSION,
     type BackendContractDetail,
@@ -22,7 +22,6 @@ import { fetchSalesChangeOrderDetail } from "@/features/sales-orders/api/sales-o
 import {
     formatInstant,
     formatIsoNow,
-    mapChangeOrder,
     mapDetailToListItem,
     mapNature,
     pickSalesOrderCommercialSource,
@@ -30,11 +29,6 @@ import {
 } from "@/features/sales-orders/api/mappers"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
 
-/**
- * 下载销售单关联合同的当前修订 PDF。
- *
- * @param contractId 合同稳定身份
- */
 /**
  * 撤回尚未最终通过的销售单审批（`POST .../cancel-approval`）。
  * 服务端按单据乐观锁与运行中实例撤回；前端不依赖详情里的 instance 投影。
@@ -52,6 +46,11 @@ export async function cancelSalesOrderApproval(input: {
     })
 }
 
+/**
+ * 独立重验合同读取资格后下载当前修订 PDF。
+ *
+ * @param contractId 合同稳定身份
+ */
 export async function downloadSalesOrderContractPdf(
     contractId: string,
 ): Promise<void> {
@@ -69,7 +68,18 @@ export async function downloadSalesOrderContractPdf(
     if (!fileId) {
         throwValidation("合同尚未归档 PDF，无法下载")
     }
-    await downloadFileAsset(fileId, `${contract.contract_no}.pdf`)
+    const blob = await apiGetBlob(
+        `/admin/contracts/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}/preview`,
+        { timeoutMs: 30_000, cache: "no-store" },
+    )
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `${contract.contract_no}.pdf`
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
 }
 
 /** 详情页附属信息：在途改单。 */
@@ -77,19 +87,19 @@ async function loadDetailExtras(
     salesOrderId: string,
     nature: SalesOrderNature,
 ) {
-    const changeOrdersPage = await apiGet<PageView<BackendSalesChangeOrder>>(
-        "/admin/sales-change-orders",
-        {
+    let changeOrdersPage: PageView<BackendSalesChangeOrder>
+    try {
+        changeOrdersPage = await apiGet<
+            PageView<BackendSalesChangeOrder> & { empty_reason?: string | null }
+        >("/admin/sales-change-orders", {
             sales_order_id: salesOrderId,
             page: 1,
             page_size: 10,
-        },
-    ).catch(() => ({
-        items: [] as BackendSalesChangeOrder[],
-        total: 0,
-        page: 1,
-        page_size: 10,
-    }))
+        })
+    } catch (error) {
+        if (isDataScopeChanged(error)) throw error
+        return { activeChangeOrder: null }
+    }
 
     const activeChange =
         changeOrdersPage.items.find(
@@ -104,13 +114,17 @@ async function loadDetailExtras(
         return { activeChangeOrder: null }
     }
 
-    const detailed = await fetchSalesChangeOrderDetail(
-        activeChange.id,
-        nature,
-    ).catch(() => mapChangeOrder(activeChange, nature))
-
-    return {
-        activeChangeOrder: detailed,
+    try {
+        return {
+            activeChangeOrder: await fetchSalesChangeOrderDetail(
+                activeChange.id,
+                nature,
+                salesOrderId,
+            ),
+        }
+    } catch (error) {
+        if (isDataScopeChanged(error)) throw error
+        return { activeChangeOrder: null }
     }
 }
 

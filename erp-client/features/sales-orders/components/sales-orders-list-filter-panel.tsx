@@ -13,7 +13,9 @@ import {
     OwnerCombobox,
 } from "@/components/business"
 import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DateRangePicker } from "@/components/ui/date-picker"
+import { Input } from "@/components/ui/input"
 import {
     ContractSearchCombobox,
     CustomerSearchCombobox,
@@ -51,6 +53,36 @@ export function SalesOrdersListFilterPanel(props: {
                 }
                 options={props.ownerOptions}
             />
+            <ListWorkspaceFilterField
+                htmlFor="sales-orders-list-filter-org"
+                label="业务组织"
+            >
+                <Input
+                    id="sales-orders-list-filter-org"
+                    value={filterDraft.orgUnitIds}
+                    onChange={(event) =>
+                        setFilterDraft((draft) => ({
+                            ...draft,
+                            orgUnitIds: event.target.value,
+                        }))
+                    }
+                    placeholder="组织 ID，逗号分隔"
+                    aria-label="按单据业务组织筛选"
+                />
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                        id="sales-orders-list-filter-org-descendants"
+                        checked={filterDraft.includeDescendants}
+                        onCheckedChange={(checked) =>
+                            setFilterDraft((draft) => ({
+                                ...draft,
+                                includeDescendants: checked === true,
+                            }))
+                        }
+                    />
+                    包含下级
+                </label>
+            </ListWorkspaceFilterField>
             <fieldset className="min-w-0">
                 <legend className="mb-3 text-xs font-medium">来源与状态</legend>
                 <div className="grid min-w-0 gap-3">

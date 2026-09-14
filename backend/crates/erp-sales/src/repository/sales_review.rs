@@ -54,6 +54,8 @@ pub struct SalesChangeOrderRow {
 pub struct SalesChangeOrderFilter {
     /// 原销售单；`None` 表示不筛选。
     pub sales_order_id: Option<SalesOrderId>,
+    /// 已证明可见的来源销售单；`None` 表示公司范围不限制。
+    pub authorized_sales_order_ids: Option<Vec<String>>,
     /// 变更状态；`None` 表示不筛选。
     pub status: Option<SalesChangeOrderStatus>,
     /// 页码（1 起）。
@@ -72,14 +74,11 @@ impl QueryFilter for SalesChangeOrderFilter {
     /// # 返回
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
-        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(sales_order_id) = &self.sales_order_id {
-            filter.insert("sales_order_id", sales_order_id.to_string());
-        }
-        if let Some(status) = self.status {
-            filter.insert("status", status.as_str());
-        }
-        filter
+        change_order_filter(
+            self.sales_order_id.as_ref().map(ToString::to_string).as_deref(),
+            self.status.map(|status| status.as_str()),
+            self.authorized_sales_order_ids.as_deref(),
+        )
     }
 }
 
@@ -124,6 +123,38 @@ impl<'a> SalesChangeOrderRepository<'a> {
             items,
             total: total as i64,
         })
+    }
+
+    /// 装载变更查询的有界身份与版本集合，用于跨页一致性校验。
+    ///
+    /// # 参数
+    /// * `filter` - 已包含授权来源限制的筛选
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 最多 10001 行；调用方必须整体拒绝超限。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 版本集合必须与列表同一授权条件和筛选快照。
+    pub async fn query_change_versions(
+        &self,
+        filter: &SalesChangeOrderFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeVersion>> {
+        mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesChangeVersion>(),
+            filter.to_doc(),
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "version": 1 })
+                .sort(doc! { "id": 1 })
+                .limit(10001)
+                .build(),
+            executor,
+        )
+        .await
     }
 
     /// 按「销售单 + 基准版本」查找进行中变更单。
@@ -442,6 +473,62 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     doc! { sort_by.unwrap_or("created_at"): direction }
 }
 
+/// 跨页校验使用的变更单身份和版本，不包含展示字段。
+#[derive(Debug, serde::Deserialize, Hash)]
+pub struct SalesChangeVersion {
+    /// 变更单主键。
+    pub id: String,
+    /// 乐观锁版本。
+    pub version: u64,
+}
+
+/// 按来源销售单授权编译变更单查询条件。
+///
+/// # 参数
+/// * `sales_order_id` - 可选原销售单筛选
+/// * `status` - 可选状态代码
+/// * `authorized_sales_order_ids` - 已证明可见的来源销售单；`None` 表示公司范围
+///
+/// # 返回
+/// 返回未删除过滤与授权交集后的查询文档。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 授权空集与越界原单保持 `$expr:false`，不得查全量。
+fn change_order_filter(
+    sales_order_id: Option<&str>,
+    status: Option<&str>,
+    authorized_sales_order_ids: Option<&[String]>,
+) -> Document {
+    let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+    if let Some(status) = status {
+        filter.insert("status", status);
+    }
+    match (sales_order_id, authorized_sales_order_ids) {
+        (Some(sales_order_id), None) => {
+            filter.insert("sales_order_id", sales_order_id);
+        }
+        (Some(sales_order_id), Some(authorized)) => {
+            if authorized.iter().any(|id| id == sales_order_id) {
+                filter.insert("sales_order_id", sales_order_id);
+            } else {
+                filter.insert("$expr", false);
+            }
+        }
+        (None, Some(authorized)) => {
+            if authorized.is_empty() {
+                filter.insert("$expr", false);
+            } else {
+                filter.insert("sales_order_id", doc! { "$in": authorized });
+            }
+        }
+        (None, None) => {}
+    }
+    filter
+}
+
 /// 销售变更单列表投影字段。
 ///
 /// # 返回
@@ -467,6 +554,7 @@ mod tests {
     fn sales_change_order_filter_applies_order_and_status() {
         let filter = SalesChangeOrderFilter {
             sales_order_id: Some(SalesOrderId::new("o-1")),
+            authorized_sales_order_ids: None,
             status: Some(SalesChangeOrderStatus::Draft),
             page: 1,
             page_size: 20,
@@ -477,6 +565,22 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_str("sales_order_id").unwrap(), "o-1");
         assert_eq!(document.get_str("status").unwrap(), "DRAFT");
+    }
+
+    #[test]
+    fn missing_authorized_source_ids_stay_empty() {
+        assert_eq!(
+            change_order_filter(None, None, Some(&[])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+        assert_eq!(
+            change_order_filter(Some("so-1"), None, Some(&["so-2".into()])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+        assert_eq!(
+            change_order_filter(Some("so-1"), None, Some(&["so-1".into()])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "sales_order_id": "so-1" }
+        );
     }
 
     #[test]
