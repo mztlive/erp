@@ -36,7 +36,7 @@ impl SelectionCustomerPort for CustomerAdapter {
     /// 不存在。
     async fn customer_fact(&self, customer_id: &str) -> SalesResult<SelectionCustomerFact> {
         let detail = crate::adapters::customer_service(self.db.clone())
-            .customer_detail(customer_id)
+            .load_customer_detail(customer_id)
             .await
             .map_err(|error| erp_sales::Error::NotFound(error.to_string()))?;
         Ok(SelectionCustomerFact {

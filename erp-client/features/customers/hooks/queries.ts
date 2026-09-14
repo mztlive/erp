@@ -32,9 +32,29 @@ export function useCustomerDirectoryQuery(
     query: CustomerDirectoryQuery,
     options?: { enabled?: boolean },
 ) {
+    const queryClient = useQueryClient()
+    const firstPage = { ...query, page: 1, scopeVersion: undefined }
+    const baseline = queryClient.getQueryData<
+        import("@/features/customers/types").CustomerDirectoryResult
+    >(customerKeys.directory(firstPage))
+    const scopeVersion =
+        query.scopeVersion ??
+        (query.page > 1 ? baseline?.scopeVersion : undefined)
+    const scoped = { ...query, scopeVersion }
     return useQuery({
-        queryKey: customerKeys.directory(query),
-        queryFn: () => fetchCustomerDirectory(query),
+        queryKey: customerKeys.directory(scoped),
+        queryFn: async () => {
+            if (query.page === 1 || scopeVersion)
+                return fetchCustomerDirectory(scoped)
+            const first = await queryClient.fetchQuery({
+                queryKey: customerKeys.directory(firstPage),
+                queryFn: () => fetchCustomerDirectory(firstPage),
+            })
+            return fetchCustomerDirectory({
+                ...query,
+                scopeVersion: first.scopeVersion,
+            })
+        },
         // 切换筛选时保留上一批结果渲染，避免整卡闪烁（数据表骨架只出现于首载）。
         placeholderData: (previous) => previous,
         enabled: options?.enabled ?? true,

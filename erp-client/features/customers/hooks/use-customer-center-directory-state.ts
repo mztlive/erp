@@ -18,6 +18,8 @@ import { hasPermission } from "@/lib/permissions"
 /** 目录筛选/分页/排序的 URL 参数增量。 */
 export type CustomerCenterDirectoryPatch = {
     ownerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
     scope?: CustomerScope
     status?: DirectoryStatus
     q?: string
@@ -27,7 +29,7 @@ export type CustomerCenterDirectoryPatch = {
 }
 
 /** 可被单独移除的已生效筛选条件。 */
-export type CustomerFilterKey = "q" | "status" | "ownerUserIds"
+export type CustomerFilterKey = "q" | "status" | "ownerUserIds" | "orgUnitIds"
 
 export type CustomerAppliedChip = Readonly<{
     key: CustomerFilterKey
@@ -53,8 +55,18 @@ export function useCustomerCenterDirectoryState() {
             : "active"
     const q = searchParams.get("q") ?? ""
     const ownerUserIds = searchParams.get("ownerUserIds") ?? ""
+    const orgUnitIds = searchParams.get("orgUnitIds") ?? ""
+    const includeDescendants = searchParams.get("includeDescendants") === "true"
     const [ownerDraft, setOwnerDraft] = React.useState(ownerUserIds)
+    const [orgDraft, setOrgDraft] = React.useState(orgUnitIds)
+    const [descendantsDraft, setDescendantsDraft] =
+        React.useState(includeDescendants)
     React.useEffect(() => setOwnerDraft(ownerUserIds), [ownerUserIds])
+    React.useEffect(() => setOrgDraft(orgUnitIds), [orgUnitIds])
+    React.useEffect(
+        () => setDescendantsDraft(includeDescendants),
+        [includeDescendants],
+    )
     const sort = "business"
     const dir: "asc" | "desc" =
         searchParams.get("dir") === "asc" ? "asc" : "desc"
@@ -81,6 +93,9 @@ export function useCustomerCenterDirectoryState() {
                 writeDirectoryUrl(pathname, {
                     scope: next.scope ?? scope,
                     ownerUserIds: next.ownerUserIds ?? ownerUserIds,
+                    orgUnitIds: next.orgUnitIds ?? orgUnitIds,
+                    includeDescendants:
+                        next.includeDescendants ?? includeDescendants,
                     status: next.status ?? status,
                     q: next.q ?? q,
                     sort: next.sort ?? sort,
@@ -90,7 +105,19 @@ export function useCustomerCenterDirectoryState() {
                 { scroll: false },
             )
         },
-        [dir, page, pathname, q, router, scope, sort, status, ownerUserIds],
+        [
+            dir,
+            includeDescendants,
+            orgUnitIds,
+            page,
+            pathname,
+            q,
+            router,
+            scope,
+            sort,
+            status,
+            ownerUserIds,
+        ],
     )
 
     /** 单一提交路径：查询按钮与搜索框 Enter 共用。 */
@@ -99,9 +126,18 @@ export function useCustomerCenterDirectoryState() {
             q: searchDraft.trim(),
             status: statusDraft,
             ownerUserIds: ownerDraft,
+            orgUnitIds: orgDraft,
+            includeDescendants: descendantsDraft,
             page: 1,
         })
-    }, [pushState, searchDraft, statusDraft, ownerDraft])
+    }, [
+        pushState,
+        searchDraft,
+        statusDraft,
+        ownerDraft,
+        orgDraft,
+        descendantsDraft,
+    ])
 
     /** 快捷筛选（客户范围）直接写 Applied；不改动关键词或状态草稿。 */
     const applyScope = React.useCallback(
@@ -117,6 +153,15 @@ export function useCustomerCenterDirectoryState() {
             if (key === "ownerUserIds") {
                 setOwnerDraft("")
                 pushState({ ownerUserIds: "", page: 1 })
+            }
+            if (key === "orgUnitIds") {
+                setOrgDraft("")
+                setDescendantsDraft(false)
+                pushState({
+                    orgUnitIds: "",
+                    includeDescendants: false,
+                    page: 1,
+                })
             }
             if (key === "q") {
                 setSearchDraft("")
@@ -140,7 +185,16 @@ export function useCustomerCenterDirectoryState() {
         setSearchDraft("")
         setStatusDraft("active")
         setOwnerDraft("")
-        pushState({ q: "", status: "active", ownerUserIds: "", page: 1 })
+        setOrgDraft("")
+        setDescendantsDraft(false)
+        pushState({
+            q: "",
+            status: "active",
+            ownerUserIds: "",
+            orgUnitIds: "",
+            includeDescendants: false,
+            page: 1,
+        })
     }, [pushState])
 
     /** 所有已生效筛选均可从 chip 单独撤销。 */
@@ -150,6 +204,11 @@ export function useCustomerCenterDirectoryState() {
             chips.push({
                 key: "ownerUserIds",
                 label: `负责销售：已选 ${ownerUserIds.split(",").length} 人`,
+            })
+        if (orgUnitIds)
+            chips.push({
+                key: "orgUnitIds",
+                label: `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
             })
         const trimmedQ = q.trim()
         if (trimmedQ) {
@@ -162,14 +221,17 @@ export function useCustomerCenterDirectoryState() {
             })
         }
         return chips
-    }, [q, status, ownerUserIds])
+    }, [q, status, ownerUserIds, orgUnitIds, includeDescendants])
 
-    const hasStructuredFilters = status !== "active" || Boolean(ownerUserIds)
+    const hasStructuredFilters =
+        status !== "active" || Boolean(ownerUserIds) || Boolean(orgUnitIds)
     const hasActiveFilters = hasStructuredFilters || q.trim().length > 0
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
         statusDraft !== status ||
-        ownerDraft !== ownerUserIds
+        ownerDraft !== ownerUserIds ||
+        orgDraft !== orgUnitIds ||
+        descendantsDraft !== includeDescendants
 
     const handlePaginationChange = React.useCallback(
         (next: PaginationState) => {
@@ -200,6 +262,12 @@ export function useCustomerCenterDirectoryState() {
         ownerUserIds,
         ownerDraft,
         setOwnerDraft,
+        orgUnitIds,
+        orgDraft,
+        setOrgDraft,
+        includeDescendants,
+        descendantsDraft,
+        setDescendantsDraft,
         scope,
         status,
         q,
@@ -231,62 +299,13 @@ export function useCustomerCenterDirectoryState() {
  * 权限守卫：无「全部有权客户」范围权限时，访问 all_authorized 一律重定向到
  * 我的客户视图（等账号资料加载完成后再判定，避免闪跳）。
  */
-export function useCustomerCenterScopeGuard(state: {
-    ownerUserIds: string
-    scope: CustomerScope
-    status: DirectoryStatus
-    q: string
-    sort: string
-    dir: "asc" | "desc"
-    page: number
-}) {
-    const router = useRouter()
-    const pathname = usePathname()
+export function useCustomerCenterScopeGuard() {
     const accountProfile = useAccountProfileQuery()
     const canCreate = hasPermission(
         accountProfile.data?.permissions,
         "customer:create",
     )
-    const canReadAll = hasPermission(
-        accountProfile.data?.permissions,
-        "customer_scope:detail",
-    )
-    const { scope, status, q, sort, dir, page, ownerUserIds } = state
-
-    React.useEffect(() => {
-        if (
-            !accountProfile.isPending &&
-            scope === "all_authorized" &&
-            !canReadAll
-        ) {
-            router.replace(
-                writeDirectoryUrl(pathname, {
-                    scope: "mine",
-                    ownerUserIds,
-                    status,
-                    q,
-                    sort,
-                    dir,
-                    page: 1,
-                }),
-                { scroll: false },
-            )
-        }
-    }, [
-        accountProfile.isPending,
-        canReadAll,
-        ownerUserIds,
-        dir,
-        page,
-        pathname,
-        q,
-        router,
-        scope,
-        sort,
-        status,
-    ])
-
-    return { accountProfile, canCreate, canReadAll }
+    return { accountProfile, canCreate, canReadAll: true }
 }
 
 /** 在非输入控件焦点、且无 Dialog/Sheet 打开时按 “/” 聚焦客户搜索框。 */

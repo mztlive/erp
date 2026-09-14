@@ -87,11 +87,10 @@ pub async fn booklet_list(
 /// 返回详情。
 pub async fn booklet_detail(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).booklet_detail(&id).await?,
     ))
@@ -120,7 +119,7 @@ pub async fn booklet_create(
     Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesSelectionBookletRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
+    ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).create(req, actor.id().to_string()).await?,
     ))
@@ -151,7 +150,7 @@ pub async fn booklet_prepare(
     Path(id): Path<String>,
     Json(req): Json<PrepareSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state)
             .start_prepare(id, req, actor.id().to_string())
@@ -184,7 +183,7 @@ pub async fn booklet_delete_item(
     Path((id, item_id)): Path<(String, String)>,
     Query(req): Query<DeleteDisplayItemRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state)
             .delete_display_item(id, item_id, req, actor.id().to_string())
@@ -217,7 +216,7 @@ pub async fn booklet_delete_item_post(
     Path((id, item_id)): Path<(String, String)>,
     Json(req): Json<DeleteDisplayItemRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state)
             .delete_display_item(id, item_id, req, actor.id().to_string())
@@ -250,7 +249,7 @@ pub async fn booklet_publish(
     Path(id): Path<String>,
     Json(req): Json<PublishSalesSelectionRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).publish(id, req, actor.id().to_string()).await?,
     ))
@@ -273,11 +272,10 @@ pub async fn booklet_publish(
 /// 返回含路径的详情。
 pub async fn booklet_copy_link(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(process(&state).copy_link(&id).await?))
 }
 
@@ -298,11 +296,10 @@ pub async fn booklet_copy_link(
 /// 返回 `{ public_url }`。
 pub async fn booklet_copy_link_url(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<CopyLinkView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).copy_link_url(&id).await?,
     ))
@@ -325,11 +322,10 @@ pub async fn booklet_copy_link_url(
 /// 返回当前会话。
 pub async fn booklet_session(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionSessionView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).admin_session(&id).await?,
     ))
@@ -360,7 +356,7 @@ pub async fn booklet_rotate_link(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state)
             .rotate_link(id, req, actor.id().to_string())
@@ -393,7 +389,7 @@ pub async fn booklet_close(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).close(id, req, actor.id().to_string()).await?,
     ))
@@ -424,7 +420,7 @@ pub async fn booklet_revoke(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).revoke(id, req, actor.id().to_string()).await?,
     ))
@@ -455,7 +451,7 @@ pub async fn booklet_void(
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
 ) -> Result<SalesSelectionBookletView> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     Ok(ApiResponse::ok_with_data(
         process(&state).void(id, req, actor.id().to_string()).await?,
     ))
@@ -505,12 +501,11 @@ pub async fn proposal_list(
 /// 返回详情。
 pub async fn proposal_detail(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<SalesSelectionProposalView> {
     let proposal = process(&state).proposal_detail(&id).await?;
-    ensure_customer_access(&state, &subject, &user_id, &proposal.customer_id).await?;
+    ensure_customer_access(&state, &actor, "detail", &proposal.customer_id).await?;
     Ok(ApiResponse::ok_with_data(proposal))
 }
 
@@ -526,12 +521,11 @@ pub async fn proposal_detail(
 /// 客户越权、跨册资产和存储读取失败时拒绝。
 pub async fn admin_image(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Query(query): Query<PublicImageQuery>,
 ) -> std::result::Result<Response, Error> {
-    access::booklet(&state, &subject, &user_id, &id).await?;
+    access::booklet(&state, &actor, &id).await?;
     let (bytes, content_type) = process(&state).admin_image(&id, &query.asset_id).await?;
     let mut response = Response::new(Body::from(bytes));
     response.headers_mut().insert(

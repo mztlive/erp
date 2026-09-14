@@ -44,13 +44,17 @@ pub use application_core::SortDir;
 pub(crate) struct CustomerListQuery {
     /// 当前负责人精确身份条件。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前主负责人所属组织，只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 客户编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID。
     pub party_id: Option<PartyId>,
     /// 启停状态筛选。
     pub status: Option<CustomerAccountStatus>,
-    /// 服务端执行的数据范围。
+    /// 目录范围标签，只收窄授权结果。
     pub scope: CustomerScope,
     /// 分页与排序参数。
     pub paging: PageParams,
@@ -203,15 +207,22 @@ pub struct CustomerDetailView {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CustomerListParams {
+    /// 跨页与导出必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前主负责人所属组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 客户编号模糊搜索。
     pub keyword: Option<String>,
     /// 共用企业主体 ID（精确匹配）。
     pub party_id: Option<PartyId>,
     /// 启停状态筛选。
     pub status: Option<CustomerAccountStatus>,
-    /// 数据范围；缺省为当前用户负责的客户。
+    /// 目录范围标签；缺省为当前用户负责的客户，只收窄授权结果。
     #[serde(default)]
     pub scope: CustomerScope,
     /// 页码（1 起）。
@@ -238,8 +249,13 @@ impl CustomerListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<CustomerListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
         Ok(CustomerListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             keyword: normalized_text(self.keyword.as_deref()),
             party_id: self.party_id.clone(),
             status: self.status,
@@ -699,7 +715,10 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = CustomerListParams {
+            scope_version: None,
             owner_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: None,
             keyword: Some(" C-20 ".to_string()),
             party_id: None,
             status: None,
@@ -715,6 +734,37 @@ mod tests {
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+    }
+
+    #[test]
+    fn list_params_accept_scope_version_and_org_filters() {
+        let params: CustomerListParams = serde_json::from_value(json!({
+            "scope_version": "v1",
+            "org_unit_ids": "org-2,org-1",
+            "include_descendants": true,
+            "page": 2
+        }))
+        .unwrap();
+        let query = params.normalized().unwrap();
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        assert_eq!(query.org_unit_ids.unwrap().as_slice(), &["org-1", "org-2"]);
+        assert_eq!(query.include_descendants, Some(true));
+        assert!(CustomerListParams {
+            scope_version: None,
+            owner_user_ids: None,
+            org_unit_ids: None,
+            include_descendants: Some(true),
+            keyword: None,
+            party_id: None,
+            status: None,
+            scope: super::CustomerScope::Mine,
+            page: None,
+            page_size: None,
+            sort_by: None,
+            sort_dir: None,
+        }
+        .normalized()
+        .is_err());
     }
 
     #[test]

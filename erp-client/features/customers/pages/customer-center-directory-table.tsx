@@ -7,6 +7,7 @@ import type {
 } from "@tanstack/react-table"
 
 import { BusinessEmptyState, DataTable } from "@/components/business"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
 import type { DirectoryStatus } from "@/features/customers/lib/directory-url"
 import { SCOPE_LABELS } from "@/features/customers/lib/filter-customers"
@@ -52,6 +53,7 @@ export function CustomerCenterDirectoryTable({
     onCreate: () => void
     onOpenRow: (row: CustomerDirectoryItem) => void
 }) {
+    const isMobile = useIsMobile()
     return items.length === 0 ? (
         totalInScope === 0 && !q.trim() && status === "active" ? (
             <BusinessEmptyState
@@ -108,6 +110,9 @@ export function CustomerCenterDirectoryTable({
             pageSizeOptions={[20]}
             layout="flush"
             rowLabel={(row) => row.shortName || row.legalName}
+            defaultColumnVisibility={
+                isMobile ? { business: false, status: false } : { business: false }
+            }
             defaultColumnPinning={{
                 left: ["customer"],
             }}

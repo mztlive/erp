@@ -1726,9 +1726,11 @@ version = "0.1.0"
 dependencies = [
  "application-core",
  "async-trait",
+ "chrono",
  "entity-core",
  "entity-macros",
  "erp-core",
+ "erp-identity",
  "hex",
  "id-generator",
  "mongodb",

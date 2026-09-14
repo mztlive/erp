@@ -41,15 +41,7 @@ export function CustomerCenterPage() {
 
     const directoryState = useCustomerCenterDirectoryState()
     const { scope, status, q, sort, dir, page } = directoryState
-    const { canCreate, canReadAll } = useCustomerCenterScopeGuard({
-        ownerUserIds: directoryState.ownerUserIds,
-        scope,
-        status,
-        q,
-        sort,
-        dir,
-        page,
-    })
+    const { canCreate } = useCustomerCenterScopeGuard()
     useCustomerCenterSearchShortcut()
 
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -59,6 +51,8 @@ export function CustomerCenterPage() {
         status,
         query: q,
         ownerUserIds: directoryState.ownerUserIds,
+        orgUnitIds: directoryState.orgUnitIds,
+        includeDescendants: directoryState.includeDescendants,
         sort: (SORT_COLUMN_TO_FIELD[sort] as "updated_at") ?? "updated_at",
         sortDir: dir,
         page,
@@ -102,7 +96,7 @@ export function CustomerCenterPage() {
             aria-busy="true"
             aria-label="正在加载客户目录"
         />
-    ) : data && !data.hasCustomerScope ? (
+    ) : data && data.emptyReason === "no_scope" ? (
         <BusinessEmptyState
             kind="no-scope"
             className={listWorkspaceEmptyStateClassName}
@@ -221,9 +215,7 @@ export function CustomerCenterPage() {
                     <ListWorkspaceViews
                         ariaLabel="客户范围"
                         hint="选择客户查看详情"
-                        items={SCOPE_ORDER.filter(
-                            (key) => key !== "all_authorized" || canReadAll,
-                        ).map((key) => ({
+                        items={SCOPE_ORDER.map((key) => ({
                             id: `customers-directory-scope-${toAutomationIdSegment(key)}`,
                             label: SCOPE_LABELS[key],
                             count:
@@ -240,6 +232,10 @@ export function CustomerCenterPage() {
                         ownerDraft={directoryState.ownerDraft}
                         setOwnerDraft={directoryState.setOwnerDraft}
                         ownerOptions={data?.ownerOptions ?? []}
+                        orgDraft={directoryState.orgDraft}
+                        setOrgDraft={directoryState.setOrgDraft}
+                        descendantsDraft={directoryState.descendantsDraft}
+                        setDescendantsDraft={directoryState.setDescendantsDraft}
                         searchInputRef={directoryState.searchInputRef}
                         searchDraft={directoryState.searchDraft}
                         setSearchDraft={directoryState.setSearchDraft}

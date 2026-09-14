@@ -14,10 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::dto::customer::{
-    CreateCustomerRequest, CustomerDetailView, CustomerListParams, CustomerScope, CustomerView, PageView,
-    SortDir, UpdateCustomerRequest,
-};
+use crate::dto::customer::{CreateCustomerRequest, CustomerScope, CustomerView, UpdateCustomerRequest};
 use crate::entity::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
     CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
@@ -27,21 +24,23 @@ use crate::ports::{AccountFactPort, CustomerAuditPort, PartyFactPort, PartyIdent
 use crate::repository::{CustomerAccountRow, CustomerExt};
 use erp_core::common::time::BusinessDate;
 use erp_core::field_update::FieldUpdate;
-use erp_core::ids::PartyId;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use application_core::AuditActor;
+use erp_identity::SharedRbacService;
 
+pub mod access;
 pub mod assignment;
 pub mod profile;
+mod query;
+mod scope;
 
+pub use access::CustomerAccess;
 pub use assignment::CustomerAssignmentService;
-
-/// 客户角色列表筛选条件类型（经 `CustomerExt` 关联类型跨 crate 可达）。
-type CustomerAccountFilter = <mongodb::Database as CustomerExt>::CustomerAccountFilter;
+pub use scope::CustomerListView;
 
 /// 客户服务。
 ///
@@ -52,6 +51,7 @@ pub struct CustomerService {
     audit: Arc<dyn CustomerAuditPort>,
     party: Arc<dyn PartyFactPort>,
     accounts: Arc<dyn AccountFactPort>,
+    rbac: Option<SharedRbacService>,
 }
 
 impl CustomerService {
@@ -76,7 +76,45 @@ impl CustomerService {
             audit,
             party,
             accounts,
+            rbac: None,
         }
+    }
+
+    /// 注入当前 RBAC 快照，供 DataScope 解析使用。
+    ///
+    /// # 参数
+    /// * `rbac` - 共享 RBAC 服务
+    ///
+    /// # 返回
+    /// 返回可解析客户范围的服务。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 列表、详情和写命令必须注入授权源，不得在缺 RBAC 时补公司范围。
+    pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
+        self.rbac = Some(rbac);
+        self
+    }
+
+    /// 取得客户范围解析所需的授权源。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已注入的 RBAC 服务。
+    ///
+    /// # 错误
+    /// 未注入时返回内部错误。
+    ///
+    /// # 关键业务约束
+    /// 缺少授权源不得按登录人自行推断范围。
+    fn require_rbac(&self) -> Result<&SharedRbacService> {
+        self.rbac
+            .as_ref()
+            .ok_or_else(|| Error::Internal("客户范围解析需要授权源".into()))
     }
 
     /// 创建客户（跨集合事务：customer_account + 首条 OWNER 归属 + 审计原子写入）。
@@ -118,9 +156,14 @@ impl CustomerService {
         let audit_port = self.audit.clone();
         let account_for_tx = account.clone();
         let assignment_for_tx = assignment.clone();
+        let rbac = self.require_rbac()?.clone();
+        let actor_for_tx = actor.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access::CustomerAccess::new(db.clone(), rbac)
+                        .require_create(&actor_for_tx, session)
+                        .await?;
                     persist_new_account(&db, &account_for_tx, &assignment_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
@@ -149,89 +192,6 @@ impl CustomerService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         persist_new_account(&self.db, account, assignment, executor).await
-    }
-
-    /// 分页查询客户角色列表。
-    ///
-    /// 排序字段白名单在 Service 层校验（api-contract §4），禁止任意字段透传。
-    ///
-    /// # 参数
-    /// * `params` - 查询参数
-    /// * `actor_user_id` - 当前登录用户 ID，用于执行客户归属范围过滤
-    ///
-    /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
-    ///
-    /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    pub async fn customer_list(
-        &self,
-        params: &CustomerListParams,
-        actor_user_id: &str,
-    ) -> Result<application_core::FilteredPage<CustomerView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let customer_ids = self.customer_ids_for_scope(query.scope, actor_user_id).await?;
-        let owners = self
-            .db
-            .customer_assignments()
-            .current_owners(
-                customer_ids.as_deref(),
-                None,
-                BusinessDate::today(),
-                &mut NoTransaction,
-            )
-            .await?;
-        let owner_options = self
-            .accounts
-            .filter_options(&owners.iter().map(|o| o.user_id.clone()).collect::<Vec<_>>())
-            .await?;
-        let customer_ids = query
-            .owner_user_ids
-            .as_ref()
-            .map(|ids| {
-                owners
-                    .iter()
-                    .filter(|o| ids.as_slice().contains(&o.user_id))
-                    .map(|o| o.customer_id.to_string())
-                    .collect()
-            })
-            .or(customer_ids);
-        let keyword_party_ids = match query.keyword.as_deref() {
-            Some(keyword) => Some(self.party.matching_ids_by_name(keyword).await?),
-            None => None,
-        };
-        let filter = CustomerAccountFilter {
-            keyword: query.keyword,
-            keyword_party_ids,
-            party_id: query.party_id,
-            party_ids: None,
-            customer_ids,
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .customer_accounts()
-            .search_customer_accounts(&filter, &mut NoTransaction)
-            .await?;
-        let items = self
-            .hydrate_customer_rows(page.items, actor_user_id, query.scope)
-            .await?;
-
-        Ok(application_core::FilteredPage {
-            owner_options,
-            ownership_basis: "current_customer_owner",
-            page: PageView {
-                items,
-                total: page.total,
-                page: filter.page,
-                page_size: filter.page_size,
-            },
-        })
     }
 
     /// 判断当前用户是否在指定客户的当前 OWNER 或 COLLABORATOR 归属中。
@@ -291,84 +251,6 @@ impl CustomerService {
         ))
     }
 
-    /// 批量补齐客户当前主体身份与归属，避免列表逐行查询。
-    async fn hydrate_customer_rows(
-        &self,
-        rows: Vec<CustomerAccountRow>,
-        actor_user_id: &str,
-        requested_scope: CustomerScope,
-    ) -> Result<Vec<CustomerView>> {
-        if rows.is_empty() {
-            return Ok(Vec::new());
-        }
-        let party_ids: Vec<PartyId> = rows
-            .iter()
-            .map(|row| PartyId::new(row.party_id.clone()))
-            .collect();
-        let identities = self.party.identities_by_ids(&party_ids).await?;
-        let customer_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
-        let assignments = self
-            .db
-            .customer_assignments()
-            .list_active_for_customers(&customer_ids, BusinessDate::today(), &mut NoTransaction)
-            .await?;
-        let account_ids: Vec<String> = assignments
-            .iter()
-            .map(|assignment| assignment.user_id.clone())
-            .collect();
-        let account_names = self.accounts.names_by_ids(&account_ids).await?;
-        Ok(assemble_customer_views(
-            rows,
-            identities,
-            assignments,
-            actor_user_id,
-            requested_scope,
-            account_names,
-        ))
-    }
-
-    /// 查询客户角色详情（客户 + 主体身份 + 当前生效 OWNER）。
-    ///
-    /// # 参数
-    /// * `id` - 客户角色 ID
-    ///
-    /// # 返回
-    /// 返回客户详情视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 客户角色不存在
-    pub async fn customer_detail(&self, id: &str) -> Result<CustomerDetailView> {
-        let account = self.load_customer(id).await?;
-        let identity = self
-            .party
-            .identities_by_ids(std::slice::from_ref(&account.party_id))
-            .await?
-            .into_iter()
-            .next();
-        let party_no = identity.as_ref().map(|fact| fact.party_no.clone());
-        let legal_name = identity.as_ref().and_then(|fact| fact.legal_name.clone());
-        let owner_user_id = self.current_owner_user_id(&account.base.id).await?;
-        let owner_user_name = match owner_user_id.as_deref() {
-            Some(user_id) => self
-                .accounts
-                .names_by_ids(&[user_id.to_string()])
-                .await?
-                .remove(user_id),
-            None => None,
-        };
-        let mut view: CustomerView = account.into();
-        view.party_no = party_no.clone();
-        view.legal_name = legal_name.clone();
-        view.owner_user_id = owner_user_id.clone();
-        view.owner_user_name = owner_user_name;
-        Ok(CustomerDetailView {
-            account: view,
-            party_no,
-            legal_name,
-            owner_user_id,
-        })
-    }
-
     /// 更新客户角色（乐观锁；单集合 + 审计）。
     ///
     /// # 参数
@@ -411,9 +293,15 @@ impl CustomerService {
         let client = db.client().clone();
         let audit_port = self.audit.clone();
         let mut account_for_tx = account.clone();
+        let rbac = self.require_rbac()?.clone();
+        let actor_for_tx = actor.clone();
+        let customer_id = id.to_string();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access::CustomerAccess::new(db.clone(), rbac)
+                        .require_with(actor_for_tx, "update", &customer_id, session)
+                        .await?;
                     persist_account_update(&db, &mut account_for_tx, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<CustomerAccount, crate::error::Error>(account_for_tx)
@@ -531,7 +419,7 @@ async fn persist_account_update(
 }
 
 /// 将批量读取结果按稳定 ID 装配为客户列表视图。
-fn assemble_customer_views(
+pub(super) fn assemble_customer_views(
     rows: Vec<CustomerAccountRow>,
     identities: Vec<PartyIdentityFact>,
     assignments: Vec<CustomerAssignment>,

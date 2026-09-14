@@ -66,6 +66,7 @@ it("客户、合同、采购人员条件序列化和分页保持稳定身份", (
             dir: "desc",
             page: 2,
             ownerUserIds: "user-2",
+            orgUnitIds: "org-1",
         }),
-    ).toBe("/sales/customers?ownerUserIds=user-2&page=2")
+    ).toBe("/sales/customers?ownerUserIds=user-2&orgUnitIds=org-1&page=2")
 })

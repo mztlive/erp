@@ -16,6 +16,8 @@ export function writeDirectoryUrl(
     pathname: string,
     params: {
         ownerUserIds?: string
+        orgUnitIds?: string
+        includeDescendants?: boolean
         scope: CustomerScope
         status: DirectoryStatus
         q: string
@@ -26,6 +28,9 @@ export function writeDirectoryUrl(
 ): string {
     const sp = new URLSearchParams()
     if (params.ownerUserIds) sp.set("ownerUserIds", params.ownerUserIds)
+    if (params.orgUnitIds) sp.set("orgUnitIds", params.orgUnitIds)
+    if (params.orgUnitIds && params.includeDescendants)
+        sp.set("includeDescendants", "true")
     if (params.scope !== "mine") sp.set("scope", params.scope)
     if (params.status !== "active") sp.set("status", params.status)
     if (params.q.trim()) sp.set("q", params.q.trim())

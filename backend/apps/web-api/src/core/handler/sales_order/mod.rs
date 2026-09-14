@@ -20,10 +20,7 @@ use erp_read_models::sales_center::order::{
 
 use crate::{
     app_state::AppState,
-    core::{
-        errors::Result, extractor::UserID, handler::customer::ensure_customer_access,
-        middleware::RbacSubject, response::ApiResponse,
-    },
+    core::{errors::Result, handler::customer::ensure_customer_access, response::ApiResponse},
 };
 
 #[permission_macros::permission(
@@ -72,14 +69,12 @@ pub async fn sales_order_list(
 pub async fn sales_order_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
     let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
-    ensure_customer_access(&state, &subject, &user_id, customer_id.as_ref()).await?;
+    ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -297,18 +292,18 @@ mod owner_query_tests {
         assert!(Query::<ContractListParams>::try_from_uri(&valid).is_ok());
         assert!(Query::<PurchaseOrderListParams>::try_from_uri(&valid).is_ok());
         assert!(Query::<SalesOrderListParams>::try_from_uri(&valid).is_ok());
-        for raw in [
-            "/?owner=Zhang",
-            "/?owner_user_ids=",
-            "/?org_unit_ids=org-1",
-            "/?handler_user_ids=user-1",
-        ] {
+        for raw in ["/?owner=Zhang", "/?owner_user_ids=", "/?handler_user_ids=user-1"] {
             let uri: Uri = raw.parse().unwrap();
             assert!(Query::<CustomerListParams>::try_from_uri(&uri).is_err());
             assert!(Query::<ContractListParams>::try_from_uri(&uri).is_err());
             assert!(Query::<PurchaseOrderListParams>::try_from_uri(&uri).is_err());
             assert!(Query::<SalesOrderListParams>::try_from_uri(&uri).is_err());
         }
+        let org: Uri = "/?org_unit_ids=org-1".parse().unwrap();
+        assert!(Query::<CustomerListParams>::try_from_uri(&org).is_ok());
+        assert!(Query::<ContractListParams>::try_from_uri(&org).is_err());
+        assert!(Query::<PurchaseOrderListParams>::try_from_uri(&org).is_err());
+        assert!(Query::<SalesOrderListParams>::try_from_uri(&org).is_err());
     }
 }
 

@@ -36,4 +36,4 @@ pub use repository::{
     CustomerAccountFilter, CustomerAccountRepository, CustomerAccountRow, CustomerAssignmentFilter,
     CustomerAssignmentRepository, CustomerAssignmentRow, CustomerExt, CustomerProfileCommandRepository,
 };
-pub use service::{CustomerAssignmentService, CustomerService};
+pub use service::{CustomerAccess, CustomerAssignmentService, CustomerListView, CustomerService};

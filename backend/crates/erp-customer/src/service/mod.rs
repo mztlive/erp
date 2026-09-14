@@ -2,4 +2,4 @@
 
 pub mod customer;
 
-pub use customer::{CustomerAssignmentService, CustomerService};
+pub use customer::{CustomerAccess, CustomerAssignmentService, CustomerListView, CustomerService};

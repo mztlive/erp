@@ -19,8 +19,8 @@ use super::file_asset::{extract_asset_file_with_limit, should_compensate_pending
 use crate::{
     app_state::AppState,
     core::{
-        errors::Result, extractor::UserID, handler::customer::ensure_customer_access,
-        middleware::RbacSubject, response::ApiResponse, upload,
+        errors::Result, extractor::UserID, handler::customer::ensure_customer_access, response::ApiResponse,
+        upload,
     },
 };
 
@@ -69,11 +69,9 @@ pub async fn contract_list(
 pub async fn contract_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateContractRequest>,
 ) -> Result<ContractView> {
-    ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
+    ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
     let view = state.contract_service().create_contract(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -93,8 +91,6 @@ pub async fn contract_create(
 pub async fn contract_upload(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     mut multipart: Multipart,
 ) -> Result<UploadContractView> {
     let file = extract_asset_file_with_limit(&mut multipart, upload::MAX_CONTRACT_PDF_BYTES).await?;
@@ -119,7 +115,7 @@ pub async fn contract_upload(
     }
     let command =
         command.ok_or_else(|| crate::core::errors::Error::BadRequest("缺少合同命令".to_string()))?;
-    ensure_customer_access(&state, &subject, &user_id, command.customer_id.as_ref()).await?;
+    ensure_customer_access(&state, &actor, "detail", command.customer_id.as_ref()).await?;
     let asset_request = store_asset_file(
         &state,
         file,

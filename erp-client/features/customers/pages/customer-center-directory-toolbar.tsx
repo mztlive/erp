@@ -6,6 +6,8 @@ import {
 
 import * as React from "react"
 
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { FixedOptionRadioFilter } from "@/components/business"
 import {
     ListSearchField,
@@ -33,6 +35,10 @@ export function CustomerCenterDirectoryToolbar({
     ownerDraft,
     setOwnerDraft,
     ownerOptions,
+    orgDraft,
+    setOrgDraft,
+    descendantsDraft,
+    setDescendantsDraft,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -50,6 +56,10 @@ export function CustomerCenterDirectoryToolbar({
     ownerDraft: string
     setOwnerDraft: (value: string) => void
     ownerOptions: readonly ResponsibleUserOption[]
+    orgDraft: string
+    setOrgDraft: (value: string) => void
+    descendantsDraft: boolean
+    setDescendantsDraft: (value: boolean) => void
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -89,6 +99,33 @@ export function CustomerCenterDirectoryToolbar({
                         onChange={setOwnerDraft}
                         options={ownerOptions}
                     />
+                    <div className="min-w-0 space-y-1.5">
+                        <label
+                            className="text-xs text-muted-foreground"
+                            htmlFor="customers-directory-org"
+                        >
+                            组织
+                        </label>
+                        <Input
+                            id="customers-directory-org"
+                            value={orgDraft}
+                            onChange={(event) =>
+                                setOrgDraft(event.target.value)
+                            }
+                            placeholder="组织 ID，逗号分隔"
+                            aria-label="按当前主负责人所属组织筛选"
+                        />
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                                id="customers-directory-org-descendants"
+                                checked={descendantsDraft}
+                                onCheckedChange={(checked) =>
+                                    setDescendantsDraft(checked === true)
+                                }
+                            />
+                            包含下级
+                        </label>
+                    </div>
                     <FixedOptionRadioFilter
                         id="customers-directory-status"
                         label="状态"

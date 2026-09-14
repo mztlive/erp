@@ -194,6 +194,8 @@ export type CustomerCenterView = Readonly<{
 
 export type CustomerDirectoryQuery = Readonly<{
     ownerUserIds?: string
+    orgUnitIds?: string
+    includeDescendants?: boolean
     scope: CustomerScope
     status: "active" | "disabled" | "all"
     query?: string
@@ -201,12 +203,18 @@ export type CustomerDirectoryQuery = Readonly<{
     sortDir?: "asc" | "desc"
     page: number
     pageSize: number
+    scopeVersion?: string
 }>
 
 export type CustomerDirectoryResult = Readonly<{
     ownerOptions?: { value: string; label: string }[]
     /** False when role has no customer data scope at all. */
     hasCustomerScope: boolean
+    emptyReason?: string | null
+    scopeVersion?: string
+    policyVersion?: number
+    organizationVersion?: number
+    scopeSummary?: string
     items: readonly CustomerDirectoryItem[]
     totalInScope: number
     page: number
