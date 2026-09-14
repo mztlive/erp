@@ -59,6 +59,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/contracts/{id}/files/{file_id}",
+            with_permission(
+                get(contract::contract_file),
+                rbac,
+                contract::contract_file_permission_key(),
+            ),
+        )
+        .route(
+            "/contracts/{id}/files/{file_id}/preview",
+            with_permission(
+                get(contract::contract_file_preview),
+                rbac,
+                contract::contract_file_preview_permission_key(),
+            ),
+        )
+        .route(
             "/contracts/{id}/revisions",
             with_permission(
                 post(contract::contract_archive_revision),

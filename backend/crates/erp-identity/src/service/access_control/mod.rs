@@ -26,6 +26,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
+mod consumers;
 pub mod resolve;
 
 use crate::error::{Error, Result};

@@ -19,6 +19,8 @@ import {
     listWorkspaceFilterStatusText,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
     useContractsList,
     type ContractFilterKey,
@@ -59,6 +61,10 @@ export function ContractsTablePanel({
         setSettlementPartyIdDraft,
         ownerDraft,
         setOwnerDraft,
+        orgDraft,
+        setOrgDraft,
+        descendantsDraft,
+        setDescendantsDraft,
         applyFilters,
         resetMoreFilters,
         hasPendingChanges,
@@ -77,7 +83,7 @@ export function ContractsTablePanel({
     } = list
 
     const moreCount = appliedChips.filter(({ key }) =>
-        ["settlementPartyId", "owner"].includes(key),
+        ["settlementPartyId", "ownerUserIds", "orgUnitIds"].includes(key),
     ).length
 
     return (
@@ -131,6 +137,30 @@ export function ContractsTablePanel({
                                 onChange={setOwnerDraft}
                                 options={ownerOptions}
                             />
+                            <ListWorkspaceFilterField
+                                htmlFor="card-contracts-list-filter-org"
+                                label="组织"
+                            >
+                                <Input
+                                    id="card-contracts-list-filter-org"
+                                    value={orgDraft}
+                                    onChange={(event) =>
+                                        setOrgDraft(event.target.value)
+                                    }
+                                    placeholder="组织 ID，逗号分隔"
+                                    aria-label="按当前主负责人所属组织筛选"
+                                />
+                                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <Checkbox
+                                        id="card-contracts-list-filter-org-descendants"
+                                        checked={descendantsDraft}
+                                        onCheckedChange={(checked) =>
+                                            setDescendantsDraft(checked === true)
+                                        }
+                                    />
+                                    包含下级
+                                </label>
+                            </ListWorkspaceFilterField>
                         </div>
                     }
                     resultStatus={listWorkspaceFilterStatusText({
@@ -179,7 +209,17 @@ export function ContractsTablePanel({
                         ) : undefined
                     }
                     emptyState={
-                        !isError && pageRows.length === 0 && !isPending ? (
+                        !isError &&
+                        pageRows.length === 0 &&
+                        !isPending &&
+                        list.contractsQuery.data?.emptyReason === "no_scope" ? (
+                            <BusinessEmptyState
+                                kind="no-scope"
+                                className={listWorkspaceEmptyStateClassName}
+                                title="当前角色无合同范围"
+                                description="当前权限与数据范围内没有合同；不代表系统尚无合同。"
+                            />
+                        ) : !isError && pageRows.length === 0 && !isPending ? (
                             <BusinessEmptyState
                                 kind={isFiltered ? "filter" : "no-data"}
                                 className={listWorkspaceEmptyStateClassName}

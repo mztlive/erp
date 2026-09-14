@@ -2,4 +2,4 @@
 
 pub mod contract;
 
-pub use contract::ContractService;
+pub use contract::{ContractAccess, ContractService};

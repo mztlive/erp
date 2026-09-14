@@ -2,15 +2,33 @@ import { fetchContracts } from "./list"
 import type { ContractsUrlState } from "../lib/contracts-url-state"
 import { buildListCsv, collectExportPages } from "@/lib/list-export"
 
-/** 获取完整合同结果并生成 CSV；每页均通过原列表权限校验。 */
+/** 获取完整合同结果并生成 CSV；跨页携带范围版本，下载前撤权重验。 */
 export const createContractExportJob = async (input: {
     query: ContractsUrlState
     filterSnapshotLabel: string
 }) => {
+    let scopeVersion: string | undefined
     const rows = await collectExportPages(
-        (page, pageSize) => fetchContracts({ ...input.query, page, pageSize }),
+        async (page, pageSize) => {
+            const result = await fetchContracts({
+                ...input.query,
+                page,
+                pageSize,
+                scopeVersion,
+            })
+            if (result.emptyReason === "no_scope")
+                throw { kind: "Auth", message: "当前无权导出合同" }
+            scopeVersion = result.scopeVersion
+            return { items: result.items, total: result.total }
+        },
         (row) => row.contractId,
     )
+    await fetchContracts({
+        ...input.query,
+        page: 1,
+        pageSize: 1,
+        scopeVersion,
+    })
     const content = buildListCsv([
         [
             "合同编号",

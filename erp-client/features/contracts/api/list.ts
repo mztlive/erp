@@ -65,6 +65,13 @@ export type ContractListData = {
     metrics: import("../lib/filter-contracts").ContractMetrics
     settlementOptions: { value: string; label: string }[]
     ownerOptions: { value: string; label: string }[]
+    emptyReason?: string | null
+    scopeVersion: string
+    policyVersion: number
+    organizationVersion: number
+    scopeSummary: string
+    asOf: string
+    ownershipBasis: string
 }
 
 export async function fetchContracts(
@@ -81,6 +88,13 @@ export async function fetchContracts(
             }
             settlement_options: { value: string; label: string }[]
             owner_options: { value: string; label: string }[]
+            empty_reason?: string | null
+            scope_version: string
+            policy_version: number
+            organization_version: number
+            scope_summary: string
+            as_of: string
+            ownership_basis: string
         }
     >("/admin/contracts", {
         q: query.q?.trim() || undefined,
@@ -88,6 +102,10 @@ export async function fetchContracts(
         customer_id: query.customerId,
         settlement_party_id: query.settlementPartyId,
         owner_user_ids: query.ownerUserIds,
+        org_unit_ids: query.orgUnitIds || undefined,
+        include_descendants:
+            query.orgUnitIds && query.includeDescendants ? true : undefined,
+        scope_version: query.scopeVersion,
         page: query.page,
         page_size: query.pageSize,
         sort_by:
@@ -102,5 +120,12 @@ export async function fetchContracts(
         metrics: page.metrics,
         settlementOptions: page.settlement_options,
         ownerOptions: page.owner_options,
+        emptyReason: page.empty_reason,
+        scopeVersion: page.scope_version,
+        policyVersion: page.policy_version,
+        organizationVersion: page.organization_version,
+        scopeSummary: page.scope_summary,
+        asOf: page.as_of,
+        ownershipBasis: page.ownership_basis,
     }
 }

@@ -152,12 +152,13 @@ impl DataScopeService {
         }
         state.own_org(user, at)?;
         let tree = OrgTree::new(&state.units)?;
+        let registration = super::consumers::registration(resource, action)?;
         ScopeResolution {
             user_id: user,
             eligible_role_ids: roles,
             resource,
             action,
-            required_dimensions: &[ScopeDimension::InternalOrg],
+            required_dimensions: registration.required_dimensions,
             rules: &rules,
             memberships: &state.memberships,
             management: &state.management,
@@ -169,16 +170,20 @@ impl DataScopeService {
 }
 
 /// 只有完成接线的资源可配置 v2，禁止将新规则交给旧解释器。
+///
+/// # 参数
+/// * `resource` - 业务资源
+/// * `action` - 已注册动作
+///
+/// # 返回
+/// 已接线时成功。
+///
+/// # 错误
+/// 未接线资源或动作返回校验错误。
+///
+/// # 关键业务约束
+/// 准入必须引用真实消费者登记，不得使用初始化清单。
 pub(super) fn ensure_resource(resource: &str, action: &str) -> Result<()> {
-    let mut actions = crate::service::iam::predefined_data_scopes::RESOURCE_ACTIONS
-        .iter()
-        .find(|(name, _)| *name == resource)
-        .map(|(_, actions)| *actions);
-    if resource == "org_unit" {
-        actions = Some(&["list", "manage"]);
-    }
-    if actions.is_none_or(|actions| !actions.contains(&action)) {
-        return Err(Error::ValidationError("资源或动作尚未接入 DataScope v2".into()));
-    }
+    super::consumers::registration(resource, action)?;
     Ok(())
 }

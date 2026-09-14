@@ -164,10 +164,13 @@ export async function loadPartyName(partyId: string): Promise<string> {
 }
 
 export async function loadFileAsset(
+    contractId: string,
     fileId: string,
 ): Promise<BackendFileAsset | null> {
     try {
-        return await apiGet<BackendFileAsset>(`/admin/file-assets/${fileId}`)
+        return await apiGet<BackendFileAsset>(
+            `/admin/contracts/${encodeURIComponent(contractId)}/files/${encodeURIComponent(fileId)}`,
+        )
     } catch {
         return null
     }

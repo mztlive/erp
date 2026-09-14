@@ -5,21 +5,32 @@
 
 use application_core::AuditActor;
 use axum::{
+    body::Body,
     extract::{Multipart, Path, Query, State},
+    http::{
+        header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS},
+        HeaderValue, StatusCode,
+    },
+    response::Response,
     Extension, Json,
 };
 use erp_contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView, ContractView,
     CreateContractRequest, TerminateContractRequest, UploadContractRequest, UploadContractView,
 };
-use erp_support::{RetentionClass, SensitivityClass};
+use erp_support::{FileAssetView, RetentionClass, SensitivityClass};
+use tracing::error;
 
-use super::file_asset::{extract_asset_file_with_limit, should_compensate_pending_assets, store_asset_file};
+use super::file_asset::{
+    extract_asset_file_with_limit, prepare_asset_response, should_compensate_pending_assets, store_asset_file,
+};
 
 use crate::{
     app_state::AppState,
     core::{
-        errors::Result, extractor::UserID, handler::customer::ensure_customer_access, response::ApiResponse,
+        errors::{Error, Result},
+        handler::customer::ensure_customer_access,
+        response::ApiResponse,
         upload,
     },
 };
@@ -35,17 +46,17 @@ use crate::{
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `user_id` - 当前登录用户，用于 `scope=assigned` 按客户归属收窄
+/// * `actor` - 已认证操作人
 /// * `query` - 分页与筛选参数（扁平传递）
 ///
 /// # 返回
-/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+/// 返回契约形状的分页视图及范围元数据。
 pub async fn contract_list(
     State(state): State<AppState>,
-    Extension(UserID(user_id)): Extension<UserID>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<ContractListParams>,
 ) -> Result<ContractListView> {
-    let page = state.contract_service().contract_list(&params, &user_id).await?;
+    let page = state.contract_service().contract_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -125,7 +136,7 @@ pub async fn contract_upload(
     )
     .await?;
     let object_key = asset_request.storage_object_key.clone();
-    let result = erp_processes::upload_contract(state.db(), command, asset_request, actor).await;
+    let result = erp_processes::upload_contract(state.db(), state.rbac(), command, asset_request, actor).await;
     let view = match result {
         Ok(view) => view,
         Err(error) => {
@@ -149,17 +160,101 @@ pub async fn contract_upload(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 已认证操作人
 /// * `id` - 合同 ID
 ///
 /// # 返回
 /// 返回详情视图（版本按序号倒序）。
 pub async fn contract_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<ContractDetailView> {
-    let view = state.contract_service().contract_detail(&id).await?;
+    let view = state.contract_service().contract_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "合同",
+    group_desc = "合同 PDF 档案管理",
+    desc = "查询合同附件",
+    resource = "contract",
+    action = "detail"
+)]
+/// 独立重验合同读取资格后返回合同 PDF 元数据。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `id` - 合同 ID
+/// * `file_id` - 文件资产 ID
+///
+/// # 返回
+/// 返回附件元数据；不暴露未授权合同的存在性。
+pub async fn contract_file(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((id, file_id)): Path<(String, String)>,
+) -> Result<FileAssetView> {
+    state
+        .contract_service()
+        .require_attachment(&actor, &id, &file_id)
+        .await?;
+    let mut view = state.file_asset_service().file_asset_detail(&file_id).await?;
+    prepare_asset_response(&state, &mut view);
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "合同",
+    group_desc = "合同 PDF 档案管理",
+    desc = "预览合同附件",
+    resource = "contract",
+    action = "detail"
+)]
+/// 独立重验合同读取资格后以内联内容返回合同 PDF。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已认证操作人
+/// * `id` - 合同 ID
+/// * `file_id` - 文件资产 ID
+///
+/// # 返回
+/// 返回 PDF 字节流。
+pub async fn contract_file_preview(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path((id, file_id)): Path<(String, String)>,
+) -> std::result::Result<Response, Error> {
+    state
+        .contract_service()
+        .require_attachment(&actor, &id, &file_id)
+        .await?;
+    let view = state
+        .file_asset_service()
+        .file_asset_preview(&file_id, &actor)
+        .await?;
+    if view.content_type.as_str() != "application/pdf" {
+        return Err(Error::Unprocessable("当前文件类型不支持在线预览".to_string()));
+    }
+    let content = state.storage().read(&view.storage_object_key).await.map_err(|storage_error| {
+        error!(error = %storage_error, file_asset_id = %file_id, "Failed to read contract PDF");
+        Error::Internal("Object storage operation failed".to_string())
+    })?;
+    let content_type = HeaderValue::from_str(&view.content_type)
+        .unwrap_or_else(|_| HeaderValue::from_static("application/pdf"));
+    let mut response = Response::new(Body::from(content));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(CONTENT_TYPE, content_type);
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response
+        .headers_mut()
+        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    Ok(response)
 }
 
 #[permission_macros::permission(
@@ -222,4 +317,40 @@ pub async fn contract_terminate(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    /// 合同 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 未知或已废弃姓名参数不得被忽略后返回全部合同。
+    #[test]
+    fn contract_scope_version_and_org_filters_decode_from_url() {
+        let uri: Uri =
+            "/?page=2&page_size=25&scope_version=v1&owner_user_ids=a,b&org_unit_ids=org-1&include_descendants=true"
+                .parse()
+                .unwrap();
+        let Query(params) = Query::<ContractListParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(params.page, Some(2));
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        assert!(params.owner_user_ids.is_some());
+        assert_eq!(params.org_unit_ids.unwrap().as_slice(), &["org-1".to_string()]);
+        assert_eq!(params.include_descendants, Some(true));
+        let legacy: Uri = "/?owner=张三".parse().unwrap();
+        assert!(Query::<ContractListParams>::try_from_uri(&legacy).is_err());
+    }
 }

@@ -5,8 +5,20 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CustomerAccountId, PartyId};
+use persistence_core::Executor;
 
 use crate::error::{Error, Result};
+
+/// 合同域所需的客户归属事实；主责与协作分开，不含身份域类型。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContractAssignmentFact {
+    /// 客户稳定身份。
+    pub customer_id: String,
+    /// 归属人员。
+    pub user_id: String,
+    /// 是否为当前主负责人；false 表示协作。
+    pub is_owner: bool,
+}
 
 /// Minimum customer facts required to archive or list contracts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,37 +58,75 @@ pub trait CustomerFactsPort: Send + Sync {
     async fn find_by_ids(&self, customer_ids: &[CustomerAccountId]) -> Result<Vec<CustomerAccountFact>>;
 }
 
-/// Port contract uses to resolve assigned-scope visibility and owner names.
+/// Port contract uses to resolve current customer ownership without depending on `erp-customer`.
 #[async_trait]
 pub trait CustomerAssignmentFactsPort: Send + Sync {
-    /// Return customer ids currently assigned to `user_id` as OWNER or COLLABORATOR.
+    /// 读取账号在指定业务日的有效主责与协作归属。
     ///
-    /// # Parameters
-    /// * `user_id` - current login user
-    /// * `as_of` - business day used for assignment validity
+    /// # 参数
+    /// * `user_id` - 当前账号
+    /// * `as_of` - 客户归属自然日
+    /// * `executor` - 与授权相同的执行器
     ///
-    /// # Returns
-    /// Empty vector when the user has no effective assignment.
+    /// # 返回
+    /// 返回有效归属行；无归属时为空向量。
     ///
-    /// # Errors
-    /// Adapter query failures.
-    async fn assigned_customer_ids(&self, user_id: &str, as_of: BusinessDate) -> Result<Vec<String>>;
+    /// # 错误
+    /// 未装配或读取失败时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 主责与协作必须分开；不得把签约经办当作当前负责人。
+    async fn active_assignments_for_user(
+        &self,
+        user_id: &str,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractAssignmentFact>>;
 
-    /// Return current OWNER user ids keyed by customer id.
+    /// 读取指定负责人集合的当前主责客户。
     ///
-    /// # Parameters
-    /// * `customer_ids` - customers on the current list page
-    /// * `as_of` - business day used for assignment validity
+    /// # 参数
+    /// * `customer_ids` - 已授权客户；`None` 表示不按客户集合收窄
+    /// * `owner_ids` - 主负责人 ID；`None` 表示不按人员收窄
+    /// * `as_of` - 客户归属自然日
+    /// * `executor` - 与授权相同的执行器
     ///
-    /// # Returns
-    /// Customers without an OWNER assignment are omitted.
+    /// # 返回
+    /// 返回这些负责人当前主责的客户 ID。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 错误
+    /// 未装配或读取失败时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 空负责人或空客户集合保持空结果，不得查询全部客户。
+    async fn current_owner_customer_ids(
+        &self,
+        customer_ids: Option<&[String]>,
+        owner_ids: Option<&[String]>,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>>;
+
+    /// 读取当前主负责人，键为客户 ID。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 可见客户
+    /// * `as_of` - 客户归属自然日
+    /// * `executor` - 与授权相同的执行器
+    ///
+    /// # 返回
+    /// 无主责的客户省略。
+    ///
+    /// # 错误
+    /// 未装配或读取失败时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 当前跟进负责人只取客户当前主负责人，不得用协作或签约人兜底。
     async fn owner_user_ids_by_customer(
         &self,
         customer_ids: &[String],
         as_of: BusinessDate,
+        executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>>;
 }
 
@@ -101,7 +151,22 @@ pub struct EmptyAssignments;
 
 #[async_trait]
 impl CustomerAssignmentFactsPort for EmptyAssignments {
-    async fn assigned_customer_ids(&self, _user_id: &str, _as_of: BusinessDate) -> Result<Vec<String>> {
+    async fn active_assignments_for_user(
+        &self,
+        _user_id: &str,
+        _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractAssignmentFact>> {
+        Ok(Vec::new())
+    }
+
+    async fn current_owner_customer_ids(
+        &self,
+        _customer_ids: Option<&[String]>,
+        _owner_ids: Option<&[String]>,
+        _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
         Ok(Vec::new())
     }
 
@@ -109,6 +174,7 @@ impl CustomerAssignmentFactsPort for EmptyAssignments {
         &self,
         _customer_ids: &[String],
         _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         Ok(HashMap::new())
     }
@@ -135,7 +201,22 @@ pub struct FailClosedAssignmentFactsPort;
 
 #[async_trait]
 impl CustomerAssignmentFactsPort for FailClosedAssignmentFactsPort {
-    async fn assigned_customer_ids(&self, _user_id: &str, _as_of: BusinessDate) -> Result<Vec<String>> {
+    async fn active_assignments_for_user(
+        &self,
+        _user_id: &str,
+        _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractAssignmentFact>> {
+        Err(Error::Internal("客户归属端口未接线".to_string()))
+    }
+
+    async fn current_owner_customer_ids(
+        &self,
+        _customer_ids: Option<&[String]>,
+        _owner_ids: Option<&[String]>,
+        _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
         Err(Error::Internal("客户归属端口未接线".to_string()))
     }
 
@@ -143,6 +224,7 @@ impl CustomerAssignmentFactsPort for FailClosedAssignmentFactsPort {
         &self,
         _customer_ids: &[String],
         _as_of: BusinessDate,
+        _executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>> {
         Err(Error::Internal("客户归属端口未接线".to_string()))
     }

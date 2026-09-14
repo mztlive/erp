@@ -11,7 +11,8 @@ use mongodb::Database;
 use persistence_core::Transactional;
 use validator::Validate;
 
-use crate::adapters::contract_service;
+use crate::adapters::scoped_contract_service;
+use erp_identity::SharedRbacService;
 
 /// Process module name.
 pub fn process_name() -> &'static str {
@@ -26,6 +27,7 @@ pub fn process_name() -> &'static str {
 ///
 /// # Parameters
 /// * `db` - database handle
+/// * `rbac` - current RBAC snapshot used by the contract DataScope adapter
 /// * `req` - contract business fields
 /// * `asset_req` - already stored object bytes with registration metadata
 /// * `actor` - authenticated audit actor
@@ -34,13 +36,14 @@ pub fn process_name() -> &'static str {
 /// Customer missing/disabled, field validation, unique-index conflicts, or transaction failures.
 pub async fn upload_contract(
     db: Database,
+    rbac: SharedRbacService,
     req: UploadContractRequest,
     asset_req: RegisterFileAssetRequest,
     actor: AuditActor,
 ) -> Result<UploadContractView> {
     req.validate()?;
     asset_req.validate()?;
-    let service = contract_service(db.clone());
+    let service = scoped_contract_service(db.clone(), rbac);
     let file_name = asset_req.file_name.clone();
     let asset = FileAsset::new(FileAssetId::new(next_id()), asset_req.into_data(actor.id())?)?;
     let file_asset_id = FileAssetId::new(asset.base.id.clone());
@@ -59,9 +62,14 @@ pub async fn upload_contract(
     let asset_for_tx = asset.clone();
     let client = db.client().clone();
     let db_for_tx = db.clone();
+    let actor_for_tx = actor.clone();
+    let customer_id = planned.contract.customer_id.to_string();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                service
+                    .require_create(&actor_for_tx, &customer_id, session)
+                    .await?;
                 db_for_tx.file_assets().create(&asset_for_tx, session).await?;
                 service
                     .apply_create_in_transaction(&mut contract_for_tx, &revision, session)

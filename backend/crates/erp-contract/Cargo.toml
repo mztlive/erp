@@ -7,6 +7,7 @@ autotests = false
 [dependencies]
 application-core = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 entity-core = { workspace = true }
 entity-macros = { workspace = true }
 erp-core = { workspace = true }

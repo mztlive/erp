@@ -221,7 +221,7 @@ fn build_public_url(state: &AppState, storage_object_key: &str) -> String {
 }
 
 /// 仅普通资产暴露公开访问信息；敏感资产的底层对象键不进入 HTTP 响应。
-fn prepare_asset_response(state: &AppState, view: &mut FileAssetView) {
+pub(crate) fn prepare_asset_response(state: &AppState, view: &mut FileAssetView) {
     if view.sensitivity_class == erp_support::SensitivityClass::General {
         view.public_url = Some(build_public_url(state, &view.storage_object_key));
         return;

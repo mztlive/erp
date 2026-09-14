@@ -566,7 +566,7 @@ impl AppState {
 
     /// Contract domain service with customer, identity, attachment and audit adapters.
     pub fn contract_service(&self) -> erp_contract::ContractService {
-        erp_processes::adapters::contract_service(self.db())
+        erp_processes::adapters::scoped_contract_service(self.db(), self.rbac())
     }
 
     /// Import-domain query service with bulk-job identity adapter.

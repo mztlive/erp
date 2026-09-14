@@ -2,6 +2,7 @@
 
 mod catalog;
 mod contract;
+mod contract_data_scope;
 mod customer;
 mod customer_data_scope;
 mod import;
@@ -13,7 +14,7 @@ mod warehouse;
 pub use organization::organization_service;
 
 pub use catalog::{catalog_service, CatalogPendingAttachments, MongoCatalogAudit, MongoCatalogFileAssets};
-pub use contract::contract_service;
+pub use contract::{contract_access, contract_service, scoped_contract_service};
 pub use customer::{MongoCustomerAccountFacts, MongoCustomerAudit, MongoCustomerPartyFacts};
 pub use customer_data_scope::{customer_access, MongoCustomerDataScope};
 pub use import::{import_apply_service, legacy_import_service, MongoImportBulkJobs};

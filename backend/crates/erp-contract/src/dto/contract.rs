@@ -217,10 +217,10 @@ pub struct TerminateContractRequest {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractListScope {
-    /// 不按客户归属收窄（合同中心默认，兼容既有全量列表）。
+    /// 当前 DataScope 已授权合同，不再表示未授权全量。
     #[default]
     All,
-    /// 仅当前用户有效归属（OWNER 或 COLLABORATOR）客户下的合同。
+    /// 仅当前用户有效主责或协作客户下的合同；只收窄授权结果。
     Assigned,
 }
 
@@ -228,8 +228,15 @@ pub enum ContractListScope {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ContractListParams {
+    /// 跨页与导出必须使用前一页的当前授权和业务版本。
+    #[validate(length(min = 1, max = 256))]
+    pub scope_version: Option<String>,
     /// 当前业务负责人 ID，逗号分隔，最多 100 项；只收窄授权结果。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前主负责人所属组织，逗号分隔，最多 100 项；只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级；缺省为 false。
+    pub include_descendants: Option<bool>,
     /// 合同号、客户编号/名称、结算主体、当前负责人关键词。
     #[validate(length(max = 200))]
     pub q: Option<String>,
@@ -237,8 +244,6 @@ pub struct ContractListParams {
     pub metric: Option<ContractMetric>,
     /// 结算主体精确筛选。
     pub settlement_party_id: Option<String>,
-    /// 当前负责人显示名精确筛选，兼容已有 URL。
-
     /// 合同编号（字面量模糊筛选）。
     pub contract_no: Option<String>,
     /// 客户筛选。
@@ -264,14 +269,16 @@ pub struct ContractListParams {
 pub(crate) struct ContractListQuery {
     /// 当前负责人精确身份条件。
     pub owner_user_ids: Option<application_core::QueryIds>,
+    /// 当前主负责人所属组织，只收窄授权结果。
+    pub org_unit_ids: Option<application_core::QueryIds>,
+    /// 组织筛选是否包含有效下级。
+    pub include_descendants: Option<bool>,
     /// 合同号、客户编号/名称、结算主体、当前负责人关键词。
     pub q: Option<String>,
     /// 快捷状态或到期条件。
     pub metric: Option<ContractMetric>,
     /// 结算主体精确筛选。
     pub settlement_party_id: Option<String>,
-    /// 当前负责人显示名精确筛选，兼容已有 URL。
-
     /// 合同编号筛选。
     pub contract_no: Option<String>,
     /// 客户筛选。
@@ -297,8 +304,15 @@ impl ContractListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ContractListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CONTRACT_SORT_FIELDS)?;
+        if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {
+            return Err(crate::error::Error::ValidationError(
+                "包含下级时必须提供组织筛选".into(),
+            ));
+        }
         Ok(ContractListQuery {
             owner_user_ids: self.owner_user_ids.clone(),
+            org_unit_ids: self.org_unit_ids.clone(),
+            include_descendants: self.include_descendants,
             q: normalized_text(self.q.as_deref()),
             metric: self.metric,
             settlement_party_id: normalized_text(self.settlement_party_id.as_deref()),
@@ -510,6 +524,30 @@ mod tests {
     }
 
     #[test]
+    fn contract_list_params_accept_scope_version_and_org_filters() {
+        use super::ContractListParams;
+        use serde_json::json;
+
+        let params: ContractListParams = serde_json::from_value(json!({
+            "page": 2,
+            "scope_version": "v1",
+            "owner_user_ids": "a,b",
+            "org_unit_ids": "org-1,org-2",
+            "include_descendants": true
+        }))
+        .unwrap();
+        assert_eq!(params.scope_version.as_deref(), Some("v1"));
+        let query = params.normalized().unwrap();
+        assert_eq!(
+            query.org_unit_ids.unwrap().as_slice(),
+            &["org-1".to_string(), "org-2".to_string()]
+        );
+        assert_eq!(query.include_descendants, Some(true));
+        assert!(serde_json::from_value::<ContractListParams>(json!({"owner": "张三"})).is_err());
+        assert!(serde_json::from_value::<ContractListParams>(json!({"owner_name": "张三"})).is_err());
+    }
+
+    #[test]
     fn customer_id_serializes_as_transparent_string() {
         assert_eq!(
             serde_json::to_string(&CustomerAccountId::new("cust-1")).unwrap(),
@@ -658,8 +696,20 @@ pub struct ContractFilterOption {
 /// 合同分页列表；保留 Page 字段并追加全范围指标和候选项。
 #[derive(Debug, Clone, Serialize)]
 pub struct ContractListView {
-    /// 当前客户负责人构成合同跟进责任；组织范围版本由 S2 接入。
+    /// 当前客户主负责人构成合同跟进责任。
     pub ownership_basis: &'static str,
+    /// 跨页与导出必须原样回传的范围版本。
+    pub scope_version: String,
+    /// RBAC 策略版本。
+    pub policy_version: u64,
+    /// 组织配置版本。
+    pub organization_version: u64,
+    /// 授权解析时点。
+    pub as_of: String,
+    /// 角色无有效范围时为 `no_scope`；有规则但对象为空时不设置。
+    pub empty_reason: Option<&'static str>,
+    /// 当前合同范围口径摘要，不含内部授权证明。
+    pub scope_summary: &'static str,
     #[serde(flatten)]
     pub page: PageView<ContractView>,
     pub metrics: ContractMetrics,
