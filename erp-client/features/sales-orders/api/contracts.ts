@@ -21,6 +21,8 @@ export type SalesOrderDetailView = SalesOrderListItem & {
     permissionVersion: string
     sourceAsOf: string
     queriedAt: string
+    changeOrderEmptyReason?: string | null
+    changeOrderScopeVersion?: string
 }
 
 export type SalesOrdersListQuery = {

@@ -578,10 +578,18 @@ async fn persist_bound_change_document(
 
 #[cfg(test)]
 mod tests {
-    /// 创建、提交、撤回必须在状态与版本校验前按来源销售单动作重验。
+    /// 创建、提交、作废、撤回必须在状态与版本校验前按来源销售单动作重验。
+    ///
+    /// # 关键业务约束
+    /// 不可见原单一律 NotFound，不得先暴露存在性或状态冲突。
     #[test]
     fn create_and_submit_revalidate_source_sales_order_before_state_checks() {
         let source = include_str!("commands.rs");
+        let auth = include_str!("authorization.rs");
+        let sales_access = include_str!("../../../erp-read-models/src/sales_center/access.rs");
+        assert!(auth.contains("require_object(&self.actor, self.action, id, &[], executor)"));
+        assert!(auth.contains("不存在或越权时返回 NotFound，不泄露存在性"));
+        assert!(sales_access.contains("销售单不存在或无权操作"));
         let create = source
             .split("pub async fn create_sales_change_order")
             .nth(1)
@@ -590,6 +598,10 @@ mod tests {
             .split("pub async fn submit_sales_change")
             .nth(1)
             .expect("提交命令");
+        let void = source
+            .split("pub async fn void_sales_change")
+            .nth(1)
+            .expect("作废命令");
         let cancel = source
             .split("pub async fn cancel_approval")
             .nth(1)
@@ -607,11 +619,20 @@ mod tests {
                 < submit.find("load_for_submission").expect("提交版本校验")
         );
         assert!(
+            void.find(r#"command_access(actor, "update")"#)
+                .expect("作废须先证明原单")
+                < void.find("prepare_void").expect("作废准备")
+        );
+        assert!(
             cancel
                 .find(r#"command_access(actor, "cancel_approval")"#)
                 .expect("撤回须先证明原单")
                 < cancel.find("load_for_cancellation").expect("撤回版本校验")
         );
+        for body in [create, submit, void, cancel] {
+            assert!(body.contains(".current("));
+            assert!(body.contains("销售变更单不存在或无权操作") || body.contains("prepare_creation"));
+        }
     }
 
     /// 创建必须注册 BusinessDocument 并调用统一绑定端口。

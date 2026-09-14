@@ -84,7 +84,9 @@ pub async fn sales_order_create(
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
     ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
-    let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
+    let customer_id = service
+        .sales_command_customer_id(&actor, &req.contract_id)
+        .await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.create_sales_order(req, &actor).await?;
 
@@ -150,7 +152,9 @@ pub async fn sales_order_save_working_copy(
     ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
+    let customer_id = service
+        .sales_command_customer_id(&actor, &req.contract_id)
+        .await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.save_working_copy(&id, req, &actor).await?;
 
@@ -189,7 +193,9 @@ pub async fn sales_order_submit(
     ensure_contract_access(&state, &actor, "detail", req.contract_id.as_ref()).await?;
     let service = SalesOrderCommandProcess::with_rbac(state.db(), state.rbac())
         .with_object_read(state.approval_object_read());
-    let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
+    let customer_id = service
+        .sales_command_customer_id(&actor, &req.contract_id)
+        .await?;
     ensure_customer_access(&state, &actor, "detail", customer_id.as_ref()).await?;
     let view = service.submit_sales_order(&id, req, &actor).await?;
 

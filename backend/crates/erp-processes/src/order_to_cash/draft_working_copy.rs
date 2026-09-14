@@ -74,8 +74,7 @@ impl SalesOrderCommandProcess {
             )?;
         let working_copy = self
             .persist_reopened_first_submission_working_copy(
-                order.base.id.as_str(),
-                order.base.version,
+                order,
                 stable.created,
                 working_copy,
                 working_copy_lines,
@@ -95,7 +94,7 @@ impl SalesOrderCommandProcess {
     /// 把新开的首次提交工作副本、明细和补建的稳定行写入同一事务。
     ///
     /// # 参数
-    /// * `order_id` - 销售单主键（审计资源）
+    /// * `order` - 当前销售单，用于版本重验及合同／客户 detail 重验
     /// * `created_stable_lines` - 本次新建的稳定明细
     /// * `working_copy` - 新开工作副本
     /// * `working_copy_lines` - 新开工作副本行
@@ -105,33 +104,34 @@ impl SalesOrderCommandProcess {
     /// 返回已落库的工作副本。
     ///
     /// # 错误
-    /// 事务或仓储写入失败时返回错误。
+    /// 合同／客户越权、版本冲突或仓储写入失败时返回错误。
     ///
-    /// # 约束
-    /// 必须与旧的 `Submitted` 副本并存；部分唯一索引只约束 `Editing`/`Conflict`。
+    /// # 关键业务约束
+    /// 必须与旧的 `Submitted` 副本并存；handler 事前检查不能代替事务内 `related`。
     async fn persist_reopened_first_submission_working_copy(
         &self,
-        order_id: &str,
-        expected_order_version: u64,
+        order: &SalesOrder,
         created_stable_lines: Vec<SalesOrderLine>,
         working_copy: SalesOrderWorkingCopy,
         working_copy_lines: Vec<SalesOrderWorkingCopyLine>,
         actor: &AuditActor,
     ) -> Result<SalesOrderWorkingCopy> {
-        let audit =
-            actor
-                .clone()
-                .resource_log("sales_order.save_draft", "sales_order", order_id.to_string())?;
+        let order_id = order.base.id.clone();
+        let expected_order_version = order.base.version;
+        let audit = actor
+            .clone()
+            .resource_log("sales_order.save_draft", "sales_order", order_id.clone())?;
         let db = self.db.clone();
         let client = db.client().clone();
         let sellable_refs = erp_sales::service::sales_order::SalesOrderService::sellable_working_copy_refs(
             &working_copy_lines,
         )?;
         let access = self.command_access(actor, "update")?;
-        let order_id = order_id.to_string();
+        let related_order = order.clone();
         let persisted = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access.related_order(&related_order, session).await?;
                     access
                         .revalidate(&order_id, expected_order_version, session)
                         .await?;

@@ -7,18 +7,16 @@
 
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
-import { isDataScopeChanged } from "@/features/data-scope/cache"
 import {
     PERMISSION_VERSION,
     type BackendContractDetail,
     type BackendCustomerDetail,
     type BackendPartyContact,
-    type BackendSalesChangeOrder,
     type BackendSalesOrderDetail,
     type PageView,
     type SalesOrderDetailView,
 } from "@/features/sales-orders/api/contracts"
-import { fetchSalesChangeOrderDetail } from "@/features/sales-orders/api/sales-orders-change"
+import { fetchActiveSalesChangeOrder } from "@/features/sales-orders/api/sales-orders-change"
 import {
     formatInstant,
     formatIsoNow,
@@ -82,49 +80,21 @@ export async function downloadSalesOrderContractPdf(
     URL.revokeObjectURL(url)
 }
 
-/** 详情页附属信息：在途改单。 */
+/** 详情页附属信息：在途改单及变更列表范围元数据。 */
 async function loadDetailExtras(
     salesOrderId: string,
     nature: SalesOrderNature,
+    scopeVersion?: string,
 ) {
-    let changeOrdersPage: PageView<BackendSalesChangeOrder>
-    try {
-        changeOrdersPage = await apiGet<
-            PageView<BackendSalesChangeOrder> & { empty_reason?: string | null }
-        >("/admin/sales-change-orders", {
-            sales_order_id: salesOrderId,
-            page: 1,
-            page_size: 10,
-        })
-    } catch (error) {
-        if (isDataScopeChanged(error)) throw error
-        return { activeChangeOrder: null }
-    }
-
-    const activeChange =
-        changeOrdersPage.items.find(
-            (c) =>
-                c.sales_order_id === salesOrderId &&
-                c.status !== "EFFECTIVE" &&
-                c.status !== "VOIDED" &&
-                c.status !== "REJECTED",
-        ) ?? null
-
-    if (!activeChange) {
-        return { activeChangeOrder: null }
-    }
-
-    try {
-        return {
-            activeChangeOrder: await fetchSalesChangeOrderDetail(
-                activeChange.id,
-                nature,
-                salesOrderId,
-            ),
-        }
-    } catch (error) {
-        if (isDataScopeChanged(error)) throw error
-        return { activeChangeOrder: null }
+    const extras = await fetchActiveSalesChangeOrder(
+        salesOrderId,
+        nature,
+        scopeVersion,
+    )
+    return {
+        activeChangeOrder: extras.order,
+        changeOrderEmptyReason: extras.emptyReason,
+        changeOrderScopeVersion: extras.scopeVersion,
     }
 }
 
@@ -191,6 +161,7 @@ async function loadContractDisplay(
 
 export async function fetchSalesOrderDetail(
     id: string,
+    changeOrderScopeVersion?: string,
 ): Promise<SalesOrderDetailView | null> {
     let detail: BackendSalesOrderDetail
     try {
@@ -206,8 +177,15 @@ export async function fetchSalesOrderDetail(
     const commercialSource = pickSalesOrderCommercialSource(detail)
     const [customerDisplay, contractDisplay, extras] = await Promise.all([
         loadCustomerDisplay(detail.customer_id),
-        loadContractDisplay(detail.contract_id, commercialSource?.contract_revision_id),
-        loadDetailExtras(id, mapNature(detail.business_type)),
+        loadContractDisplay(
+            detail.contract_id,
+            commercialSource?.contract_revision_id,
+        ),
+        loadDetailExtras(
+            id,
+            mapNature(detail.business_type),
+            changeOrderScopeVersion,
+        ),
     ])
     const order = mapDetailToListItem(detail, {
         customerName:
@@ -266,5 +244,7 @@ export async function fetchSalesOrderDetail(
         permissionVersion: PERMISSION_VERSION,
         sourceAsOf: queriedAt,
         queriedAt,
+        changeOrderEmptyReason: extras.changeOrderEmptyReason,
+        changeOrderScopeVersion: extras.changeOrderScopeVersion,
     }
 }

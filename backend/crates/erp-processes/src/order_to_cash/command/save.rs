@@ -45,7 +45,7 @@ impl SalesOrderCommandProcess {
         let access = self.command_access(actor, "update")?;
         let authorized_order = access.current(id, &mut NoTransaction).await?;
         let (customer_id, settlement_party_id, draft) = self
-            .resolve_sales_command_draft(&req.contract_id, req.draft)
+            .resolve_sales_command_draft(&access, &req.contract_id, req.draft, &mut NoTransaction)
             .await?;
         let order = authorized_order;
         let expected_order_version = order.base.version;
@@ -90,6 +90,7 @@ impl SalesOrderCommandProcess {
         let working_copy = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access.related_order(&order, session).await?;
                     access
                         .revalidate(&order.base.id, expected_order_version, session)
                         .await?;

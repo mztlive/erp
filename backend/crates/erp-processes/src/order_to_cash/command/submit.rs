@@ -157,7 +157,7 @@ impl SalesOrderCommandProcess {
             return Ok(existing);
         }
         let (customer_id, settlement_party_id, draft) = self
-            .resolve_sales_command_draft(&req.contract_id, req.draft)
+            .resolve_sales_command_draft(&access, &req.contract_id, req.draft, &mut NoTransaction)
             .await?;
         let order = authorized_order;
         order

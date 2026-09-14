@@ -2,7 +2,6 @@ use erp_audit::AuditExt;
 use erp_contract::ContractExt;
 use erp_core::common::time::Instant;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, WorkflowActionId};
-use erp_customer::CustomerExt;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::command::identity::{
@@ -13,7 +12,7 @@ use erp_workflow::entity::document_registry::{
 };
 use erp_workflow::DocumentRegistryExt;
 use id_generator::next_id;
-use persistence_core::{NoTransaction, Transactional};
+use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::super::adapter::{
@@ -43,13 +42,17 @@ impl SalesOrderCommandProcess {
     /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
     ///
     /// # 参数
+    /// * `actor` - 已认证操作人
     /// * `contract_id` - 前端选择的合同稳定身份
     ///
     /// # 返回
     /// 返回合同所属客户身份。
     ///
     /// # 错误
-    /// 合同不存在时返回 `NotFound`。
+    /// 合同不存在或不可见时返回 `NotFound`。
+    ///
+    /// # 关键业务约束
+    /// 本入口只做事前检查；写入事务仍须 `related` 重验，不得当作唯一凭证。
     #[tracing::instrument(
         name = "sales_order.resolve_customer_scope",
         skip_all,
@@ -59,39 +62,43 @@ impl SalesOrderCommandProcess {
             operation = "resolve_customer_scope"
         )
     )]
-    pub async fn sales_command_customer_id(&self, contract_id: &ContractId) -> Result<CustomerAccountId> {
-        let contract = self
-            .db
-            .contracts()
-            .find_by_id(contract_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
+    pub async fn sales_command_customer_id(
+        &self,
+        actor: &AuditActor,
+        contract_id: &ContractId,
+    ) -> Result<CustomerAccountId> {
+        let access = self.command_access(actor, "detail")?;
+        let contract = access
+            .load_contract(contract_id.as_ref(), &mut NoTransaction)
+            .await?;
         Ok(contract.customer_id)
     }
 
     /// 按当前有效合同修订补齐不可由客户端声明的销售草稿快照。
     ///
     /// # 参数
+    /// * `access` - 已构造的命令检查器，用于合同／客户 detail 重验
     /// * `contract_id` - 合同稳定身份
     /// * `editable` - 客户端可编辑字段与行
+    /// * `executor` - 调用方执行器；预装载可用 `NoTransaction`，不得代替写入事务重验
     ///
     /// # 返回
     /// 返回合同所属客户、结算主体与完整内部草稿。
     ///
     /// # 错误
-    /// 合同或修订不存在、合同非生效态、所选修订已过期时返回错误。
+    /// 合同或客户不可见、合同或修订不存在、合同非生效态、所选修订已过期时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 禁止以无范围 `find_by_id` 作为授权读取；写入事务必须再次 `related`。
     pub(super) async fn resolve_sales_command_draft(
         &self,
+        access: &super::super::authorization::SalesCommandAccess,
         contract_id: &ContractId,
         editable: SalesOrderEditableDraftRequest,
+        executor: &mut dyn Executor,
     ) -> Result<(CustomerAccountId, erp_core::ids::PartyId, SalesOrderDraftRequest)> {
         editable.validate()?;
-        let contract = self
-            .db
-            .contracts()
-            .find_by_id(contract_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
+        let contract = access.load_contract(contract_id.as_ref(), executor).await?;
         if contract.stable.status != erp_contract::ContractStatus::Effective {
             return Err(Error::BusinessLogicError(
                 "合同当前不可用于新销售提交".to_string(),
@@ -107,10 +114,7 @@ impl SalesOrderCommandProcess {
         let revision = self
             .db
             .contract_revisions()
-            .find_by_id(
-                editable.requested_contract_revision_id.as_ref(),
-                &mut NoTransaction,
-            )
+            .find_by_id(editable.requested_contract_revision_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::NotFound("合同版本不存在".to_string()))?;
         if !revision.belongs_to_contract(contract_id) {
@@ -119,6 +123,14 @@ impl SalesOrderCommandProcess {
         if !revision.matches_settlement_party(&contract.settlement_party_id) {
             return Err(Error::ConflictError(
                 "合同当前结算主体与所选版本不一致，请刷新后重试".to_string(),
+            ));
+        }
+        let customer = access
+            .load_customer(contract.customer_id.as_ref(), executor)
+            .await?;
+        if !customer.is_active() {
+            return Err(Error::BusinessLogicError(
+                "客户已停用，禁止创建新销售单".to_string(),
             ));
         }
         let draft = SalesOrderDraftRequest {
@@ -193,22 +205,11 @@ impl SalesOrderCommandProcess {
                 .map_err(crate::Error::from);
         }
         let (customer_id, settlement_party_id, draft) = self
-            .resolve_sales_command_draft(&req.contract_id, req.draft.clone())
+            .resolve_sales_command_draft(&access, &req.contract_id, req.draft.clone(), &mut NoTransaction)
             .await?;
         self.sales()
             .ensure_sellable_draft_lines(&draft.lines, &self.catalog())
             .await?;
-        let customer = self
-            .db
-            .customer_accounts()
-            .find_by_id(&customer_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
-        if !customer.is_active() {
-            return Err(Error::BusinessLogicError(
-                "客户已停用，禁止创建新销售单".to_string(),
-            ));
-        }
 
         let business_org_unit_id =
             crate::business_ownership::required_business_org(&self.db, actor.id(), &mut NoTransaction)
@@ -306,6 +307,7 @@ impl SalesOrderCommandProcess {
             let transaction_result = client
                 .with_transaction(move |session| {
                     Box::pin(async move {
+                        access_for_tx.related_order(&submitted_order, session).await?;
                         access_for_tx.creation(&submitted_order, session).await?;
                         erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                             .ensure_sellable_refs(
@@ -432,6 +434,7 @@ impl SalesOrderCommandProcess {
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access_for_tx.related_order(&order_for_tx, session).await?;
                     access_for_tx.creation(&order_for_tx, session).await?;
                     erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                         .ensure_sellable_refs(

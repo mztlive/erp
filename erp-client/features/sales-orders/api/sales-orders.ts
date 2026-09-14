@@ -29,7 +29,9 @@ export {
     type SubmitSalesOrderInput,
 } from "@/features/sales-orders/api/sales-orders-create"
 export {
+    fetchActiveSalesChangeOrder,
     fetchSalesChangeOrderDetail,
+    type ActiveSalesChangeOrderResult,
     startSalesChangeOrder,
     submitSalesChangeOrder,
     submitSalesChangeReviewDecision,

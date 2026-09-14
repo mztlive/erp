@@ -484,6 +484,7 @@ pub(super) async fn persist_sales_order_start(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                access.related_order(&order, session).await?;
                 access
                     .revalidate(&order.base.id, expected_order_version, session)
                     .await?;

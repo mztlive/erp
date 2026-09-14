@@ -27,6 +27,12 @@ export const salesOrderKeys = {
     list: (query: SalesOrdersListQuery) =>
         [...salesOrderKeys.all, "list", query] as const,
     detail: (id: string) => [...salesOrderKeys.all, "detail", id] as const,
+    changes: (salesOrderId: string, scopeVersion?: string) =>
+        [
+            ...salesOrderKeys.detail(salesOrderId),
+            "changes",
+            { scopeVersion },
+        ] as const,
     acceptanceRoot: (id: string) =>
         [...salesOrderKeys.all, "acceptance", id] as const,
     acceptance: (
@@ -76,10 +82,20 @@ export function useSalesOrderDetailQuery(
     salesOrderId: string,
     refreshOnMount = false,
 ) {
+    const client = useQueryClient()
     return useQuery({
         queryKey: salesOrderKeys.detail(salesOrderId),
         refetchOnMount: refreshOnMount ? "always" : true,
-        queryFn: () => fetchSalesOrderDetail(salesOrderId),
+        queryFn: () => {
+            const previous = client.getQueryData<
+                | import("@/features/sales-orders/api/contracts").SalesOrderDetailView
+                | null
+            >(salesOrderKeys.detail(salesOrderId))
+            return fetchSalesOrderDetail(
+                salesOrderId,
+                previous?.changeOrderScopeVersion,
+            )
+        },
         enabled: Boolean(salesOrderId),
     })
 }

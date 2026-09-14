@@ -275,26 +275,24 @@ impl SalesAccess {
         document_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        if self
-            .db
-            .sales_orders()
-            .find_by_id(document_id, executor)
-            .await?
-            .is_some()
-        {
-            self.require_object(actor, action, document_id, &[], executor)
-                .await?;
+        let sales_order = self.db.sales_orders().find_by_id(document_id, executor).await?;
+        let change_source = if sales_order.is_none() {
+            self.db
+                .sales_change_orders()
+                .find_by_id(document_id, executor)
+                .await?
+                .map(|change| change.sales_order_id)
+        } else {
+            None
+        };
+        let Some(object_id) = attached_sales_object_id(
+            sales_order.as_ref().map(|_| document_id),
+            change_source.as_ref().map(|id| id.as_ref()),
+        ) else {
             return Ok(());
-        }
-        if let Some(change) = self
-            .db
-            .sales_change_orders()
-            .find_by_id(document_id, executor)
-            .await?
-        {
-            self.require_object(actor, action, change.sales_order_id.as_ref(), &[], executor)
-                .await?;
-        }
+        };
+        self.require_object(actor, action, object_id, &[], executor)
+            .await?;
         Ok(())
     }
 
@@ -335,6 +333,27 @@ impl SalesAccess {
         }
         Ok(customers)
     }
+}
+
+/// 附件单据对应须重验的销售对象主键。
+///
+/// # 参数
+/// * `sales_order_id` - 作为销售单存在时的主键
+/// * `change_source_id` - 作为变更单存在时的来源销售单
+///
+/// # 返回
+/// 需要 `require_object` 的销售单主键；非销售附件返回 `None`。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 销售单优先于变更单；不可见对象必须由 `require_object` 返回 NotFound。
+fn attached_sales_object_id<'a>(
+    sales_order_id: Option<&'a str>,
+    change_source_id: Option<&'a str>,
+) -> Option<&'a str> {
+    sales_order_id.or(change_source_id)
 }
 
 /// 参与关系仅补充销售单明确登记的读取动作，不能为创建或状态迁移提供资格。
@@ -407,6 +426,83 @@ mod tests {
         ] {
             assert!(!allows_history("sales_order", action));
         }
+    }
+
+    /// 不可见销售单／变更单附件必须按来源对象 `require_object` 得到 NotFound。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 不得用附件列表授权代替对象范围。
+    #[test]
+    fn attached_sales_documents_require_object_and_invisible_objects_are_not_found() {
+        assert_eq!(
+            attached_sales_object_id(Some("so-1"), Some("so-from-change")),
+            Some("so-1")
+        );
+        assert_eq!(
+            attached_sales_object_id(None, Some("so-from-change")),
+            Some("so-from-change")
+        );
+        assert_eq!(attached_sales_object_id(None, None), None);
+
+        let source = include_str!("access.rs");
+        let attached = source
+            .split("pub async fn require_attached_document")
+            .nth(1)
+            .expect("附件重验");
+        assert!(attached.contains("attached_sales_object_id"));
+        assert!(attached.contains("require_object(actor, action, object_id"));
+        let require_object = source
+            .split("pub async fn require_object")
+            .nth(1)
+            .expect("对象重验");
+        assert!(require_object.contains("销售单不存在或无权操作"));
+    }
+
+    /// 未知 `org_unit_ids` 必须被组织树展开拒绝，不得忽略后放行。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 筛选只能收窄授权结果；未知组织不得当作空集成功。
+    #[test]
+    fn unknown_org_unit_ids_are_rejected() {
+        use erp_identity::entity::organization::{OrgUnit, OrgUnitKind};
+
+        let unit = OrgUnit::new(
+            "org-1".into(),
+            "销售".into(),
+            None,
+            OrgUnitKind::Department,
+            "admin".into(),
+            "初始化".into(),
+        )
+        .unwrap();
+        let tree = OrgTree::new(std::slice::from_ref(&unit)).unwrap();
+        match tree.expand("missing", false) {
+            Err(erp_identity::Error::ValidationError(message)) => {
+                assert!(message.contains("组织节点不存在"));
+            }
+            other => panic!("expected missing org rejection, got {other:?}"),
+        }
+        let list_scope = include_str!("order/scope.rs");
+        assert!(list_scope.contains("expand_org_units"));
+        assert!(list_scope.contains("未知组织或展开失败时拒绝"));
     }
 
     #[test]
