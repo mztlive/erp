@@ -248,6 +248,10 @@ export type PurchaseOrderCenterView = Readonly<{
     approval?: DocumentApprovalView
     /** 当前进行中的采购变更单；缺省表示无在途改单。 */
     activeChangeOrder?: PurchaseChangeOrderSummary | null
+    /** 变更列表角色无有效范围时为 `no_scope`。 */
+    emptyReason?: string | null
+    /** 跨页必须回传的采购变更范围版本。 */
+    scopeVersion?: string
 }>
 
 export type SupplySourceType = "PURCHASE" | "EXISTING_STOCK"

@@ -9,6 +9,7 @@ use crate::entity::purchase_order::{
 pub use effect::EffectiveChangeWrite;
 use erp_core::ids::{PurchaseChangeOrderId, PurchaseOrderRevisionId};
 use id_generator::next_id;
+pub use load::lock_draft_change;
 /// 在原创建时点分配变更 ID；不读取外域或预写审计。
 ///
 /// # 错误

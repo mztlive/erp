@@ -882,6 +882,68 @@ mod tests {
         assert_eq!(document.get_str("status").unwrap(), "returned");
     }
 
+    /// 授权空集与越界原单必须保持恒假条件，不得退化为无授权限制。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// `Some([])` 与筛选原单不在授权集时都必须写入 `$expr: false`。
+    #[test]
+    fn purchase_return_missing_authorized_source_ids_stay_empty() {
+        use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+        let empty = PurchaseReturnOrderFilter {
+            purchase_return_no: None,
+            purchase_order_id: None,
+            authorized_purchase_order_ids: Some(Vec::new()),
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        assert_eq!(
+            empty.to_doc(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+
+        let out_of_scope = PurchaseReturnOrderFilter {
+            purchase_return_no: None,
+            purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
+            authorized_purchase_order_ids: Some(vec!["po-2".into()]),
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        assert_eq!(
+            out_of_scope.to_doc(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+
+        let in_scope = PurchaseReturnOrderFilter {
+            purchase_return_no: None,
+            purchase_order_id: Some(erp_core::ids::PurchaseOrderId::new("po-1")),
+            authorized_purchase_order_ids: Some(vec!["po-1".into()]),
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+        assert_eq!(
+            in_scope.to_doc(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1" }
+        );
+    }
+
     #[test]
     fn refund_filter_escapes_regex_and_sort_whitelist_falls_back() {
         let filter = CustomerRefundFilter {

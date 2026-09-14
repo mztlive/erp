@@ -146,54 +146,86 @@ export async function fetchPurchaseChangeOrderDetail(
 const isOpenPurchaseChangeStatus = (status?: string): boolean =>
     status !== "EFFECTIVE" && status !== "VOIDED" && status !== "VOID"
 
+export type ActivePurchaseChangeOrderResult = {
+    order: PurchaseChangeOrderSummary | null
+    emptyReason?: string | null
+    scopeVersion?: string
+}
+
+type PurchaseChangeOrderListPage = BackendPage<BackendPurchaseChangeOrder> & {
+    empty_reason?: string | null
+    scope_version?: string
+}
+
+/**
+ * 把变更列表页的范围元数据收成前端字段；`no_scope` 一律空集。
+ *
+ * @param page 变更列表响应。
+ * @param order 已按详情接口证明的在途变更；缺省表示无在途改单。
+ */
+function purchaseChangeListResult(
+    page: PurchaseChangeOrderListPage,
+    order: PurchaseChangeOrderSummary | null = null,
+): ActivePurchaseChangeOrderResult {
+    return {
+        order: page.empty_reason === "no_scope" ? null : order,
+        emptyReason: page.empty_reason,
+        scopeVersion: page.scope_version,
+    }
+}
+
 /**
  * 读取原采购单上尚未终态的采购变更，并补详情审批投影。
  *
  * @param purchaseOrderId 原采购单 ID。
  * @param preferredChangeId 任务或 URL 指定的变更单；缺省取第一条在途改单。
+ * @param scopeVersion 跨页必须回传的范围版本。
  */
 export async function fetchActivePurchaseChangeOrder(
     purchaseOrderId: string,
     preferredChangeId?: string,
-): Promise<PurchaseChangeOrderSummary | null> {
+    scopeVersion?: string,
+): Promise<ActivePurchaseChangeOrderResult> {
     if (preferredChangeId) {
         try {
             const preferred =
                 await fetchPurchaseChangeOrderDetail(preferredChangeId)
             if (preferred.purchaseOrderId === purchaseOrderId) {
-                return preferred
+                return { order: preferred }
             }
         } catch (error) {
             if (!(isApiError(error) && error.status === 404)) throw error
         }
     }
 
-    try {
-        const page = await apiGet<
-            BackendPage<BackendPurchaseChangeOrder> & {
-                empty_reason?: string | null
-                scope_version?: string
-            }
-        >("/admin/purchase-change-orders", {
+    const page = await apiGet<PurchaseChangeOrderListPage>(
+        "/admin/purchase-change-orders",
+        {
             purchase_order_id: purchaseOrderId,
+            scope_version: scopeVersion,
             page: 1,
             page_size: 10,
-        })
-        const active =
-            (page.items ?? []).find(
-                (change) =>
-                    change.purchase_order_id === purchaseOrderId &&
-                    isOpenPurchaseChangeStatus(change.status),
-            ) ?? null
-        if (!active) return null
-        try {
-            return await fetchPurchaseChangeOrderDetail(active.id)
-        } catch {
-            return mapPurchaseChangeOrder(active)
-        }
+        },
+    )
+    if (page.empty_reason === "no_scope") {
+        return purchaseChangeListResult(page)
+    }
+    const active =
+        (page.items ?? []).find(
+            (change) =>
+                change.purchase_order_id === purchaseOrderId &&
+                isOpenPurchaseChangeStatus(change.status),
+        ) ?? null
+    if (!active) return purchaseChangeListResult(page)
+    try {
+        const order = await fetchPurchaseChangeOrderDetail(active.id)
+        return purchaseChangeListResult(page, order)
     } catch (error) {
         if (isDataScopeChanged(error)) throw error
-        return null
+        if (isApiError(error) && error.status === 404) {
+            return purchaseChangeListResult(page)
+        }
+        throw error
     }
 }
 
@@ -227,21 +259,28 @@ const loadCenterFromChangeOrder = async (
  *
  * @param purchaseOrderId 采购单或变更单 ID。
  * @param options.changeOrderId 任务或 URL 指定的变更单。
+ * @param options.scopeVersion 跨页必须回传的变更列表范围版本。
  */
 export async function fetchPurchaseOrderCenter(
     purchaseOrderId: string,
-    options?: { changeOrderId?: string },
+    options?: { changeOrderId?: string; scopeVersion?: string },
 ): Promise<PurchaseOrderCenterView | null> {
     try {
         const center = await apiGet<BackendCenter>(
             `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
         )
         const view = mapCenter(center)
-        const activeChangeOrder = await fetchActivePurchaseChangeOrder(
+        const activeChange = await fetchActivePurchaseChangeOrder(
             center.id,
             options?.changeOrderId,
+            options?.scopeVersion,
         )
-        return { ...view, activeChangeOrder }
+        return {
+            ...view,
+            activeChangeOrder: activeChange.order,
+            emptyReason: activeChange.emptyReason,
+            scopeVersion: activeChange.scopeVersion,
+        }
     } catch (error) {
         if (isApiError(error) && error.status === 404) {
             return loadCenterFromChangeOrder(purchaseOrderId)

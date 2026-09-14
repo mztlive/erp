@@ -6,6 +6,7 @@ vi.mock("@/lib/api", () => ({
 }))
 
 import {
+    fetchActivePurchaseChangeOrder,
     fetchPurchaseOrderExportData,
     fetchPurchaseOrders,
 } from "./purchase-order-queries-api"
@@ -91,7 +92,10 @@ describe("采购单列表范围版本", () => {
             ...page,
             page_size: 1,
         })
-        const rows = await fetchPurchaseOrderExportData({ page: 1, pageSize: 20 })
+        const rows = await fetchPurchaseOrderExportData({
+            page: 1,
+            pageSize: 20,
+        })
         expect(rows).toHaveLength(1)
         expect(apiGet).toHaveBeenNthCalledWith(
             1,
@@ -111,5 +115,153 @@ describe("采购单列表范围版本", () => {
                 scope_version: "export-v1",
             }),
         )
+    })
+})
+
+describe("采购变更范围版本", () => {
+    const listRow = {
+        id: "change-1",
+        purchase_order_id: "po-1",
+        base_revision_id: "rev-1",
+        reason: "列表行不得当作详情",
+        status: "DRAFT",
+        version: 1,
+        created_at: 1,
+    }
+
+    beforeEach(() => {
+        apiGet.mockReset()
+    })
+
+    it("把 scope_version 送进查询并用 empty_reason 区分无范围", async () => {
+        apiGet.mockResolvedValueOnce({
+            items: [listRow],
+            total: 1,
+            page: 1,
+            page_size: 10,
+            empty_reason: "no_scope",
+            scope_version: "v2",
+        })
+        const result = await fetchActivePurchaseChangeOrder(
+            "po-1",
+            undefined,
+            "v2",
+        )
+        expect(apiGet).toHaveBeenCalledWith("/admin/purchase-change-orders", {
+            purchase_order_id: "po-1",
+            scope_version: "v2",
+            page: 1,
+            page_size: 10,
+        })
+        expect(result).toEqual({
+            order: null,
+            emptyReason: "no_scope",
+            scopeVersion: "v2",
+        })
+        expect(apiGet).toHaveBeenCalledTimes(1)
+    })
+
+    it("DATA_SCOPE_CHANGED 必须抛出以触发刷新", async () => {
+        apiGet.mockRejectedValueOnce(
+            Object.assign(
+                new Error("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新"),
+                {
+                    status: 409,
+                    code: "DATA_SCOPE_CHANGED",
+                },
+            ),
+        )
+        await expect(
+            fetchActivePurchaseChangeOrder("po-1", undefined, "v1"),
+        ).rejects.toMatchObject({
+            status: 409,
+            code: "DATA_SCOPE_CHANGED",
+        })
+    })
+
+    it("详情失败不得用列表行顶替", async () => {
+        apiGet
+            .mockResolvedValueOnce({
+                items: [listRow],
+                total: 1,
+                page: 1,
+                page_size: 10,
+                empty_reason: null,
+                scope_version: "v3",
+            })
+            .mockRejectedValueOnce(
+                Object.assign(new Error("采购变更单不存在或无权查看"), {
+                    kind: "NotFound",
+                    status: 500,
+                    message: "采购变更单不存在或无权查看",
+                }),
+            )
+        await expect(
+            fetchActivePurchaseChangeOrder("po-1"),
+        ).rejects.toMatchObject({
+            status: 500,
+        })
+        expect(apiGet).toHaveBeenNthCalledWith(
+            2,
+            "/admin/purchase-change-orders/change-1",
+        )
+    })
+
+    it("详情 404 按空集处理并回传范围版本", async () => {
+        apiGet
+            .mockResolvedValueOnce({
+                items: [listRow],
+                total: 1,
+                page: 1,
+                page_size: 10,
+                empty_reason: null,
+                scope_version: "v3",
+            })
+            .mockRejectedValueOnce(
+                Object.assign(new Error("采购变更单不存在或无权查看"), {
+                    kind: "NotFound",
+                    status: 404,
+                    message: "采购变更单不存在或无权查看",
+                }),
+            )
+        await expect(fetchActivePurchaseChangeOrder("po-1")).resolves.toEqual({
+            order: null,
+            emptyReason: null,
+            scopeVersion: "v3",
+        })
+    })
+
+    it("详情成功时回传范围版本且不把列表行当详情", async () => {
+        apiGet
+            .mockResolvedValueOnce({
+                items: [listRow],
+                total: 1,
+                page: 1,
+                page_size: 10,
+                empty_reason: null,
+                scope_version: "v4",
+            })
+            .mockResolvedValueOnce({
+                ...listRow,
+                reason: "详情审批投影",
+                approval: null,
+            })
+        const result = await fetchActivePurchaseChangeOrder(
+            "po-1",
+            undefined,
+            "v4",
+        )
+        expect(apiGet).toHaveBeenNthCalledWith(
+            1,
+            "/admin/purchase-change-orders",
+            expect.objectContaining({
+                purchase_order_id: "po-1",
+                scope_version: "v4",
+            }),
+        )
+        expect(result.scopeVersion).toBe("v4")
+        expect(result.emptyReason).toBeNull()
+        expect(result.order?.reason).toBe("详情审批投影")
+        expect(result.order?.id).toBe("change-1")
     })
 })

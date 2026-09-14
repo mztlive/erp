@@ -75,6 +75,90 @@ mod tests {
         assert!(source.contains("adapter.cancel_action"));
     }
 
+    /// 变更写命令必须在状态、版本、进行中校验之前按来源采购单动作消费同一解析器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 越权请求必须得到统一 NotFound，不得先暴露存在性或状态冲突。
+    #[test]
+    fn change_write_commands_require_source_access_before_prechecks() {
+        let source = include_str!("submit.rs");
+        let start = source
+            .split("pub async fn start_change(")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn submit_change(").next())
+            .expect("必须存在 start_change");
+        let submit = source
+            .split("pub async fn submit_change(")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn submit_change_view(").next())
+            .expect("必须存在 submit_change");
+        let cancel = source
+            .split("pub async fn cancel_change_approval(")
+            .nth(1)
+            .and_then(|rest| rest.split("async fn persist_started_change(").next())
+            .expect("必须存在 cancel_change_approval");
+
+        let start_access = start
+            .find(r#"command_access(actor, "update")"#)
+            .expect("发起变更必须先解析 update 动作");
+        let start_current = start.find(".current(").expect("发起变更必须先证明来源采购单");
+        let start_load = start
+            .find("load_changeable_order")
+            .expect("发起变更必须在授权后加载可变更版本");
+        let start_in_progress = start
+            .find("ensure_no_in_progress_change")
+            .expect("进行中校验必须在授权之后");
+        assert!(start_access < start_current);
+        assert!(start_current < start_load);
+        assert!(start_load < start_in_progress);
+
+        let submit_load = submit
+            .find("load_change(")
+            .expect("提交必须先读取变更单以取得来源单");
+        let submit_access = submit
+            .find(r#"command_access(actor, "submit")"#)
+            .expect("提交必须按来源采购单 submit 动作解析");
+        let submit_current = submit.find(".current(").expect("提交必须证明来源采购单可见");
+        let submit_lock = submit
+            .find("lock_draft_change(")
+            .expect("草稿与版本校验必须在授权之后");
+        assert!(submit_load < submit_access);
+        assert!(submit_access < submit_current);
+        assert!(submit_current < submit_lock);
+
+        let cancel_load = cancel.find("load_change(").expect("撤回必须先读取变更单");
+        let cancel_access = cancel
+            .find(r#"command_access(actor, "cancel_approval")"#)
+            .expect("撤回必须按来源采购单 cancel_approval 动作解析");
+        let cancel_current = cancel.find(".current(").expect("撤回必须证明来源采购单可见");
+        let cancel_version = cancel
+            .find("ensure_expected_version")
+            .expect("版本校验必须在授权之后");
+        assert!(cancel_load < cancel_access);
+        assert!(cancel_access < cancel_current);
+        assert!(cancel_current < cancel_version);
+
+        let load = include_str!("../../../../erp-procurement/src/service/purchase_order/change/load.rs");
+        let changeable = load
+            .split("pub async fn load_changeable_order")
+            .nth(1)
+            .and_then(|rest| rest.split("pub async fn ensure_no_in_progress_change").next())
+            .expect("必须存在 load_changeable_order");
+        assert!(
+            !changeable.contains("purchase_orders()"),
+            "可变更加载不得按主键重读未授权采购单"
+        );
+    }
+
     /// 详情必须返回统一审批结构。
     #[test]
     fn detail_returns_unified_approval() {

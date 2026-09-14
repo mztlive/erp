@@ -33,6 +33,7 @@ use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, PurchaseChangeSubmitResult, StartPurchaseChangeRequest,
     StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
 };
+use erp_procurement::service::purchase_order::change::lock_draft_change;
 use erp_procurement::service::purchase_order::change::mapping::content_fingerprint;
 use erp_procurement::service::purchase_order::change::state::start_purchase_change_approval;
 use erp_procurement::service::purchase_order::line_input::{build_change_submission_lines, to_line_inputs};
@@ -55,9 +56,13 @@ impl PurchaseOrderProcess {
     /// 返回变更单结果。
     ///
     /// # 错误
-    /// * `NotFound` - 采购单不存在
+    /// * `NotFound` - 采购单不存在或无权操作
     /// * `ConflictError` - 版本不一致、已存在进行中变更或未配置审批流程
     /// * `BusinessLogicError` - 采购单未生效
+    ///
+    /// # 关键业务约束
+    /// 必须先按来源采购单 `update` 动作证明可见性；不可见对象一律 NotFound，
+    /// 不得先返回进行中、版本或未生效错误。
     pub async fn start_change(
         &self,
         id: &str,
@@ -65,9 +70,13 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<StartPurchaseChangeResult> {
         req.validate()?;
+        let order = self
+            .command_access(actor, "update")?
+            .current(id, &mut NoTransaction)
+            .await?;
         let (order, base_revision) = self
             .domain()
-            .load_changeable_order(id, req.expected_lock_version)
+            .load_changeable_order(order, req.expected_lock_version)
             .await?;
         self.domain().ensure_no_in_progress_change(id).await?;
         let change = erp_procurement::service::purchase_order::change::new_change(
@@ -100,8 +109,11 @@ impl PurchaseOrderProcess {
     /// 返回变更提交结果。
     ///
     /// # 错误
-    /// * `NotFound` - 变更单不存在
+    /// * `NotFound` - 变更单不存在，或来源采购单不可见
     /// * `ConflictError` - 版本不一致、无绑定或重复提交
+    ///
+    /// # 关键业务约束
+    /// 读取变更单后必须立即按来源采购单 `submit` 动作证明可见性，再做草稿与版本校验。
     pub async fn submit_change(
         &self,
         change_id: &str,
@@ -110,10 +122,11 @@ impl PurchaseOrderProcess {
     ) -> Result<PurchaseChangeSubmitResult> {
         req.validate()?;
         let adapter = purchase_change_order_adapter()?;
-        let change = self
-            .domain()
-            .lock_draft_change(change_id, req.expected_lock_version)
+        let change = self.domain().load_change(change_id, &mut NoTransaction).await?;
+        self.command_access(actor, "submit")?
+            .current(change.purchase_order_id.as_ref(), &mut NoTransaction)
             .await?;
+        let change = lock_draft_change(change, req.expected_lock_version)?;
         let result = self
             .start_change_approval(change_id, change, req, actor, adapter)
             .await?;
@@ -161,7 +174,10 @@ impl PurchaseOrderProcess {
     /// 撤回成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审批中、已最终通过、原因缺失或并发冲突时返回错误。
+    /// 来源采购单不可见、非审批中、已最终通过、原因缺失或并发冲突时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 必须先按来源采购单 `cancel_approval` 动作证明可见性，再校验期望版本。
     pub async fn cancel_change_approval(
         &self,
         id: &str,
@@ -170,6 +186,9 @@ impl PurchaseOrderProcess {
     ) -> Result<()> {
         req.validate()?;
         let mut change = self.domain().load_change(id, &mut NoTransaction).await?;
+        self.command_access(actor, "cancel_approval")?
+            .current(change.purchase_order_id.as_ref(), &mut NoTransaction)
+            .await?;
         change
             .ensure_expected_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;

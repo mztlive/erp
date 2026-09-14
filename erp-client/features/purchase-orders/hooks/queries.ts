@@ -32,6 +32,17 @@ export const purchaseOrderKeys = {
     list: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.lists(), query] as const,
     detail: (id: string) => [...purchaseOrderKeys.all, "detail", id] as const,
+    center: (
+        id: string,
+        options?: { changeOrderId?: string; scopeVersion?: string },
+    ) =>
+        [
+            ...purchaseOrderKeys.detail(id),
+            {
+                changeOrderId: options?.changeOrderId ?? "",
+                scopeVersion: options?.scopeVersion,
+            },
+        ] as const,
     changeOrder: (id: string) =>
         [...purchaseOrderKeys.all, "change-order", id] as const,
     creationBases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
@@ -71,8 +82,7 @@ export function usePurchaseOrdersQuery(
     >(purchaseOrderKeys.list(firstPage))
     const page = query.page ?? 1
     const scopeVersion =
-        query.scopeVersion ??
-        (page > 1 ? baseline?.scopeVersion : undefined)
+        query.scopeVersion ?? (page > 1 ? baseline?.scopeVersion : undefined)
     const scoped = { ...query, scopeVersion }
     return useQuery({
         queryKey: purchaseOrderKeys.list(scoped),
@@ -109,15 +119,25 @@ export function usePurchaseOrderCenterQuery(
     purchaseOrderId: string,
     options?: { changeOrderId?: string },
 ) {
+    const client = useQueryClient()
+    const firstKey = purchaseOrderKeys.center(purchaseOrderId, {
+        changeOrderId: options?.changeOrderId,
+    })
+    const baseline =
+        client.getQueryData<
+            Awaited<ReturnType<typeof fetchPurchaseOrderCenter>>
+        >(firstKey)
+    const scopeVersion = baseline?.scopeVersion
     return useQuery({
-        queryKey: [
-            ...purchaseOrderKeys.detail(purchaseOrderId),
-            options?.changeOrderId ?? "",
-        ],
+        queryKey: purchaseOrderKeys.center(purchaseOrderId, {
+            changeOrderId: options?.changeOrderId,
+            scopeVersion,
+        }),
         queryFn: () =>
-            options?.changeOrderId
-                ? fetchPurchaseOrderCenter(purchaseOrderId, options)
-                : fetchPurchaseOrderCenter(purchaseOrderId),
+            fetchPurchaseOrderCenter(purchaseOrderId, {
+                changeOrderId: options?.changeOrderId,
+                scopeVersion,
+            }),
         enabled: Boolean(purchaseOrderId),
     })
 }
