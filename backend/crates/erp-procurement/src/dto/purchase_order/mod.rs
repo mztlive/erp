@@ -320,6 +320,7 @@ mod tests {
     #[test]
     fn list_params_normalize_paging_filters_and_sort_defaults() {
         let params = PurchaseOrderListParams {
+            scope_version: None,
             owner_user_ids: None,
             q: Some(" PO-2026 ".to_string()),
             sales_order_id: None,
@@ -344,6 +345,7 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = PurchaseOrderListParams {
+            scope_version: Some("v1".to_string()),
             owner_user_ids: None,
             q: None,
             sales_order_id: None,

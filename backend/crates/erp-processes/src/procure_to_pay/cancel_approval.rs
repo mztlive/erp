@@ -7,7 +7,6 @@ use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
 use erp_audit::AuditExt;
 use erp_core::common::time::Instant;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
-use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::work_item::WorkItem;
 use erp_workflow::BpmExt;
 use erp_workflow::WorkItemExt;
@@ -51,7 +50,10 @@ impl PurchaseOrderProcess {
     /// 撤回成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审批中、已最终通过、原因缺失或并发冲突时返回错误。
+    /// 非审批中、已最终通过、原因缺失、无权操作或并发冲突时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 撤回必须按当前采购对象范围重验，历史参与不授予撤回。
     pub async fn cancel_approval(
         &self,
         id: &str,
@@ -60,11 +62,9 @@ impl PurchaseOrderProcess {
     ) -> Result<()> {
         req.validate()?;
         let mut order = self
-            .db
-            .purchase_orders()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+            .command_access(actor, "cancel_approval")?
+            .current(id, &mut NoTransaction)
+            .await?;
         let subject = purchase_order_subject_ref(id)?;
         let command = DocumentCancelCommand::new(
             subject.clone(),
@@ -117,6 +117,7 @@ impl PurchaseOrderProcess {
                 reason: command.reason().to_string(),
                 now,
                 audit,
+                object_scope: Some(self.command_access(actor, "cancel_approval")?),
             },
         )
         .await;
@@ -331,6 +332,7 @@ fn map_cancel_plan_error(error: bpm::engine::EngineError) -> Error {
 ///
 /// # 关键业务约束
 /// 运行事实、任务关闭与单据回写必须同事务；CAS 失败时回滚。
+/// 写事务必须重验采购对象范围，历史参与不授予撤回。
 pub(super) struct PurchaseOrderCancelPersistInput {
     /// 已执行 `cancel_action` 的采购单。
     pub order: PurchaseOrder,
@@ -346,6 +348,8 @@ pub(super) struct PurchaseOrderCancelPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: erp_audit::AuditLog,
+    /// 撤回写事务内重验的对象范围。
+    pub object_scope: Option<super::authorization::PurchaseCommandAccess>,
 }
 
 /// 在同一事务内应用取消计划、关闭任务并写回采购单。
@@ -365,6 +369,7 @@ pub(super) struct PurchaseOrderCancelPersistInput {
 ///
 /// # 关键业务约束
 /// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
+/// 写事务必须重验采购对象范围，历史参与不授予撤回。
 pub(super) async fn persist_purchase_order_cancel(
     db: &Database,
     input: PurchaseOrderCancelPersistInput,
@@ -377,6 +382,7 @@ pub(super) async fn persist_purchase_order_cancel(
         reason,
         now,
         audit,
+        object_scope,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(());
@@ -387,6 +393,9 @@ pub(super) async fn persist_purchase_order_cancel(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                if let Some(scope) = &object_scope {
+                    scope.current(&order.base.id, session).await?;
+                }
                 execute_cancel_steps(
                     &mut CancelPosting {
                         db: &db,

@@ -22,6 +22,7 @@ mod common;
 mod coverage_sources;
 mod order;
 mod revision;
+pub mod scope;
 mod submission;
 
 pub use coverage_sources::PurchaseCoverageSources;

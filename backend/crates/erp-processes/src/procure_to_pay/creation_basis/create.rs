@@ -290,6 +290,7 @@ pub struct VerifiedBasisInput<'a> {
 /// # 关键业务约束
 /// `creation_basis_id` 唯一，且本函数只创建一个采购聚合；命令收据记录提交后正式号。
 /// 供应商名称快照只从同一事务内批量加载的事实读取，不得再次逐段查询。
+/// 创建并提交必须在同一事务证明采购对象范围，不得由创建人审计字段兜底。
 pub async fn persist_basis_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
@@ -366,6 +367,9 @@ pub async fn persist_basis_draft(
         submission_lines.push(build_submission_line(&submission_id, (index + 1) as u32, line)?);
     }
     order.attach_draft_submission(submission.base.id.clone().into())?;
+    erp_read_models::purchase_center::access::PurchaseAccess::new(db.clone(), rbac.clone())
+        .ensure_create_and_submit(command.actor, &order, session)
+        .await?;
     let write = PreparedDraftWrite {
         sales_order,
         order: &order,

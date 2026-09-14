@@ -5,6 +5,7 @@ import type {
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderListQuery = {
+    scopeVersion?: string
     ownerUserIds?: string
     q?: string
     salesOrderId?: string
@@ -17,6 +18,11 @@ export type PurchaseOrderListQuery = {
 }
 
 export type PurchaseOrderListResult = {
+    emptyReason?: string | null
+    scopeVersion?: string
+    policyVersion?: number
+    organizationVersion?: number
+    scopeSummary?: string
     ownerOptions?: { value: string; label: string }[]
     rows: PurchaseOrderListItem[]
     total: number

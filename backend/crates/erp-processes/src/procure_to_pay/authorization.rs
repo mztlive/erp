@@ -1,7 +1,9 @@
-//! 采购单写命令的授权快照与事务内账号重验。
+//! 采购单写命令的授权快照与事务内账号、范围重验。
 
 use erp_identity::AccessControlExt;
 use erp_identity::Permission;
+use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_read_models::purchase_center::access::PurchaseAccess;
 use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
@@ -62,6 +64,96 @@ impl PurchaseOrderProcess {
         Err(Error::Rbac(
             "采购单授权策略持续变化，无法形成稳定快照".to_string(),
         ))
+    }
+
+    /// 构造写命令范围检查器；缺少身份装配时拒绝，不退回路由级授权。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `action` - 已注册的采购动作
+    ///
+    /// # 返回
+    /// 返回可在事务内重验对象范围的检查器。
+    ///
+    /// # 错误
+    /// 未注入 RBAC 时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 每次检查均重新解析服务端授权，不得复用列表上下文。
+    pub(super) fn command_access(
+        &self,
+        actor: &AuditActor,
+        action: &'static str,
+    ) -> Result<PurchaseCommandAccess> {
+        Ok(PurchaseCommandAccess {
+            access: PurchaseAccess::new(self.db.clone(), self.require_rbac()?.clone()),
+            actor: actor.clone(),
+            action,
+        })
+    }
+}
+
+/// 命令上下文只保存请求身份；每次检查均重新解析服务端授权。
+#[derive(Clone)]
+pub(super) struct PurchaseCommandAccess {
+    /// 采购范围解析器。
+    access: PurchaseAccess,
+    /// 已认证操作人。
+    actor: AuditActor,
+    /// 本次命令动作。
+    action: &'static str,
+}
+
+impl PurchaseCommandAccess {
+    /// 在调用方事务内读取当前可操作单据；历史参与不会产生写资格。
+    ///
+    /// # 参数
+    /// * `id` - 采购单主键
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 对象在范围内时返回采购单。
+    ///
+    /// # 错误
+    /// 不存在或越权时返回 NotFound，不泄露存在性。
+    ///
+    /// # 关键业务约束
+    /// 写命令必须在原事务重验，不得把入口事前检查当作凭证。
+    pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<PurchaseOrder> {
+        self.access
+            .require_object(&self.actor, self.action, id, &[], executor)
+            .await
+            .map_err(crate::Error::from)
+    }
+
+    /// 写入前重新读取当前责任与版本，防止预读取后交接或状态变化。
+    ///
+    /// # 参数
+    /// * `id` - 采购单主键
+    /// * `expected` - 预读取时的乐观锁版本
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 范围与版本未变化时成功。
+    ///
+    /// # 错误
+    /// 范围失效返回 NotFound；版本变化返回冲突。
+    ///
+    /// # 关键业务约束
+    /// 不得在范围变化后继续写入。
+    pub(super) async fn revalidate(
+        &self,
+        id: &str,
+        expected: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let current = self.current(id, executor).await?;
+        if current.base.version != expected {
+            return Err(Error::ConflictError(
+                "采购单责任或版本已变化，请刷新后重试".into(),
+            ));
+        }
+        Ok(())
     }
 }
 

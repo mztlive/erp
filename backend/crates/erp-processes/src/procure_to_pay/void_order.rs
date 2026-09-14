@@ -120,6 +120,7 @@ impl PurchaseOrderProcess {
 ///
 /// # 关键业务约束
 /// 任意事务错误都必须执行一次无事务收据回读，以覆盖提交响应丢失。
+/// 写事务必须重验采购对象范围，历史参与不授予作废。
 async fn execute_void_draft_transaction(
     service: &PurchaseOrderProcess,
     purchase_order_id: &str,
@@ -134,6 +135,7 @@ async fn execute_void_draft_transaction(
         rbac,
         policy_revision,
     } = authorization;
+    let object_scope = service.command_access(actor, "delete")?;
     let transaction_order_id = purchase_order_id.to_string();
     let transaction_actor = actor.clone();
     let transaction_receipt_id = receipt_id.clone();
@@ -142,6 +144,9 @@ async fn execute_void_draft_transaction(
         .run_authorized_policy_transaction(policy_revision, move |session| {
             Box::pin(async move {
                 ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
+                object_scope
+                    .revalidate(&transaction_order_id, request.expected_lock_version, session)
+                    .await?;
                 let command = VoidDraftCommand {
                     purchase_order_id: &transaction_order_id,
                     request: &request,

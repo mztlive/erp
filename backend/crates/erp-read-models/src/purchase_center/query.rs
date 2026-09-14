@@ -2,27 +2,27 @@
 
 use std::collections::{HashMap, HashSet};
 
+use application_core::{AuditActor, FilteredPage};
 use erp_identity::AccessControlExt;
 use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
-use erp_procurement::repository::PurchaseOrderExt;
 use persistence_core::NoTransaction;
 use validator::Validate;
 
+use super::access::PurchaseAccess;
 use super::approval_query::load_document_approval;
 use super::dto::{PurchaseOrderCenterView, PurchaseOrderListItemView};
-use super::repository::{load_purchase_order_center_facts, load_purchase_order_list_page};
+use super::repository::{load_purchase_order_center_facts, PurchaseOrderListFacts};
+use super::scope::PurchaseListView;
 use super::PurchaseOrderReadService;
 use crate::{Error, Result};
 use erp_procurement::dto::purchase_order::{
-    PageView, PurchaseOrderListParams, PurchaseSalesAllocationView, SortDir, TotalsView,
+    PageView, PurchaseOrderListParams, PurchaseSalesAllocationView, TotalsView,
 };
+use erp_procurement::repository::purchase_order::PurchaseOrderRow;
 use erp_procurement::service::purchase_order::view_mapping::{
     revision_line_to_view, revision_totals, submission_line_to_view,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
-
-/// 采购单列表筛选条件类型（经 `PurchaseOrderExt` 关联类型跨 crate 可达）。
-type PurchaseOrderFilter = <mongodb::Database as PurchaseOrderExt>::PurchaseOrderFilter;
 
 impl PurchaseOrderReadService {
     /// 分页查询采购单列表。
@@ -32,111 +32,60 @@ impl PurchaseOrderReadService {
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 返回带范围版本的分页视图。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// * `ConflictError` - 跨页范围版本缺失或已变化
+    /// * `Forbidden` - 没有列表动作权限
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键业务约束
+    /// 列表、候选与总数在同一授权快照完成；后续页必须回传范围版本。
     pub async fn purchase_order_list(
         &self,
         params: &PurchaseOrderListParams,
-    ) -> Result<application_core::FilteredPage<PurchaseOrderListItemView>> {
+        actor: &AuditActor,
+    ) -> Result<PurchaseListView> {
+        let expected = params.scope_version.as_deref();
+        if params.page.unwrap_or(1) > 1 && expected.is_none_or(str::is_empty) {
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".into(),
+            ));
+        }
         params.validate()?;
-        let query = params.normalized()?;
-        let (keyword_sales_order_ids, keyword_supplier_ids) =
-            super::repository::list_facts::keyword_reference_ids(
-                &self.db,
-                query.q.as_deref(),
-                &mut NoTransaction,
-            )
-            .await?;
-        let filter = PurchaseOrderFilter {
-            owner_user_ids: query.owner_user_ids,
-            keyword_sales_order_ids,
-            keyword_supplier_ids,
-            purchase_no: query.q,
-            sales_order_id: query.sales_order_id.map(erp_core::ids::SalesOrderId::new),
-            supplier_id: query.supplier_id.map(erp_core::ids::SupplierAccountId::new),
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = load_purchase_order_list_page(&self.db, &filter, &mut NoTransaction).await?;
-        let supplier_names = &page.1.supplier_names;
-        let sales_order_numbers = &page.1.sales_order_nos;
-        let owner_names = &page.1.owner_names;
-        let submissions = &page.1.submissions;
-        let revisions = &page.1.revisions;
-        let page_rows = &page.0;
-        let items = page_rows
-            .items
-            .iter()
-            .map(|row| -> Result<PurchaseOrderListItemView> {
-                let sales_order_id = row.sales_order_id.to_string();
-                let sales_order_no = sales_no_for(&sales_order_id, sales_order_numbers)?;
-                let supplier_name = supplier_display(row.supplier_id.as_ref(), supplier_names);
-                let totals = list_row_totals(
-                    row.current_submission_id.as_deref(),
-                    row.current_revision_id.as_deref(),
-                    submissions,
-                    revisions,
-                );
-                let raw_owner = row
-                    .owner_user_id
-                    .as_deref()
-                    .filter(|owner| !owner.trim().is_empty())
-                    .map(str::to_string);
-                let (owner_user_id, owner_name) = owner_display(raw_owner, owner_names);
-                Ok(PurchaseOrderListItemView {
-                    id: row.id.clone(),
-                    purchase_no: row.purchase_no.clone(),
-                    sales_order_id,
-                    sales_order_no,
-                    supplier_id: row.supplier_id.to_string(),
-                    supplier_name,
-                    purchase_type: row.purchase_type,
-                    fulfillment_responsibility: row.fulfillment_responsibility,
-                    payment_term_code: row.payment_term_code.clone(),
-                    owner_name,
-                    owner_user_id,
-                    status: row.status,
-                    review_status: row.review_status,
-                    gross_amount: totals.0,
-                    net_amount: totals.1,
-                    tax_amount: totals.2,
-                    payment_progress: row.payment_progress,
-                    invoice_progress: row.invoice_progress,
-                    fulfillment_progress: row.fulfillment_progress,
-                    current_submission_id: row.current_submission_id.clone(),
-                    current_revision_id: row.current_revision_id.clone(),
-                    version: row.version,
-                    created_at: row.created_at,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let owner_ids = self
-            .db
-            .purchase_orders()
-            .current_owner_ids(&mut NoTransaction)
-            .await?;
-        let owner_options = self
-            .db
-            .accounts()
-            .filter_options(&owner_ids, &mut NoTransaction)
-            .await?;
-        Ok(application_core::FilteredPage {
-            owner_options,
-            ownership_basis: "current_procurement_owner",
-            page: PageView {
-                items,
-                total: page_rows.total,
-                page: filter.page,
-                page_size: filter.page_size,
+        let snapshot = self.list_snapshot(params, actor).await?;
+        if expected.is_some_and(|value| value != snapshot.context.scope_version) {
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into(),
+            ));
+        }
+        let items = map_list_items(&snapshot.page.items, &snapshot.facts)?;
+        let current = self.list_snapshot(params, actor).await?;
+        if current.context.scope_version != snapshot.context.scope_version {
+            return Err(Error::ConflictError(
+                "DATA_SCOPE_CHANGED：数据范围或业务单据已变化，请刷新".into(),
+            ));
+        }
+        Ok(PurchaseListView {
+            scope_version: snapshot.context.scope_version,
+            policy_version: snapshot.context.policy_version,
+            organization_version: snapshot.context.organizations.version,
+            as_of: snapshot.context.as_of.as_utc().to_rfc3339(),
+            empty_reason: snapshot.no_scope.then_some("no_scope"),
+            scope_summary: "采购单当前负责人及单据业务组织范围",
+            data: FilteredPage {
+                owner_options: snapshot.owner_options,
+                ownership_basis: "current_procurement_owner",
+                page: PageView {
+                    items,
+                    total: snapshot.page.total,
+                    page: snapshot.page_no,
+                    page_size: snapshot.page_size,
+                },
             },
         })
     }
@@ -145,18 +94,34 @@ impl PurchaseOrderReadService {
     ///
     /// # 参数
     /// * `id` - 采购单 ID
+    /// * `actor` - 已认证操作人；内部无账号上下文时为空
     ///
     /// # 返回
     /// 返回对象中心视图（当前内容按 版本 > 提交 > 草稿 优先级取用）。
     ///
     /// # 错误
-    /// * `NotFound` - 采购单不存在
+    /// * `NotFound` - 采购单不存在或不可见
+    /// * `ConflictError` - 组装过程中范围或单据已变化
     /// * `RepositoryError` - 数据库查询失败
-    pub async fn purchase_order_detail(&self, id: &str) -> Result<PurchaseOrderCenterView> {
+    ///
+    /// # 关键业务约束
+    /// 列表已授权不能作为详情凭证；返回前再次重验范围版本。
+    pub async fn purchase_order_detail(
+        &self,
+        id: &str,
+        actor: Option<&AuditActor>,
+    ) -> Result<PurchaseOrderCenterView> {
+        let mut access_version = None;
+        if let Some(actor) = actor {
+            let (_, version) = PurchaseAccess::new(self.db.clone(), self.require_rbac()?.clone())
+                .detail(actor, id)
+                .await?;
+            access_version = Some(version);
+        }
         let facts = load_purchase_order_center_facts(&self.db, id, &mut NoTransaction).await?;
         let order = facts
             .order
-            .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+            .ok_or_else(|| Error::NotFound("采购单不存在或无权查看".to_string()))?;
         let supplier_name = supplier_display(
             order.supplier_id.as_ref(),
             &facts
@@ -271,7 +236,7 @@ impl PurchaseOrderReadService {
             Err(error) => return Err(error),
         };
 
-        Ok(PurchaseOrderCenterView {
+        let view = PurchaseOrderCenterView {
             id: order.base.id.clone(),
             purchase_no: order.purchase_no.clone(),
             status: order.stable.status,
@@ -307,7 +272,18 @@ impl PurchaseOrderReadService {
             )
             .await?,
             created_at: order.base.created_at,
-        })
+        };
+        if let (Some(actor), Some(expected)) = (actor, access_version) {
+            let (_, current) = PurchaseAccess::new(self.db.clone(), self.require_rbac()?.clone())
+                .detail(actor, id)
+                .await?;
+            if current != expected {
+                return Err(Error::ConflictError(
+                    "DATA_SCOPE_CHANGED：数据范围或采购单已变化，请刷新".into(),
+                ));
+            }
+        }
+        Ok(view)
     }
 
     /// 批量解析账号展示姓名。
@@ -394,6 +370,70 @@ fn list_row_totals(
         }
     }
     (String::new(), String::new(), String::new())
+}
+
+/// 把当前页投影行映射为列表视图。
+///
+/// # 参数
+/// * `rows` - 已授权的当前页投影
+/// * `facts` - 同一快照下的关联事实
+///
+/// # 返回
+/// 返回列表行视图。
+///
+/// # 错误
+/// 来源销售单号缺失时返回内部错误。
+///
+/// # 关键业务约束
+/// 映射不得改变授权集合；金额取自当前提交或版本指针。
+fn map_list_items(
+    rows: &[PurchaseOrderRow],
+    facts: &PurchaseOrderListFacts,
+) -> Result<Vec<PurchaseOrderListItemView>> {
+    rows.iter()
+        .map(|row| -> Result<PurchaseOrderListItemView> {
+            let sales_order_id = row.sales_order_id.to_string();
+            let sales_order_no = sales_no_for(&sales_order_id, &facts.sales_order_nos)?;
+            let supplier_name = supplier_display(row.supplier_id.as_ref(), &facts.supplier_names);
+            let totals = list_row_totals(
+                row.current_submission_id.as_deref(),
+                row.current_revision_id.as_deref(),
+                &facts.submissions,
+                &facts.revisions,
+            );
+            let raw_owner = row
+                .owner_user_id
+                .as_deref()
+                .filter(|owner| !owner.trim().is_empty())
+                .map(str::to_string);
+            let (owner_user_id, owner_name) = owner_display(raw_owner, &facts.owner_names);
+            Ok(PurchaseOrderListItemView {
+                id: row.id.clone(),
+                purchase_no: row.purchase_no.clone(),
+                sales_order_id,
+                sales_order_no,
+                supplier_id: row.supplier_id.to_string(),
+                supplier_name,
+                purchase_type: row.purchase_type,
+                fulfillment_responsibility: row.fulfillment_responsibility,
+                payment_term_code: row.payment_term_code.clone(),
+                owner_name,
+                owner_user_id,
+                status: row.status,
+                review_status: row.review_status,
+                gross_amount: totals.0,
+                net_amount: totals.1,
+                tax_amount: totals.2,
+                payment_progress: row.payment_progress,
+                invoice_progress: row.invoice_progress,
+                fulfillment_progress: row.fulfillment_progress,
+                current_submission_id: row.current_submission_id.clone(),
+                current_revision_id: row.current_revision_id.clone(),
+                version: row.version,
+                created_at: row.created_at,
+            })
+        })
+        .collect()
 }
 
 /// 解析供应商展示名.
@@ -489,10 +529,14 @@ mod query_layering_tests {
     /// 查询编排必须使用批量事实加载，旧逐行 helpers 已删除.
     #[test]
     fn query_uses_batch_fact_bundles() {
-        let production = include_str!("query.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .expect("生产代码必须存在");
+        fn production_part(source: &str) -> &str {
+            source.split("#[cfg(test)]").next().expect("生产代码必须存在")
+        }
+        let production = [
+            production_part(include_str!("query.rs")),
+            production_part(include_str!("scope.rs")),
+        ]
+        .concat();
         assert!(
             production.contains("load_purchase_order_list_page"),
             "列表必须使用批量事实加载"
