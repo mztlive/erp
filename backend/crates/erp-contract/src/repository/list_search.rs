@@ -251,6 +251,7 @@ mod tests {
             contract_no: None,
             customer_id: None,
             customer_ids: Some(vec![]),
+            historical_contract_ids: vec![],
             status: None,
             page: 3,
             page_size: 20,
@@ -266,12 +267,8 @@ mod tests {
         };
         let pipeline = list_pipeline(&filter, &search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
         assert_eq!(
-            pipeline[0]
-                .get_document("$match")
-                .unwrap()
-                .get_document("customer_id")
-                .unwrap(),
-            &doc! { "$in": [] }
+            pipeline[0].get_document("$match").unwrap(),
+            &doc! { "$and": [{ "deleted_at": 0_i64 }, { "$expr": false }] }
         );
         let facets = pipeline.last().unwrap().get_document("$facet").unwrap();
         let items = facets.get_array("items").unwrap();

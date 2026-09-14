@@ -54,7 +54,7 @@ export async function fetchContractCenter(
 
     const attachments: ContractAttachmentView[] = []
     for (const rev of detail.revisions) {
-        const file = await loadFileAsset(rev.contract_pdf_file_id)
+        const file = await loadFileAsset(detail.id, rev.contract_pdf_file_id)
         if (!file) {
             attachments.push({
                 id: rev.contract_pdf_file_id,

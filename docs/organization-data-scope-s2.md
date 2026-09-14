@@ -52,7 +52,7 @@
 | 编号 | 必须交付 | 当前状态 |
 | --- | --- | --- |
 | S2-01 | M01 客户：统一范围、主责及协作、组织筛选、列表与详情、候选及导出 | 功能已接入；跨域直连已改为本域 Port + 组合层 adapter。列表、详情、全量授权、导出、写命令与归属变更消费 v2；主责与协作分开；组织筛选按当前主负责人所属组织；跨页与 CSV 携带 scope_version。S2-12 的 A34／A36 及业务验收未核销，不得登记本项整体完成 |
-| S2-02 | M02 合同：当前客户归属及合法单据参与、组织筛选、附件、候选与导出 | 未接入新解析器 |
+| S2-02 | M02 合同：当前客户归属及合法单据参与、组织筛选、附件、候选与导出 | 功能已接入；Port／adapter 已按第 9.4 节接线。列表、详情、附件、候选、导出与写命令消费 v2；当前跟进负责人取客户当前主负责人；合法单据参与仅补充读取；组织筛选按当前主负责人所属组织；跨页与 CSV 携带 scope_version。S2-12 的 A34／A36 及业务验收未核销，不得登记本项整体完成 |
 | S2-03 | M04 销售：业务组织范围、列表与详情、打印、候选、导出和写命令范围 | 业务组织与快照已采集；销售列表、详情、候选、跨页与 CSV 版本复核及主单创建／保存／提交／撤回／作废事务范围已接入；组织筛选、关联客户／合同、变更单及任务命令和其他读取消费者未完成 |
 | S2-04 | M05 采购：业务组织范围、列表与详情、候选、导出和写命令范围 | 已采集业务组织；范围消费未完成 |
 | S2-05 | 全部既有 DataScope 读取器与工作流事实适配器按资源、动作和身份维度解释 v2 | 未完成：工作台／工作流等仍为旧读取器，列为尚未接入；其目标接入必须经公共解析，禁止将无资源动作的旧覆盖计算作为 v2 授权结果 |
@@ -78,7 +78,7 @@
 | 身份域组织与范围 | `erp-identity/src/service/access_control/resolve.rs`；`entity/access_control/resolved_scope.rs` | 身份域内部调用无需跨域 Port | 资源维度与准入登记；公共结果转换合同；单对象判定与条件编译的基准 |
 | 客户 | `erp-customer/src/service/customer/{access,scope}.rs`；`ports/data_scope.rs`；`repository/scope.rs` | `CustomerDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/customer_data_scope.rs` 调用 `DataScopeService` | S2-12 剩余 A34／A36；同事务和时点的窄组织事实已由 Port 暴露；列表／详情／候选／导出／命令共同验证未核销 |
 | 销售及关联成本 | `erp-read-models/src/sales_center/access.rs` 调用公共入口，销售 Repository 编译对象条件；命令由 `erp-processes/src/order_to_cash/authorization.rs` 复用 | 命名组合用例可调用身份域；不得据此要求业务域反向依赖组合层 | 按 S3 第 6 章核对公共判定、条件等价、事务与动作；剩余 S2-03 入口未完成 |
-| 合同／采购 | v2 对象范围消费未完成；既有归属或责任字段不构成接入 | 相应范围 Port／adapter 未完成登记 | S2-02、S2-04、S2-13；接入前拒绝将初始化目录作为授权生效依据 |
+| 合同／采购 | 合同：`erp-contract/src/service/contract/{access,scope,query}.rs`；`ports/data_scope.rs`；`repository/scope.rs`。采购 v2 对象范围消费未完成；既有归属或责任字段不构成采购接入 | 合同 `ContractDataScopePort` 已定义；生产 adapter `erp-processes/src/adapters/contract_data_scope.rs` 调用 `DataScopeService`。采购范围 Port／adapter 未完成登记 | S2-04、S2-13；采购接入前拒绝将初始化目录作为授权生效依据 |
 | 工作台／工作流 | 旧读取器见 `erp-read-models/src/workbench/access.rs`、`erp-processes/src/adapters/workflow/authorization.rs` | 既有 WorkflowAuthorizationPort 仍传原始范围事实，尚未完成 v2 接入 | S2-05 及 S3-04；转换不得丢资源动作、启用状态或目标维度；保留任务执行与管理边界 |
 
 ### 4.2 实施与退出顺序

@@ -1,216 +1,527 @@
-//! 合同列表的客户归属可见范围。
-//!
-//! 跨域只读客户归属事实 Port，不调用 CustomerService。
-//! `assigned` 范围与销售单创建的 `ensure_customer_access` 一致：当前用户作为
-//! OWNER 或 COLLABORATOR 的有效归属客户。
+//! 合同列表与候选的一致授权快照；范围与业务版本跨页携带。
 
-use crate::dto::contract::ContractListScope;
-use crate::error::Result;
-use erp_core::common::time::BusinessDate;
+use persistence_core::Transactional;
+use std::hash::{Hash, Hasher};
 
+use application_core::AuditActor;
+
+use super::access::intersect_ids;
 use super::ContractService;
+use crate::dto::contract::{
+    ContractListParams, ContractListQuery, ContractListScope, ContractListView, PageView,
+};
+use crate::error::{Error, Result};
+use crate::ports::{ContractDataScopePort, ContractResolvedScope};
+use crate::repository::list_search::ContractSearch;
+use crate::repository::scope::ContractReadScope;
+use crate::repository::{ContractExt, ContractFilter};
+
+/// 同一事务内的列表快照，供跨页版本复核。
+pub(super) struct ContractSnapshot {
+    /// 对外列表视图。
+    pub view: ContractListView,
+    /// 身份授权上下文。
+    pub context: ContractResolvedScope,
+    /// 授权集合本身为空。
+    pub no_scope: bool,
+}
 
 impl ContractService {
-    /// 按列表范围解析允许返回的客户 ID 集合。
+    /// 授权、总数、候选与合同版本全部在同一个事务读取。
     ///
     /// # 参数
-    /// * `scope` - 客户归属可见范围
-    /// * `requested_customer_id` - 调用方显式指定的单个客户；`None` 表示不限单个客户
-    /// * `actor_user_id` - 当前登录用户 ID，用于读取有效归属
+    /// * `params` - 原始查询
+    /// * `query` - 已归一化查询
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// * `None` - 不按客户 ID 过滤
-    /// * `Some(ids)` - 仅这些客户；空向量表示没有任何可见客户
+    /// 返回带范围版本的列表快照。
     ///
     /// # 错误
-    /// * `RepositoryError` - 读取归属失败
+    /// 缺范围版本的后续页、范围变化、筛选非法或仓储失败时拒绝。
     ///
-    /// # 约束
-    /// `Assigned` 与显式 `customer_id` 同时存在时取交集；客户不在归属内时返回空集合。
-    pub(super) async fn visible_customer_ids(
+    /// # 关键业务约束
+    /// 组织筛选按当前主负责人所属组织收窄，不得扩大授权结果。
+    pub(super) async fn list_snapshot(
         &self,
-        scope: ContractListScope,
-        requested_customer_id: Option<String>,
-        actor_user_id: &str,
-    ) -> Result<Option<Vec<String>>> {
-        let assigned_customer_ids = match scope {
-            ContractListScope::All => None,
-            ContractListScope::Assigned => Some(self.assigned_customer_ids(actor_user_id).await?),
-        };
-        Ok(intersect_customer_ids(
-            requested_customer_id,
-            assigned_customer_ids,
-        ))
-    }
-
-    /// 读取当前用户在今天仍有效的归属客户 ID。
-    ///
-    /// # 参数
-    /// * `actor_user_id` - 当前登录用户 ID
-    ///
-    /// # 返回
-    /// 返回 OWNER / COLLABORATOR 有效归属对应的客户 ID；无归属时为空向量。
-    ///
-    /// # 错误
-    /// * `RepositoryError` - 读取归属失败
-    ///
-    /// # 约束
-    /// 有效期按业务日 `BusinessDate::today()`（UTC 自然日）判定，与客户列表范围一致。
-    async fn assigned_customer_ids(&self, actor_user_id: &str) -> Result<Vec<String>> {
-        self.assignments
-            .assigned_customer_ids(actor_user_id, BusinessDate::today())
+        _params: &ContractListParams,
+        query: ContractListQuery,
+        actor: &AuditActor,
+    ) -> Result<ContractSnapshot> {
+        let db = self.db.clone();
+        let access = self.access();
+        let data_scope = self.data_scope.clone();
+        let assignments = self.assignments.clone();
+        let accounts = self.accounts.clone();
+        let customers = self.customers.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
+                    let no_scope = !context.has_scope_rules();
+                    let as_of = super::access::business_date(context.as_of)?;
+                    let (customer_ids, historical_contract_ids) = apply_list_filters(
+                        &db,
+                        data_scope.as_ref(),
+                        assignments.as_ref(),
+                        &context,
+                        &scope,
+                        &query,
+                        as_of,
+                        executor,
+                    )
+                    .await?;
+                    let filter = list_filter(&query, customer_ids, historical_contract_ids);
+                    let ids = db.contract().list_customer_ids(&filter, executor).await?;
+                    let customer_facts = super::query::list_customer_facts_with(
+                        customers.as_ref(),
+                        assignments.as_ref(),
+                        accounts.as_ref(),
+                        &ids,
+                        as_of,
+                        executor,
+                    )
+                    .await?;
+                    let search = ContractSearch {
+                        q: query.q.clone(),
+                        metric: query.metric,
+                        settlement_party_id: query.settlement_party_id.clone(),
+                        owner_user_ids: query.owner_user_ids.clone(),
+                        customers: customer_facts,
+                    };
+                    let result = db.contract().search_list(&filter, &search, executor).await?;
+                    let versions = db.contract().query_versions(&filter, executor).await?;
+                    if versions.len() > 10_000 {
+                        return Err(Error::ValidationError(
+                            "合同查询超过上限，请收窄组织或负责人条件".into(),
+                        ));
+                    }
+                    let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
+                    versions.hash(&mut fingerprint);
+                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
+                    let owner_options = accounts
+                        .filter_options(
+                            &search
+                                .customers
+                                .iter()
+                                .filter_map(|c| c.owner_id.clone())
+                                .collect::<Vec<_>>(),
+                        )
+                        .await?
+                        .into_iter()
+                        .map(|o| crate::dto::contract::ContractFilterOption {
+                            value: o.value,
+                            label: o.label,
+                        })
+                        .collect();
+                    let total = result.total();
+                    let items =
+                        super::query::contract_rows(&db, result.items, &search.customers, executor).await?;
+                    Ok(ContractSnapshot {
+                        no_scope,
+                        context,
+                        view: ContractListView {
+                            ownership_basis: "current_customer_owner",
+                            scope_version: String::new(),
+                            policy_version: 0,
+                            organization_version: 0,
+                            as_of: String::new(),
+                            empty_reason: None,
+                            scope_summary: "合同当前客户主负责人、协作关系、负责人所属组织及合法单据参与",
+                            page: PageView {
+                                items,
+                                total,
+                                page: filter.page,
+                                page_size: filter.page_size,
+                            },
+                            metrics: result.metrics.into_iter().next().unwrap_or_default(),
+                            settlement_options: result.settlement_options,
+                            owner_options,
+                        },
+                    })
+                })
+            })
             .await
     }
 }
 
-/// 将请求中的客户筛选与当前用户归属范围求交。
+/// 将内部快照转换为对外列表视图。
 ///
 /// # 参数
-/// * `requested_customer_id` - 调用方显式指定的客户；`None` 表示不限单个客户
-/// * `assigned_customer_ids` - 当前用户有效归属客户；`None` 表示不按归属收窄
+/// * `snapshot` - 同一事务读取的授权与业务快照
 ///
 /// # 返回
-/// * `None` - 不按客户 ID 过滤
-/// * `Some(ids)` - 仅这些客户；空向量表示没有任何可见客户
+/// 返回可序列化的列表响应。
 ///
 /// # 错误
 /// 无。
 ///
-/// # 约束
-/// 请求客户不在归属集合内时返回空向量，禁止退回全量合同。
-fn intersect_customer_ids(
-    requested_customer_id: Option<String>,
-    assigned_customer_ids: Option<Vec<String>>,
-) -> Option<Vec<String>> {
-    match (requested_customer_id, assigned_customer_ids) {
-        (None, None) => None,
-        (Some(customer_id), None) => Some(vec![customer_id]),
-        (None, Some(assigned)) => Some(assigned),
-        (Some(customer_id), Some(assigned)) => {
-            if assigned.iter().any(|id| id == &customer_id) {
-                Some(vec![customer_id])
-            } else {
-                Some(Vec::new())
-            }
+/// # 关键业务约束
+/// 不把内部授权证明或全量人员集合返回给客户端。
+pub(super) fn to_list_view(snapshot: ContractSnapshot) -> ContractListView {
+    let mut view = snapshot.view;
+    view.scope_version = snapshot.context.scope_version;
+    view.policy_version = snapshot.context.policy_version;
+    view.organization_version = snapshot.context.organization_version;
+    view.as_of = snapshot.context.as_of.as_utc().to_rfc3339();
+    view.empty_reason = snapshot.no_scope.then_some("no_scope");
+    view
+}
+
+/// 构造可被 HTTP 边界识别的范围变化冲突。
+///
+/// # 参数
+/// * `detail` - 面向用户的中文恢复说明
+///
+/// # 返回
+/// 返回带 `DATA_SCOPE_CHANGED` 前缀的冲突错误。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 稳定码必须出现在错误载荷中，供 HTTP 映射为独立 `code`，不得只依赖展示文案。
+pub(super) fn data_scope_changed(detail: &str) -> Error {
+    Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
+}
+
+/// 后续页必须携带当前范围版本，禁止拼接不同授权快照。
+///
+/// # 参数
+/// * `page` - 请求页码
+/// * `version` - 客户端回传的范围版本
+///
+/// # 返回
+/// 第一页或版本非空时成功。
+///
+/// # 错误
+/// 第二页及之后缺少版本时返回 `DATA_SCOPE_CHANGED`。
+///
+/// # 关键业务约束
+/// 不得在缺版本时继续查询并默默使用新授权。
+pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
+    if page > 1 && version.is_none_or(str::is_empty) {
+        return Err(data_scope_changed("请从第一页刷新后继续查询"));
+    }
+    Ok(())
+}
+
+/// 客户端回传的范围版本必须与当前快照一致。
+///
+/// # 参数
+/// * `expected` - 后续页携带的范围版本；第一页可为空
+/// * `actual` - 本次查询快照的范围版本
+///
+/// # 返回
+/// 未携带或完全一致时成功。
+///
+/// # 错误
+/// 版本不一致时返回 `DATA_SCOPE_CHANGED`。
+///
+/// # 关键业务约束
+/// 不得把新旧授权结果拼接成同一列表。
+pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
+    if expected.is_some_and(|value| value != actual) {
+        return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
+    }
+    Ok(())
+}
+
+/// 同一查询内两次快照的范围版本必须一致。
+///
+/// # 参数
+/// * `first` - 首次快照版本
+/// * `second` - 复核快照版本
+///
+/// # 返回
+/// 两次版本相同时成功。
+///
+/// # 错误
+/// 查询过程中范围或合同资料变化时返回 `DATA_SCOPE_CHANGED`。
+///
+/// # 关键业务约束
+/// 复核失败必须整页拒绝，不得返回半新半旧结果。
+pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
+    if first != second {
+        return Err(data_scope_changed("数据范围或合同资料已变化，请刷新"));
+    }
+    Ok(())
+}
+
+/// 归一化查询与权限客户集合求交后的仓储条件；空集合必须保留。
+///
+/// # 参数
+/// * `query` - 归一化查询
+/// * `customer_ids` - 已与筛选求交的授权客户
+/// * `historical_contract_ids` - 仍受筛选约束的历史参与合同
+///
+/// # 返回
+/// 返回仓储筛选。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 不得把 `None` 解释为未授权全量。
+fn list_filter(
+    query: &ContractListQuery,
+    customer_ids: Option<Vec<String>>,
+    historical_contract_ids: Vec<String>,
+) -> ContractFilter {
+    ContractFilter {
+        contract_no: query.contract_no.clone(),
+        customer_id: None,
+        customer_ids,
+        historical_contract_ids,
+        status: query.status,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, crate::dto::contract::SortDir::Asc),
+    }
+}
+
+/// 将业务筛选与授权集合求交。
+///
+/// # 参数
+/// * `data_scope` - 组织展开与成员事实 Port
+/// * `assignments` - 当前主责事实
+/// * `context` - 已解析的合同范围事实
+/// * `scope` - 已映射的合同范围
+/// * `query` - 归一化查询
+/// * `as_of` - 客户归属自然日
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 授权客户集合与仍可见的历史参与合同。
+///
+/// # 错误
+/// 组织展开失败、成员超限或归属查询失败时拒绝。
+///
+/// # 关键业务约束
+/// Assigned 只是收窄条件；All 不得绕过 DataScope。
+async fn apply_list_filters(
+    db: &mongodb::Database,
+    data_scope: &dyn ContractDataScopePort,
+    assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
+    context: &ContractResolvedScope,
+    scope: &ContractReadScope,
+    query: &ContractListQuery,
+    as_of: erp_core::common::time::BusinessDate,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<(Option<Vec<String>>, Vec<String>)> {
+    let mut ids = scope.authorized_customer_ids.clone();
+    let mut constraint: Option<Vec<String>> = None;
+    constraint = intersect_ids(constraint, assignment_filter(scope, query.scope));
+    if let Some(owners) = &query.owner_user_ids {
+        constraint = Some(
+            assignments
+                .current_owner_customer_ids(constraint.as_deref(), Some(owners.as_slice()), as_of, executor)
+                .await?,
+        );
+    }
+    constraint =
+        apply_org_unit_filter(data_scope, assignments, context, constraint, query, as_of, executor).await?;
+    if let Some(customer_id) = &query.customer_id {
+        constraint = intersect_ids(constraint, Some(vec![customer_id.clone()]));
+    }
+    ids = intersect_ids(ids, constraint.clone());
+    let history = narrow_history(
+        db,
+        scope.historical_contract_ids.clone(),
+        constraint.as_deref(),
+        ids.is_none() && constraint.is_none(),
+        executor,
+    )
+    .await?;
+    Ok((ids, history))
+}
+
+/// 按请求筛选收窄历史参与合同。
+///
+/// # 参数
+/// * `db` - 合同集合
+/// * `history` - 已证明的历史参与合同
+/// * `constraint` - 请求侧客户筛选；`None` 表示无额外筛选
+/// * `company_unfiltered` - 公司范围且无筛选时历史已被全量覆盖
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回仍应并入读取条件的历史合同 ID。
+///
+/// # 错误
+/// 读取合同客户映射失败时拒绝。
+///
+/// # 关键业务约束
+/// 筛选只能收窄；公司范围不必再并入历史 ID。
+async fn narrow_history(
+    db: &mongodb::Database,
+    history: Vec<String>,
+    constraint: Option<&[String]>,
+    company_unfiltered: bool,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<Vec<String>> {
+    if company_unfiltered || history.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(customers) = constraint else {
+        return Ok(history);
+    };
+    let allowed = customers.iter().collect::<std::collections::BTreeSet<_>>();
+    Ok(db
+        .contracts()
+        .customer_refs_by_ids(&history, executor)
+        .await?
+        .into_iter()
+        .filter(|row| allowed.contains(&row.customer_id))
+        .map(|row| row.id)
+        .collect())
+}
+
+/// 按请求中的组织筛选收窄已授权客户集合。
+///
+/// # 参数
+/// * `data_scope` - 组织展开与成员事实 Port
+/// * `assignments` - 当前主责事实
+/// * `context` - 已解析的合同范围事实
+/// * `ids` - 当前授权客户集合
+/// * `query` - 归一化查询
+/// * `as_of` - 客户归属自然日
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 无组织筛选时原样返回；否则返回主负责人属于筛选组织的客户。
+///
+/// # 错误
+/// 包含下级但未提供组织、展开失败或成员超限时拒绝。
+///
+/// # 关键业务约束
+/// 组织筛选只看当前主负责人所属组织，不得用协作人员或签约经办组织代替。
+async fn apply_org_unit_filter(
+    data_scope: &dyn ContractDataScopePort,
+    assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
+    context: &ContractResolvedScope,
+    ids: Option<Vec<String>>,
+    query: &ContractListQuery,
+    as_of: erp_core::common::time::BusinessDate,
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<Option<Vec<String>>> {
+    let Some(org_ids) = &query.org_unit_ids else {
+        if query.include_descendants == Some(true) {
+            return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
+        }
+        return Ok(ids);
+    };
+    if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
+        return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
+    }
+    let expanded = data_scope
+        .expand_org_units(
+            org_ids.as_slice(),
+            query.include_descendants.unwrap_or(false),
+            executor,
+        )
+        .await?;
+    let members = data_scope
+        .org_member_ids(&expanded, context.as_of, executor)
+        .await?;
+    if members.len() > 10_000 {
+        return Err(Error::ValidationError(
+            "组织成员超过查询上限，请收窄组织筛选".into(),
+        ));
+    }
+    if members.is_empty() {
+        return Ok(Some(Vec::new()));
+    }
+    Ok(Some(
+        assignments
+            .current_owner_customer_ids(ids.as_deref(), Some(&members), as_of, executor)
+            .await?,
+    ))
+}
+
+/// 目录范围标签转换为授权集合上的额外收窄。
+///
+/// # 参数
+/// * `scope` - 已证明的合同范围
+/// * `requested` - 页面请求的目录范围
+///
+/// # 返回
+/// All 不额外收窄；Assigned 返回当前主责与协作客户。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 目录范围不是授权来源，不能把 All 解释为公司范围。
+fn assignment_filter(scope: &ContractReadScope, requested: ContractListScope) -> Option<Vec<String>> {
+    match requested {
+        ContractListScope::All => None,
+        ContractListScope::Assigned => {
+            let mut ids = scope.owned_customer_ids.clone();
+            ids.extend(scope.collaborative_customer_ids.iter().cloned());
+            ids.sort();
+            ids.dedup();
+            Some(ids)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::intersect_customer_ids;
-    use crate::dto::contract::ContractListScope;
-    use crate::error::Error;
-    use crate::ports::{
-        AccountNamePort, ContractAuditPort, CustomerAssignmentFactsPort, CustomerFactsPort,
-        EmptyAccountNames, EmptyCustomers, EmptyFileAssetFacts, FailClosedAssignmentFactsPort,
-        FailClosedAuditPort, FileAssetFactsPort,
-    };
-    use async_trait::async_trait;
-    use erp_core::common::time::BusinessDate;
-    use std::collections::HashMap;
-    use std::sync::Arc;
+    use super::*;
 
     #[test]
-    fn intersect_keeps_unscoped_request_or_assignment() {
-        assert_eq!(intersect_customer_ids(None, None), None);
-        assert_eq!(
-            intersect_customer_ids(Some("cust-1".to_string()), None),
-            Some(vec!["cust-1".to_string()])
-        );
-        assert_eq!(
-            intersect_customer_ids(None, Some(vec!["cust-1".to_string(), "cust-2".to_string()])),
-            Some(vec!["cust-1".to_string(), "cust-2".to_string()])
-        );
-    }
-
-    #[test]
-    fn intersect_drops_unassigned_requested_customer() {
-        assert_eq!(
-            intersect_customer_ids(
-                Some("cust-1".to_string()),
-                Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
-            ),
-            Some(vec!["cust-1".to_string()])
-        );
-        assert_eq!(
-            intersect_customer_ids(Some("cust-9".to_string()), Some(vec!["cust-1".to_string()])),
-            Some(Vec::new())
-        );
-        assert_eq!(
-            intersect_customer_ids(Some("cust-1".to_string()), Some(Vec::new())),
-            Some(Vec::new())
-        );
-    }
-
-    struct AssignedOnly(Vec<String>);
-
-    #[async_trait]
-    impl CustomerAssignmentFactsPort for AssignedOnly {
-        async fn assigned_customer_ids(
-            &self,
-            _user_id: &str,
-            _as_of: BusinessDate,
-        ) -> crate::error::Result<Vec<String>> {
-            Ok(self.0.clone())
-        }
-
-        async fn owner_user_ids_by_customer(
-            &self,
-            _customer_ids: &[String],
-            _as_of: BusinessDate,
-        ) -> crate::error::Result<HashMap<String, String>> {
-            Ok(HashMap::new())
-        }
-    }
-
-    fn intersect_from_scope(
-        scope: ContractListScope,
-        requested: Option<String>,
-        assigned: Option<Vec<String>>,
-    ) -> Option<Vec<String>> {
-        let assigned_customer_ids = match scope {
-            ContractListScope::All => None,
-            ContractListScope::Assigned => assigned,
-        };
-        intersect_customer_ids(requested, assigned_customer_ids)
-    }
-
-    #[test]
-    fn assigned_scope_without_membership_is_empty_not_unscoped() {
-        assert_eq!(
-            intersect_from_scope(ContractListScope::Assigned, None, Some(Vec::new())),
-            Some(Vec::new())
-        );
-        assert_eq!(
-            intersect_from_scope(
-                ContractListScope::Assigned,
-                Some("cust-9".to_string()),
-                Some(vec!["cust-1".to_string()]),
-            ),
-            Some(Vec::new())
-        );
-    }
-
-    #[test]
-    fn fail_closed_assignment_port_is_auth_failure_internal() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .expect("runtime");
-        runtime.block_on(async {
-            let err = FailClosedAssignmentFactsPort
-                .assigned_customer_ids("user-1", BusinessDate::today())
-                .await
-                .expect_err("must fail closed");
-            match err {
-                Error::Internal(message) => assert_eq!(message, "客户归属端口未接线"),
-                other => panic!("期望 Internal，得到 {other:?}"),
+    fn later_pages_without_scope_version_are_rejected() {
+        assert!(ensure_page(1, None).is_ok());
+        assert!(ensure_page(2, None).is_err());
+        assert!(ensure_page(2, Some("")).is_err());
+        assert!(ensure_page(2, Some("v1")).is_ok());
+        match ensure_page(2, None) {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
             }
-        });
-        let _audit: Arc<dyn ContractAuditPort> = Arc::new(FailClosedAuditPort);
-        let _customers: Arc<dyn CustomerFactsPort> = Arc::new(EmptyCustomers);
-        let _accounts: Arc<dyn AccountNamePort> = Arc::new(EmptyAccountNames);
-        let _files: Arc<dyn FileAssetFactsPort> = Arc::new(EmptyFileAssetFacts);
-        let _ = AssignedOnly(vec!["cust-1".to_string()]);
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
     }
+
+    #[test]
+    fn mismatched_scope_version_is_data_scope_changed() {
+        assert!(ensure_scope_version(None, "v1").is_ok());
+        assert!(ensure_scope_version(Some("v1"), "v1").is_ok());
+        match ensure_scope_version(Some("v1"), "v2") {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        match ensure_stable_snapshot("v1", "v9") {
+            Err(Error::ConflictError(message)) => {
+                assert!(message.starts_with("DATA_SCOPE_CHANGED："));
+            }
+            other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
+        }
+        assert!(ensure_stable_snapshot("v1", "v1").is_ok());
+    }
+
+    #[test]
+    fn directory_scope_does_not_grant_company_access() {
+        let scope = ContractReadScope {
+            roles: vec![],
+            user_limit: None,
+            historical_contract_ids: vec![],
+            owned_customer_ids: vec!["c-own".into()],
+            collaborative_customer_ids: vec!["c-collab".into()],
+            authorized_customer_ids: Some(vec!["c-1".into()]),
+        };
+        assert!(assignment_filter(&scope, ContractListScope::All).is_none());
+        assert_eq!(
+            assignment_filter(&scope, ContractListScope::Assigned),
+            Some(vec!["c-collab".into(), "c-own".into()])
+        );
+    }
+
 }

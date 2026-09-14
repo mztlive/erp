@@ -22,6 +22,7 @@ export type ContractFilterKey =
     | "customerId"
     | "settlementPartyId"
     | "ownerUserIds"
+    | "orgUnitIds"
 
 export type ContractAppliedChip = Readonly<{
     key: ContractFilterKey
@@ -55,6 +56,8 @@ export function useContractsList() {
         customerId,
         settlementPartyId,
         ownerUserIds,
+        orgUnitIds,
+        includeDescendants,
         upload,
     } = url
 
@@ -73,8 +76,13 @@ export function useContractsList() {
     const [ownerDraft, setOwnerDraft] = React.useState<string | null>(
         ownerUserIds ?? null,
     )
+    const [orgDraft, setOrgDraft] = React.useState(orgUnitIds ?? "")
+    const [descendantsDraft, setDescendantsDraft] =
+        React.useState(includeDescendants)
 
-    const hasStructuredFilters = Boolean(settlementPartyId || ownerUserIds)
+    const hasStructuredFilters = Boolean(
+        settlementPartyId || ownerUserIds || orgUnitIds,
+    )
 
     // UI 态：初始深链带结构化条件时展开；URL 回填不重置展开态
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
@@ -95,21 +103,34 @@ export function useContractsList() {
             q: searchDraft.trim() || undefined,
             settlementPartyId: settlementPartyIdDraft ?? undefined,
             ownerUserIds: ownerDraft ?? undefined,
+            orgUnitIds: orgDraft.trim() || undefined,
+            includeDescendants: descendantsDraft,
             page: 1,
         })
         setPanelOpen(false)
-    }, [ownerDraft, pushUrl, searchDraft, settlementPartyIdDraft])
+    }, [
+        descendantsDraft,
+        orgDraft,
+        ownerDraft,
+        pushUrl,
+        searchDraft,
+        settlementPartyIdDraft,
+    ])
 
     /** 只清「更多筛选」草稿；保留关键词、快捷筛选、客户锁定和当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setSettlementPartyIdDraft(null)
         setOwnerDraft(null)
+        setOrgDraft("")
+        setDescendantsDraft(false)
     }, [])
 
     const hasPendingChanges =
         searchDraft.trim() !== (q ?? "").trim() ||
         settlementPartyIdDraft !== (settlementPartyId ?? null) ||
-        ownerDraft !== (ownerUserIds ?? null)
+        ownerDraft !== (ownerUserIds ?? null) ||
+        orgDraft.trim() !== (orgUnitIds ?? "").trim() ||
+        descendantsDraft !== includeDescendants
 
     /** 移除单个已生效条件；每个条件都有可移除 chip。 */
     const removeFilter = React.useCallback(
@@ -133,6 +154,15 @@ export function useContractsList() {
                     setOwnerDraft(null)
                     pushUrl({ ownerUserIds: undefined, page: 1 })
                     break
+                case "orgUnitIds":
+                    setOrgDraft("")
+                    setDescendantsDraft(false)
+                    pushUrl({
+                        orgUnitIds: undefined,
+                        includeDescendants: false,
+                        page: 1,
+                    })
+                    break
             }
         },
         [pushUrl],
@@ -150,6 +180,8 @@ export function useContractsList() {
             customerId: undefined,
             settlementPartyId: undefined,
             ownerUserIds: undefined,
+            orgUnitIds: undefined,
+            includeDescendants: false,
             page: 1,
         })
     }, [pushUrl])
@@ -162,7 +194,9 @@ export function useContractsList() {
     React.useEffect(() => {
         setSettlementPartyIdDraft(settlementPartyId ?? null)
         setOwnerDraft(ownerUserIds ?? null)
-    }, [ownerUserIds, settlementPartyId])
+        setOrgDraft(orgUnitIds ?? "")
+        setDescendantsDraft(includeDescendants)
+    }, [includeDescendants, orgUnitIds, ownerUserIds, settlementPartyId])
 
     // `/` 聚焦搜索：忽略输入框/文本域/弹层（Dialog / Sheet）
     React.useEffect(() => {
@@ -246,11 +280,18 @@ export function useContractsList() {
                 key: "ownerUserIds",
                 label: `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`,
             })
+        if (orgUnitIds)
+            chips.push({
+                key: "orgUnitIds",
+                label: `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
+            })
         return chips
     }, [
         customerId,
+        includeDescendants,
         lockedCustomerLabel,
         metric,
+        orgUnitIds,
         ownerUserIds,
         q,
         selectedSettlementPartyLabel,
@@ -269,13 +310,19 @@ export function useContractsList() {
             parts.push(
                 `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`,
             )
+        if (orgUnitIds)
+            parts.push(
+                `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`,
+            )
         return parts.length
             ? `当前筛选：${parts.join(" · ")}`
             : "按将到期优先排序展示当前业务范围内的合同。"
     }, [
         customerId,
+        includeDescendants,
         lockedCustomerLabel,
         metric,
+        orgUnitIds,
         ownerUserIds,
         q,
         selectedSettlementPartyLabel,
@@ -293,12 +340,17 @@ export function useContractsList() {
             ownerUserIds
                 ? `当前跟进负责人：已选 ${ownerUserIds.split(",").length} 人`
                 : null,
+            orgUnitIds
+                ? `组织：已选 ${orgUnitIds.split(",").length} 个${includeDescendants ? "（含下级）" : ""}`
+                : null,
         ].filter(Boolean)
         return parts.join(" · ")
     }, [
         customerId,
+        includeDescendants,
         lockedCustomerLabel,
         metric,
+        orgUnitIds,
         ownerUserIds,
         q,
         selectedSettlementPartyLabel,
@@ -339,7 +391,8 @@ export function useContractsList() {
         metric !== "all" ||
         Boolean(customerId) ||
         Boolean(settlementPartyId) ||
-        Boolean(ownerUserIds)
+        Boolean(ownerUserIds) ||
+        Boolean(orgUnitIds)
 
     return {
         url,
@@ -354,6 +407,12 @@ export function useContractsList() {
         customerId,
         settlementPartyId,
         ownerUserIds,
+        orgUnitIds,
+        includeDescendants,
+        orgDraft,
+        setOrgDraft,
+        descendantsDraft,
+        setDescendantsDraft,
         upload,
         hasStructuredFilters,
         searchDraft,

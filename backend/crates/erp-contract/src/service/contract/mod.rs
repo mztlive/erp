@@ -21,8 +21,8 @@ use crate::entity::contract::{
 };
 use crate::error::{Error, Result};
 use crate::ports::{
-    AccountNamePort, ContractAuditPort, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
-    FileAssetFact, FileAssetFactsPort,
+    AccountNamePort, ContractAuditPort, ContractDataScopePort, ContractParticipantPort, CustomerAccountFact,
+    CustomerAssignmentFactsPort, CustomerFactsPort, FileAssetFact, FileAssetFactsPort,
 };
 use crate::repository::ContractExt;
 use application_core::AuditActor;
@@ -32,8 +32,11 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+pub mod access;
 mod query;
 mod scope;
+
+pub use access::ContractAccess;
 
 /// 已规划、尚未持久化的合同身份与首个/下一个不可变修订。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +57,8 @@ pub struct ContractService {
     assignments: Arc<dyn CustomerAssignmentFactsPort>,
     accounts: Arc<dyn AccountNamePort>,
     files: Arc<dyn FileAssetFactsPort>,
+    data_scope: Arc<dyn ContractDataScopePort>,
+    participants: Arc<dyn ContractParticipantPort>,
 }
 
 impl ContractService {
@@ -66,9 +71,17 @@ impl ContractService {
     /// * `assignments` - 客户归属可见范围
     /// * `accounts` - 负责人显示名
     /// * `files` - 合同 PDF 附件存在性
+    /// * `data_scope` - 合同范围授权端口
+    /// * `participants` - 合法单据参与端口
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 范围解析必须走注入的 Port；未接线端口失败关闭，不得补公司范围。
     pub fn new(
         db: Database,
         audit: Arc<dyn ContractAuditPort>,
@@ -76,6 +89,8 @@ impl ContractService {
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         accounts: Arc<dyn AccountNamePort>,
         files: Arc<dyn FileAssetFactsPort>,
+        data_scope: Arc<dyn ContractDataScopePort>,
+        participants: Arc<dyn ContractParticipantPort>,
     ) -> Self {
         Self {
             db,
@@ -84,7 +99,31 @@ impl ContractService {
             assignments,
             accounts,
             files,
+            data_scope,
+            participants,
         }
+    }
+
+    /// 构造复用本服务授权 Port 的合同访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库与范围 Port 的访问器。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 不得在此回退构造身份域 Service。
+    fn access(&self) -> access::ContractAccess {
+        access::ContractAccess::new(
+            self.db.clone(),
+            Arc::clone(&self.data_scope),
+            Arc::clone(&self.assignments),
+            Arc::clone(&self.participants),
+        )
     }
 
     /// 首次归档合同（合同身份 + 首个不可变版本 + PDF 关联原子形成，数据模型 §6.4）。
@@ -111,6 +150,7 @@ impl ContractService {
     ) -> Result<ContractView> {
         req.validate()?;
         self.ensure_active_customer(&req.customer_id).await?;
+        let customer_id = req.customer_id.to_string();
         let planned = plan_first_archive(req, actor.id())?;
         let audit = self.audit.resource_log(
             actor.clone(),
@@ -122,11 +162,16 @@ impl ContractService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
+        let access = self.access();
+        let actor_for_tx = actor.clone();
         let mut contract_for_tx = planned.contract.clone();
         let revision = planned.revision.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .require_create(&actor_for_tx, &customer_id, session)
+                        .await?;
                     db.contract()
                         .create_contract_with_revision(&mut contract_for_tx, &revision, session)
                         .await?;
@@ -196,19 +241,45 @@ impl ContractService {
     ///
     /// # 参数
     /// * `id` - 合同 ID
+    /// * `actor` - 已认证操作人
     ///
     /// # 返回
     /// 返回详情视图（版本按序号倒序）。
     ///
     /// # 错误
-    /// * `NotFound` - 合同不存在
-    pub async fn contract_detail(&self, id: &str) -> Result<ContractDetailView> {
+    /// * `NotFound` - 合同不存在或不在读取范围内
+    /// * `ConflictError` - 查询过程中范围变化
+    ///
+    /// # 关键业务约束
+    /// 详情必须独立重验当前权限；历史参与只补充读取。
+    pub async fn contract_detail(&self, id: &str, actor: &AuditActor) -> Result<ContractDetailView> {
+        let expected = self.access().require(actor, "detail", id).await?;
+        let view = self.load_contract_detail(id).await?;
+        let current = self.access().require(actor, "detail", id).await?;
+        scope::ensure_stable_snapshot(&expected.scope_version, &current.scope_version)?;
+        Ok(view)
+    }
+
+    /// 装载详情展示字段，不解释数据范围。
+    ///
+    /// # 参数
+    /// * `id` - 合同 ID
+    ///
+    /// # 返回
+    /// 返回详情视图。
+    ///
+    /// # 错误
+    /// 合同不存在时返回 NotFound。
+    ///
+    /// # 关键业务约束
+    /// 本方法不解释权限；HTTP 详情入口必须先调用 `contract_detail`。
+    pub async fn load_contract_detail(&self, id: &str) -> Result<ContractDetailView> {
         let contract = self
             .db
             .contracts()
             .find_by_id(id, &mut NoTransaction)
             .await?
-            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
+            .ok_or_else(|| Error::NotFound("合同不存在或无权查看".to_string()))?;
         let revisions = self
             .db
             .contract_revisions()
@@ -281,11 +352,17 @@ impl ContractService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
+        let access = self.access();
+        let actor_for_tx = actor.clone();
+        let contract_id = id.to_string();
         let mut contract_for_tx = planned.contract.clone();
         let revision = planned.revision;
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .require_with(actor_for_tx, "update", &contract_id, session)
+                        .await?;
                     db.contract()
                         .archive_contract_revision(&mut contract_for_tx, &revision, session)
                         .await?;
@@ -295,7 +372,7 @@ impl ContractService {
             })
             .await?;
 
-        self.contract_detail(id).await
+        self.contract_detail(id, actor).await
     }
 
     /// 在调用方 Executor 上追加不可变修订并切换当前版本指针。
@@ -359,9 +436,15 @@ impl ContractService {
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
+        let access = self.access();
+        let actor_for_tx = actor.clone();
+        let contract_id = id.to_string();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    access
+                        .require_with(actor_for_tx, "update", &contract_id, session)
+                        .await?;
                     db.contracts().update(&mut contract, session).await?;
                     audit_port.persist(&audit, session).await?;
                     Ok::<(), crate::error::Error>(())
@@ -369,7 +452,7 @@ impl ContractService {
             })
             .await?;
 
-        self.contract_detail(id).await
+        self.contract_detail(id, actor).await
     }
 
     /// 在调用方 Executor 上持久化已终止合同。
@@ -386,6 +469,66 @@ impl ContractService {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.db.contracts().update(contract, executor).await?;
+        Ok(())
+    }
+
+    /// 在调用方事务内证明按指定客户创建合同的资格。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `customer_id` - 拟归档合同的客户
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 创建范围覆盖该客户时成功。
+    ///
+    /// # 错误
+    /// 无创建动作或客户不在授权内时拒绝。
+    ///
+    /// # 关键业务约束
+    /// 组合层持有根事务时必须调用本方法，不得只依赖入口事前检查。
+    pub async fn require_create(
+        &self,
+        actor: &AuditActor,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.access()
+            .require_create(actor, customer_id, executor)
+            .await?;
+        Ok(())
+    }
+
+    /// 独立重验合同读取资格，并确认附件属于该合同。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `contract_id` - 合同 ID
+    /// * `file_id` - 合同 PDF 文件资产 ID
+    ///
+    /// # 返回
+    /// 附件属于该合同且当前可读时成功。
+    ///
+    /// # 错误
+    /// 合同不可读或附件不属于该合同时返回 NotFound。
+    ///
+    /// # 关键业务约束
+    /// 列表或详情已授权不能作为附件请求的长期凭证。
+    pub async fn require_attachment(
+        &self,
+        actor: &AuditActor,
+        contract_id: &str,
+        file_id: &str,
+    ) -> Result<()> {
+        self.access().require(actor, "detail", contract_id).await?;
+        let detail = self.load_contract_detail(contract_id).await?;
+        if !detail
+            .revisions
+            .iter()
+            .any(|revision| revision.contract_pdf_file_id == file_id)
+        {
+            return Err(Error::NotFound("合同附件不存在或无权查看".into()));
+        }
         Ok(())
     }
 

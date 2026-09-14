@@ -61,8 +61,10 @@ pub struct ContractFilter {
     pub contract_no: Option<String>,
     /// 单个客户；`None` 表示不按单客户筛选。
     pub customer_id: Option<String>,
-    /// 多个客户（`$in`）；`None` 表示不按客户集合筛选，空向量匹配不到任何合同。
+    /// 授权客户集合；`None` 表示公司范围，空向量匹配不到任何客户合同。
     pub customer_ids: Option<Vec<String>>,
+    /// 合法历史参与合同；与授权客户按并集读取。
+    pub historical_contract_ids: Vec<String>,
     /// 合同状态；`None` 表示不筛选。
     pub status: Option<ContractStatus>,
     /// 页码（1 起）。
@@ -86,10 +88,11 @@ impl QueryFilter for ContractFilter {
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", self.contract_no.as_deref());
-        insert_customer_filter(
+        insert_authorization_filter(
             &mut filter,
             self.customer_id.as_deref(),
             self.customer_ids.as_deref(),
+            &self.historical_contract_ids,
         );
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -348,12 +351,13 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     doc! { sort_by.unwrap_or("created_at"): direction }
 }
 
-/// 写入客户精确匹配或 `$in` 集合条件。
+/// 写入已证明的客户集合、请求客户与历史参与合同条件。
 ///
 /// # 参数
 /// * `filter` - 正在组装的查询文档
-/// * `customer_id` - 单个客户；`None` 表示未指定
-/// * `customer_ids` - 可见客户集合；`None` 表示不按集合收窄
+/// * `customer_id` - 调用方显式指定的单个客户；`None` 表示未指定
+/// * `customer_ids` - 授权客户集合；`None` 表示公司范围
+/// * `historical_contract_ids` - 合法历史参与合同
 ///
 /// # 返回
 /// 无。条件直接写入 `filter`。
@@ -361,24 +365,39 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
 /// # 错误
 /// 无。
 ///
-/// # 约束
-/// 两者同时存在时取交集；请求客户不在集合内时写入空 `$in`。
-fn insert_customer_filter(filter: &mut Document, customer_id: Option<&str>, customer_ids: Option<&[String]>) {
-    match (customer_id, customer_ids) {
-        (None, None) => {}
-        (Some(customer_id), None) => {
-            filter.insert("customer_id", customer_id);
-        }
-        (None, Some(customer_ids)) => {
-            filter.insert("customer_id", doc! { "$in": customer_ids });
-        }
-        (Some(customer_id), Some(customer_ids)) => {
-            if customer_ids.iter().any(|id| id == customer_id) {
-                filter.insert("customer_id", customer_id);
+/// # 关键业务约束
+/// 请求客户不在授权集合内时保持空结果；空授权不得退回全量合同。
+fn insert_authorization_filter(
+    filter: &mut Document,
+    customer_id: Option<&str>,
+    customer_ids: Option<&[String]>,
+    historical_contract_ids: &[String],
+) {
+    let narrowed = match (customer_id, customer_ids) {
+        (None, ids) => ids.map(Vec::from),
+        (Some(id), None) => Some(vec![id.to_string()]),
+        (Some(id), Some(ids)) => {
+            if ids.iter().any(|existing| existing == id) {
+                Some(vec![id.to_string()])
             } else {
-                filter.insert("customer_id", doc! { "$in": Vec::<String>::new() });
+                Some(Vec::new())
             }
         }
+    };
+    let auth = crate::repository::scope::authorization_document(
+        narrowed.as_deref(),
+        historical_contract_ids,
+    );
+    if auth.is_empty() {
+        return;
+    }
+    if auth.get("$expr").is_some() || auth.get("$or").is_some() {
+        let existing = filter.clone();
+        *filter = doc! { "$and": [existing, auth] };
+        return;
+    }
+    for (key, value) in auth {
+        filter.insert(key, value);
     }
 }
 
@@ -462,6 +481,7 @@ mod tests {
             contract_no: Some("HT-2026".to_string()),
             customer_id: Some("cust-1".to_string()),
             customer_ids: None,
+            historical_contract_ids: vec![],
             status: Some(crate::entity::contract::ContractStatus::Effective),
             page: 1,
             page_size: 20,
@@ -479,7 +499,10 @@ mod tests {
                 .unwrap(),
             r"HT\-2026"
         );
-        assert_eq!(document.get_str("customer_id").unwrap(), "cust-1");
+        assert_eq!(
+            document.get_document("customer_id").unwrap(),
+            &doc! { "$in": ["cust-1"] }
+        );
         assert_eq!(document.get_str("status").unwrap(), "EFFECTIVE");
     }
 
@@ -489,6 +512,7 @@ mod tests {
             contract_no: None,
             customer_id: None,
             customer_ids: None,
+            historical_contract_ids: vec![],
             status: None,
             page: 1,
             page_size: 20,
@@ -505,6 +529,7 @@ mod tests {
             contract_no: None,
             customer_id: None,
             customer_ids: Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
+            historical_contract_ids: vec![],
             status: None,
             page: 1,
             page_size: 20,
@@ -521,16 +546,34 @@ mod tests {
             customer_ids: Some(vec!["cust-1".to_string(), "cust-2".to_string()]),
             ..in_scope.clone()
         };
-        assert_eq!(hit.to_doc().get_str("customer_id").unwrap(), "cust-2");
+        assert_eq!(
+            hit.to_doc().get_document("customer_id").unwrap(),
+            &doc! { "$in": ["cust-2"] }
+        );
 
         let miss = ContractFilter {
             customer_id: Some("cust-9".to_string()),
             customer_ids: Some(vec!["cust-1".to_string()]),
+            ..in_scope.clone()
+        };
+        assert_eq!(
+            miss.to_doc(),
+            doc! { "$and": [{ "deleted_at": 0_i64 }, { "$expr": false }] }
+        );
+
+        let history = ContractFilter {
+            historical_contract_ids: vec!["ht-old".to_string()],
             ..in_scope
         };
         assert_eq!(
-            miss.to_doc().get_document("customer_id").unwrap(),
-            &doc! { "$in": Vec::<String>::new() }
+            history.to_doc().get_array("$and").unwrap()[1],
+            doc! {
+                "$or": [
+                    { "customer_id": { "$in": ["cust-1", "cust-2"] } },
+                    { "id": { "$in": ["ht-old"] } },
+                ]
+            }
+            .into()
         );
     }
 

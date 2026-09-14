@@ -2177,6 +2177,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/contracts/{id}/files/{file_id}",
+                description: "查询合同附件",
+                permission: {
+                    resource: "contract",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contracts/{id}/files/{file_id}/preview",
+                description: "预览合同附件",
+                permission: {
+                    resource: "contract",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/contracts/{id}/revisions",
                 description: "归档合同新版本",

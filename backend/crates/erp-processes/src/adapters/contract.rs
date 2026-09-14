@@ -8,16 +8,21 @@ use async_trait::async_trait;
 use entity_core::BaseModel;
 use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_contract::{
-    AccountNamePort, ContractAuditPort, ContractService, CustomerAccountFact, CustomerAssignmentFactsPort,
-    CustomerFactsPort, FileAssetFact, FileAssetFactsPort, PreparedContractAudit,
+    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractService,
+    CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort, FailClosedContractDataScopePort,
+    FailClosedContractParticipantPort, FileAssetFact, FileAssetFactsPort,
+    PreparedContractAudit,
 };
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CustomerAccountId, FileAssetId};
 use erp_customer::{AssignmentRole, CustomerExt};
-use erp_identity::AccessControlExt;
+use erp_identity::{AccessControlExt, SharedRbacService};
 use erp_support::FileAssetExt;
+use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
+
+use super::contract_data_scope::MongoContractDataScope;
 
 /// MongoDB adapter that converts contract audit facts into `erp-audit` writes.
 #[derive(Clone)]
@@ -118,7 +123,7 @@ impl CustomerFactsPort for MongoContractCustomers {
 
 /// MongoDB adapter that reads assignment visibility for contract lists.
 #[derive(Clone)]
-pub struct MongoContractAssignments {
+pub(crate) struct MongoContractAssignments {
     db: Database,
 }
 
@@ -136,18 +141,44 @@ impl MongoContractAssignments {
 
 #[async_trait]
 impl CustomerAssignmentFactsPort for MongoContractAssignments {
-    async fn assigned_customer_ids(
+    async fn active_assignments_for_user(
         &self,
         user_id: &str,
         as_of: BusinessDate,
-    ) -> erp_contract::Result<Vec<String>> {
+        executor: &mut dyn Executor,
+    ) -> erp_contract::Result<Vec<ContractAssignmentFact>> {
         let assignments = self
             .db
             .customer_assignments()
-            .find_active_assignments_for_user(user_id, as_of, &mut NoTransaction)
+            .find_active_assignments_for_user(user_id, as_of, executor)
             .await
             .map_err(map_customer_to_contract)?;
         Ok(assignments
+            .into_iter()
+            .map(|assignment| ContractAssignmentFact {
+                customer_id: assignment.customer_id.to_string(),
+                user_id: assignment.user_id,
+                is_owner: assignment.assignment_role == AssignmentRole::Owner,
+            })
+            .collect())
+    }
+
+    async fn current_owner_customer_ids(
+        &self,
+        customer_ids: Option<&[String]>,
+        owner_ids: Option<&[String]>,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> erp_contract::Result<Vec<String>> {
+        if owner_ids.is_some_and(<[String]>::is_empty) || customer_ids.is_some_and(<[String]>::is_empty) {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .db
+            .customer_assignments()
+            .current_owners(customer_ids, owner_ids, as_of, executor)
+            .await
+            .map_err(map_customer_to_contract)?
             .into_iter()
             .map(|assignment| assignment.customer_id.to_string())
             .collect())
@@ -157,11 +188,12 @@ impl CustomerAssignmentFactsPort for MongoContractAssignments {
         &self,
         customer_ids: &[String],
         as_of: BusinessDate,
+        executor: &mut dyn Executor,
     ) -> erp_contract::Result<HashMap<String, String>> {
         let assignments = self
             .db
             .customer_assignments()
-            .list_active_for_customers(customer_ids, as_of, &mut NoTransaction)
+            .list_active_for_customers(customer_ids, as_of, executor)
             .await
             .map_err(map_customer_to_contract)?;
         Ok(assignments
@@ -169,6 +201,63 @@ impl CustomerAssignmentFactsPort for MongoContractAssignments {
             .filter(|assignment| assignment.assignment_role == AssignmentRole::Owner)
             .map(|assignment| (assignment.customer_id.to_string(), assignment.user_id))
             .collect())
+    }
+}
+
+/// MongoDB adapter that reads legal document participation for contract reads.
+#[derive(Clone)]
+pub(crate) struct MongoContractParticipants {
+    db: Database,
+}
+
+impl MongoContractParticipants {
+    /// Bind the adapter to `db`.
+    ///
+    /// # 参数
+    /// * `db` - 工作流参与集合所在数据库
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 不得把签约经办解释为参与事实。
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+
+    /// Wrap the adapter as a shared port.
+    ///
+    /// # 参数
+    /// * `db` - 工作流参与集合所在数据库
+    ///
+    /// # 返回
+    /// 返回合同参与 Port。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 历史参与只用于读取动作。
+    pub fn shared(db: Database) -> Arc<dyn ContractParticipantPort> {
+        Arc::new(Self::new(db))
+    }
+}
+
+#[async_trait]
+impl ContractParticipantPort for MongoContractParticipants {
+    async fn document_ids_by_user(
+        &self,
+        user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> erp_contract::Result<Vec<String>> {
+        self.db
+            .document_participants()
+            .document_ids_by_user(user_id, executor)
+            .await
+            .map_err(map_customer_to_contract)
     }
 }
 
@@ -243,7 +332,19 @@ impl FileAssetFactsPort for MongoContractFileAssets {
     }
 }
 
-/// Construct a contract service with customer, identity, attachment and audit adapters.
+/// 构造只装载合同事实的服务；范围 Port 失败关闭。
+///
+/// # 参数
+/// * `db` - 合同集合所在数据库
+///
+/// # 返回
+/// 返回未接线范围解析的合同服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 不得用于列表、详情或写命令；解析范围必须调用 [`scoped_contract_service`]。
 pub fn contract_service(db: Database) -> ContractService {
     ContractService::new(
         db.clone(),
@@ -252,6 +353,58 @@ pub fn contract_service(db: Database) -> ContractService {
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         MongoContractFileAssets::shared(db),
+        FailClosedContractDataScopePort::shared(),
+        FailClosedContractParticipantPort::shared(),
+    )
+}
+
+/// 构造已接入身份域公共解析器的合同服务。
+///
+/// # 参数
+/// * `db` - 合同与身份集合所在数据库
+/// * `rbac` - 当前 RBAC 快照
+///
+/// # 返回
+/// 返回可解析合同范围的服务。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// adapter 必须调用 DataScopeService；合同域不得直接依赖身份域。
+pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> ContractService {
+    ContractService::new(
+        db.clone(),
+        MongoContractAudit::shared(db.clone()),
+        MongoContractCustomers::shared(db.clone()),
+        MongoContractAssignments::shared(db.clone()),
+        MongoContractAccounts::shared(db.clone()),
+        MongoContractFileAssets::shared(db.clone()),
+        MongoContractDataScope::shared(db.clone(), rbac),
+        MongoContractParticipants::shared(db),
+    )
+}
+
+/// 构造绑定身份数据库的合同访问器。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 当前 RBAC 快照
+///
+/// # 返回
+/// 返回已注入本 adapter 的合同访问器。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// HTTP 与命名 Process 必须经此入口，不得把 RBAC 直接交给合同域。
+pub fn contract_access(db: Database, rbac: SharedRbacService) -> erp_contract::ContractAccess {
+    erp_contract::ContractAccess::new(
+        db.clone(),
+        MongoContractDataScope::shared(db.clone(), rbac),
+        MongoContractAssignments::shared(db.clone()),
+        MongoContractParticipants::shared(db),
     )
 }
 
