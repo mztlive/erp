@@ -73,9 +73,6 @@ impl ReturnsReadService {
     /// # 关键业务约束
     /// 采购退货必须沿来源采购单责任接入。
     fn purchase_access(&self) -> crate::purchase_center::access::PurchaseAccess {
-        crate::purchase_center::access::PurchaseAccess::new(
-            self.db.clone(),
-            Arc::clone(&self.purchase_scope),
-        )
+        crate::purchase_center::access::PurchaseAccess::new(self.db.clone(), Arc::clone(&self.purchase_scope))
     }
 }

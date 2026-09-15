@@ -91,6 +91,7 @@ impl CustomerScopeClause {
     ///
     /// # 关键业务约束
     /// 不得把创建人当作主责；组织条件只解释当前主负责人所属组织。
+    #[cfg(test)]
     pub fn allows(&self, owner: &str, owner_org: Option<&str>, collaborating: bool) -> bool {
         self.company
             || self.owner_user_id.as_deref() == Some(owner)
@@ -151,6 +152,7 @@ impl CustomerReadScope {
     ///
     /// # 关键业务约束
     /// 创建固定以操作人为主责，协作身份与历史参与不得单独放行建档。
+    #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, owner_org: Option<&str>) -> bool {
         self.roles
             .iter()

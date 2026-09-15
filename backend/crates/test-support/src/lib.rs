@@ -14,6 +14,7 @@
 pub mod api;
 pub mod db;
 pub mod error;
+pub mod filter;
 pub mod indexes;
 pub mod jwt;
 pub mod seed;
@@ -21,6 +22,7 @@ pub mod seed;
 pub use api::TestApi;
 pub use db::TestDb;
 pub use error::{Error, Result};
+pub use filter::matches_filter;
 pub use indexes::assert_indexes;
 pub use jwt::mint_jwt;
 pub use seed::seed_admin_account;

@@ -11,5 +11,6 @@ pub mod service;
 pub use error::{known_duplicate_index_message, Error, Result};
 pub use ports::{
     FailClosedPurchaseDataScopePort, PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope,
+    PurchaseScopeObject,
 };
 pub use service::purchase_order::access::PurchaseAccess;

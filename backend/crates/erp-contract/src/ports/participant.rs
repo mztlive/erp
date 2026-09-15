@@ -24,11 +24,7 @@ pub trait ContractParticipantPort: Send + Sync {
     ///
     /// # 关键业务约束
     /// 历史参与必须来自有效业务参与事实，不得由签约经办或业绩快照推导。
-    async fn document_ids_by_user(
-        &self,
-        user_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<String>>;
+    async fn document_ids_by_user(&self, user_id: &str, executor: &mut dyn Executor) -> Result<Vec<String>>;
 }
 
 /// 未接线时失败关闭，不得把参与集合解释为空成功。

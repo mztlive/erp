@@ -42,6 +42,7 @@ impl PurchaseScopeClause {
     ///
     /// # 关键业务约束
     /// 不得把仓库 ID 与部门 ID 放入同一并集；创建人不得充当负责人。
+    #[cfg(test)]
     fn allows(&self, owner: &str, org: &str) -> bool {
         self.company
             || self.owner_user_id.as_deref() == Some(owner)
@@ -108,6 +109,7 @@ impl PurchaseReadScope {
     ///
     /// # 关键业务约束
     /// 创建固定以当前采购负责人和业务组织解释，不得回退创建人。
+    #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, org: &str) -> bool {
         self.roles.iter().any(|clause| clause.allows(owner, org))
             && self

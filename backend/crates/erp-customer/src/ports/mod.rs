@@ -8,6 +8,7 @@ mod party;
 pub use account::{AccountFactPort, FailClosedAccountFactPort};
 pub use audit::{CustomerAuditPort, FailClosedAuditPort, PreparedCustomerAudit};
 pub use data_scope::{
-    CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, FailClosedCustomerDataScopePort,
+    CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, CustomerScopeObject,
+    FailClosedCustomerDataScopePort,
 };
 pub use party::{FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact};

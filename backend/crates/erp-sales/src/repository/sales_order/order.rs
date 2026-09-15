@@ -713,7 +713,7 @@ mod tests {
             sort_by: None,
             sort_ascending: false,
         };
-        assert_eq!(filter.to_doc().get_bool("$expr").unwrap(), false);
+        assert!(!filter.to_doc().get_bool("$expr").unwrap());
     }
 
     #[test]

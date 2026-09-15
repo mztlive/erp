@@ -138,6 +138,7 @@ impl ContractReadScope {
     ///
     /// # 关键业务约束
     /// 创建不得使用历史参与或签约经办作为资格。
+    #[cfg(test)]
     pub fn allows_creation(&self, customer_id: &str) -> bool {
         self.allows_customer(customer_id)
     }
@@ -192,9 +193,7 @@ impl ContractReadScope {
     /// # 关键业务约束
     /// 缺范围必须保持空集，不得退化为全量查询。
     pub fn is_empty(&self) -> bool {
-        self.authorized_customer_ids
-            .as_ref()
-            .is_some_and(Vec::is_empty)
+        self.authorized_customer_ids.as_ref().is_some_and(Vec::is_empty)
             && self.historical_contract_ids.is_empty()
     }
 
@@ -233,7 +232,10 @@ impl ContractReadScope {
 ///
 /// # 关键业务约束
 /// 历史参与只能并入读取条件，调用方不得把本结果当作修改资格。
-pub fn authorization_document(customer_ids: Option<&[String]>, historical_contract_ids: &[String]) -> Document {
+pub fn authorization_document(
+    customer_ids: Option<&[String]>,
+    historical_contract_ids: &[String],
+) -> Document {
     match customer_ids {
         None => doc! {},
         Some(customers) if customers.is_empty() && historical_contract_ids.is_empty() => {
@@ -242,7 +244,7 @@ pub fn authorization_document(customer_ids: Option<&[String]>, historical_contra
         Some(customers) if historical_contract_ids.is_empty() => {
             doc! { "customer_id": { "$in": customers } }
         }
-        Some(customers) if customers.is_empty() => {
+        Some([]) => {
             doc! { "id": { "$in": historical_contract_ids } }
         }
         Some(customers) => doc! {
@@ -390,10 +392,7 @@ mod tests {
             authorized_customer_ids: Some(Vec::new()),
         };
         assert!(!scope.allows_creation("cust-1"));
-        assert_eq!(
-            scope.document(),
-            doc! { "id": { "$in": ["ht-old"] } }
-        );
+        assert_eq!(scope.document(), doc! { "id": { "$in": ["ht-old"] } });
         let mixed = authorization_document(Some(&["cust-1".into()]), &["ht-old".into()]);
         assert_eq!(
             mixed,

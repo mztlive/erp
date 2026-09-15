@@ -4,6 +4,7 @@ use super::SharedRbacService;
 use crate::access_control::{
     DataScopeData, DataScopeSubjectType, DataScopeType, ScopeBinding, ScopeDimension, ScopeTargetMode,
 };
+use crate::service::access_control::consumers::validate_binding;
 use crate::Result;
 
 /// 已接入 S2 的资源与完整动作目录；不得用通配符初始化范围。
@@ -62,8 +63,16 @@ pub async fn ensure_predefined_role_data_scopes(rbac: &SharedRbacService) -> Res
 /// # 错误
 /// 模型校验或事务写入失败时返回错误。
 pub(crate) async fn seed_role(rbac: &SharedRbacService, role: &str) -> Result<()> {
-    for (resource, actions) in RESOURCE_ACTIONS {
-        let definitions = definitions(role, resource, actions);
+    let manifest = RESOURCE_ACTIONS
+        .iter()
+        .map(|(resource, actions)| (*resource, definitions(role, resource, actions)))
+        .collect::<Vec<_>>();
+    for (_, definitions) in &manifest {
+        for data in definitions {
+            validate_binding(&data.binding)?;
+        }
+    }
+    for (resource, definitions) in manifest {
         if !definitions.is_empty() {
             rbac.seed_data_scope_manifest(role, resource, definitions).await?;
         }
@@ -151,6 +160,7 @@ mod tests {
             for (resource, actions) in RESOURCE_ACTIONS {
                 for data in definitions(role, resource, actions) {
                     let scope = DataScope::new(DataScopeId::new("test"), data).unwrap();
+                    validate_binding(&scope.binding).unwrap();
                     assert_eq!(scope.binding.schema_version, 2);
                     assert_eq!(scope.binding.resource, *resource);
                 }

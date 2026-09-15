@@ -24,6 +24,7 @@ pub struct SalesReadScope {
 
 impl SalesScopeClause {
     /// 按与仓储条件相同的当前责任事实判断待创建对象，不使用审计创建人。
+    #[cfg(test)]
     fn allows(&self, owner: &str, org: &str, customer: &str) -> bool {
         self.company
             || self.owner_user_id.as_deref() == Some(owner)
@@ -61,6 +62,7 @@ impl SalesReadScope {
     ///
     /// # 返回
     /// 全部独立资源范围同时覆盖责任事实时返回 true，历史参与不授予创建权。
+    #[cfg(test)]
     pub fn allows_creation(&self, owner: &str, org: &str, customer: &str) -> bool {
         self.roles.iter().any(|c| c.allows(owner, org, customer))
             && self

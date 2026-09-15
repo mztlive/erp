@@ -1,0 +1,579 @@
+"openapi": "3.1.0"
+"info":
+  "title": "S2 组织配置接口执行合同"
+  "version": "1.0.0"
+  "description": "与组织及数据范围主合同第 4、8、9 章共同执行。节点、成员与管理关系使用稳定 ID。时间关系为 UTC 半开区间；组织配置不授予业务执行权。本文件不构成业务上线验收。"
+"servers": [{"url": "http://localhost:10001"}]
+"tags": [{"name": "组织管理", "description": "内部组织配置、变更预览及原子提交。"}]
+"security": [{"bearerAuth": []}]
+"paths":
+  "/admin/org-units":
+    "get":
+      "operationId": "organization_scope_list"
+      "tags": ["组织管理"]
+      "summary": "读取配置边界内的组织、人员和关系"
+      "description": "要求 org_unit:list。有动作权限但无角色范围时返回空数组并标记 no_scope；不得泄露边界外组织事实。"
+      "responses":
+        "200":
+          "description": "成功；使用统一 ApiResponse 信封。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/OrganizationListResponse"
+        "400":
+          "description": "请求、动作、维度或业务约束不合法。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "401":
+          "description": "登录状态失效。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "403":
+          "description": "动作权限或组织配置边界不足。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "409":
+          "description": "期望版本、授权版本或幂等载荷发生冲突；不得部分提交。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "500":
+          "description": "未装配服务或持久化失败，禁止回退 Company。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+  "/admin/org-units/preview":
+    "post":
+      "operationId": "organization_change_preview"
+      "tags": ["组织管理"]
+      "summary": "预览组织变更影响"
+      "description": "要求 org_unit:manage。只预览不写入；返回可见边界内的变更前后值。前端必须保存本次完整命令，提交使用相同载荷。"
+      "responses":
+        "200":
+          "description": "成功；使用统一 ApiResponse 信封。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/OrganizationChangeResponse"
+        "400":
+          "description": "请求、动作、维度或业务约束不合法。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "401":
+          "description": "登录状态失效。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "403":
+          "description": "动作权限或组织配置边界不足。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "409":
+          "description": "期望版本、授权版本或幂等载荷发生冲突；不得部分提交。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "500":
+          "description": "未装配服务或持久化失败，禁止回退 Company。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/OrganizationChangeRequest"
+            "example":
+              "expected_version": 3
+              "idempotency_key": "org-change-001"
+              "reason": "调整部门名称"
+              "change":
+                "operation": "rename_unit"
+                "org_unit_id": "org-sales"
+                "name": "销售一部"
+  "/admin/org-units/change":
+    "post":
+      "operationId": "organization_change_commit"
+      "tags": ["组织管理"]
+      "summary": "原子提交组织变更"
+      "description": "要求 org_unit:manage。事务内独立重验账号、动作范围、期望版本、人员资格及未结业务。幂等键绑定操作人；异载荷重用必须拒绝；重放仍须验证当前授权。不自动改派任务、不改历史归属。"
+      "responses":
+        "200":
+          "description": "成功；使用统一 ApiResponse 信封。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/OrganizationChangeResponse"
+        "400":
+          "description": "请求、动作、维度或业务约束不合法。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "401":
+          "description": "登录状态失效。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "403":
+          "description": "动作权限或组织配置边界不足。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "409":
+          "description": "期望版本、授权版本或幂等载荷发生冲突；不得部分提交。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+        "500":
+          "description": "未装配服务或持久化失败，禁止回退 Company。"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Error"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/OrganizationChangeRequest"
+            "example":
+              "expected_version": 3
+              "idempotency_key": "org-change-001"
+              "reason": "调整部门名称"
+              "change":
+                "operation": "rename_unit"
+                "org_unit_id": "org-sales"
+                "name": "销售一部"
+"components":
+  "securitySchemes":
+    "bearerAuth":
+      "type": "http"
+      "scheme": "bearer"
+      "bearerFormat": "JWT"
+  "schemas":
+    "OrgUnit":
+      "type": "object"
+      "required": ["id", "version", "created_at", "updated_at", "deleted_at", "name", "parent_id", "kind", "enabled", "changed_by", "reason"]
+      "properties":
+        "id":
+          "type": "string"
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "created_at":
+          "type": "integer"
+          "minimum": 0
+        "updated_at":
+          "type": "integer"
+          "minimum": 0
+        "deleted_at":
+          "type": "integer"
+          "minimum": 0
+        "name":
+          "type": "string"
+        "parent_id":
+          "type": ["string", "null"]
+        "kind":
+          "type": "string"
+          "enum": ["department", "team"]
+        "enabled":
+          "type": "boolean"
+        "changed_by":
+          "type": "string"
+        "reason":
+          "type": "string"
+    "OrgMembership":
+      "type": "object"
+      "required": ["id", "version", "created_at", "updated_at", "deleted_at", "user_id", "org_unit_id", "valid_from", "valid_to", "changed_by", "reason"]
+      "properties":
+        "id":
+          "type": "string"
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "created_at":
+          "type": "integer"
+          "minimum": 0
+        "updated_at":
+          "type": "integer"
+          "minimum": 0
+        "deleted_at":
+          "type": "integer"
+          "minimum": 0
+        "user_id":
+          "type": "string"
+        "org_unit_id":
+          "type": "string"
+        "valid_from":
+          "type": "integer"
+          "format": "int64"
+          "description": "UTC Unix 秒数，禁止发送毫秒或日期字符串。"
+        "valid_to":
+          "type": ["integer", "null"]
+          "format": "int64"
+          "description": "UTC Unix 秒数；null 表示无结束时点。"
+        "changed_by":
+          "type": "string"
+        "reason":
+          "type": "string"
+    "OrgManagementAssignment":
+      "type": "object"
+      "required": ["id", "version", "created_at", "updated_at", "deleted_at", "user_id", "role_id", "org_unit_id", "include_descendants", "valid_from", "valid_to", "granted_by", "reason"]
+      "properties":
+        "id":
+          "type": "string"
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "created_at":
+          "type": "integer"
+          "minimum": 0
+        "updated_at":
+          "type": "integer"
+          "minimum": 0
+        "deleted_at":
+          "type": "integer"
+          "minimum": 0
+        "user_id":
+          "type": "string"
+        "role_id":
+          "type": "string"
+        "org_unit_id":
+          "type": "string"
+        "include_descendants":
+          "type": "boolean"
+        "valid_from":
+          "type": "integer"
+          "format": "int64"
+          "description": "UTC Unix 秒数，禁止发送毫秒或日期字符串。"
+        "valid_to":
+          "type": ["integer", "null"]
+          "format": "int64"
+          "description": "UTC Unix 秒数；null 表示无结束时点。"
+        "granted_by":
+          "type": "string"
+        "reason":
+          "type": "string"
+    "OrgPerson":
+      "type": "object"
+      "required": ["id", "label", "account", "active", "own_org_unit_id"]
+      "properties":
+        "id":
+          "type": "string"
+        "label":
+          "type": "string"
+        "account":
+          "type": "string"
+        "active":
+          "type": "boolean"
+        "own_org_unit_id":
+          "type": ["string", "null"]
+    "OrgRole":
+      "type": "object"
+      "required": ["id", "name", "enabled"]
+      "properties":
+        "id":
+          "type": "string"
+        "name":
+          "type": "string"
+        "enabled":
+          "type": "boolean"
+    "OrganizationState":
+      "type": "object"
+      "required": ["version", "units", "memberships", "management"]
+      "properties":
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "units":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgUnit"
+        "memberships":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgMembership"
+        "management":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgManagementAssignment"
+    "OrganizationStateView":
+      "type": "object"
+      "required": ["version", "units", "memberships", "management", "people", "roles", "scope_version", "policy_version", "organization_version", "as_of", "empty_reason", "scope_summary", "ownership_basis"]
+      "properties":
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "units":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgUnit"
+        "memberships":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgMembership"
+        "management":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgManagementAssignment"
+        "people":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgPerson"
+        "roles":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/OrgRole"
+        "scope_version":
+          "type": "string"
+        "policy_version":
+          "type": "integer"
+          "minimum": 0
+        "organization_version":
+          "type": "integer"
+          "minimum": 0
+        "as_of":
+          "type": "string"
+          "format": "date-time"
+          "description": "授权解析时点，RFC3339 UTC。"
+        "empty_reason":
+          "type": ["string", "null"]
+          "enum": ["no_scope", null]
+        "scope_summary":
+          "type": "string"
+        "ownership_basis":
+          "type": "string"
+          "const": "org_unit_configuration"
+    "CreateUnit":
+      "type": "object"
+      "required": ["operation", "name", "kind"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "create_unit"
+        "name":
+          "type": "string"
+        "parent_id":
+          "type": ["string", "null"]
+        "kind":
+          "type": "string"
+          "enum": ["department", "team"]
+      "additionalProperties": false
+    "MoveUnit":
+      "type": "object"
+      "required": ["operation", "org_unit_id"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "move_unit"
+        "org_unit_id":
+          "type": "string"
+        "parent_id":
+          "type": ["string", "null"]
+      "additionalProperties": false
+    "RenameUnit":
+      "type": "object"
+      "required": ["operation", "org_unit_id", "name"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "rename_unit"
+        "org_unit_id":
+          "type": "string"
+        "name":
+          "type": "string"
+      "additionalProperties": false
+    "DisableUnit":
+      "type": "object"
+      "required": ["operation", "org_unit_id"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "disable_unit"
+        "org_unit_id":
+          "type": "string"
+      "additionalProperties": false
+    "TransferMember":
+      "type": "object"
+      "required": ["operation", "user_id", "org_unit_id"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "transfer_member"
+        "user_id":
+          "type": "string"
+        "org_unit_id":
+          "type": "string"
+      "additionalProperties": false
+    "EndMembership":
+      "type": "object"
+      "required": ["operation", "user_id"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "end_membership"
+        "user_id":
+          "type": "string"
+      "additionalProperties": false
+    "GrantManagement":
+      "type": "object"
+      "required": ["operation", "user_id", "role_id", "org_unit_id", "include_descendants"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "grant_management"
+        "user_id":
+          "type": "string"
+        "role_id":
+          "type": "string"
+        "org_unit_id":
+          "type": "string"
+        "include_descendants":
+          "type": "boolean"
+        "valid_to":
+          "type": ["integer", "null"]
+          "format": "int64"
+          "description": "UTC Unix 秒数；null 表示无结束时点。"
+      "additionalProperties": false
+    "RevokeManagement":
+      "type": "object"
+      "required": ["operation", "assignment_id"]
+      "properties":
+        "operation":
+          "type": "string"
+          "const": "revoke_management"
+        "assignment_id":
+          "type": "string"
+      "additionalProperties": false
+    "OrganizationOperation":
+      "oneOf": [{"$ref": "#/components/schemas/CreateUnit"}, {"$ref": "#/components/schemas/MoveUnit"}, {"$ref": "#/components/schemas/RenameUnit"}, {"$ref": "#/components/schemas/DisableUnit"}, {"$ref": "#/components/schemas/TransferMember"}, {"$ref": "#/components/schemas/EndMembership"}, {"$ref": "#/components/schemas/GrantManagement"}, {"$ref": "#/components/schemas/RevokeManagement"}]
+      "discriminator":
+        "propertyName": "operation"
+        "mapping":
+          "create_unit": "#/components/schemas/CreateUnit"
+          "move_unit": "#/components/schemas/MoveUnit"
+          "rename_unit": "#/components/schemas/RenameUnit"
+          "disable_unit": "#/components/schemas/DisableUnit"
+          "transfer_member": "#/components/schemas/TransferMember"
+          "end_membership": "#/components/schemas/EndMembership"
+          "grant_management": "#/components/schemas/GrantManagement"
+          "revoke_management": "#/components/schemas/RevokeManagement"
+    "OrganizationChangeRequest":
+      "type": "object"
+      "required": ["expected_version", "idempotency_key", "reason", "change"]
+      "properties":
+        "expected_version":
+          "type": "integer"
+          "minimum": 0
+        "idempotency_key":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 128
+          "pattern": "^[A-Za-z0-9_-]+$"
+        "reason":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 1000
+          "description": "必须包含非空白内容。"
+        "change":
+          "$ref": "#/components/schemas/OrganizationOperation"
+      "additionalProperties": false
+    "OrganizationChangeReceipt":
+      "type": "object"
+      "required": ["id", "version", "created_at", "updated_at", "deleted_at", "actor_id", "request", "before", "after", "as_of"]
+      "properties":
+        "id":
+          "type": "string"
+        "version":
+          "type": "integer"
+          "minimum": 0
+        "created_at":
+          "type": "integer"
+          "minimum": 0
+        "updated_at":
+          "type": "integer"
+          "minimum": 0
+        "deleted_at":
+          "type": "integer"
+          "minimum": 0
+        "actor_id":
+          "type": "string"
+        "request":
+          "$ref": "#/components/schemas/OrganizationChangeRequest"
+        "before":
+          "$ref": "#/components/schemas/OrganizationState"
+        "after":
+          "$ref": "#/components/schemas/OrganizationState"
+        "as_of":
+          "type": "integer"
+          "format": "int64"
+          "description": "UTC Unix 秒数，禁止发送毫秒或日期字符串。"
+    "OrganizationListResponse":
+      "type": "object"
+      "required": ["status", "errorMessage", "success", "data"]
+      "properties":
+        "status":
+          "type": "integer"
+          "const": 200
+        "errorMessage":
+          "type": "string"
+        "success":
+          "type": "boolean"
+          "const": true
+        "data":
+          "$ref": "#/components/schemas/OrganizationStateView"
+    "OrganizationChangeResponse":
+      "type": "object"
+      "required": ["status", "errorMessage", "success", "data"]
+      "properties":
+        "status":
+          "type": "integer"
+          "const": 200
+        "errorMessage":
+          "type": "string"
+        "success":
+          "type": "boolean"
+          "const": true
+        "data":
+          "$ref": "#/components/schemas/OrganizationChangeReceipt"
+    "Error":
+      "type": "object"
+      "required": ["status", "errorMessage", "success", "data"]
+      "properties":
+        "status":
+          "type": "integer"
+        "errorMessage":
+          "type": "string"
+        "success":
+          "type": "boolean"
+          "const": false
+        "code":
+          "type": "string"
+        "data":
+          "type": "null"
+        "retryable":
+          "type": "boolean"
+        "fieldErrors":
+          "type": "object"
+          "additionalProperties":
+            "type": "string"

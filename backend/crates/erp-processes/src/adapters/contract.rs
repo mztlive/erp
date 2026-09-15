@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use entity_core::BaseModel;
 use erp_audit::{AuditActorLogs, AuditExt, AuditLog, AuditLogData};
 use erp_contract::{
-    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractService,
-    CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort, FailClosedContractDataScopePort,
-    FailClosedContractParticipantPort, FileAssetFact, FileAssetFactsPort,
+    AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractScopePorts,
+    ContractService, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
+    FailClosedContractDataScopePort, FailClosedContractParticipantPort, FileAssetFact, FileAssetFactsPort,
     PreparedContractAudit,
 };
 use erp_core::common::time::BusinessDate;
@@ -353,8 +353,10 @@ pub fn contract_service(db: Database) -> ContractService {
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         MongoContractFileAssets::shared(db),
-        FailClosedContractDataScopePort::shared(),
-        FailClosedContractParticipantPort::shared(),
+        ContractScopePorts {
+            data_scope: FailClosedContractDataScopePort::shared(),
+            participants: FailClosedContractParticipantPort::shared(),
+        },
     )
 }
 
@@ -380,8 +382,10 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
         MongoContractFileAssets::shared(db.clone()),
-        MongoContractDataScope::shared(db.clone(), rbac),
-        MongoContractParticipants::shared(db),
+        ContractScopePorts {
+            data_scope: MongoContractDataScope::shared(db.clone(), rbac),
+            participants: MongoContractParticipants::shared(db),
+        },
     )
 }
 

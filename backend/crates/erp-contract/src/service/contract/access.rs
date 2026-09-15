@@ -12,7 +12,7 @@ use persistence_core::{Executor, Transactional};
 use crate::error::{Error, Result};
 use crate::ports::{
     ContractDataScopePort, ContractParticipantPort, ContractResolvedClause, ContractResolvedScope,
-    CustomerAssignmentFactsPort,
+    ContractScopeObject, CustomerAssignmentFactsPort,
 };
 use crate::repository::scope::{ContractReadScope, ContractScopeClause};
 use crate::repository::ContractExt;
@@ -186,7 +186,12 @@ impl ContractAccess {
             .contracts()
             .find_authorized(contract_id, &scope, executor)
             .await?;
-        if found.is_none() {
+        let contract = found.ok_or_else(|| deny_object(action))?;
+        let mut object = self
+            .object_facts(contract.customer_id.as_ref(), &access, &scope, executor)
+            .await?;
+        object.historical_read_participant = scope.historical_contract_ids.iter().any(|id| id == contract_id);
+        if !self.scope.allows(&access, &object)? {
             return Err(deny_object(action));
         }
         Ok(access)
@@ -214,10 +219,35 @@ impl ContractAccess {
         executor: &mut dyn Executor,
     ) -> Result<ContractResolvedScope> {
         let (access, scope) = self.resolve(actor, "create", executor).await?;
-        if !scope.allows_creation(customer_id) {
+        let object = self.object_facts(customer_id, &access, &scope, executor).await?;
+        if !self.scope.allows(&access, &object)? {
             return Err(Error::Forbidden("当前账号无权在授权范围内归档合同".into()));
         }
         Ok(access)
+    }
+
+    /// 合同对象使用客户当前主负责人组织，不以签约人或上传人作为责任兜底。
+    async fn object_facts(
+        &self,
+        id: &str,
+        access: &ContractResolvedScope,
+        scope: &ContractReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<ContractScopeObject> {
+        let owners = self
+            .assignments
+            .owner_user_ids_by_customer(&[id.to_string()], business_date(access.as_of)?, executor)
+            .await?;
+        let mut org_unit_id = None;
+        if let Some(owner) = owners.get(id) {
+            org_unit_id = self.scope.own_org(owner, access.as_of, executor).await?;
+        }
+        Ok(ContractScopeObject {
+            owned: scope.owned_customer_ids.iter().any(|value| value == id),
+            collaborating: scope.collaborative_customer_ids.iter().any(|value| value == id),
+            historical_read_participant: false,
+            org_unit_id,
+        })
     }
 
     /// 读取动作已由身份域证明后，补充该账号合法参与且仍存在的合同。
@@ -243,11 +273,7 @@ impl ContractAccess {
     ) -> Result<Vec<String>> {
         let ids = self.participants.document_ids_by_user(user, executor).await?;
         ensure_limit(ids.len(), "历史参与范围超过查询上限")?;
-        let refs = self
-            .db
-            .contracts()
-            .customer_refs_by_ids(&ids, executor)
-            .await?;
+        let refs = self.db.contracts().customer_refs_by_ids(&ids, executor).await?;
         ensure_limit(refs.len(), "历史参与合同超过查询上限")?;
         let mut contracts = refs
             .into_iter()
@@ -297,9 +323,7 @@ impl ContractAccess {
                 .org_member_ids(&org_ids, access.as_of, executor)
                 .await?;
             ensure_limit(members.len(), "组织成员超过查询上限")?;
-            let customers = self
-                .customers_owned_by_members(&members, as_of, executor)
-                .await?;
+            let customers = self.customers_owned_by_members(&members, as_of, executor).await?;
             sets.push((orgs, customers));
         }
         Ok(sets)
@@ -393,7 +417,7 @@ pub(super) fn business_date(at: Instant) -> Result<BusinessDate> {
 ///
 /// # 关键业务约束
 /// 角色并集与个人上限分别保留；缺范围保持空集；历史参与不并入写资格。
-fn contract_scope(
+pub fn contract_scope(
     access: &ContractResolvedScope,
     user: &str,
     owned: &[String],

@@ -86,9 +86,35 @@ impl PurchaseResolvedScope {
     }
 }
 
+/// 业务域提供的单对象责任事实；不包含原始授权规则。
+#[derive(Debug, Clone, Default)]
+pub struct PurchaseScopeObject {
+    /// 当前操作人是否为对象的权威负责人。
+    pub owned: bool,
+    /// 当前操作人是否具备有效协作事实。
+    pub collaborating: bool,
+    /// 当前操作人是否具备合法历史读取参与。
+    pub historical_read_participant: bool,
+    /// 按本资源口径取得的内部组织。
+    pub org_unit_id: Option<String>,
+}
+
 /// 采购域消费的窄授权 Port；adapter 调用身份域公共解析器。
 #[async_trait]
 pub trait PurchaseDataScopePort: Send + Sync {
+    /// 经生产 adapter 复用公共单对象范围判定。
+    ///
+    /// # 参数
+    /// * `scope` - 当前动作已解析事实
+    /// * `object` - 本域提供的当前责任与合法参与事实
+    /// # 返回
+    /// 返回角色范围和个人上限共同允许的判定。
+    /// # 错误
+    /// 未装配、资源动作不符时失败；禁止以数据库创建判定作为兜底。
+    fn allows(&self, _scope: &PurchaseResolvedScope, _object: &PurchaseScopeObject) -> Result<bool> {
+        Err(unwired())
+    }
+
     /// 在调用方事务内证明采购资源动作并返回已解析事实。
     ///
     /// # 参数

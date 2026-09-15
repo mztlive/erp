@@ -6,11 +6,13 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
+use erp_customer::ports::CustomerScopeObject;
 use erp_customer::{CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope};
-use erp_identity::access_control::ScopeClause;
+use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
+use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::SharedRbacService;
 use mongodb::Database;
@@ -63,6 +65,14 @@ impl MongoCustomerDataScope {
 
 #[async_trait]
 impl CustomerDataScopePort for MongoCustomerDataScope {
+    fn allows(
+        &self,
+        scope: &CustomerResolvedScope,
+        object: &CustomerScopeObject,
+    ) -> erp_customer::Result<bool> {
+        evaluate_object(scope, object)
+    }
+
     async fn resolve(
         &self,
         actor: &AuditActor,
@@ -347,6 +357,140 @@ mod tests {
                 assert_eq!(message, "没有该资源动作权限");
             }
             other => panic!("expected forbidden, got {other:?}"),
+        }
+    }
+}
+
+/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
+fn evaluate_object(
+    scope: &CustomerResolvedScope,
+    object: &CustomerScopeObject,
+) -> erp_customer::Result<bool> {
+    if scope.resource != "customer" {
+        return Err(erp_customer::Error::ValidationError(
+            "范围资源与消费方不一致".into(),
+        ));
+    }
+    let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
+    let resolved = ResolvedScope {
+        role_clauses: scope.role_clauses.iter().map(public_clause).collect(),
+        user_limit: scope.user_limit.as_ref().map(public_clause),
+    };
+    Ok(resolved.allows(
+        &ScopedObject {
+            owned: object.owned,
+            collaborating: object.collaborating,
+            historical_read_participant: object.historical_read_participant,
+            org_unit_id: object.org_unit_id.as_deref(),
+            settlement_party_id: None,
+            warehouse_id: None,
+        },
+        consumer.allows_history,
+    ))
+}
+
+/// 转换已解析条款，保留本人、协作、组织及空集。
+fn public_clause(clause: &CustomerResolvedClause) -> ScopeClause {
+    ScopeClause {
+        company: clause.company,
+        self_owned: clause.self_owned,
+        collaborative: clause.collaborative,
+        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
+        ..ScopeClause::default()
+    }
+}
+
+#[cfg(test)]
+mod equivalence_tests {
+    use super::*;
+    use erp_customer::service::customer::access::customer_scope;
+    use serde_json::json;
+    use test_support::matches_filter as matches;
+
+    fn clause(mask: u8) -> CustomerResolvedClause {
+        CustomerResolvedClause {
+            company: mask & 1 != 0,
+            self_owned: mask & 2 != 0,
+            collaborative: mask & 4 != 0,
+            org_unit_ids: if mask & 8 != 0 {
+                vec!["org-a".into()]
+            } else {
+                vec![]
+            },
+        }
+    }
+
+    #[test]
+    fn unwired_port_and_mismatched_resource_fail_closed() {
+        use erp_customer::ports::FailClosedCustomerDataScopePort;
+        let mut scope = CustomerResolvedScope {
+            user_id: "actor".into(),
+            resource: "customer".into(),
+            action: "detail".into(),
+            role_clauses: vec![clause(1)],
+            user_limit: None,
+            policy_version: 1,
+            organization_version: 1,
+            scope_version: "v1".into(),
+            as_of: Instant::from_unix_secs(0),
+        };
+        let object = CustomerScopeObject::default();
+        assert!(FailClosedCustomerDataScopePort.allows(&scope, &object).is_err());
+        assert!(evaluate_object(&scope, &object).unwrap());
+        scope.resource = "work_item".into();
+        assert!(evaluate_object(&scope, &object).is_err());
+    }
+
+    #[test]
+    fn public_object_decision_matches_compiled_conditions() {
+        let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
+        let selected = |bit| {
+            ids.iter()
+                .enumerate()
+                .filter(|(i, _)| i & bit != 0)
+                .map(|(_, id)| id.clone())
+                .collect::<Vec<_>>()
+        };
+        let owned = selected(1);
+        let collaborating = selected(2);
+        let org_owned = vec![(vec!["org-a".into()], selected(4))];
+        for action in ["detail", "create", "update"] {
+            for role in 0..16 {
+                for second in [0, 2, 8] {
+                    for limit in -1..16 {
+                        let access = CustomerResolvedScope {
+                            user_id: "actor".into(),
+                            resource: "customer".into(),
+                            action: action.into(),
+                            role_clauses: vec![clause(role), clause(second)],
+                            user_limit: (limit >= 0).then(|| clause(limit as u8)),
+                            policy_version: 1,
+                            organization_version: 1,
+                            scope_version: "v1".into(),
+                            as_of: Instant::from_unix_secs(0),
+                        };
+                        let mut history = Vec::new();
+                        if action == "detail" {
+                            history = selected(8);
+                        }
+                        let compiled =
+                            customer_scope(&access, "actor", &owned, &collaborating, history, &org_owned);
+                        for (index, id) in ids.iter().enumerate() {
+                            let object = CustomerScopeObject {
+                                owned: index & 1 != 0,
+                                collaborating: index & 2 != 0,
+                                historical_read_participant: index & 8 != 0,
+                                org_unit_id: Some(if index & 4 != 0 { "org-a" } else { "org-b" }.into()),
+                            };
+                            let document = json!({ "id": id, "customer_id": id,
+                            "owner_user_id": if object.owned { "actor" } else { "other" },
+                            "business_org_unit_id": object.org_unit_id.as_deref().unwrap() });
+                            assert_eq!(evaluate_object(&access, &object).unwrap(), matches(&compiled.document(), &document),
+                                "action={action}, role={role}, second={second}, limit={limit}, object={index}");
+                        }
+                    }
+                }
+            }
         }
     }
 }

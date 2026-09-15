@@ -13,7 +13,8 @@ pub use customer::{
     EmptyAssignments, EmptyCustomers, FailClosedAssignmentFactsPort, FailClosedCustomerFactsPort,
 };
 pub use data_scope::{
-    ContractDataScopePort, ContractResolvedClause, ContractResolvedScope, FailClosedContractDataScopePort,
+    ContractDataScopePort, ContractResolvedClause, ContractResolvedScope, ContractScopeObject,
+    FailClosedContractDataScopePort,
 };
 pub use file_asset::{EmptyFileAssetFacts, FailClosedFileAssetFacts, FileAssetFact, FileAssetFactsPort};
 pub use identity::{AccountNamePort, EmptyAccountNames, FailClosedAccountNamePort};

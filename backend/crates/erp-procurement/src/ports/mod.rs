@@ -9,4 +9,5 @@ pub mod purchase_order;
 
 pub use data_scope::{
     FailClosedPurchaseDataScopePort, PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope,
+    PurchaseScopeObject,
 };

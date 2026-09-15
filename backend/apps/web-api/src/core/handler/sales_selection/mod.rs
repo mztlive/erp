@@ -115,8 +115,6 @@ pub async fn booklet_detail(
 pub async fn booklet_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesSelectionBookletRequest>,
 ) -> Result<SalesSelectionBookletView> {
     ensure_customer_access(&state, &actor, "detail", &req.customer_id).await?;
@@ -144,8 +142,6 @@ pub async fn booklet_create(
 /// 返回准备中详情。
 pub async fn booklet_prepare(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<PrepareSalesSelectionRequest>,
@@ -177,8 +173,6 @@ pub async fn booklet_prepare(
 /// 返回详情。
 pub async fn booklet_delete_item(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path((id, item_id)): Path<(String, String)>,
     Query(req): Query<DeleteDisplayItemRequest>,
@@ -210,8 +204,6 @@ pub async fn booklet_delete_item(
 /// 返回详情。
 pub async fn booklet_delete_item_post(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path((id, item_id)): Path<(String, String)>,
     Json(req): Json<DeleteDisplayItemRequest>,
@@ -243,8 +235,6 @@ pub async fn booklet_delete_item_post(
 /// 返回含链接的详情。
 pub async fn booklet_publish(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<PublishSalesSelectionRequest>,
@@ -350,8 +340,6 @@ pub async fn booklet_session(
 /// 返回新链接。
 pub async fn booklet_rotate_link(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
@@ -383,8 +371,6 @@ pub async fn booklet_rotate_link(
 /// 返回已关闭详情。
 pub async fn booklet_close(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
@@ -414,8 +400,6 @@ pub async fn booklet_close(
 /// 返回详情。
 pub async fn booklet_revoke(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,
@@ -445,8 +429,6 @@ pub async fn booklet_revoke(
 /// 返回已作废详情。
 pub async fn booklet_void(
     State(state): State<AppState>,
-    Extension(subject): Extension<RbacSubject>,
-    Extension(UserID(user_id)): Extension<UserID>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SalesSelectionCommandRequest>,

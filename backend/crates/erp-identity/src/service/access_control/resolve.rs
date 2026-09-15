@@ -4,7 +4,7 @@ use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeDimension, ScopeResolution};
+use crate::access_control::{DataScopeSubjectType, ResolvedScope, ScopeResolution};
 use crate::entity::organization::OrgTree;
 use crate::entity::organization_change::OrganizationState;
 use crate::repository::OrganizationRepository;
@@ -146,9 +146,7 @@ impl DataScopeService {
                 .await?,
         );
         for rule in rules.iter().filter(|rule| rule.binding.applies(resource, action)) {
-            if rule.binding.target_dimension != ScopeDimension::InternalOrg {
-                return Err(Error::ValidationError("该资源仅接受内部组织范围".into()));
-            }
+            super::consumers::validate_binding(&rule.binding)?;
         }
         state.own_org(user, at)?;
         let tree = OrgTree::new(&state.units)?;

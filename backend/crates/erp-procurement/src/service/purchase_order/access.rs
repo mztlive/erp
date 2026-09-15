@@ -9,7 +9,9 @@ use persistence_core::Executor;
 
 use crate::entity::purchase_order::PurchaseOrder;
 use crate::error::{Error, Result};
-use crate::ports::{PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope};
+use crate::ports::{
+    PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope, PurchaseScopeObject,
+};
 use crate::repository::purchase_order::scope::{PurchaseReadScope, PurchaseScopeClause};
 use crate::repository::PurchaseOrderExt;
 
@@ -121,17 +123,28 @@ impl PurchaseAccess {
         permissions: &[String],
         executor: &mut dyn Executor,
     ) -> Result<PurchaseOrder> {
-        let (_, scope) = if permissions.is_empty() {
+        let (access, scope) = if permissions.is_empty() {
             self.resolve(actor, action, executor).await?
         } else {
             self.resolve_permissions(actor, action, permissions, executor)
                 .await?
         };
-        self.db
+        let order = self
+            .db
             .purchase_orders()
             .find_authorized(id, &scope, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))
+            .ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))?;
+        let object = PurchaseScopeObject {
+            owned: order.current_owner_user_id()? == actor.id(),
+            org_unit_id: Some(order.business_org_unit_id.clone()),
+            historical_read_participant: scope.historical_order_ids.iter().any(|value| value == id),
+            collaborating: false,
+        };
+        if !self.scope.allows(&access, &object)? {
+            return Err(Error::NotFound("采购单不存在或无权操作".into()));
+        }
+        Ok(order)
     }
 
     /// 新单使用即将持久化的显式责任解释创建与提交范围。
@@ -157,15 +170,18 @@ impl PurchaseAccess {
     ) -> Result<()> {
         let submit = "purchase_order:submit".to_string();
         let create = "purchase_order:create".to_string();
-        let (_, mut scope) = self
+        let (create_access, _) = self
             .resolve_permissions(actor, "create", std::slice::from_ref(&submit), executor)
             .await?;
-        let (_, submit_scope) = self
+        let (submit_access, _) = self
             .resolve_permissions(actor, "submit", std::slice::from_ref(&create), executor)
             .await?;
-        scope.required_scopes.push(submit_scope);
-        let owner = order.current_owner_user_id()?;
-        if !scope.allows_creation(owner, &order.business_org_unit_id) {
+        let object = PurchaseScopeObject {
+            owned: order.current_owner_user_id()? == actor.id(),
+            org_unit_id: Some(order.business_org_unit_id.clone()),
+            ..Default::default()
+        };
+        if !self.scope.allows(&create_access, &object)? || !self.scope.allows(&submit_access, &object)? {
             return Err(Error::Forbidden("没有该业务责任范围的采购建单权限".into()));
         }
         Ok(())
@@ -251,11 +267,7 @@ pub fn attach_history(
 ///
 /// # 关键业务约束
 /// 协作范围不映射为采购对象；本人负责解释当前采购负责人。
-fn purchase_scope(
-    access: &PurchaseResolvedScope,
-    user: &str,
-    history: Vec<String>,
-) -> PurchaseReadScope {
+pub fn purchase_scope(access: &PurchaseResolvedScope, user: &str, history: Vec<String>) -> PurchaseReadScope {
     PurchaseReadScope {
         required_scopes: vec![],
         historical_order_ids: history,
@@ -264,10 +276,7 @@ fn purchase_scope(
             .iter()
             .map(|clause| map_clause(clause, user))
             .collect(),
-        user_limit: access
-            .user_limit
-            .as_ref()
-            .map(|clause| map_clause(clause, user)),
+        user_limit: access.user_limit.as_ref().map(|clause| map_clause(clause, user)),
     }
 }
 

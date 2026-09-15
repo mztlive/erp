@@ -5,7 +5,7 @@ use erp_contract::{Contract, ContractExt};
 use erp_customer::{CustomerAccount, CustomerExt};
 use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::sales_center::access::SalesAccess;
-use erp_sales::{entity::sales_order::SalesOrder, repository::SalesOrderExt};
+use erp_sales::entity::sales_order::SalesOrder;
 use persistence_core::Executor;
 
 use super::SalesOrderCommandProcess;
@@ -64,38 +64,24 @@ impl SalesCommandAccess {
         Ok(self)
     }
 
-    /// 创建并提交的两个资源动作范围分别计算后求交，不能仅证明动作而复用创建范围。
-    async fn scope(
-        &self,
-        executor: &mut dyn Executor,
-    ) -> Result<erp_sales::repository::sales_order::scope::SalesReadScope> {
-        let (_, mut scope) = self
+    /// 在调用方事务内读取当前可操作单据，并复用公共单对象判定。
+    pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
+        let order = self
             .access
-            .resolve(&self.actor, self.action, &self.permissions, executor)
+            .require_object(&self.actor, self.action, id, &self.permissions, executor)
             .await?;
         if !self.permissions.is_empty() {
-            let (_, submit) = self
-                .access
-                .resolve(
+            self.access
+                .require_object(
                     &self.actor,
                     "submit",
+                    id,
                     &[Permission::parse("sales_order:create")?],
                     executor,
                 )
                 .await?;
-            scope.required_scopes.push(submit);
         }
-        Ok(scope)
-    }
-
-    /// 在调用方事务内读取当前可操作单据；历史参与不会产生写资格。
-    pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
-        let scope = self.scope(executor).await?;
-        self.db
-            .sales_orders()
-            .find_authorized(id, &scope, executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))
+        Ok(order)
     }
 
     /// 写入前重新读取当前责任与版本，防止预读取后交接或状态变化。
@@ -116,12 +102,33 @@ impl SalesCommandAccess {
 
     /// 新单使用即将持久化的显式责任解释创建范围，不能由创建人审计字段兜底。
     pub(super) async fn creation(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
-        let scope = self.scope(executor).await?;
-        if !scope.allows_creation(
-            &order.sales_owner_user_id,
-            &order.business_org_unit_id,
-            order.customer_id.as_ref(),
-        ) {
+        self.require_creation_action(order, self.action, &self.permissions, executor)
+            .await?;
+        if !self.permissions.is_empty() {
+            self.require_creation_action(
+                order,
+                "submit",
+                &[Permission::parse("sales_order:create")?],
+                executor,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// 创建与提交分别使用当前动作范围，禁止把读取参与权用于写入。
+    async fn require_creation_action(
+        &self,
+        order: &SalesOrder,
+        action: &str,
+        permissions: &[Permission],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let (access, scope) = self
+            .access
+            .resolve(&self.actor, action, permissions, executor)
+            .await?;
+        if !SalesAccess::allows(&access, &scope, order)? {
             return Err(Error::Forbidden("没有该业务责任范围的销售建单权限".into()));
         }
         Ok(())

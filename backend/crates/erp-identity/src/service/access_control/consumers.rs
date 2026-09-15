@@ -1,6 +1,6 @@
 //! 已接线 DataScope v2 消费者登记；不得用初始化清单代替准入。
 
-use crate::access_control::ScopeDimension;
+use crate::access_control::{ScopeBinding, ScopeDimension};
 use crate::error::{Error, Result};
 
 /// 已由真实消费者接入公共解析的资源动作及必需维度。
@@ -52,8 +52,12 @@ const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
 
 /// 已接线消费者的资源动作登记。
 pub struct ConsumerRegistration {
+    /// 本资源动作接受的身份维度；未列出的维度必须拒绝。
+    pub supported_dimensions: &'static [ScopeDimension],
     /// 该资源动作解析所需维度。
     pub required_dimensions: &'static [ScopeDimension],
+    /// 合法历史参与是否可补充该动作的正向读取范围。
+    pub allows_history: bool,
 }
 
 /// 按真实消费者登记查找资源动作。
@@ -74,18 +78,68 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
     let entry = WIRED_CONSUMERS
         .iter()
         .find(|(name, _, _)| *name == resource)
-        .ok_or_else(|| Error::ValidationError("资源或动作尚未接入 DataScope v2".into()))?;
+        .ok_or_else(|| Error::ValidationError(format!("{resource}:{action} 尚未接入 DataScope v2")))?;
     if !entry.1.contains(&action) {
-        return Err(Error::ValidationError("资源或动作尚未接入 DataScope v2".into()));
+        return Err(Error::ValidationError(format!(
+            "{resource}:{action} 尚未接入 DataScope v2"
+        )));
     }
     Ok(ConsumerRegistration {
+        supported_dimensions: entry.2,
         required_dimensions: entry.2,
+        allows_history: matches!(
+            resource,
+            "customer" | "contract" | "sales_order" | "purchase_order"
+        ) && matches!(action, "list" | "detail"),
     })
+}
+
+/// 对配置、初始化及已存储规则执行相同的消费者准入。
+///
+/// # 参数
+/// * `binding` - 已通过模型形态校验的资源动作绑定。
+/// # 返回
+/// 全部动作及目标维度已接线时成功。
+/// # 错误
+/// 任一动作未接线或维度不支持时拒绝，停用规则也不能绕过准入。
+pub fn validate_binding(binding: &ScopeBinding) -> Result<()> {
+    for action in &binding.actions {
+        let consumer = registration(&binding.resource, action)?;
+        if !consumer.supported_dimensions.contains(&binding.target_dimension) {
+            return Err(Error::ValidationError(format!(
+                "{}:{} 不支持 {:?} 范围维度",
+                binding.resource, action, binding.target_dimension
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn binding_checks_every_action_and_dimension_even_when_disabled() {
+        let mut binding = ScopeBinding {
+            schema_version: 2,
+            resource: "customer".into(),
+            actions: vec!["list".into()],
+            target_dimension: ScopeDimension::InternalOrg,
+            target_mode: None,
+            include_descendants: None,
+            enabled: false,
+        };
+        assert!(validate_binding(&binding).is_ok());
+        binding.actions.push("resume".into());
+        assert!(validate_binding(&binding).is_err());
+        binding.actions.pop();
+        binding.target_dimension = ScopeDimension::Warehouse;
+        assert!(validate_binding(&binding).is_err());
+        assert!(registration("customer", "detail").unwrap().allows_history);
+        assert!(!registration("customer", "update").unwrap().allows_history);
+        assert!(!registration("org_unit", "list").unwrap().allows_history);
+    }
 
     /// 合同与采购主单已接线可解析；未接线动作与工作流资源必须拒绝。
     #[test]

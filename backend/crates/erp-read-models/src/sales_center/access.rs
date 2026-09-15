@@ -3,9 +3,10 @@
 use application_core::AuditActor;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_customer::{AssignmentRole, CustomerExt};
-use erp_identity::access_control::ScopeClause;
+use erp_identity::access_control::{ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::repository::OrganizationRepository;
+use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataScopeService};
 use erp_identity::Permission;
 use erp_sales::entity::sales_order::SalesOrder;
@@ -59,6 +60,9 @@ impl SalesAccess {
                         .find_authorized(&id, &scope, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("销售单不存在或无权查看".into()))?;
+                    if !Self::allows(&context, &scope, &order)? {
+                        return Err(Error::NotFound("销售单不存在或无权查看".into()));
+                    }
                     let version = format!(
                         "{}:{}:{}",
                         context.scope_version, order.base.id, order.base.version
@@ -139,12 +143,48 @@ impl SalesAccess {
         permissions: &[Permission],
         executor: &mut dyn Executor,
     ) -> Result<SalesOrder> {
-        let (_, scope) = self.resolve(actor, action, permissions, executor).await?;
-        self.db
+        let (access, scope) = self.resolve(actor, action, permissions, executor).await?;
+        let order = self
+            .db
             .sales_orders()
             .find_authorized(id, &scope, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))
+            .ok_or_else(|| Error::NotFound("销售单不存在或无权操作".into()))?;
+        if !Self::allows(&access, &scope, &order)? {
+            return Err(Error::NotFound("销售单不存在或无权操作".into()));
+        }
+        Ok(order)
+    }
+
+    /// 以当前销售责任和合法参与事实复用公共单对象判定。
+    ///
+    /// # 参数
+    /// * `access` - 本动作公共解析上下文
+    /// * `scope` - 同次解析的业务事实映射
+    /// * `order` - 当前或拟创建销售单
+    /// # 返回
+    /// 返回公共范围判定；其他独立资源范围须由调用方分别解析和核对。
+    /// # 错误
+    /// 未注册资源动作拒绝。
+    pub fn allows(access: &AuthorizedDataScope, scope: &SalesReadScope, order: &SalesOrder) -> Result<bool> {
+        let consumer = registration(&access.resource, &access.action)?;
+        let collaborating = scope.roles.iter().chain(scope.user_limit.iter()).any(|clause| {
+            clause
+                .collaborative_customer_ids
+                .iter()
+                .any(|id| id == order.customer_id.as_ref())
+        });
+        Ok(access.scope.allows(
+            &ScopedObject {
+                owned: order.sales_owner_user_id == access.user_id,
+                collaborating,
+                historical_read_participant: scope.historical_order_ids.contains(&order.base.id),
+                org_unit_id: Some(&order.business_org_unit_id),
+                settlement_party_id: None,
+                warehouse_id: None,
+            },
+            consumer.allows_history,
+        ))
     }
 
     /// 将已证明范围编译为来源销售单 ID 限制，供变更单沿原单接入。
@@ -368,7 +408,17 @@ fn business_date(at: Instant) -> Result<BusinessDate> {
 }
 
 /// 映射同角色正向范围和独立个人上限，保持两者的交集关系。
-fn sales_scope(
+///
+/// # 参数
+/// * `access` - 已由公共解析器证明的资源动作上下文
+/// * `user` - 已认证操作人
+/// * `customers` - 当前合法协作客户
+/// * `history` - 该动作允许的合法历史参与单据
+/// # 返回
+/// 返回仓储可执行的条件；调用方分别解析其他必需资源动作并求交。
+/// # 错误
+/// 无；事实读取、动作及版本校验必须在调用前完成。
+pub fn sales_scope(
     access: &AuthorizedDataScope,
     user: &str,
     customers: &[String],

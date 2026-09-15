@@ -7,7 +7,9 @@ use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::ports::PurchaseDataScopePort;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
 use erp_procurement::repository::PurchaseOrderExt;
-use erp_procurement::service::purchase_order::access::{attach_history, PurchaseAccess as DomainPurchaseAccess};
+use erp_procurement::service::purchase_order::access::{
+    attach_history, PurchaseAccess as DomainPurchaseAccess,
+};
 use erp_procurement::PurchaseResolvedScope;
 use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;

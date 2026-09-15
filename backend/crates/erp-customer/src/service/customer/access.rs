@@ -11,7 +11,9 @@ use persistence_core::{Executor, Transactional};
 
 use crate::entity::customer::AssignmentRole;
 use crate::error::{Error, Result};
-use crate::ports::{CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope};
+use crate::ports::{
+    CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope, CustomerScopeObject,
+};
 use crate::repository::scope::{CustomerReadScope, CustomerScopeClause};
 use crate::repository::CustomerExt;
 
@@ -165,6 +167,10 @@ impl CustomerAccess {
         if found.is_none() {
             return Err(deny_object(action));
         }
+        let object = self.object_facts(customer_id, &access, &scope, executor).await?;
+        if !self.scope.allows(&access, &object)? {
+            return Err(deny_object(action));
+        }
         Ok(access)
     }
 
@@ -212,12 +218,51 @@ impl CustomerAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<CustomerResolvedScope> {
-        let (access, scope) = self.resolve(actor, "create", executor).await?;
-        let owner_org = self.scope.own_org(actor.id(), access.as_of, executor).await?;
-        if !scope.allows_creation(actor.id(), owner_org.as_deref()) {
+        let access = self.scope.resolve(actor, "create", executor).await?;
+        let owner_org = self
+            .scope
+            .own_org(actor.id(), access.as_of, executor)
+            .await?
+            .ok_or_else(|| Error::ValidationError("请先维护负责人的有效主属组织".into()))?;
+        let object = CustomerScopeObject {
+            owned: true,
+            org_unit_id: Some(owner_org),
+            ..Default::default()
+        };
+        if !self.scope.allows(&access, &object)? {
             return Err(Error::Forbidden("当前账号无权在授权范围内创建客户".into()));
         }
         Ok(access)
+    }
+
+    /// 在相同执行器和授权时点取得客户当前主责组织，协作组织不参与映射。
+    async fn object_facts(
+        &self,
+        id: &str,
+        access: &CustomerResolvedScope,
+        scope: &CustomerReadScope,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerScopeObject> {
+        let owners = self
+            .db
+            .customer_assignments()
+            .current_owners(
+                Some(&[id.to_string()]),
+                None,
+                business_date(access.as_of)?,
+                executor,
+            )
+            .await?;
+        let mut org_unit_id = None;
+        if let Some(owner) = owners.first() {
+            org_unit_id = self.scope.own_org(&owner.user_id, access.as_of, executor).await?;
+        }
+        Ok(CustomerScopeObject {
+            owned: scope.owned_customer_ids.iter().any(|value| value == id),
+            collaborating: scope.collaborative_customer_ids.iter().any(|value| value == id),
+            historical_read_participant: scope.historical_customer_ids.iter().any(|value| value == id),
+            org_unit_id,
+        })
     }
 
     /// 读取动作已由身份域证明后，补充该账号全部历史归属客户。
@@ -383,7 +428,7 @@ pub(super) fn business_date(at: Instant) -> Result<BusinessDate> {
 ///
 /// # 关键业务约束
 /// 角色并集与个人上限分别保留；缺范围保持空集。
-fn customer_scope(
+pub fn customer_scope(
     access: &CustomerResolvedScope,
     user: &str,
     owned: &[String],

@@ -384,10 +384,7 @@ fn insert_authorization_filter(
             }
         }
     };
-    let auth = crate::repository::scope::authorization_document(
-        narrowed.as_deref(),
-        historical_contract_ids,
-    );
+    let auth = crate::repository::scope::authorization_document(narrowed.as_deref(), historical_contract_ids);
     if auth.is_empty() {
         return;
     }

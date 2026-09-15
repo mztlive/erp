@@ -6,15 +6,15 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
-use erp_identity::access_control::ScopeClause;
+use erp_identity::access_control::{ResolvedScope, ScopeClause, ScopedObject};
 use erp_identity::entity::organization::OrgTree;
 use erp_identity::entity::organization_change::OrganizationState;
 use erp_identity::repository::OrganizationRepository;
+use erp_identity::service::access_control::consumers::registration;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Permission, SharedRbacService};
-use erp_procurement::{
-    PurchaseAccess, PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope,
-};
+use erp_procurement::ports::PurchaseScopeObject;
+use erp_procurement::{PurchaseAccess, PurchaseDataScopePort, PurchaseResolvedClause, PurchaseResolvedScope};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -65,6 +65,14 @@ impl MongoPurchaseDataScope {
 
 #[async_trait]
 impl PurchaseDataScopePort for MongoPurchaseDataScope {
+    fn allows(
+        &self,
+        scope: &PurchaseResolvedScope,
+        object: &PurchaseScopeObject,
+    ) -> erp_procurement::Result<bool> {
+        evaluate_object(scope, object)
+    }
+
     async fn resolve(
         &self,
         actor: &AuditActor,
@@ -310,9 +318,7 @@ fn map_identity_error(error: erp_identity::Error) -> erp_procurement::Error {
             erp_procurement::Error::TransientTransaction(payload)
         }
         erp_identity::Error::Forbidden(payload) => erp_procurement::Error::Forbidden(payload),
-        erp_identity::Error::Unauthenticated(payload) => {
-            erp_procurement::Error::Unauthenticated(payload)
-        }
+        erp_identity::Error::Unauthenticated(payload) => erp_procurement::Error::Unauthenticated(payload),
         erp_identity::Error::Logic(payload) => erp_procurement::Error::Logic(payload),
         erp_identity::Error::Rbac(payload) => erp_procurement::Error::Internal(payload),
         erp_identity::Error::OutcomeUnknown(payload) => erp_procurement::Error::OutcomeUnknown(payload),
@@ -390,6 +396,136 @@ mod tests {
                 assert_eq!(message, "没有该资源动作权限");
             }
             other => panic!("expected forbidden, got {other:?}"),
+        }
+    }
+}
+
+/// 将本域已解析事实无损转回公共判定输入，不读取或重解释原始规则。
+fn evaluate_object(
+    scope: &PurchaseResolvedScope,
+    object: &PurchaseScopeObject,
+) -> erp_procurement::Result<bool> {
+    if scope.resource != "purchase_order" {
+        return Err(erp_procurement::Error::ValidationError(
+            "范围资源与消费方不一致".into(),
+        ));
+    }
+    let consumer = registration(&scope.resource, &scope.action).map_err(map_identity_error)?;
+    let resolved = ResolvedScope {
+        role_clauses: scope.role_clauses.iter().map(public_clause).collect(),
+        user_limit: scope.user_limit.as_ref().map(public_clause),
+    };
+    Ok(resolved.allows(
+        &ScopedObject {
+            owned: object.owned,
+            collaborating: object.collaborating,
+            historical_read_participant: object.historical_read_participant,
+            org_unit_id: object.org_unit_id.as_deref(),
+            settlement_party_id: None,
+            warehouse_id: None,
+        },
+        consumer.allows_history,
+    ))
+}
+
+/// 转换已解析条款，保留本人、协作、组织及空集。
+fn public_clause(clause: &PurchaseResolvedClause) -> ScopeClause {
+    ScopeClause {
+        company: clause.company,
+        self_owned: clause.self_owned,
+        collaborative: clause.collaborative,
+        org_unit_ids: clause.org_unit_ids.iter().cloned().collect(),
+        ..ScopeClause::default()
+    }
+}
+
+#[cfg(test)]
+mod equivalence_tests {
+    use super::*;
+    use erp_procurement::service::purchase_order::access::purchase_scope;
+    use serde_json::json;
+    use test_support::matches_filter as matches;
+
+    fn clause(mask: u8) -> PurchaseResolvedClause {
+        PurchaseResolvedClause {
+            company: mask & 1 != 0,
+            self_owned: mask & 2 != 0,
+            collaborative: mask & 4 != 0,
+            org_unit_ids: if mask & 8 != 0 {
+                vec!["org-a".into()]
+            } else {
+                vec![]
+            },
+        }
+    }
+
+    #[test]
+    fn unwired_port_and_mismatched_resource_fail_closed() {
+        use erp_procurement::ports::FailClosedPurchaseDataScopePort;
+        let mut scope = PurchaseResolvedScope {
+            user_id: "actor".into(),
+            resource: "purchase_order".into(),
+            action: "detail".into(),
+            role_clauses: vec![clause(1)],
+            user_limit: None,
+            policy_version: 1,
+            organization_version: 1,
+            scope_version: "v1".into(),
+            as_of: Instant::from_unix_secs(0),
+        };
+        let object = PurchaseScopeObject::default();
+        assert!(FailClosedPurchaseDataScopePort.allows(&scope, &object).is_err());
+        assert!(evaluate_object(&scope, &object).unwrap());
+        scope.resource = "work_item".into();
+        assert!(evaluate_object(&scope, &object).is_err());
+    }
+
+    #[test]
+    fn public_object_decision_matches_compiled_conditions() {
+        let ids = (0..16).map(|i| format!("o-{i}")).collect::<Vec<_>>();
+        let selected = |bit| {
+            ids.iter()
+                .enumerate()
+                .filter(|(i, _)| i & bit != 0)
+                .map(|(_, id)| id.clone())
+                .collect::<Vec<_>>()
+        };
+        for action in ["detail", "create", "update"] {
+            for role in 0..16 {
+                for second in [0, 2, 8] {
+                    for limit in -1..16 {
+                        let access = PurchaseResolvedScope {
+                            user_id: "actor".into(),
+                            resource: "purchase_order".into(),
+                            action: action.into(),
+                            role_clauses: vec![clause(role), clause(second)],
+                            user_limit: (limit >= 0).then(|| clause(limit as u8)),
+                            policy_version: 1,
+                            organization_version: 1,
+                            scope_version: "v1".into(),
+                            as_of: Instant::from_unix_secs(0),
+                        };
+                        let mut history = Vec::new();
+                        if action == "detail" {
+                            history = selected(8);
+                        }
+                        let compiled = purchase_scope(&access, "actor", history);
+                        for (index, id) in ids.iter().enumerate() {
+                            let object = PurchaseScopeObject {
+                                owned: index & 1 != 0,
+                                collaborating: false,
+                                historical_read_participant: index & 8 != 0,
+                                org_unit_id: Some(if index & 4 != 0 { "org-a" } else { "org-b" }.into()),
+                            };
+                            let document = json!({ "id": id, "customer_id": id,
+                            "owner_user_id": if object.owned { "actor" } else { "other" },
+                            "business_org_unit_id": object.org_unit_id.as_deref().unwrap() });
+                            assert_eq!(evaluate_object(&access, &object).unwrap(), matches(&compiled.document(), &document),
+                                "action={action}, role={role}, second={second}, limit={limit}, object={index}");
+                        }
+                    }
+                }
+            }
         }
     }
 }

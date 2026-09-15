@@ -18,6 +18,7 @@
 use crate::repository::owned::{PurchaseChangeOrderRepository, PurchaseOrderRepository};
 mod allocation;
 mod change;
+pub use change::PurchaseChangeSearch;
 mod common;
 mod coverage_sources;
 mod order;

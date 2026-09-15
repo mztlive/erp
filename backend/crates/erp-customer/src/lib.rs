@@ -30,8 +30,8 @@ pub use entity::{
 pub use error::{known_duplicate_index_message, Error, Result};
 pub use ports::{
     AccountFactPort, CustomerAuditPort, CustomerDataScopePort, CustomerResolvedClause, CustomerResolvedScope,
-    FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort, FailClosedPartyFactPort,
-    PartyFactPort, PartyIdentityFact, PreparedCustomerAudit,
+    CustomerScopeObject, FailClosedAccountFactPort, FailClosedAuditPort, FailClosedCustomerDataScopePort,
+    FailClosedPartyFactPort, PartyFactPort, PartyIdentityFact, PreparedCustomerAudit,
 };
 pub use repository::{
     CustomerAccountFilter, CustomerAccountRepository, CustomerAccountRow, CustomerAssignmentFilter,

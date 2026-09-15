@@ -19,16 +19,28 @@ use persistence_core::Executor;
 use persistence_core::PageResult;
 use persistence_core::{mongo_ops, Result};
 
+/// 已归一化的采购变更查询；授权来源条件与业务筛选分别保留。
+#[derive(Debug, Clone, Copy)]
+pub struct PurchaseChangeSearch<'a> {
+    /// 可选来源采购单。
+    pub purchase_order_id: Option<&'a str>,
+    /// 可选单据状态。
+    pub status: Option<&'a str>,
+    /// 已证明可见的来源单；None 表示公司范围，空集合保持无结果。
+    pub authorized_purchase_order_ids: Option<&'a [String]>,
+    /// 从一开始的页码。
+    pub page: u64,
+    /// 每页条数。
+    pub page_size: u32,
+    /// 按创建时间和稳定 ID 升序。
+    pub sort_ascending: bool,
+}
+
 impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 分页查询采购变更单，并按创建时间稳定排序。
     ///
     /// # 参数
-    /// * `purchase_order_id` - 可选原采购单筛选
-    /// * `status` - 可选状态代码筛选
-    /// * `authorized_purchase_order_ids` - 已证明可见的来源采购单；`None` 表示公司范围不限制
-    /// * `page` - 页码，从 1 开始
-    /// * `page_size` - 单页条数
-    /// * `sort_ascending` - `true` 按创建时间升序，否则降序
+    /// * `search` - 已归一化的来源单、状态、授权集合及分页排序条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -38,19 +50,22 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// 当 MongoDB 查询、计数或游标读取失败时返回错误。
     pub async fn search_change_orders(
         &self,
-        purchase_order_id: Option<&str>,
-        status: Option<&str>,
-        authorized_purchase_order_ids: Option<&[String]>,
-        page: u64,
-        page_size: u32,
-        sort_ascending: bool,
+        search: PurchaseChangeSearch<'_>,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<PurchaseChangeOrder>> {
+        let PurchaseChangeSearch {
+            purchase_order_id,
+            status,
+            authorized_purchase_order_ids,
+            page,
+            page_size,
+            sort_ascending,
+        } = search;
         let filter = change_order_filter(purchase_order_id, status, authorized_purchase_order_ids);
         let skip = page.saturating_sub(1).saturating_mul(u64::from(page_size));
         let direction = if sort_ascending { 1 } else { -1 };
         let options = FindOptions::builder()
-            .sort(doc! { "created_at": direction })
+            .sort(doc! { "created_at": direction, "id": direction })
             .skip(skip)
             .limit(i64::from(page_size))
             .build();
@@ -329,29 +344,6 @@ fn change_order_filter(
     filter
 }
 
-#[cfg(test)]
-mod tests {
-    use super::change_order_filter;
-    use mongodb::bson::doc;
-
-    #[test]
-    fn missing_authorized_source_ids_stay_empty() {
-        use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-        assert_eq!(
-            change_order_filter(None, None, Some(&[])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
-        );
-        assert_eq!(
-            change_order_filter(Some("po-1"), None, Some(&["po-2".into()])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
-        );
-        assert_eq!(
-            change_order_filter(Some("po-1"), None, Some(&["po-1".into()])),
-            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1" }
-        );
-    }
-}
-
 impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
     /// 批量取回多个变更提交的全部明细（`$in`，禁止 N+1）。
     ///
@@ -382,5 +374,28 @@ impl<'a> PurchaseChangeSubmissionLineRepository<'a> {
             executor,
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::change_order_filter;
+    use mongodb::bson::doc;
+
+    #[test]
+    fn missing_authorized_source_ids_stay_empty() {
+        use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+        assert_eq!(
+            change_order_filter(None, None, Some(&[])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+        assert_eq!(
+            change_order_filter(Some("po-1"), None, Some(&["po-2".into()])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": false }
+        );
+        assert_eq!(
+            change_order_filter(Some("po-1"), None, Some(&["po-1".into()])),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "purchase_order_id": "po-1" }
+        );
     }
 }

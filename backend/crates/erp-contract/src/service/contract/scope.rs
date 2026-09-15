@@ -70,7 +70,6 @@ impl ContractService {
                         &context,
                         &scope,
                         &query,
-                        as_of,
                         executor,
                     )
                     .await?;
@@ -310,9 +309,9 @@ async fn apply_list_filters(
     context: &ContractResolvedScope,
     scope: &ContractReadScope,
     query: &ContractListQuery,
-    as_of: erp_core::common::time::BusinessDate,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<(Option<Vec<String>>, Vec<String>)> {
+    let as_of = super::access::business_date(context.as_of)?;
     let mut ids = scope.authorized_customer_ids.clone();
     let mut constraint: Option<Vec<String>> = None;
     constraint = intersect_ids(constraint, assignment_filter(scope, query.scope));
@@ -323,8 +322,16 @@ async fn apply_list_filters(
                 .await?,
         );
     }
-    constraint =
-        apply_org_unit_filter(data_scope, assignments, context, constraint, query, as_of, executor).await?;
+    constraint = apply_org_unit_filter(
+        data_scope,
+        assignments,
+        context,
+        constraint,
+        query,
+        as_of,
+        executor,
+    )
+    .await?;
     if let Some(customer_id) = &query.customer_id {
         constraint = intersect_ids(constraint, Some(vec![customer_id.clone()]));
     }
@@ -523,5 +530,4 @@ mod tests {
             Some(vec!["c-collab".into(), "c-own".into()])
         );
     }
-
 }

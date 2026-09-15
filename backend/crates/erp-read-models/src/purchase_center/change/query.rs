@@ -1,3 +1,4 @@
+use erp_procurement::repository::purchase_order::PurchaseChangeSearch;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use persistence_core::NoTransaction;
@@ -94,11 +95,7 @@ impl PurchaseOrderReadService {
     ///
     /// # 关键业务约束
     /// 列表已授权不能作为详情凭证；沿来源采购单 detail 动作重验。
-    pub async fn change_order_detail(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<PurchaseChangeOrderView> {
+    pub async fn change_order_detail(&self, id: &str, actor: &AuditActor) -> Result<PurchaseChangeOrderView> {
         let this_access = self.access();
         let this_db = self.db.clone();
         let actor = actor.clone();
@@ -145,8 +142,7 @@ impl PurchaseOrderReadService {
                     let (mut context, scope) = access.resolve(&actor, "list", executor).await?;
                     let no_scope = scope.is_empty();
                     let authorized = access.authorized_source_ids(&scope, executor).await?;
-                    let (_, sort_dir) =
-                        normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
+                    let (_, sort_dir) = normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
                     let page = params.page.unwrap_or(1);
                     let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
                     let purchase_order_id = normalized_filter(params.purchase_order_id.as_deref());
@@ -154,12 +150,14 @@ impl PurchaseOrderReadService {
                     let result = db
                         .purchase_order()
                         .search_change_orders(
-                            purchase_order_id.as_deref(),
-                            status.as_deref(),
-                            authorized.as_deref(),
-                            page,
-                            page_size,
-                            matches!(sort_dir, SortDir::Asc),
+                            PurchaseChangeSearch {
+                                purchase_order_id: purchase_order_id.as_deref(),
+                                status: status.as_deref(),
+                                authorized_purchase_order_ids: authorized.as_deref(),
+                                page,
+                                page_size,
+                                sort_ascending: matches!(sort_dir, SortDir::Asc),
+                            },
                             executor,
                         )
                         .await?;
@@ -179,8 +177,7 @@ impl PurchaseOrderReadService {
                     }
                     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
                     versions.hash(&mut fingerprint);
-                    context.scope_version =
-                        format!("{}:{:x}", context.scope_version, fingerprint.finish());
+                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
                     let views = result
                         .items
                         .into_iter()
@@ -262,7 +259,9 @@ async fn load_authorized_change(
                     .find_authorized(change.purchase_order_id.as_ref(), &scope, executor)
                     .await?
                     .ok_or_else(|| Error::NotFound("采购变更单不存在或无权查看".to_string()))?;
-                let binding = match find_approval_binding(&db, &id, executor).await.map_err(crate::Error::from)
+                let binding = match find_approval_binding(&db, &id, executor)
+                    .await
+                    .map_err(crate::Error::from)
                 {
                     Ok(binding) => binding,
                     Err(Error::NotFound(_)) => None,

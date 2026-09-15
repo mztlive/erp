@@ -13,11 +13,11 @@ use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
-    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest,
-    PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseOrderListParams,
-    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, StartPurchaseChangeRequest,
-    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
-    SubmitPurchaseOrderResult, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest, PurchaseChangeEffectResult,
+    PurchaseChangeOrderListParams, PurchaseOrderListParams, SavePurchaseOrderDraftRequest,
+    SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
+    SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+    VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use erp_read_models::purchase_center::dto::{
@@ -477,9 +477,7 @@ pub async fn purchase_change_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<PurchaseChangeOrderListParams>,
 ) -> Result<PurchaseChangeListView> {
-    let page = purchase_reads(&state)
-        .change_order_list(&params, &actor)
-        .await?;
+    let page = purchase_reads(&state).change_order_list(&params, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -511,9 +509,7 @@ pub async fn purchase_change_detail(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseChangeOrderView> {
-    let view = purchase_reads(&state)
-        .change_order_detail(&id, &actor)
-        .await?;
+    let view = purchase_reads(&state).change_order_detail(&id, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

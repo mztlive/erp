@@ -47,6 +47,14 @@ pub struct PlannedContractArchive {
     pub revision: ContractRevision,
 }
 
+/// 合同范围解析及合法参与事实必须成组装配；缺少任一项均不能形成完整授权。
+pub struct ContractScopePorts {
+    /// 公共范围解析及单对象判定端口。
+    pub data_scope: Arc<dyn ContractDataScopePort>,
+    /// 本域合法单据参与事实端口。
+    pub participants: Arc<dyn ContractParticipantPort>,
+}
+
 /// 合同服务。
 ///
 /// 提供合同归档、版本追加、终止与查询编排。
@@ -71,8 +79,7 @@ impl ContractService {
     /// * `assignments` - 客户归属可见范围
     /// * `accounts` - 负责人显示名
     /// * `files` - 合同 PDF 附件存在性
-    /// * `data_scope` - 合同范围授权端口
-    /// * `participants` - 合法单据参与端口
+    /// * `scope_ports` - 成组装配的公共范围与合法参与端口
     ///
     /// # 返回
     /// 返回服务实例。
@@ -89,8 +96,7 @@ impl ContractService {
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         accounts: Arc<dyn AccountNamePort>,
         files: Arc<dyn FileAssetFactsPort>,
-        data_scope: Arc<dyn ContractDataScopePort>,
-        participants: Arc<dyn ContractParticipantPort>,
+        scope_ports: ContractScopePorts,
     ) -> Self {
         Self {
             db,
@@ -99,8 +105,8 @@ impl ContractService {
             assignments,
             accounts,
             files,
-            data_scope,
-            participants,
+            data_scope: scope_ports.data_scope,
+            participants: scope_ports.participants,
         }
     }
 
@@ -493,9 +499,7 @@ impl ContractService {
         customer_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.access()
-            .require_create(actor, customer_id, executor)
-            .await?;
+        self.access().require_create(actor, customer_id, executor).await?;
         Ok(())
     }
 

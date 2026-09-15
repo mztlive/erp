@@ -26,7 +26,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
-mod consumers;
+pub mod consumers;
 mod query;
 pub mod resolve;
 
@@ -685,12 +685,7 @@ async fn ensure_scope_configuration(
     {
         return Err(Error::Forbidden("范围配置要求公司边界的组织配置权限".into()));
     }
-    for scope_action in &scope.binding.actions {
-        resolve::ensure_resource(&scope.binding.resource, scope_action)?;
-    }
-    if scope.binding.target_dimension != crate::access_control::ScopeDimension::InternalOrg {
-        return Err(Error::ValidationError("该资源仅接受内部组织维度".into()));
-    }
+    consumers::validate_binding(&scope.binding)?;
     if action == "delete" {
         return Ok(());
     }

@@ -162,8 +162,7 @@ impl ReturnsReadService {
                     }
                     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
                     versions.hash(&mut fingerprint);
-                    context.scope_version =
-                        format!("{}:{:x}", context.scope_version, fingerprint.finish());
+                    context.scope_version = format!("{}:{:x}", context.scope_version, fingerprint.finish());
                     let mut views = Vec::with_capacity(page.items.len());
                     for row in page.items {
                         views.push(purchase_return_order_view(&db, row.id, executor).await?);
