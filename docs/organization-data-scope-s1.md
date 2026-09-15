@@ -123,3 +123,25 @@ npx vitest run features/contracts features/customers features/purchase-orders fe
 ```
 
 浏览器检查使用独立本地前端与模拟 API：105 条对象中，两个同名负责人分别关联 102 条和 3 条；四类列表须按所选 ID 请求并显示 3 条对应对象。销售选择 102 条的一方后，刷新保留条件，第 6 页仅显示最后 2 条，导出必须重新读取全部 102 条。390px 检查覆盖销售、采购的已选人员和筛选菜单。模拟环境不得登记真实数据库、组织范围或业务验收通过。
+
+## 9. HEAD 本地重验补登记（2026-09-15，基线 8b3fc1e4）
+
+本节为 2026-09-15 在 S1 专用 worktree 对 HEAD 提交 `8b3fc1e4`（`fix(org-scope): S1 销售采购补齐 ownership_basis 与服务端 as_of`）的本地重验补登记，只记录本次执行的命令与结果，不改写 §7 历史表及其计数。
+
+1. 执行环境：worktree 路径 `/Users/huangjiajiang/Development/erp-s1-remaining`，分支 `org-scope/s1-remaining`，基线 `8b3fc1e4`。未合并到 main，未改父仓库。
+2. 本次 6 文件修复内容（均为加法透传，无行为破坏）：
+   - `erp-client/features/sales-orders/api/sales-orders-list.ts`：响应 wire 类型新增可选 `as_of` / `ownership_basis`，回传 `asOf` / `ownershipBasis`，`queriedAt` 改为服务端 `as_of` 优先、缺失时回退本地 `formatIsoNow()`。
+   - `erp-client/features/sales-orders/api/contracts.ts`：`SalesOrderListView` 新增可选 `asOf` / `ownershipBasis`。
+   - `erp-client/features/purchase-orders/api/purchase-order-queries-api.ts`：响应 wire 类型新增可选 `as_of` / `ownership_basis`，回传 `asOf` / `ownershipBasis`，`freshness.updatedAt` 改为服务端 `as_of` 优先、缺失时回退本地时间。
+   - `erp-client/features/purchase-orders/api/purchase-orders-contract.ts`：`PurchaseOrderListResult` 新增可选 `asOf` / `ownershipBasis`。
+   - `erp-client/features/sales-orders/api/sales-orders-list.test.ts`、`erp-client/features/purchase-orders/api/purchase-order-queries-api.test.ts`：mock 补 `as_of` / `ownership_basis` 并断言透传。
+   - 对抗评审结论：wire 新增字段均为可选，服务端缺失时回退旧行为；请求参数、URL、Query key、文案、自动化 id 均未改动；筛选语义 unchanged；测试 mock 与断言有效。无 blocker，无需修复。
+3. 后端定向命令与结果（从 `backend/` 执行）：`cargo fmt --check` exit 0；定向 6 crate `cargo check` exit 0；lib 单测 625 通过、0 失败，分 crate 计数为 application-core 11、contract 60、customer 70、procurement 251、sales 233；BPM 边界、领域边界、权限漂移、`git diff --check` 均 exit 0。
+4. 前端定向结果（从 `erp-client/` 执行）：`npx tsc --noEmit` exit 0；7 文件 vitest 19/19 通过（`features/contracts/api/list.test.ts`、`features/customers/api/directory.test.ts`、`features/purchase-orders/api/purchase-order-queries-api.test.ts`、`features/sales-orders/api/sales-orders-list.test.ts`、`tests/list-export.test.ts`、`tests/owner-query-state.test.ts`、`features/entity-selectors/components/responsible-user-filter.test.tsx`）；本次 6 文件 `oxlint --deny-warnings` 与 `oxfmt --check` 通过；全量 `npm run lint` exit 1，存量 6 处失败均在本次范围外、未改：
+   - `features/sales-orders/components/sales-orders-list-filter-panel.tsx`：jsx-a11y label 警告。
+   - `features/customers/pages/customer-center-directory-toolbar.tsx`：jsx-a11y label 警告。
+   - `features/contracts/components/contracts-table-panel.tsx`：jsx-a11y label 警告。
+   - `features/sales-orders/lib/sales-orders-list-filters.ts`：no-extra-boolean-cast 错误。
+   - `features/organization/lib/impact.ts`：no-unused-vars（`afterUnits`）错误。
+   - `features/organization/components/organization-layout.test.tsx`：no-unused-vars（`container`）错误。
+5. 仍未执行项：真实 MongoDB 集成测试、业务验收、浏览器真实账号验证、全仓 workspace 门禁均未执行。S1 状态仍为“本地检查通过”，未验收；不声称 S2 或 A33—A36 通过。
