@@ -238,10 +238,10 @@ impl PurchaseChangeOrder {
     /// 变更单尚未提交，或请求提交与当前冻结提交不一致时返回领域错误。
     pub fn submission_id_for_effect(&self, requested: Option<&str>) -> Result<PurchaseChangeSubmissionId> {
         let current = self.current_submission_id.clone().ok_or_else(|| Error::from("变更单尚未提交审批"))?;
-        if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) {
-            if requested != current.as_ref() {
-                return Err(Error::from("生效提交必须是当前冻结提交，不得使用历史提交"));
-            }
+        if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty())
+            && requested != current.as_ref()
+        {
+            return Err(Error::from("生效提交必须是当前冻结提交，不得使用历史提交"));
         }
         Ok(current)
     }

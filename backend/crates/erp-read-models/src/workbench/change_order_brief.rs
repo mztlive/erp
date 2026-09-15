@@ -783,10 +783,10 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
             )?
         ));
     }
-    if let (Some(before), Some(after)) = (before, after) {
-        if before.line_no != after.line_no {
-            quantity_parts.push(format!("行号 {} → {}", before.line_no, after.line_no));
-        }
+    if let (Some(before), Some(after)) = (before, after)
+        && before.line_no != after.line_no
+    {
+        quantity_parts.push(format!("行号 {} → {}", before.line_no, after.line_no));
     }
     let due_label =
         if before.and_then(|item| item.due.as_deref()) != after.and_then(|item| item.due.as_deref()) {

@@ -183,10 +183,10 @@ pub async fn customer_profile_command_detail(
     Path(idempotency_key): Path<String>,
 ) -> Result<Option<CustomerProfileMutationView>> {
     let view = state.customer_profile_service().command_result(&idempotency_key).await?;
-    if let Some(result) = &view {
-        if result.initiated_by != actor.id() {
-            ensure_customer_access(&state, &actor, "detail", &result.customer_id).await?;
-        }
+    if let Some(result) = &view
+        && result.initiated_by != actor.id()
+    {
+        ensure_customer_access(&state, &actor, "detail", &result.customer_id).await?;
     }
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -445,10 +445,10 @@ async fn allowed_actions(
         if requires_active && !customer_active {
             continue;
         }
-        if let Some(prerequisite) = prerequisite {
-            if !has_permission(state, subject, prerequisite).await? {
-                continue;
-            }
+        if let Some(prerequisite) = prerequisite
+            && !has_permission(state, subject, prerequisite).await?
+        {
+            continue;
         }
         if has_permission(state, subject, permission).await? {
             actions.push(action.to_string());

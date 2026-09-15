@@ -58,10 +58,10 @@ pub async fn load_procurement_rule_list_facts(
         };
         for sku in skus {
             facts.sku_nos.insert(sku.base.id.clone(), sku.sku_no.clone());
-            if let Some(revision_id) = sku.stable.current_revision_id.as_deref() {
-                if let Some(name) = revision_names.get(revision_id) {
-                    facts.sku_names.insert(sku.base.id, name.clone());
-                }
+            if let Some(revision_id) = sku.stable.current_revision_id.as_deref()
+                && let Some(name) = revision_names.get(revision_id)
+            {
+                facts.sku_names.insert(sku.base.id, name.clone());
             }
         }
     }

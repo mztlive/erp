@@ -224,14 +224,14 @@ pub fn apply_prepared_investigation(
     order: &mut SupplierFulfillmentOrder,
     target_action: &mut SupplierOrderAction,
 ) -> Result<InvestigationFinding> {
-    if context.action == SupplierOrderInvestigationAction::QueryResult {
-        if let Some(resolution) = order.verified_resolution(target_action).map(Into::into) {
-            return Ok(InvestigationFinding {
-                outcome: SupplierOrderInvestigationOutcome::VerifiedTerminal,
-                resolution: Some(resolution),
-                summary: format!("已由当前供应商业务事实核实结果：{}", resolution.label()),
-            });
-        }
+    if context.action == SupplierOrderInvestigationAction::QueryResult
+        && let Some(resolution) = order.verified_resolution(target_action).map(Into::into)
+    {
+        return Ok(InvestigationFinding {
+            outcome: SupplierOrderInvestigationOutcome::VerifiedTerminal,
+            resolution: Some(resolution),
+            summary: format!("已由当前供应商业务事实核实结果：{}", resolution.label()),
+        });
     }
     match prepared {
         PreparedInvestigation::PersistedTerminal(resolution) => {

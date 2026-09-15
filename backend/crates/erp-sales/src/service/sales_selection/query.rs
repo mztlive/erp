@@ -168,12 +168,11 @@ impl SalesSelectionService {
         };
         let task = self.active_task_of(booklet, executor).await?;
         let mut view = Self::booklet_view(booklet, &items, task.as_ref(), None);
-        if let Some(proposal_id) = booklet.proposal_id.as_ref() {
-            if let Some(proposal) =
+        if let Some(proposal_id) = booklet.proposal_id.as_ref()
+            && let Some(proposal) =
                 self.db.sales_selection_proposals().find_by_id(proposal_id.as_ref(), executor).await?
-            {
-                view.proposal_no = Some(proposal.proposal_no);
-            }
+        {
+            view.proposal_no = Some(proposal.proposal_no);
         }
         Ok(view)
     }

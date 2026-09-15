@@ -782,10 +782,10 @@ fn write_generated_file(
         fs::create_dir_all(parent)?;
     }
 
-    if let Ok(existing) = fs::read_to_string(output_path) {
-        if existing == content {
-            return Ok(());
-        }
+    if let Ok(existing) = fs::read_to_string(output_path)
+        && existing == content
+    {
+        return Ok(());
     }
 
     fs::write(output_path, content)

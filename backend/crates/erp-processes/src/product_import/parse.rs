@@ -172,10 +172,8 @@ fn cell_text(attrs: &str, inner: &str, shared: &[String]) -> String {
     }
     if let Some(value) = capture_tag(inner, "v") {
         let value = unescape_xml(&value);
-        if is_shared {
-            if let Ok(index) = value.parse::<usize>() {
-                return shared.get(index).cloned().unwrap_or_default();
-            }
+        if is_shared && let Ok(index) = value.parse::<usize>() {
+            return shared.get(index).cloned().unwrap_or_default();
         }
         return value;
     }

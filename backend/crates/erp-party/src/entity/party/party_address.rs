@@ -312,10 +312,10 @@ fn normalize_required_address(value: String) -> Result<String> {
 /// # 错误
 /// 结束日期不晚于开始日期时返回错误。
 fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to {
-        if valid_to <= valid_from {
-            return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-        }
+    if let Some(valid_to) = valid_to
+        && valid_to <= valid_from
+    {
+        return Err(Error::from("生效结束日期必须晚于生效开始日期"));
     }
     Ok(())
 }

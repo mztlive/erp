@@ -162,10 +162,10 @@ impl WarehouseRevision {
         if data.revision_no == 0 {
             return Err(Error::from("修订序号必须从 1 开始"));
         }
-        if let Some(effective_to) = data.effective_to {
-            if effective_to <= data.effective_from {
-                return Err(Error::from("生效结束日必须晚于生效开始日"));
-            }
+        if let Some(effective_to) = data.effective_to
+            && effective_to <= data.effective_from
+        {
+            return Err(Error::from("生效结束日必须晚于生效开始日"));
         }
 
         Ok(Self {

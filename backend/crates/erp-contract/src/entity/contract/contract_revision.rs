@@ -150,10 +150,10 @@ impl ContractRevision {
             CONTRACT_NO_MAX_LEN,
             "合同编号过长",
         )?;
-        if let Some(valid_to) = data.valid_to {
-            if valid_to <= data.valid_from {
-                return Err(Error::from("合同有效期止必须晚于有效期起"));
-            }
+        if let Some(valid_to) = data.valid_to
+            && valid_to <= data.valid_from
+        {
+            return Err(Error::from("合同有效期止必须晚于有效期起"));
         }
 
         Ok(Self {

@@ -269,10 +269,10 @@ impl ReceivableProcess {
                         session,
                     )
                     .await?;
-                if let Some(other) = duplicate {
-                    if other.base.id != invoice.base.id {
-                        return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
-                    }
+                if let Some(other) = duplicate
+                    && other.base.id != invoice.base.id
+                {
+                    return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
                 }
 
                 super::invoice_posting::post_invoice_in_transaction(

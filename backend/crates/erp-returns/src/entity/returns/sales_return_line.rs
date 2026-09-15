@@ -199,10 +199,10 @@ fn validate_receiving(
         if received.to_decimal().is_sign_negative() {
             return Err(Error::from("实际退回数量不得为负"));
         }
-        if let Some(requested) = requested {
-            if received > requested {
-                return Err(Error::from("实际退回数量不得超过申请数量"));
-            }
+        if let Some(requested) = requested
+            && received > requested
+        {
+            return Err(Error::from("实际退回数量不得超过申请数量"));
         }
     }
     if let (Some(restockable), Some(received)) = (restockable, received) {

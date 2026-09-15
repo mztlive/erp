@@ -247,10 +247,10 @@ fn validate_direction_consistency(entry_type: PayableEntryType, direction: Entry
         PayableEntryType::SupplierRefund | PayableEntryType::Reversal => Some(EntryDirection::Decrease),
         PayableEntryType::ChangeDelta | PayableEntryType::SettlementDelta => None,
     };
-    if let Some(fixed) = fixed {
-        if direction != fixed {
-            return Err(Error::from(format!("{} 分录方向必须为 {}", entry_type.label(), fixed.label())));
-        }
+    if let Some(fixed) = fixed
+        && direction != fixed
+    {
+        return Err(Error::from(format!("{} 分录方向必须为 {}", entry_type.label(), fixed.label())));
     }
     Ok(())
 }

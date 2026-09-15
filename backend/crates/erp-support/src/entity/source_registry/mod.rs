@@ -709,10 +709,10 @@ impl ExternalIdentityTarget {
             "内部对象ID过长",
         )?;
         let approved_by = normalize_optional_text(data.approved_by, "确认人", ACTOR_MAX_LEN)?;
-        if let Some(valid_to) = data.valid_to {
-            if valid_to <= data.valid_from {
-                return Err(Error::from("映射失效时间必须晚于生效时间"));
-            }
+        if let Some(valid_to) = data.valid_to
+            && valid_to <= data.valid_from
+        {
+            return Err(Error::from("映射失效时间必须晚于生效时间"));
         }
         if data.approved_at.is_some() != approved_by.is_some() {
             return Err(Error::from("确认时间与确认人必须同时提供或同时省略"));

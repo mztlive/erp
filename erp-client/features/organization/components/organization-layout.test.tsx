@@ -89,7 +89,7 @@ it("390px 容器内树、筛选条无强制宽于视口的最小宽度，并切�
 })
 
 it("390px 对话框使用视口宽度并禁止横向滚动", () => {
-    const { container } = render(
+    render(
         <div style={{ width: 390 }} className={PAGE_NARROW_CLASS}>
             <OrganizationChangeDialog
                 open

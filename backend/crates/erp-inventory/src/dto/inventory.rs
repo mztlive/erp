@@ -496,10 +496,10 @@ impl StockMovementListParams {
     /// # 错误
     /// 时间区间倒挂、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StockMovementListQuery> {
-        if let (Some(from), Some(to)) = (self.occurred_from, self.occurred_to) {
-            if from > to {
-                return Err(Error::ValidationError("发生时间区间下界不得晚于上界".to_string()));
-            }
+        if let (Some(from), Some(to)) = (self.occurred_from, self.occurred_to)
+            && from > to
+        {
+            return Err(Error::ValidationError("发生时间区间下界不得晚于上界".to_string()));
         }
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STOCK_MOVEMENT_SORT_FIELDS)?;
         Ok(StockMovementListQuery {

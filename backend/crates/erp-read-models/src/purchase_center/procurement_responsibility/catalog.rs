@@ -103,15 +103,15 @@ async fn load_category_ancestors(
         let mut next: Vec<ProductCategoryId> = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for key in sorted_keys {
-            if let Some(category) = row_map.get(&key) {
-                if let Some(parent) = category.parent_category_id.clone() {
-                    let parent_key = parent.to_string();
-                    if !categories.contains_key(&parent_key)
-                        && !row_map.contains_key(&parent_key)
-                        && seen.insert(parent_key.clone())
-                    {
-                        next.push(parent);
-                    }
+            if let Some(category) = row_map.get(&key)
+                && let Some(parent) = category.parent_category_id.clone()
+            {
+                let parent_key = parent.to_string();
+                if !categories.contains_key(&parent_key)
+                    && !row_map.contains_key(&parent_key)
+                    && seen.insert(parent_key.clone())
+                {
+                    next.push(parent);
                 }
             }
         }

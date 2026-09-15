@@ -99,17 +99,17 @@ impl PaymentTermSnapshot {
         if payment_term.prepay_gate != prepay_gate {
             return Err(Error::from("付款条件与先款门禁不一致，请重新选择"));
         }
-        if let Some(amount) = prepay_minimum_amount {
-            if amount.to_decimal() < rust_decimal::Decimal::ZERO {
-                return Err(Error::from("先款门槛金额不能为负"));
-            }
+        if let Some(amount) = prepay_minimum_amount
+            && amount.to_decimal() < rust_decimal::Decimal::ZERO
+        {
+            return Err(Error::from("先款门槛金额不能为负"));
         }
         // 新版本始终冻结提供方比例；显式门槛仍保留调用方约定。
         let prepay_minimum_ratio = prepay_minimum_ratio.or(payment_term.prepay_minimum_ratio);
-        if let Some(ratio) = prepay_minimum_ratio {
-            if ratio.to_decimal() < rust_decimal::Decimal::ZERO {
-                return Err(Error::from("先款门槛比例不能为负"));
-            }
+        if let Some(ratio) = prepay_minimum_ratio
+            && ratio.to_decimal() < rust_decimal::Decimal::ZERO
+        {
+            return Err(Error::from("先款门槛比例不能为负"));
         }
         Ok(Self {
             payment_term_code: payment_term.canonical_code,

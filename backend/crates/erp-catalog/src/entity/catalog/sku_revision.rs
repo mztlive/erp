@@ -227,10 +227,10 @@ fn ensure_revision_no(revision_no: u32) -> Result<()> {
 /// # 错误
 /// 结束日早于或等于开始日时返回错误。
 fn ensure_effective_window(effective_from: BusinessDate, effective_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(effective_to) = effective_to {
-        if effective_to <= effective_from {
-            return Err(Error::from("生效结束日必须晚于生效开始日"));
-        }
+    if let Some(effective_to) = effective_to
+        && effective_to <= effective_from
+    {
+        return Err(Error::from("生效结束日必须晚于生效开始日"));
     }
     Ok(())
 }

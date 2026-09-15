@@ -166,10 +166,10 @@ impl super::WorkItemFactsReader {
             if offering.stable.status == OfferingStatus::Stopped {
                 subject_versions.push(format!("offering:{}", offering.base.version));
             }
-            if let Some(availability) = availability {
-                if availability.availability_status == AvailabilityStatus::Stopped {
-                    subject_versions.push(format!("availability:{}", availability.base.version));
-                }
+            if let Some(availability) = availability
+                && availability.availability_status == AvailabilityStatus::Stopped
+            {
+                subject_versions.push(format!("availability:{}", availability.base.version));
             }
             if subject_versions.is_empty() {
                 continue;

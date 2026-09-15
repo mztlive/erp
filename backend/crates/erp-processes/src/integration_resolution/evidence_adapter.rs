@@ -300,17 +300,17 @@ impl IntegrationEvidenceAuthority for MongoIntegrationEvidenceAuthority {
     ) -> EvidenceFuture<'a, Vec<ControlledEvidenceRef>> {
         Box::pin(async move {
             let mut evidence = Vec::new();
-            if let Some(message_id) = subject.message_id.as_deref() {
-                if let Some(message) = self.db.inbox_messages().find_by_id(message_id, executor).await? {
-                    if message.status == InboxMessageStatus::Processed && message.processed_at.is_some() {
-                        evidence.push(controlled_ref(
-                            ControlledEvidenceKind::ExternalCaseResult,
-                            "inbox_message",
-                            &message.base.id,
-                            "已处理入站结果",
-                        )?);
-                    }
-                }
+            if let Some(message_id) = subject.message_id.as_deref()
+                && let Some(message) = self.db.inbox_messages().find_by_id(message_id, executor).await?
+                && message.status == InboxMessageStatus::Processed
+                && message.processed_at.is_some()
+            {
+                evidence.push(controlled_ref(
+                    ControlledEvidenceKind::ExternalCaseResult,
+                    "inbox_message",
+                    &message.base.id,
+                    "已处理入站结果",
+                )?);
             }
             if subject.business_object_type.as_deref() == Some("reconciliation_difference")
                 || !subject.fact_references.is_empty()
@@ -369,27 +369,25 @@ async fn discover_compensation(
         return Ok(());
     };
     let kind = subject.business_object_type.as_deref().unwrap_or_default().to_ascii_lowercase();
-    if kind.is_empty() || kind == "customer_refund" {
-        if let Some(refund) = db.customer_refunds().find_by_id(id, executor).await? {
-            if refund.status == CustomerRefundStatus::Posted {
-                push_compensation_refs(evidence, "customer_refund", &refund.base.id, "已过账客户退款")?;
-                return Ok(());
-            }
-        }
+    if (kind.is_empty() || kind == "customer_refund")
+        && let Some(refund) = db.customer_refunds().find_by_id(id, executor).await?
+        && refund.status == CustomerRefundStatus::Posted
+    {
+        push_compensation_refs(evidence, "customer_refund", &refund.base.id, "已过账客户退款")?;
+        return Ok(());
     }
-    if kind.is_empty() || kind == "supplier_refund" {
-        if let Some(refund) = db.supplier_refunds().find_by_id(id, executor).await? {
-            if refund.status == SupplierRefundStatus::Posted {
-                push_compensation_refs(evidence, "supplier_refund", &refund.base.id, "已过账供应商退款")?;
-                return Ok(());
-            }
-        }
+    if (kind.is_empty() || kind == "supplier_refund")
+        && let Some(refund) = db.supplier_refunds().find_by_id(id, executor).await?
+        && refund.status == SupplierRefundStatus::Posted
+    {
+        push_compensation_refs(evidence, "supplier_refund", &refund.base.id, "已过账供应商退款")?;
+        return Ok(());
     }
-    if kind.is_empty() || kind == "supplier_refund_fact" {
-        if let Some(refund) = db.supplier_refund_facts().find_by_id(id, executor).await? {
-            push_compensation_refs(evidence, "supplier_refund_fact", &refund.base.id, "供应商退款成功事实")?;
-            return Ok(());
-        }
+    if (kind.is_empty() || kind == "supplier_refund_fact")
+        && let Some(refund) = db.supplier_refund_facts().find_by_id(id, executor).await?
+    {
+        push_compensation_refs(evidence, "supplier_refund_fact", &refund.base.id, "供应商退款成功事实")?;
+        return Ok(());
     }
     Ok(())
 }

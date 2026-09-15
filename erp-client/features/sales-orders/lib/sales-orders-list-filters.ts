@@ -194,7 +194,7 @@ export function resolveSalesOrdersListFilterPatch(input: {
         createdBy: filterDraft.createdBy || undefined,
         ownerUserIds: filterDraft.ownerUserIds || undefined,
         orgUnitIds: filterDraft.orgUnitIds.trim() || undefined,
-        includeDescendants: Boolean(filterDraft.orgUnitIds.trim())
+        includeDescendants: filterDraft.orgUnitIds.trim()
             ? filterDraft.includeDescendants
             : false,
         nature: filterDraft.nature,

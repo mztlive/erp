@@ -405,10 +405,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ) -> Result<FinanceResponsibilityRule> {
         let probe =
             FinanceResponsibilityRule::new("validation", data.clone(), "validation").map_err(Error::Logic)?;
-        if validate_counterparty {
-            if let Some(counterparty_id) = probe.counterparty_id.as_deref() {
-                self.ensure_counterparty(probe.operation, counterparty_id, executor).await?;
-            }
+        if validate_counterparty && let Some(counterparty_id) = probe.counterparty_id.as_deref() {
+            self.ensure_counterparty(probe.operation, counterparty_id, executor).await?;
         }
         if validate_owner {
             self.ensure_finance_owner_eligible(probe.operation, probe.owner_user_id.clone()).await?;

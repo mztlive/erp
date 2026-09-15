@@ -348,10 +348,10 @@ impl<'a> ReceivableRepository<'a> {
             let Some(account) = account else {
                 return Ok(Vec::new());
             };
-            if let Some(sales_order_id) = &scope.sales_order_id {
-                if account.sales_order_id.as_ref() != sales_order_id.as_str() {
-                    return Ok(Vec::new());
-                }
+            if let Some(sales_order_id) = &scope.sales_order_id
+                && account.sales_order_id.as_ref() != sales_order_id.as_str()
+            {
+                return Ok(Vec::new());
             }
             return Ok(vec![account.base.id]);
         }

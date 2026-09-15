@@ -281,11 +281,11 @@ impl ReceiptAllocation {
         let mut reverse_sums: HashMap<String, Amount> = HashMap::new();
         let zero = Amount::from_str("0.00").expect("固定零金额必须可解析");
         for allocation in allocations {
-            if allocation.allocation_action == AllocationAction::Reverse {
-                if let Some(original) = &allocation.reverses_allocation_id {
-                    let entry = reverse_sums.entry(original.to_string()).or_insert(zero);
-                    *entry = entry.checked_add(allocation.allocated_amount);
-                }
+            if allocation.allocation_action == AllocationAction::Reverse
+                && let Some(original) = &allocation.reverses_allocation_id
+            {
+                let entry = reverse_sums.entry(original.to_string()).or_insert(zero);
+                *entry = entry.checked_add(allocation.allocated_amount);
             }
         }
         let mut applies: Vec<&ReceiptAllocation> =

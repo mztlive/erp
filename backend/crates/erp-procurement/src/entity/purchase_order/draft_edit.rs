@@ -256,7 +256,8 @@ mod tests {
             quantity,
             Rate::from_str("0").unwrap(),
         );
-        let line = PurchaseOrderSubmissionLine::new(
+
+        PurchaseOrderSubmissionLine::new(
             PurchaseOrderSubmissionLineId::new(id),
             PurchaseOrderSubmissionLineData {
                 purchase_order_submission_id: PurchaseOrderSubmissionId::new("sub-1"),
@@ -281,8 +282,7 @@ mod tests {
                 allocated_quantity: Some(quantity),
             },
         )
-        .unwrap();
-        line
+        .unwrap()
     }
 
     /// 构造当前草稿商品行（引用齐全）。

@@ -90,10 +90,10 @@ impl UserRole {
         let user_id = normalize_required_text(data.user_id, "用户ID不能为空", USER_ID_MAX_LEN, "用户ID过长")?;
         let assigned_by =
             normalize_required_text(data.assigned_by, "分配人不能为空", ASSIGNED_BY_MAX_LEN, "分配人过长")?;
-        if let Some(effective_to) = data.effective_to {
-            if effective_to <= data.effective_from {
-                return Err(Error::from("到期时间必须晚于生效时间"));
-            }
+        if let Some(effective_to) = data.effective_to
+            && effective_to <= data.effective_from
+        {
+            return Err(Error::from("到期时间必须晚于生效时间"));
         }
         Ok(Self {
             base: BaseModel::new(id.to_string()),

@@ -131,10 +131,10 @@ impl ProductImportProcess {
             .await
             .map_err(|error| Error::Internal(format!("合并直传分片失败，请重试: {error}")))?;
         let result = self.register_merged_object(&req, actor).await;
-        if let Err(error) = &result {
-            if !matches!(error, Error::OutcomeUnknown(_)) {
-                let _ = self.storage.delete(&req.object_key).await;
-            }
+        if let Err(error) = &result
+            && !matches!(error, Error::OutcomeUnknown(_))
+        {
+            let _ = self.storage.delete(&req.object_key).await;
         }
         result
     }

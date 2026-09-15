@@ -214,10 +214,10 @@ fn split_pointer_ids(
             if seen_submissions.insert(pointer.clone()) {
                 submissions.push(pointer);
             }
-        } else if let Some(pointer) = row.current_revision_id.clone() {
-            if seen_revisions.insert(pointer.clone()) {
-                revisions.push(pointer);
-            }
+        } else if let Some(pointer) = row.current_revision_id.clone()
+            && seen_revisions.insert(pointer.clone())
+        {
+            revisions.push(pointer);
         }
     }
     (submissions, revisions)

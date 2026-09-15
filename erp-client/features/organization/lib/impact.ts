@@ -33,7 +33,6 @@ export function impactChanges(
     directory?: Pick<OrganizationStateView, "people" | "roles">,
 ): BusinessDiffEntry[] {
     const beforeUnits = unitMap(receipt.before)
-    const afterUnits = unitMap(receipt.after)
     const changes: BusinessDiffEntry[] = []
     const people = directory?.people ?? []
     const roles = directory?.roles ?? []

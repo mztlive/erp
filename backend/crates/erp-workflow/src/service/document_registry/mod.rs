@@ -166,10 +166,10 @@ impl DocumentRegistryService {
         actor: &AuditActor,
     ) -> Result<BusinessDocumentView> {
         req.validate()?;
-        if let Some(map_id) = &req.external_identity_map_id {
-            if !self.facts.external_identity_map_exists(map_id, &mut NoTransaction).await? {
-                return Err(Error::NotFound("外部身份映射不存在".to_string()));
-            }
+        if let Some(map_id) = &req.external_identity_map_id
+            && !self.facts.external_identity_map_exists(map_id, &mut NoTransaction).await?
+        {
+            return Err(Error::NotFound("外部身份映射不存在".to_string()));
         }
         let id = req.id.map(BusinessDocumentId::new).unwrap_or_else(|| BusinessDocumentId::new(next_id()));
         let doc = BusinessDocument::new(

@@ -308,14 +308,14 @@ fn list_row_totals(
         }
         return (String::new(), String::new(), String::new());
     }
-    if let Some(id) = revision_pointer {
-        if let Some(revision) = revisions.get(id) {
-            return (
-                revision.gross_amount.to_string(),
-                revision.net_amount.to_string(),
-                revision.tax_amount.to_string(),
-            );
-        }
+    if let Some(id) = revision_pointer
+        && let Some(revision) = revisions.get(id)
+    {
+        return (
+            revision.gross_amount.to_string(),
+            revision.net_amount.to_string(),
+            revision.tax_amount.to_string(),
+        );
     }
     (String::new(), String::new(), String::new())
 }

@@ -500,10 +500,10 @@ fn validate_voucher_draft(draft: &VoucherLineDraft) -> Result<Rate> {
     if draft.gift_amount != amounts.gift_amount {
         return Err(Error::from("配赠金额必须等于面额小计减成交金额"));
     }
-    if let Some(gift_rate) = draft.gift_rate {
-        if gift_rate != amounts.gift_rate {
-            return Err(Error::from("配赠率与配赠金额、成交金额不一致"));
-        }
+    if let Some(gift_rate) = draft.gift_rate
+        && gift_rate != amounts.gift_rate
+    {
+        return Err(Error::from("配赠率与配赠金额、成交金额不一致"));
     }
     Ok(amounts.gift_rate)
 }

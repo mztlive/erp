@@ -325,10 +325,10 @@ impl<T: PurchaseReceiptWire> PurchaseCommandReceipt<T> {
         {
             return Err(PurchaseCommandReceiptError::IdentityMismatch);
         }
-        if let Some(expected_target_id) = expected_target_id {
-            if audit.resource_id.as_deref() != Some(expected_target_id) {
-                return Err(PurchaseCommandReceiptError::IdentityMismatch);
-            }
+        if let Some(expected_target_id) = expected_target_id
+            && audit.resource_id.as_deref() != Some(expected_target_id)
+        {
+            return Err(PurchaseCommandReceiptError::IdentityMismatch);
         }
         let message = audit
             .message

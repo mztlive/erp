@@ -145,3 +145,16 @@ npx vitest run features/contracts features/customers features/purchase-orders fe
    - `features/organization/lib/impact.ts`：no-unused-vars（`afterUnits`）错误。
    - `features/organization/components/organization-layout.test.tsx`：no-unused-vars（`container`）错误。
 5. 仍未执行项：真实 MongoDB 集成测试、业务验收、浏览器真实账号验证、全仓 workspace 门禁均未执行。S1 状态仍为“本地检查通过”，未验收；不声称 S2 或 A33—A36 通过。
+
+## 10. HEAD 全量本地重验（2026-09-16，基线 ceb0fdb0）
+
+本节为 2026-09-16 在工作区路径 `/Users/huangjiajiang/Development/erp`、分支 `main`、基线 `ceb0fdb0`（`docs(org-scope): S1 补登记 HEAD 本地重验`）上执行的 S1 §8 全量本地重验。不改写 §7、§9 历史表。状态仍为“本地检查通过”，不得登记“已验收”。
+
+1. 本批为打通 §8 全仓门禁与模拟浏览器检查而做的修复（不含 S1 查询语义变更）：
+   - 前端 lint：`sales-orders-list-filter-panel.tsx`、`customer-center-directory-toolbar.tsx`、`contracts-table-panel.tsx` 为包含下级 Checkbox 补 `htmlFor`；`sales-orders-list-filters.ts` 去掉多余 `Boolean()`；`organization/lib/impact.ts`、`organization-layout.test.tsx` 删除未使用变量。
+   - 后端 Clippy：nightly `clippy::collapsible_if` 在 `--all-targets` 下阻断全仓；按 Clippy 建议将嵌套 `if let` 收成 let-chain（含 `web-api/build.rs` 与多领域 crate）。另有 `login_rate_keys` / 采购草稿测试 helper 的直接返回整理。
+   - 浏览器：新增 `e2e/tests/s1-owner-query-mock.spec.ts`。登录真实本地 web-api 后拦截客户/合同/销售单/采购单列表，105 条中同名负责人分别 102 与 3 条。
+2. 后端命令与结果（从 `backend/` 执行）：`cargo fmt --all -- --check` exit 0；`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` exit 0；`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked` 3891 通过、64 忽略、0 失败；`env -u ERP_TEST_MONGO_URI cargo test -p erp-customer --lib --locked` 70 通过；BPM 边界、`check-domain-boundaries.sh --cutover`、权限漂移、`git diff --check` 均 exit 0。
+3. 前端命令与结果（从 `erp-client/` 执行）：`npx tsc --noEmit` exit 0；全量 `npm run lint` exit 0；§8 vitest 53 文件 183 通过。
+4. 浏览器：`cd e2e && npx playwright test tests/s1-owner-query-mock.spec.ts` 1/1 通过。覆盖四类列表按 `owner_user_ids` 显示 3 条、销售 102 条刷新保留条件、第 6 页 2 条、`page_size=100` 重读 102 条导出、销售/采购 390px 已选人员与筛选菜单无横向溢出。模拟环境不得登记真实数据库、组织范围或业务验收通过。
+5. 仍未执行：真实 MongoDB 集成测试（仓库禁止）、真实业务打印、真实账号权限/并发/执行计划核对、业务验收。不声称 S2 或 A33—A36 通过。

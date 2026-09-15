@@ -283,10 +283,10 @@ impl PayableReadService {
         let mut seen = HashSet::new();
         let mut asset_ids = Vec::new();
         for payment in payments {
-            if let Some(asset_id) = payment.bank_receipt_asset_id.as_ref() {
-                if seen.insert(asset_id.to_string()) {
-                    asset_ids.push(FileAssetId::new(asset_id.to_string()));
-                }
+            if let Some(asset_id) = payment.bank_receipt_asset_id.as_ref()
+                && seen.insert(asset_id.to_string())
+            {
+                asset_ids.push(FileAssetId::new(asset_id.to_string()));
             }
         }
         let assets = self.db.file_assets().find_by_ids(&asset_ids, &mut NoTransaction).await?;
@@ -323,10 +323,10 @@ impl PayableReadService {
         let mut seen = HashSet::new();
         let mut account_ids = Vec::new();
         for payment in payments {
-            if let Some(account_id) = payment.payee_bank_account_id.as_ref() {
-                if seen.insert(account_id.to_string()) {
-                    account_ids.push(PartyBankAccountId::new(account_id.to_string()));
-                }
+            if let Some(account_id) = payment.payee_bank_account_id.as_ref()
+                && seen.insert(account_id.to_string())
+            {
+                account_ids.push(PartyBankAccountId::new(account_id.to_string()));
             }
         }
         let accounts =
@@ -335,10 +335,10 @@ impl PayableReadService {
             accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
         let mut views = HashMap::new();
         for payment in payments {
-            if let Some(account_id) = payment.payee_bank_account_id.as_ref() {
-                if let Some(account) = accounts_by_id.get(account_id.as_ref()) {
-                    views.insert(payment.base.id.clone(), payment_recipient_view(account));
-                }
+            if let Some(account_id) = payment.payee_bank_account_id.as_ref()
+                && let Some(account) = accounts_by_id.get(account_id.as_ref())
+            {
+                views.insert(payment.base.id.clone(), payment_recipient_view(account));
             }
         }
         Ok(views)

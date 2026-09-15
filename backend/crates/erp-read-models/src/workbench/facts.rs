@@ -280,13 +280,12 @@ fn apply_subject_display(
         .unwrap_or_else(|| fact.display.counterparty_label.clone());
     let preserve_task_impact = fields.work_item_type.uses_explicit_owner_authorization()
         && fields.impact_summary.as_deref().is_some_and(|impact| !impact.trim().is_empty());
-    if !preserve_task_impact {
-        if let Some(impact) = subject
+    if !preserve_task_impact
+        && let Some(impact) = subject
             .and_then(|item| item.impact_summary.clone())
             .or_else(|| fact.display.impact_summary.clone())
-        {
-            fields.impact_summary = Some(impact);
-        }
+    {
+        fields.impact_summary = Some(impact);
     }
     fields.brief_source =
         subject.map(|item| item.brief_source.clone()).unwrap_or_else(|| fact.display.brief_source.clone());

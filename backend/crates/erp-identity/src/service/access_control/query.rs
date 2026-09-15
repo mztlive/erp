@@ -62,12 +62,12 @@ impl AccessControlService {
                             .as_bytes()
                         )
                     );
-                    if let Some(expected) = query.scope_version.as_deref() {
-                        if expected != scope_version {
-                            return Err(Error::ConflictError(
-                                "DATA_SCOPE_CHANGED：数据范围已变化，请刷新".into(),
-                            ));
-                        }
+                    if let Some(expected) = query.scope_version.as_deref()
+                        && expected != scope_version
+                    {
+                        return Err(Error::ConflictError(
+                            "DATA_SCOPE_CHANGED：数据范围已变化，请刷新".into(),
+                        ));
                     }
                     let filter = DataScopeFilter {
                         subject_type: query.subject_type,

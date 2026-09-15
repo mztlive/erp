@@ -69,7 +69,10 @@ export function SalesOrdersListFilterPanel(props: {
                     placeholder="组织 ID，逗号分隔"
                     aria-label="按单据业务组织筛选"
                 />
-                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <label
+                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                    htmlFor="sales-orders-list-filter-org-descendants"
+                >
                     <Checkbox
                         id="sales-orders-list-filter-org-descendants"
                         checked={filterDraft.includeDescendants}

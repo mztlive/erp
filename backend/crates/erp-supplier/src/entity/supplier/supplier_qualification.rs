@@ -93,10 +93,10 @@ impl QualificationType {
         if self != Self::Contract && start.is_none() {
             return Err(Error::from("资质生效开始日期不能为空"));
         }
-        if let (Some(start), Some(end)) = (start, end) {
-            if end <= start {
-                return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-            }
+        if let (Some(start), Some(end)) = (start, end)
+            && end <= start
+        {
+            return Err(Error::from("生效结束日期必须晚于生效开始日期"));
         }
         Ok(())
     }

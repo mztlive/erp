@@ -104,10 +104,10 @@ pub fn ensure_capability_qualified(
     if on_date < revision.valid_from {
         return Err(CapabilityEligibilityViolation::NotYetValid);
     }
-    if let Some(valid_to) = revision.valid_to {
-        if on_date > valid_to {
-            return Err(CapabilityEligibilityViolation::Expired);
-        }
+    if let Some(valid_to) = revision.valid_to
+        && on_date > valid_to
+    {
+        return Err(CapabilityEligibilityViolation::Expired);
     }
     Ok(())
 }

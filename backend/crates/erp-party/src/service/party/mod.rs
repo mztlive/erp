@@ -450,10 +450,9 @@ impl PartyService {
     ) -> Result<()> {
         if let Some(existing) =
             self.db.parties().find_by_party_no_including_deleted(party_no, executor).await?
+            && !exclude_party_id.is_some_and(|id| existing.base.id == id)
         {
-            if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
-                return Err(Error::ConflictError(format!("主体编号「{party_no}」已存在")));
-            }
+            return Err(Error::ConflictError(format!("主体编号「{party_no}」已存在")));
         }
 
         let Some(credit_code) = unified_credit_code else {
@@ -461,10 +460,9 @@ impl PartyService {
         };
         if let Some(existing) =
             self.db.parties().find_by_unified_credit_code_including_deleted(credit_code, executor).await?
+            && !exclude_party_id.is_some_and(|id| existing.base.id == id)
         {
-            if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
-                return Err(Error::ConflictError(format!("统一社会信用代码「{credit_code}」已存在")));
-            }
+            return Err(Error::ConflictError(format!("统一社会信用代码「{credit_code}」已存在")));
         }
 
         Ok(())

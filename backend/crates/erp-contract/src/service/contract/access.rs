@@ -480,10 +480,10 @@ fn clause_ids(
         ids.extend(owned.iter().cloned());
     }
     ids.extend(clause.collaborative_customer_ids.iter().cloned());
-    if !clause.owner_org_unit_ids.is_empty() {
-        if let Some((_, customers)) = org_owned.iter().find(|(orgs, _)| orgs == &clause.owner_org_unit_ids) {
-            ids.extend(customers.iter().cloned());
-        }
+    if !clause.owner_org_unit_ids.is_empty()
+        && let Some((_, customers)) = org_owned.iter().find(|(orgs, _)| orgs == &clause.owner_org_unit_ids)
+    {
+        ids.extend(customers.iter().cloned());
     }
     ids.sort();
     ids.dedup();

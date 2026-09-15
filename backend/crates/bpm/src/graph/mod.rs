@@ -77,10 +77,8 @@ impl NodeReplacementDraft {
         if display_order == 0 {
             return Err(ModelError::InvalidField("节点顺序必须从 1 开始"));
         }
-        if let Some(existing) = existing_node_id.as_ref() {
-            if existing.as_ref().trim().is_empty() {
-                return Err(ModelError::InvalidField("已有节点ID不能为空"));
-            }
+        if existing_node_id.as_ref().is_some_and(|existing| existing.as_ref().trim().is_empty()) {
+            return Err(ModelError::InvalidField("已有节点ID不能为空"));
         }
         if new_node_id.as_ref().trim().is_empty() {
             return Err(ModelError::InvalidField("新节点ID不能为空"));

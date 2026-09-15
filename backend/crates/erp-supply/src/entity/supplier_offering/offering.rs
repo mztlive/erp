@@ -518,10 +518,10 @@ fn normalize_list(
     }
     let mut normalized = Vec::with_capacity(values.len());
     for value in values {
-        if let Some(value) = normalize_optional_text(Some(value), label, item_max_len)? {
-            if !normalized.contains(&value) {
-                normalized.push(value);
-            }
+        if let Some(value) = normalize_optional_text(Some(value), label, item_max_len)?
+            && !normalized.contains(&value)
+        {
+            normalized.push(value);
         }
     }
     Ok(normalized)

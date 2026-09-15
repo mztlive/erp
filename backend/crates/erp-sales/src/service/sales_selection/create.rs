@@ -141,16 +141,16 @@ impl SalesSelectionService {
             return Ok(None);
         };
         record.ensure_same_request(hash).map_err(|error| Error::selection_conflict(error.to_string()))?;
-        if operation.replays_live_booklet() {
-            if let Some(id) = &record.booklet_id {
-                let book = self.load_booklet(id.as_ref(), executor).await?;
-                let view = self.detail_view(&book, None, executor).await?;
-                return serde_json::from_value(
-                    serde_json::to_value(view).map_err(|e| Error::Internal(e.to_string()))?,
-                )
-                .map(Some)
-                .map_err(|e| Error::Internal(e.to_string()));
-            }
+        if operation.replays_live_booklet()
+            && let Some(id) = &record.booklet_id
+        {
+            let book = self.load_booklet(id.as_ref(), executor).await?;
+            let view = self.detail_view(&book, None, executor).await?;
+            return serde_json::from_value(
+                serde_json::to_value(view).map_err(|e| Error::Internal(e.to_string()))?,
+            )
+            .map(Some)
+            .map_err(|e| Error::Internal(e.to_string()));
         }
         let value = serde_json::from_str(&record.result_json)
             .map_err(|error| Error::Internal(format!("幂等结果无法读取: {error}")))?;

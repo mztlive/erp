@@ -203,10 +203,10 @@ fn first_missing_asset_label(
     use std::collections::HashSet;
     let missing_set = missing.iter().map(ToString::to_string).collect::<HashSet<_>>();
     for (label, id) in labeled {
-        if let Some(id) = id {
-            if missing_set.contains(id.as_ref()) {
-                return Some((*label).to_string());
-            }
+        if let Some(id) = id
+            && missing_set.contains(id.as_ref())
+        {
+            return Some((*label).to_string());
         }
     }
     None

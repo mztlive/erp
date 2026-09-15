@@ -240,12 +240,10 @@ pub(super) async fn persist_procurement_work_items(
         if existing.len() > 1 {
             return Err(Error::ConflictError("同一销售责任行集合存在多条开放供给分配任务".to_string()));
         }
-        if let Some(existing) = existing.first() {
-            if existing.responsibility_scope_ids() != item.responsibility_scope_ids() {
-                return Err(Error::ConflictError(
-                    "开放供给分配任务的冻结责任范围与当前解析不一致".to_string(),
-                ));
-            }
+        if let Some(existing) = existing.first()
+            && existing.responsibility_scope_ids() != item.responsibility_scope_ids()
+        {
+            return Err(Error::ConflictError("开放供给分配任务的冻结责任范围与当前解析不一致".to_string()));
         }
         if existing.is_empty() {
             db.work_items().create(item, session).await?;

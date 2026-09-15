@@ -47,10 +47,10 @@ pub(crate) fn reason_label(reason_code: Option<&str>, work_item_type: WorkItemTy
 /// # 错误
 /// 无。
 pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkItemType) -> String {
-    if let Some(text) = stored.map(str::trim).filter(|text| !text.is_empty()) {
-        if is_usable_impact(text, work_item_type) {
-            return text.to_string();
-        }
+    if let Some(text) = stored.map(str::trim).filter(|text| !text.is_empty())
+        && is_usable_impact(text, work_item_type)
+    {
+        return text.to_string();
     }
     default_impact_summary(work_item_type).to_string()
 }

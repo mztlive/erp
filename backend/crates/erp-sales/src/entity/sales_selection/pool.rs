@@ -46,10 +46,10 @@ impl PoolFilterSnapshot {
     /// # 错误
     /// 售价下限大于上限时拒绝。
     pub fn normalize(self) -> Result<Self> {
-        if let (Some(min), Some(max)) = (self.sales_price_min, self.sales_price_max) {
-            if min > max {
-                return Err(Error::from("销售价下限不能大于上限"));
-            }
+        if let (Some(min), Some(max)) = (self.sales_price_min, self.sales_price_max)
+            && min > max
+        {
+            return Err(Error::from("销售价下限不能大于上限"));
         }
         Ok(Self {
             nationwide_only: self.nationwide_only,

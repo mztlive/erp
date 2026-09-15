@@ -410,12 +410,11 @@ impl IntoResponse for Error {
         };
 
         let mut response = (http_status, Json(body)).into_response();
-        if http_status == StatusCode::TOO_MANY_REQUESTS {
-            if let Some(retry_after_secs) = retry_after_secs {
-                if let Ok(value) = HeaderValue::try_from(retry_after_secs.to_string()) {
-                    response.headers_mut().insert(RETRY_AFTER, value);
-                }
-            }
+        if http_status == StatusCode::TOO_MANY_REQUESTS
+            && let Some(retry_after_secs) = retry_after_secs
+            && let Ok(value) = HeaderValue::try_from(retry_after_secs.to_string())
+        {
+            response.headers_mut().insert(RETRY_AFTER, value);
         }
         response
     }

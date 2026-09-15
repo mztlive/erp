@@ -253,14 +253,14 @@ impl StockMovement {
         if data.quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
             return Err(Error::from("库存流水数量必须为正数"));
         }
-        if let Some(expected) = data.movement_type.inherent_direction() {
-            if expected != data.direction {
-                return Err(Error::from(format!(
-                    "流水类型 {} 的方向必须为 {}",
-                    data.movement_type.as_str(),
-                    expected.as_str()
-                )));
-            }
+        if let Some(expected) = data.movement_type.inherent_direction()
+            && expected != data.direction
+        {
+            return Err(Error::from(format!(
+                "流水类型 {} 的方向必须为 {}",
+                data.movement_type.as_str(),
+                expected.as_str()
+            )));
         }
         let source_document_id = normalize_required_text(
             data.source_document_id,
