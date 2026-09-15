@@ -31,17 +31,19 @@ export const TARGET_MODE_LABEL: Record<ScopeTargetMode, string> = {
     managed_orgs: "管理的组织",
 }
 
-export const OPERATION_LABEL: Record<OrganizationOperation["operation"], string> =
-    {
-        create_unit: "新建组织",
-        move_unit: "移动组织",
-        rename_unit: "重命名组织",
-        disable_unit: "停用组织",
-        transfer_member: "成员调岗",
-        end_membership: "结束成员关系",
-        grant_management: "授予管理范围",
-        revoke_management: "撤销管理范围",
-    }
+export const OPERATION_LABEL: Record<
+    OrganizationOperation["operation"],
+    string
+> = {
+    create_unit: "新建组织",
+    move_unit: "移动组织",
+    rename_unit: "重命名组织",
+    disable_unit: "停用组织",
+    transfer_member: "成员调岗",
+    end_membership: "结束成员关系",
+    grant_management: "授予管理范围",
+    revoke_management: "撤销管理范围",
+}
 
 export const ORGANIZATION_BOUNDARY_NOTICE =
     "组织配置只调整内部组织、成员与管理关系，不会改派任务，也不会授予销售、采购或审批等业务执行权。"

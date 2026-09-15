@@ -71,7 +71,11 @@ function StatusBadge({
             )}
             {...props}
         >
-            <Icon data-icon="inline-start" aria-hidden="true" className="size-3 text-current/85 shrink-0" />
+            <Icon
+                data-icon="inline-start"
+                aria-hidden="true"
+                className="size-3 text-current/85 shrink-0"
+            />
             {label}
         </Badge>
     )

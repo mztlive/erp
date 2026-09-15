@@ -9,10 +9,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 
-import {
-    fetchOwnerOptions,
-    fetchUnitOptions,
-} from "@/lib/options"
+import { fetchOwnerOptions, fetchUnitOptions } from "@/lib/options"
 
 /** 跨工作面共享选项查询的 queryKey。 */
 export const optionKeys = {

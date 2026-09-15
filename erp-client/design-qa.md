@@ -11,16 +11,16 @@
 
 ## 验收证据
 
-| 项目 | 证据 |
-| --- | --- |
-| source visual truth | `/Users/huangjiajiang/.codex/generated_images/01a07fec-01d0-71f3-8a38-b97c36c8bb6b/exec-2170e495-7f26-4720-bea8-7a3a974241e4.png` |
-| implementation screenshot | `/tmp/erp-workspace-audit-20260908/18-option2-reversed-amounts.png` |
-| full-view comparison | `/tmp/erp-workspace-audit-20260908/13-option2-comparison.png`；左侧设计，右侧实现 |
-| focused region comparison | `/tmp/erp-workspace-audit-20260908/14-option2-detail-comparison.png`；筛选、任务行、详情与操作栏 |
-| 手机列表 | `/tmp/erp-workspace-audit-20260908/17-option2-reversed-mobile.png` |
-| 手机详情 | `/tmp/erp-workspace-audit-20260908/11-option2-mobile-detail-final.png` |
-| 平板列表 | `/tmp/erp-workspace-audit-20260908/12-option2-tablet.png` |
-| 正式页空状态 | `/tmp/erp-workspace-audit-20260908/15-option2-live-empty.png` |
+| 项目                      | 证据                                                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| source visual truth       | `/Users/huangjiajiang/.codex/generated_images/01a07fec-01d0-71f3-8a38-b97c36c8bb6b/exec-2170e495-7f26-4720-bea8-7a3a974241e4.png` |
+| implementation screenshot | `/tmp/erp-workspace-audit-20260908/18-option2-reversed-amounts.png`                                                               |
+| full-view comparison      | `/tmp/erp-workspace-audit-20260908/13-option2-comparison.png`；左侧设计，右侧实现                                                 |
+| focused region comparison | `/tmp/erp-workspace-audit-20260908/14-option2-detail-comparison.png`；筛选、任务行、详情与操作栏                                  |
+| 手机列表                  | `/tmp/erp-workspace-audit-20260908/17-option2-reversed-mobile.png`                                                                |
+| 手机详情                  | `/tmp/erp-workspace-audit-20260908/11-option2-mobile-detail-final.png`                                                            |
+| 平板列表                  | `/tmp/erp-workspace-audit-20260908/12-option2-tablet.png`                                                                         |
+| 正式页空状态              | `/tmp/erp-workspace-audit-20260908/15-option2-live-empty.png`                                                                     |
 
 桌面 CSS viewport 为 1440×1024；实现截图为 1440×1024 像素。源图为 1487×1058 像素，已缩放到 1440×1024 后合并比较。浏览器 devicePixelRatio 为 2，CUA 截图输出已按 CSS 尺寸归一化。手机为 390×844，平板为 768×1024。正式页空状态 viewport 为 1616×1039。
 
@@ -28,22 +28,22 @@
 
 ## 验收结果
 
-| 验收面 | 标准与结果 |
-| --- | --- |
-| 字体与层级 | 使用现有中文系统字体栈；任务类型、往来方、编号三级明确；金额突出。源图未提供字体文件，不声明字体逐像素一致。通过。 |
+| 验收面     | 标准与结果                                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 字体与层级 | 使用现有中文系统字体栈；任务类型、往来方、编号三级明确；金额突出。源图未提供字体文件，不声明字体逐像素一致。通过。                                       |
 | 间距与布局 | 宽列表时金额与截止时间按列对齐，窄列表时合并到右列并显示金额口径；详情底部操作保持可见。保留现有全局侧栏宽度；依用户补充要求将列表与详情宽度反转。通过。 |
-| 色彩与状态 | 使用现有浅色主题、黑色主操作、轻灰选中行、业务类型淡色图标及共享状态标记。状态标记沿用系统色值。通过。 |
-| 图像与图标 | 保留原 ERP 标识、头像与现有 Lucide 图标体系；无新增插画或图片资产，无栅格界面替代。通过。 |
-| 文案与数据 | 按真实摘要能力显示金额、来源单据与明细。缺失金额显示“—”；不添加设计示例中的虚构附件或分页。通过。 |
-| 交互 | 搜索提交、类型筛选、超期切换、清除条件、详情关闭与再次打开、全屏切换均有组件测试；手机详情可打开既有审批确认弹窗，未提交业务审批。通过。 |
-| 正式页检查 | 当前账号空状态正常；浏览器 error 日志为空；当前页面 DOM 未发现重复 ID。通过。 |
+| 色彩与状态 | 使用现有浅色主题、黑色主操作、轻灰选中行、业务类型淡色图标及共享状态标记。状态标记沿用系统色值。通过。                                                   |
+| 图像与图标 | 保留原 ERP 标识、头像与现有 Lucide 图标体系；无新增插画或图片资产，无栅格界面替代。通过。                                                                |
+| 文案与数据 | 按真实摘要能力显示金额、来源单据与明细。缺失金额显示“—”；不添加设计示例中的虚构附件或分页。通过。                                                        |
+| 交互       | 搜索提交、类型筛选、超期切换、清除条件、详情关闭与再次打开、全屏切换均有组件测试；手机详情可打开既有审批确认弹窗，未提交业务审批。通过。                 |
+| 正式页检查 | 当前账号空状态正常；浏览器 error 日志为空；当前页面 DOM 未发现重复 ID。通过。                                                                            |
 
 ## 必修项验收记录
 
-| 严重度 | 检查项 | 修复要求 | 修复后证据 |
-| --- | --- | --- | --- |
-| P2 | 初版任务行过高，首屏信息密度不足 | 收紧行高、字号与内部间距，保留主要信息三级层次 | `07-option2-desktop.png` 对照 `08-option2-desktop-final.png`；最终同屏对照见 `13-option2-comparison.png` |
-| P2 | 手机抽屉说明按钮与关闭按钮重叠 | 为抽屉头部预留关闭区域，隐藏桌面全屏动作 | `10-option2-mobile-detail.png` 对照 `11-option2-mobile-detail-final.png` |
+| 严重度 | 检查项                           | 修复要求                                       | 修复后证据                                                                                               |
+| ------ | -------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| P2     | 初版任务行过高，首屏信息密度不足 | 收紧行高、字号与内部间距，保留主要信息三级层次 | `07-option2-desktop.png` 对照 `08-option2-desktop-final.png`；最终同屏对照见 `13-option2-comparison.png` |
+| P2     | 手机抽屉说明按钮与关闭按钮重叠   | 为抽屉头部预留关闭区域，隐藏桌面全屏动作       | `10-option2-mobile-detail.png` 对照 `11-option2-mobile-detail-final.png`                                 |
 
 上述证据文件均位于 `/tmp/erp-workspace-audit-20260908/`。最终视觉检查未发现本次验收范围内仍需修复的 P0、P1、P2 项。
 

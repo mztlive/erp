@@ -88,9 +88,10 @@ export async function centerProduct(
         fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}).catch(
             () => [] as UnitOfMeasureDto[],
         ),
-        fetchAllPages<ProductCategoryDto>("/admin/product-categories", {}).catch(
-            () => [] as ProductCategoryDto[],
-        ),
+        fetchAllPages<ProductCategoryDto>(
+            "/admin/product-categories",
+            {},
+        ).catch(() => [] as ProductCategoryDto[]),
         fetchAllPages<ProductBrandDto>("/admin/product-brands", {}).catch(
             () => [] as ProductBrandDto[],
         ),

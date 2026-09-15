@@ -116,8 +116,8 @@ export function CustomerCenterDirectoryToolbar({
                             aria-label="按当前主负责人所属组织筛选"
                         />
                         <label
-                            className="flex items-center gap-2 text-xs text-muted-foreground"
                             htmlFor="customers-directory-org-descendants"
+                            className="flex items-center gap-2 text-xs text-muted-foreground"
                         >
                             <Checkbox
                                 id="customers-directory-org-descendants"

@@ -70,8 +70,8 @@ export function SalesOrdersListFilterPanel(props: {
                     aria-label="按单据业务组织筛选"
                 />
                 <label
-                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
                     htmlFor="sales-orders-list-filter-org-descendants"
+                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
                 >
                     <Checkbox
                         id="sales-orders-list-filter-org-descendants"

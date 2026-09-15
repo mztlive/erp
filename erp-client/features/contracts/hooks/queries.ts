@@ -32,8 +32,7 @@ export function useContractsQuery(
     return useQuery({
         queryKey: [...contractKeys.list(), scoped],
         queryFn: async () => {
-            if (query.page === 1 || scopeVersion)
-                return fetchContracts(scoped)
+            if (query.page === 1 || scopeVersion) return fetchContracts(scoped)
             const first = await queryClient.fetchQuery({
                 queryKey: [...contractKeys.list(), firstPage],
                 queryFn: () => fetchContracts(firstPage),

@@ -147,5 +147,3 @@ export function impactCounts(changes: readonly BusinessDiffEntry[]) {
         skipped: 0,
     }
 }
-
-

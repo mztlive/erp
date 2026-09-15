@@ -453,7 +453,6 @@ export async function fetchWorkspaceDashboard(
             family: query.family,
             workItemType: query.workItemType,
             due: query.due,
-            blocked: query.blocked,
             timezone: query.timezone,
         }),
         startedMetricPromise,

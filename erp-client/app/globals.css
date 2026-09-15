@@ -23,17 +23,9 @@
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --font-sans:
-        var(--font-sans),
-        system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Roboto,
-        "PingFang SC",
-        "Hiragino Sans GB",
-        "Microsoft YaHei",
-        "WenQuanYi Micro Hei",
-        sans-serif;
+        var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB",
+        "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
     --font-mono:
         ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
         "Liberation Mono", "Courier New", monospace;
@@ -180,29 +172,25 @@
 
     /* 比例协调的圆角阶梯体系 */
     --radius-xs: 0.125rem; /* 2px */
-    --radius-sm: 0.25rem;  /* 4px - 状态点/极小标记 */
+    --radius-sm: 0.25rem; /* 4px - 状态点/极小标记 */
     --radius-md: 0.375rem; /* 6px - 徽章/紧凑小控件 */
     --radius-lg: var(--radius); /* 8px - 默认按钮/输入框 */
     --radius-xl: 0.625rem; /* 10px - 内部面板 */
     --radius-2xl: 0.75rem; /* 12px - 核心卡片表面 */
-    --radius-3xl: 1rem;    /* 16px - 大浮层/弹窗 */
+    --radius-3xl: 1rem; /* 16px - 大浮层/弹窗 */
     --radius-4xl: 1.25rem; /* 20px */
 
     /* Vercel / Notion 极简精密微投影：克制、精密、发丝级浮层 */
     --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
     --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-sm:
-        0 1px 3px 0 rgb(0 0 0 / 0.07),
-        0 1px 2px -1px rgb(0 0 0 / 0.05);
+        0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.05);
     --shadow-md:
-        0 4px 6px -1px rgb(0 0 0 / 0.07),
-        0 2px 4px -2px rgb(0 0 0 / 0.05);
+        0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
     --shadow-lg:
-        0 10px 15px -3px rgb(0 0 0 / 0.07),
-        0 4px 6px -4px rgb(0 0 0 / 0.04);
+        0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.04);
     --shadow-xl:
-        0 20px 25px -5px rgb(0 0 0 / 0.08),
-        0 8px 10px -6px rgb(0 0 0 / 0.04);
+        0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.04);
 }
 
 /* --------------------------------------------------------------------------
@@ -214,17 +202,17 @@
     /* Vercel / Notion 风格：极简纯净画布 + 纯白微边卡片 */
     --background: oklch(0.99 0.001 260); /* #fafafa 极其纯净的素净灰白画布 */
     --foreground: oklch(0.14 0.005 260); /* #18181b 沉着冷峻的极致石墨黑 */
-    --card: oklch(1 0 0);                /* #ffffff 纯白卡片表面 */
+    --card: oklch(1 0 0); /* #ffffff 纯白卡片表面 */
     --card-foreground: oklch(0.14 0.005 260);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.14 0.005 260);
 
     /* Vercel 经典黑白主色体系：黑曜石核心按键与焦点，极度克制高级 */
-    --primary: oklch(0.14 0.005 260);    /* #18181b 经典实心黑底按键 */
+    --primary: oklch(0.14 0.005 260); /* #18181b 经典实心黑底按键 */
     --primary-foreground: oklch(0.99 0 0); /* 纯白文字 */
-    --secondary: oklch(0.96 0.003 260);  /* #f4f4f5 沉静浅灰衬底 */
-    --secondary-foreground: oklch(0.20 0.005 260);
-    --muted: oklch(0.962 0.002 260);     /* 柔和微冷灰 */
+    --secondary: oklch(0.96 0.003 260); /* #f4f4f5 沉静浅灰衬底 */
+    --secondary-foreground: oklch(0.2 0.005 260);
+    --muted: oklch(0.962 0.002 260); /* 柔和微冷灰 */
     --muted-foreground: oklch(0.48 0.008 260); /* #71717a 次级灰度文字 */
 
     --accent: oklch(0.955 0.003 260);
@@ -235,24 +223,26 @@
     --destructive-foreground: oklch(1 0 0);
     --destructive-soft: oklch(0.975 0.015 25);
     --destructive-soft-foreground: oklch(0.44 0.15 25);
-    --destructive-border: oklch(0.90 0.035 25);
+    --destructive-border: oklch(0.9 0.035 25);
 
-    --success: oklch(0.52 0.12 155);     /* 克制深鼠尾草绿 */
+    --success: oklch(0.52 0.12 155); /* 克制深鼠尾草绿 */
     --success-foreground: oklch(1 0 0);
     --success-soft: oklch(0.968 0.012 155); /* 极其清淡温润的草木灰底 */
-    --success-soft-foreground: oklch(0.32 0.06 155); /* 沉静且极高可读性的灰绿文字 */
+    --success-soft-foreground: oklch(
+        0.32 0.06 155
+    ); /* 沉静且极高可读性的灰绿文字 */
     --success-border: oklch(0.88 0.025 155);
 
-    --warning: oklch(0.62 0.13 75);      /* 沉稳琥珀金 */
+    --warning: oklch(0.62 0.13 75); /* 沉稳琥珀金 */
     --warning-foreground: oklch(1 0 0);
     --warning-soft: oklch(0.975 0.02 75);
-    --warning-soft-foreground: oklch(0.42 0.10 75);
+    --warning-soft-foreground: oklch(0.42 0.1 75);
     --warning-border: oklch(0.89 0.04 75);
 
-    --info: oklch(0.52 0.14 250);        /* 矿物石板蓝 */
+    --info: oklch(0.52 0.14 250); /* 矿物石板蓝 */
     --info-foreground: oklch(1 0 0);
     --info-soft: oklch(0.97 0.015 250);
-    --info-soft-foreground: oklch(0.35 0.10 250);
+    --info-soft-foreground: oklch(0.35 0.1 250);
     --info-border: oklch(0.89 0.035 250);
 
     --neutral-soft: oklch(0.965 0.002 260);
@@ -267,25 +257,25 @@
     --teal-soft-foreground: oklch(0.36 0.09 190);
     --teal-border: oklch(0.88 0.035 190);
     --violet-soft: oklch(0.968 0.018 290);
-    --violet-soft-foreground: oklch(0.40 0.10 290);
+    --violet-soft-foreground: oklch(0.4 0.1 290);
     --violet-border: oklch(0.88 0.035 290);
     --lime-soft: oklch(0.97 0.02 135);
     --lime-soft-foreground: oklch(0.38 0.08 135);
     --lime-border: oklch(0.88 0.035 135);
     --rose-soft: oklch(0.97 0.018 15);
-    --rose-soft-foreground: oklch(0.45 0.10 15);
+    --rose-soft-foreground: oklch(0.45 0.1 15);
     --rose-border: oklch(0.88 0.03 15);
     --indigo-soft: oklch(0.968 0.018 265);
-    --indigo-soft-foreground: oklch(0.38 0.10 265);
+    --indigo-soft-foreground: oklch(0.38 0.1 265);
     --indigo-border: oklch(0.88 0.035 265);
     --cyan-soft: oklch(0.968 0.018 220);
     --cyan-soft-foreground: oklch(0.36 0.08 220);
     --cyan-border: oklch(0.88 0.035 220);
 
     /* 极细微高精边框与发丝线（单像素微发丝质感） */
-    --border: oklch(0.915 0.003 260);    /* #e4e4e7 精密浅灰细线 */
+    --border: oklch(0.915 0.003 260); /* #e4e4e7 精密浅灰细线 */
     --overlay: oklch(0.12 0.005 260 / 30%);
-    --input: oklch(0.895 0.004 260);     /* #d4d4d8 控件微边框 */
+    --input: oklch(0.895 0.004 260); /* #d4d4d8 控件微边框 */
     --ring: oklch(0.14 0.005 260 / 15%); /* 黑灰极细微环 */
 
     --surface-sunken: oklch(0.975 0.002 260);
@@ -296,20 +286,20 @@
     --row-striped: oklch(0.99 0.001 260);
     --grid: oklch(0.935 0.003 260);
 
-    --chart-1: oklch(0.20 0.005 260);
+    --chart-1: oklch(0.2 0.005 260);
     --chart-2: oklch(0.45 0.01 260);
     --chart-3: oklch(0.65 0.01 260);
     --chart-4: oklch(0.55 0.12 155);
     --chart-5: oklch(0.62 0.13 75);
 
     /* Notion / Vercel 纯净浅色侧栏：与白底形成微妙克制层次，告别紫色与花哨色块 */
-    --sidebar: oklch(0.982 0.002 260);   /* #f9f9fb 微冷素净灰 */
+    --sidebar: oklch(0.982 0.002 260); /* #f9f9fb 微冷素净灰 */
     --sidebar-foreground: oklch(0.42 0.008 260); /* 次级导航灰 */
-    --sidebar-primary: oklch(0.14 0.005 260);    /* 纯粹黑曜石 */
+    --sidebar-primary: oklch(0.14 0.005 260); /* 纯粹黑曜石 */
     --sidebar-primary-foreground: oklch(0.99 0 0);
-    --sidebar-accent: oklch(0.945 0.003 260);    /* #e4e4e7 浅灰底 */
+    --sidebar-accent: oklch(0.945 0.003 260); /* #e4e4e7 浅灰底 */
     --sidebar-accent-foreground: oklch(0.14 0.005 260); /* 选中项纯黑粗体 */
-    --sidebar-border: oklch(0.92 0.003 260);     /* 精致单像素侧边分隔线 */
+    --sidebar-border: oklch(0.92 0.003 260); /* 精致单像素侧边分隔线 */
     --sidebar-ring: oklch(0.14 0.005 260 / 15%);
 }
 
@@ -319,12 +309,12 @@
 .dark {
     --background: oklch(0.12 0.005 260); /* #09090b 曜石纯黑背景 */
     --foreground: oklch(0.98 0 0);
-    --card: oklch(0.16 0.005 260);       /* #18181b 浮动卡片 */
+    --card: oklch(0.16 0.005 260); /* #18181b 浮动卡片 */
     --card-foreground: oklch(0.98 0 0);
     --popover: oklch(0.16 0.005 260);
     --popover-foreground: oklch(0.98 0 0);
 
-    --primary: oklch(0.98 0 0);          /* 纯白主按钮 */
+    --primary: oklch(0.98 0 0); /* 纯白主按钮 */
     --primary-foreground: oklch(0.12 0.005 260);
     --secondary: oklch(0.22 0.005 260);
     --secondary-foreground: oklch(0.98 0 0);
@@ -334,7 +324,7 @@
     --accent: oklch(0.22 0.005 260);
     --accent-foreground: oklch(0.98 0 0);
 
-    --destructive: oklch(0.60 0.18 25);
+    --destructive: oklch(0.6 0.18 25);
     --destructive-foreground: oklch(1 0 0);
     --destructive-soft: oklch(0.25 0.04 25);
     --destructive-soft-foreground: oklch(0.85 0.08 25);
@@ -359,7 +349,7 @@
     --info-border: oklch(0.34 0.05 250);
 
     --neutral-soft: oklch(0.22 0.005 260);
-    --neutral-soft-foreground: oklch(0.80 0.005 260);
+    --neutral-soft-foreground: oklch(0.8 0.005 260);
     --neutral-border: oklch(1 0 0 / 10%);
 
     --orange-soft: oklch(0.28 0.05 55);
@@ -392,7 +382,7 @@
     --surface-sunken: oklch(0.14 0.005 260);
     --surface-control: oklch(0.16 0.005 260);
     --table-header: oklch(0.15 0.005 260);
-    --row-hover: oklch(0.20 0.005 260);
+    --row-hover: oklch(0.2 0.005 260);
     --row-selected: oklch(0.24 0.005 260);
     --row-striped: oklch(0.14 0.005 260);
     --grid: oklch(1 0 0 / 8%);
