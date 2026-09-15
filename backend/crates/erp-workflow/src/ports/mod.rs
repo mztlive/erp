@@ -15,7 +15,7 @@ pub use authorization::{
 };
 pub use object_facts::{
     FailClosedObjectFactPort, ObjectFact, ObjectFactKey, ObjectFactMap, ObjectFactPort, ObjectKind,
-    SubjectBrief, W29CloseFact,
+    OrderTaskSource, SubjectBrief, W29CloseFact,
 };
 pub use object_read::{ApprovalObjectReadPort, FailClosedObjectReadPort};
 pub use upgrade_subject::{ApprovalUpgradeSubjectFacts, FailClosedUpgradeSubjectPort, UpgradeSubjectPort};

@@ -2,19 +2,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::entity::work_item::{
-    AvailableWorkItemAccount, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
-};
-use crate::ports::{permission_covers, DataScopeFact, ObjectFact, ObjectFactMap};
-use crate::repository::DocumentRegistryExt;
-
-use persistence_core::{Executor, NoTransaction};
-
-use crate::error::{Error, ErrorCode, Result};
 use application_core::AuditActor;
+use persistence_core::{Executor, NoTransaction};
 
 use super::close::is_w29_fields_closable;
 use super::dto;
+use super::order_access::{require_order_task_read, task_read_error};
+use crate::entity::work_item::{
+    AvailableWorkItemAccount, WorkItem, WorkItemBriefRelation, WorkItemStatus, WorkItemType,
+};
+use crate::error::{Error, ErrorCode, Result};
+use crate::ports::{permission_covers, DataScopeFact, ObjectFact, ObjectFactMap};
+use crate::repository::DocumentRegistryExt;
 
 pub fn object_policy(
     work_item_type: WorkItemType,
@@ -43,7 +42,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let access = self.actor_access(actor).await?;
         self.ensure_item_access(item, &access)
             .await
-            .map_err(|_| Error::Forbidden("当前账号无权处理该业务对象".to_string()))
+            .map_err(task_read_error)
     }
 
     pub async fn ensure_item_access(&self, item: &WorkItem, access: &ActorAccess) -> Result<()> {
@@ -266,6 +265,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.facts.load_object_facts(&keys, executor).await?;
+        let fact = facts
+            .get(&(policy.object_kind, item.business_object_id.clone()))
+            .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
+        require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
         if authorized_item_fields(item.clone(), access, &facts).is_none() {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
@@ -327,7 +330,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .await?;
         self.ensure_item_access_with_executor(item, &access, executor)
             .await
-            .map_err(|_| Error::Forbidden("当前账号不具备任务业务对象的参与权或读取权".to_string()))?;
+            .map_err(task_read_error)?;
         self.auth
             .ensure_policy_snapshot_with_executor(policy_revision, executor)
             .await
@@ -645,6 +648,7 @@ pub fn allowed_actions(
         && item.status == WorkItemStatus::Open
         && item.approval_node_execution_id.is_some()
         && item.owner_user_id.as_deref() == Some(actor_id)
+        && has_permission(access, "approval_instance:decide")
     {
         actions.push(WorkItemAllowedAction::Approve);
         actions.push(WorkItemAllowedAction::Reject);

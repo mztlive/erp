@@ -31,7 +31,6 @@ export function canView(item: WorkspaceWorkItem): boolean {
 
 export function isBlockedWorkItem(item: WorkspaceWorkItem): boolean {
     return (
-        item.processingState === "APPROVAL_BLOCKED" ||
-        item.approval?.status === "BLOCKED"
+        item.processingState !== "READY" || item.approval?.status === "BLOCKED"
     )
 }

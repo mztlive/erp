@@ -9,7 +9,10 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import { OrganizationChangeDialog } from "./organization-change-dialog"
 import { EMPTY_CHANGE_DRAFT } from "@/features/organization/lib/change-payload"
-import type { OrganizationStateView } from "@/features/organization/types"
+import type {
+    OrganizationChangeRequest,
+    OrganizationStateView,
+} from "@/features/organization/types"
 
 const view: OrganizationStateView = {
     version: 3,
@@ -69,7 +72,7 @@ it("提交使用已预览命令；版本冲突失败路径可见", async () => {
         },
         as_of: 1,
     }))
-    const onSubmit = vi.fn(async () => {
+    const onSubmit = vi.fn(async (_request: OrganizationChangeRequest) => {
         throw Object.assign(new Error("组织范围已变化，请刷新后重试"), {
             status: 409,
             kind: "Http",

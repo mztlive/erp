@@ -69,7 +69,7 @@ export function useSalesChangeReviewActions({
           ? "completed"
           : workItem.status === "CLOSED"
             ? "closed"
-            : workItem.processingState === "APPROVAL_BLOCKED"
+            : workItem.processingState !== "READY"
               ? "blocked"
               : canProcess
                 ? "assigned_to_me"

@@ -6,17 +6,19 @@
 pub mod access;
 mod close;
 mod finance_responsibility;
+pub mod order_access;
 mod query_support;
 mod reassign;
 mod write;
 
 use std::sync::Arc;
 
-use crate::dto::work_item as dto;
-use crate::ports::{FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, WorkflowAuditPort};
-use crate::repository::WorkItemExt;
-use mongodb::Database;
-
+#[cfg(test)]
+use access::{
+    allowed_actions, authorized_fields, authorized_item_fields, detail_scope,
+    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_policy, ActorAccess,
+    ViewAccess,
+};
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
     WorkItemAllowedAction, WorkItemApprovalContextView, WorkItemConflict, WorkItemConflictKind,
@@ -26,16 +28,7 @@ pub use finance_responsibility::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
     FinanceResponsibilityRuleView, ResolvedFinanceResponsibility, UpdateFinanceResponsibilityRuleRequest,
 };
-pub use write::{expected_task_version, AuthorizedWorkItem};
-
-#[cfg(test)]
-use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
-#[cfg(test)]
-use access::{
-    allowed_actions, authorized_fields, authorized_item_fields, detail_scope,
-    ensure_generic_work_item_mutation, has_assignment_candidate_access, object_policy, ActorAccess,
-    ViewAccess,
-};
+use mongodb::Database;
 #[cfg(test)]
 use query_support::{
     business_day_bounds_at, counts_as_processable_stat, family_counts_for_types,
@@ -46,6 +39,13 @@ use reassign::{
     approval_assignment_separated, audited_fact_operator_actors, non_empty_assignment_actors,
     purchase_order_fulfillment_responsibility_id, AssignmentSeparationPolicy,
 };
+pub use write::{expected_task_version, AuthorizedWorkItem};
+
+use crate::dto::work_item as dto;
+use crate::ports::{FailClosedAuditPort, FailClosedObjectFactPort, ObjectFactPort, WorkflowAuditPort};
+#[cfg(test)]
+use crate::ports::{ObjectFact, ObjectFactMap, ObjectKind};
+use crate::repository::WorkItemExt;
 
 pub type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
@@ -94,6 +94,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, HashSet};
+
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+
     use super::{
         allowed_actions, approval_assignment_separated, audited_fact_operator_actors, authorized_fields,
         authorized_item_fields, business_day_bounds_at, counts_as_processable_stat, detail_scope,
@@ -101,19 +106,14 @@ mod tests {
         has_assignment_candidate_access, non_empty_assignment_actors, object_policy,
         purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions, ActorAccess,
         AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, ObjectFact, ObjectFactMap,
-        ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
+        ObjectKind, ProcessingBlockerView, ViewAccess, WorkItemAllowedAction, WorkItemScope,
+        AUTHORIZED_SCAN_BATCH_SIZE,
     };
-    use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use crate::entity::work_item::{
         AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemData, WorkItemPriority,
         WorkItemStatus, WorkItemType,
     };
     use crate::error::{Error, ErrorCode};
-
-    use erp_core::common::time::Instant;
-    use erp_core::ids::WorkItemId;
-
-    use std::collections::{HashMap, HashSet};
 
     /// 验证工作项管理员转交的授权提交栅栏。
     ///
@@ -923,7 +923,7 @@ mod tests {
             collector.finish(),
             AuthorizedPage {
                 items: vec!["authorized-3", "authorized-4"],
-                total: 4,
+                total: 4
             }
         );
     }

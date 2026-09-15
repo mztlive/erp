@@ -118,7 +118,7 @@ export function deriveResponsibilityStatus(
     const workItem = item.workItem
     if (workItem.status === "COMPLETED") return "completed"
     if (workItem.status === "CLOSED") return "closed"
-    if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
+    if (workItem.processingState !== "READY") return "blocked"
     return workItem.ownerUser?.id === userId
         ? "assigned_to_me"
         : "assigned_to_other"

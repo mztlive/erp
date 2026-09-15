@@ -1,19 +1,17 @@
 //! 责任队列待办统计。
 
+use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
 use validator::Validate;
 
-use crate::errors::{Error, Result};
-use application_core::AuditActor;
-
 use super::access::{authorized_fields, ActorAccess, ViewAccess};
-use super::dto;
 use super::query::{matches_keyword, next_candidate_offset, AUTHORIZED_SCAN_BATCH_SIZE};
 use super::{
-    ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
+    dto, ProcessingState, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView,
     WorkItemFilter, WorkItemScope, WorkItemStatsParams, WorkItemStatsView, WorkbenchReadService,
 };
+use crate::errors::{Error, Result};
 
 impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchReadService<A> {
     /// 查询与正式队列复用同一授权快照的待办统计。
@@ -149,7 +147,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             if candidate_count == 0 {
                 break;
             }
-            let facts = self.object_facts_for_rows(&rows).await?;
+            let mut facts = self.object_facts_for_rows(&rows).await?;
+            self.filter_order_access(&access.actor_id, &mut facts).await?;
             let authorized = authorized_fields(rows, access, &facts);
             fields.extend(
                 authorized

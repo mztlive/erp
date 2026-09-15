@@ -13,6 +13,7 @@ mod fulfillment_queue;
 mod funds_document_brief;
 mod inventory_settlement_brief;
 mod operational_brief;
+mod owner_qualification;
 mod party_names;
 mod presentation;
 mod purchase_review_brief;

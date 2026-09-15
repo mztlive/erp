@@ -69,7 +69,7 @@ export type BackendConfirmation = {
         owner_role: string
         owner_organization_id: string
         owner_user_id?: string | null
-        processing_state: "READY" | "APPROVAL_BLOCKED"
+        processing_state: "READY" | "APPROVAL_BLOCKED" | "EXECUTION_BLOCKED"
         allowed_actions: string[]
         action_blockers: string[]
         handler_key: string

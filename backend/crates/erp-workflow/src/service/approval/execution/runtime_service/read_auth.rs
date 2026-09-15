@@ -16,7 +16,7 @@ use persistence_core::Executor;
 use super::super::authorization::{converge_eligibility, AuthorizationFailure};
 use super::hidden_not_found;
 use crate::error::{Error, ErrorCode, Result};
-use crate::ports::ApprovalObjectReadPort;
+use crate::ports::{ApprovalObjectReadPort, OrderTaskSource};
 use crate::service::approval::business_adapter::{
     adapter_object_read_decision_with, adapter_spec_of, ensure_separation_of_duties,
     BindingRevalidationContext,
@@ -121,6 +121,22 @@ pub(super) async fn revalidate_decision_approver(
             let scope_actor = authenticated_actor
                 .cloned()
                 .unwrap_or_else(|| AuditActor::new(account.id.clone(), account.id.clone(), account.kind));
+            if OrderTaskSource::approval_kind(snapshot.document_type).is_some()
+                && !rbac
+                    .order_approval_readable(
+                        &scope_actor,
+                        snapshot.document_type,
+                        &snapshot.business_object_id,
+                        executor,
+                    )
+                    .await?
+            {
+                return converge_eligibility(
+                    assignee_id,
+                    assignee_name,
+                    Some(AuthorizationFailure::CannotReadSubject),
+                );
+            }
             let decide_scope = approval_decide_scope_with_executor(rbac, &scope_actor, executor).await?;
             if decide_scope.is_empty() {
                 Some(AuthorizationFailure::NotEligible)

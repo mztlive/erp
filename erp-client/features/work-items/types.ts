@@ -16,7 +16,10 @@ export type WorkItemStatus = "OPEN" | "COMPLETED" | "CLOSED"
 
 export type WorkItemScope = "mine" | "managed" | "history"
 
-export type WorkItemProcessingState = "READY" | "APPROVAL_BLOCKED"
+export type WorkItemProcessingState =
+    | "READY"
+    | "APPROVAL_BLOCKED"
+    | "EXECUTION_BLOCKED"
 
 export type WorkItemAllowedAction =
     | "REASSIGN"

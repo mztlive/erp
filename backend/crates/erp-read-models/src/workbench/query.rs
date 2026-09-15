@@ -4,23 +4,20 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::num::NonZeroU32;
 
+use application_core::AuditActor;
 use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
-use erp_workflow::BpmExt;
-use erp_workflow::WorkItemExt;
+use erp_workflow::{BpmExt, WorkItemExt};
 use persistence_core::NoTransaction;
 use validator::Validate;
 
-use crate::errors::{Error, Result};
-use application_core::AuditActor;
-
 use super::access::{authorized_fields, authorized_item_fields, detail_scope, ActorAccess};
-use super::dto;
 use super::facts::object_policy;
 use super::stats::apply_due_filter;
 use super::{
-    ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
+    dto, ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
     WorkItemPageView, WorkItemScope, WorkItemView,
 };
+use crate::errors::{Error, Result};
 
 pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
 
@@ -168,7 +165,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             if candidate_count == 0 {
                 break;
             }
-            let facts = self.object_facts_for_rows(&rows).await?;
+            let mut facts = self.object_facts_for_rows(&rows).await?;
+            self.filter_order_access(&access.actor_id, &mut facts).await?;
             let fields = authorized_fields(rows, access, &facts);
             collector.extend(
                 fields
@@ -209,7 +207,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
                     .map(|policy| (policy.object_kind, item.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
-        let facts = self.load_object_facts(&keys, &mut NoTransaction).await?;
+        let mut facts = self.load_object_facts(&keys, &mut NoTransaction).await?;
+        self.filter_order_access(&access.actor_id, &mut facts).await?;
         Ok(items
             .into_iter()
             .filter_map(|item| authorized_item_fields(item, access, &facts))
@@ -239,6 +238,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         }
         self.apply_party_names(&mut items).await?;
         self.apply_approval_contexts(&mut items).await?;
+        self.apply_owner_qualification(&mut items).await?;
         Ok(items)
     }
 
@@ -327,6 +327,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         );
         self.apply_party_names(std::slice::from_mut(&mut view)).await?;
         self.apply_approval_contexts(std::slice::from_mut(&mut view))
+            .await?;
+        self.apply_owner_qualification(std::slice::from_mut(&mut view))
             .await?;
         Ok(view)
     }
@@ -539,9 +541,8 @@ pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> 
 mod tests {
     use super::{
         ensure_queue_context, next_candidate_offset, remove_approval_decision_actions, AuthorizedPage,
-        AuthorizedPageCollector,
+        AuthorizedPageCollector, WorkItemAllowedAction, AUTHORIZED_SCAN_BATCH_SIZE,
     };
-    use super::{WorkItemAllowedAction, AUTHORIZED_SCAN_BATCH_SIZE};
 
     #[test]
     fn keyword_filters_display_facts_before_paging_and_counting() {
@@ -598,7 +599,7 @@ mod tests {
             collector.finish(),
             AuthorizedPage {
                 items: vec!["authorized-3", "authorized-4"],
-                total: 4,
+                total: 4
             }
         );
     }

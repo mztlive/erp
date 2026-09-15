@@ -83,7 +83,8 @@ const isWorkItemDto = (value: unknown): value is WorkItemDto => {
         typeof value.owner_role === "string" &&
         typeof value.owner_organization_id === "string" &&
         (value.processing_state === "READY" ||
-            value.processing_state === "APPROVAL_BLOCKED") &&
+            value.processing_state === "APPROVAL_BLOCKED" ||
+            value.processing_state === "EXECUTION_BLOCKED") &&
         typeof value.business_object_type === "string" &&
         typeof value.business_object_id === "string" &&
         typeof value.root_business_object_id === "string" &&

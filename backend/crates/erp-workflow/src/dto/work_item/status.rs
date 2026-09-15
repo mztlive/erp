@@ -89,6 +89,8 @@ pub enum ProcessingState {
     Ready,
     /// 审批步骤受阻，普通责任动作必须为空。
     ApprovalBlocked,
+    /// 当前负责人已失去账号、执行权限或订单读取资格；保留责任，由授权管理者处置。
+    ExecutionBlocked,
 }
 
 /// 权限安全的任务阻断摘要。

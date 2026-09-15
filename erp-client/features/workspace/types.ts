@@ -51,7 +51,7 @@ export type WorkspaceWorkItem = Readonly<{
     status: WorkItemStatus
     statusLabel: string
     statusTone: StatusTone
-    processingState: "READY" | "APPROVAL_BLOCKED"
+    processingState: "READY" | "APPROVAL_BLOCKED" | "EXECUTION_BLOCKED"
     priority: number
     createdAt: string
     dueAt?: string

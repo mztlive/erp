@@ -3,32 +3,27 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::entity::work_item::{
-    AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
-};
-use crate::repository::WorkItemExt;
-use application_core::CommandReceipt;
-
+use application_core::{AuditActor, CommandReceipt};
 use erp_core::common::time::Instant;
-
-use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
-use crate::error::{Error, Result};
-use crate::ports::PreparedWorkflowAudit;
-use application_core::AuditActor;
-
-use super::access::object_policy;
 use super::access::{
     active_role_ids, ensure_generic_work_item_mutation, ensure_item_in_managed_scope, ensure_managed_access,
-    has_assignment_candidate_access, ActorAccess, MANAGE_PERMISSION,
+    has_assignment_candidate_access, object_policy, ActorAccess, MANAGE_PERMISSION,
 };
+use super::order_access::{require_order_task_read, task_read_error};
 use super::write::{expected_task_version, required_text, WorkItemWriteOutcome, IDEMPOTENCY_AUDIT_PREFIX};
 use super::{
     ReassignWorkItemRequest, WorkItemConflictKind, WorkItemMutationOutcome, WorkItemReassignCandidateView,
     WorkItemService,
 };
+use crate::entity::work_item::{
+    AvailableWorkItemAccount, FulfillmentResponsibilityKey, WorkItem, WorkItemAssignmentSeparationPolicy,
+};
+use crate::error::{Error, Result};
+use crate::ports::PreparedWorkflowAudit;
+use crate::repository::WorkItemExt;
 
 const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
@@ -334,7 +329,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         }
         self.ensure_item_access_with_executor(item, &access, executor)
             .await
-            .map_err(|_| Error::Forbidden("当前账号无权处理该业务对象".to_string()))
+            .map_err(task_read_error)
     }
 
     /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
@@ -386,7 +381,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         }
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
-            .map_err(|_| Error::Forbidden("目标账号不具备该业务对象的参与权或读取权".to_string()))?;
+            .map_err(task_read_error)?;
         self.ensure_assignment_separation(user_id, item, allow_current_owner, executor)
             .await
     }
@@ -467,6 +462,10 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.facts.load_object_facts(&keys, executor).await?;
+        let fact = facts
+            .get(&(policy.object_kind, item.business_object_id.clone()))
+            .ok_or_else(|| Error::Forbidden("任务业务对象不可访问".into()))?;
+        require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
         if !has_assignment_candidate_access(item, access, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
@@ -535,8 +534,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
         let actor_kind = actor.kind();
         let policy_revision = authorization.policy_revision;
         let policy_rbac = self.auth.clone();
-        let validation_rbac = policy_rbac.clone();
-        let facts = Arc::clone(&self.facts);
+        let validation = self.clone();
         let audit_port = Arc::clone(&self.audit);
         let db = self.db.clone();
         let result = policy_rbac
@@ -553,8 +551,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                     let allow_current_owner =
                         current.owner_user_id.as_deref() == Some(target_user_id.as_str());
                     ensure_assignment_policy_in_transaction(
-                        &db,
-                        &validation_rbac,
+                        &validation,
                         AssignmentPolicyCheck {
                             actor_kind,
                             actor_id: &actor_id,
@@ -569,10 +566,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                     .await?;
                     current = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
                         reassign_purchase_order_fulfillment_responsibility(
-                            &db,
-                            &validation_rbac,
+                            &validation,
                             ReassignPurchaseOrderFulfillmentInput {
-                                facts: facts.as_ref(),
                                 selected: current,
                                 purchase_order_id,
                                 target_user_id: &target_user_id,
@@ -596,8 +591,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                         current
                     };
                     ensure_assignment_policy_in_transaction(
-                        &db,
-                        &validation_rbac,
+                        &validation,
                         AssignmentPolicyCheck {
                             actor_kind,
                             actor_id: &actor_id,
@@ -670,8 +664,7 @@ struct AssignmentPolicyCheck<'a> {
 /// 重验操作人授权与候选人资格后再允许写入。
 ///
 /// # 参数
-/// * `db` - 数据库
-/// * `rbac` - 共享 RBAC 服务
+/// * `service` - 保留已装配事实与授权 Port 的任务服务
 /// * `check` - 分派策略重验输入
 /// * `executor` - 事务执行器
 ///
@@ -683,16 +676,14 @@ struct AssignmentPolicyCheck<'a> {
 ///
 /// # 关键业务约束
 /// 必须在同一任务责任事务内调用。
-async fn ensure_assignment_policy_in_transaction(
-    db: &Database,
-    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+async fn ensure_assignment_policy_in_transaction<A: crate::ports::WorkflowAuthorizationPort>(
+    service: &WorkItemService<A>,
     check: AssignmentPolicyCheck<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     if check.actor_kind != check.authorization.actor_kind {
         return Err(Error::Forbidden("操作账号身份已变化".to_string()));
     }
-    let service = WorkItemService::new(db.clone(), rbac.clone());
     service
         .ensure_assignment_actor_access(
             check.actor_kind,
@@ -743,8 +734,6 @@ pub(super) fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> R
 
 /// 采购单履约责任转交入参。
 struct ReassignPurchaseOrderFulfillmentInput<'a> {
-    /// 授权服务。
-    facts: &'a dyn crate::ports::ObjectFactPort,
     /// 管理员本次选中的开放任务。
     selected: WorkItem,
     /// 责任键解析出的采购单 ID。
@@ -760,7 +749,7 @@ struct ReassignPurchaseOrderFulfillmentInput<'a> {
 /// 原子变更采购单当前责任人与其全部开放采购履约任务。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `service` - 保留生产事实 Port 的任务服务
 /// * `input` - 选中任务、目标责任人与授权快照
 /// * `executor` - 当前事务执行器
 ///
@@ -773,28 +762,25 @@ struct ReassignPurchaseOrderFulfillmentInput<'a> {
 /// # 关键业务约束
 /// 完成和关闭的历史任务保持不变；只有同一 `purchase_order:{id}` 下的开放履约任务级联。
 async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::WorkflowAuthorizationPort>(
-    db: &Database,
-    auth: &A,
+    service: &WorkItemService<A>,
     input: ReassignPurchaseOrderFulfillmentInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<WorkItem> {
-    let (_, mut tasks) = input
+    let (_, mut tasks) = service
         .facts
         .purchase_order_fulfillment_scope(&input.selected, input.purchase_order_id, executor)
         .await?;
     ensure_fulfillment_tasks_candidate(
-        &WorkItemService::new(db.clone(), auth.clone()),
+        service,
         &tasks,
         input.target_user_id,
         &input.authorization.assignee_permissions,
         executor,
     )
     .await
-    .map_err(|_| {
-        Error::Forbidden("目标账号缺少一个或多个开放履约任务所需权限，采购单责任未变更".to_string())
-    })?;
+    .map_err(task_read_error)?;
 
-    input
+    service
         .facts
         .reassign_purchase_order_owner(
             input.purchase_order_id,
@@ -808,7 +794,9 @@ async fn reassign_purchase_order_fulfillment_responsibility<A: crate::ports::Wor
     let mut selected_after = None;
     for task in &mut tasks {
         task.reassign(input.target_user_id.to_string(), reassigned_at)?;
-        db.work_items()
+        service
+            .db
+            .work_items()
             .update(task, executor)
             .await
             .map_err(|error| match error {

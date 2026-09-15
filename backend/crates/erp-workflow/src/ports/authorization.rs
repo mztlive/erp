@@ -1,16 +1,18 @@
 //! Authorization facts consumed by workflow; adapters live at the composition root.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::pin::Pin;
 
+use crate::entity::document_registry::DocumentType;
+use application_core::AuditActor;
 use erp_core::AccountKind;
 use mongodb::ClientSession;
 use persistence_core::Executor;
 
-use crate::error::Result;
-
+use super::object_facts::OrderTaskSource;
 pub use crate::entity::work_item::WorkflowAccountFact;
+use crate::error::{Error, Result};
 
 /// Data-scope coverage type snapshot. Wire values match identity `DataScopeTypeFact`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -152,6 +154,65 @@ pub type WorkflowPolicyWrite<T, E> = Box<
 
 /// Authorization facts and policy-bound transactions for workflow commands.
 pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
+    /// 在审批原事务内重验 S2 订单对象当前详情权限。
+    ///
+    /// # 参数
+    /// * `actor` - 当前审批人。
+    /// * `document_type` - 审批快照固定的订单类型。
+    /// * `document_id` - 业务单据主键，变更单由 adapter 沿原单解析。
+    /// * `executor` - 审批决定、恢复或读取的执行器。
+    /// # 返回
+    /// 当前对象可读时为 true；业务越界返回 false，供审批引擎记录受阻。
+    /// # 错误
+    /// 未装配和基础设施失败不得转换成成功。
+    fn order_approval_readable(
+        &self,
+        _actor: &AuditActor,
+        _document_type: DocumentType,
+        _document_id: &str,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<bool>> + Send {
+        async { Err(Error::Internal("订单审批范围授权未装配".into())) }
+    }
+
+    /// 批量返回当前详情范围允许的关联订单，用于任务列表、统计及详情。
+    ///
+    /// # 参数
+    /// * `actor` - 服务端账号身份。
+    /// * `sources` - 从业务实体外键得到的去重订单来源。
+    /// * `executor` - 调用方执行器。
+    /// # 返回
+    /// 返回已授权来源的子集；空授权必须保持空集。
+    /// # 错误
+    /// 未装配、未知范围版本及基础设施错误失败关闭。
+    fn readable_order_sources(
+        &self,
+        _actor: &AuditActor,
+        _sources: &BTreeSet<OrderTaskSource>,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<BTreeSet<OrderTaskSource>>> + Send {
+        async { Err(Error::Internal("任务对象范围授权未装配".into())) }
+    }
+
+    /// 在任务命令原事务内独立重验关联业务对象的详情范围。
+    ///
+    /// # 参数
+    /// * `actor` - 当前操作人或待接收任务的有效账号。
+    /// * `source` - 事务内业务实体证明的订单来源。
+    /// * `executor` - 原任务事务执行器。
+    /// # 返回
+    /// 对象当前可读时成功；任务责任不替代对象授权。
+    /// # 错误
+    /// 未装配、未接入、来源缺失或范围越界时失败关闭。
+    fn require_order_task_read(
+        &self,
+        _actor: &AuditActor,
+        _source: &OrderTaskSource,
+        _executor: &mut dyn Executor,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { Err(Error::Internal("任务对象范围授权未装配".into())) }
+    }
+
     /// Return role ids granted to `account_id`.
     fn role_ids(
         &self,
@@ -287,7 +348,7 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = std::result::Result<T, E>> + Send
     where
         T: Send + 'static,
-        E: From<crate::error::Error>
+        E: From<Error>
             + From<persistence_core::Error>
             + From<application_core::Error>
             + std::error::Error
@@ -307,7 +368,7 @@ pub trait WorkflowAuthorizationPort: Clone + Send + Sync + 'static {
 pub struct FailClosedWorkflowAuthorizationPort;
 
 fn unwired_auth<T>() -> Result<T> {
-    Err(crate::error::Error::Internal("授权端口未接线".to_string()))
+    Err(Error::Internal("授权端口未接线".to_string()))
 }
 
 #[allow(clippy::manual_async_fn)]
@@ -465,7 +526,7 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
     ) -> impl Future<Output = std::result::Result<T, E>> + Send
     where
         T: Send + 'static,
-        E: From<crate::error::Error>
+        E: From<Error>
             + From<persistence_core::Error>
             + From<application_core::Error>
             + std::error::Error
@@ -479,10 +540,6 @@ impl WorkflowAuthorizationPort for FailClosedWorkflowAuthorizationPort {
             + Send
             + 'static,
     {
-        async move {
-            Err(E::from(crate::error::Error::Internal(
-                "授权端口未接线".to_string(),
-            )))
-        }
+        async move { Err(E::from(Error::Internal("授权端口未接线".to_string()))) }
     }
 }

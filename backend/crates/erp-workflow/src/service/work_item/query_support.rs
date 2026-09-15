@@ -2,14 +2,14 @@
 
 use std::collections::HashSet;
 
-use crate::entity::work_item::WorkItem;
-use crate::error::Result;
-use crate::ports::ObjectFactMap;
 use persistence_core::NoTransaction;
 
 use super::access::{authorized_item_fields, ActorAccess};
-use super::dto;
-use super::WorkItemService;
+use super::order_access::filter_order_facts;
+use super::{dto, WorkItemService};
+use crate::entity::work_item::WorkItem;
+use crate::error::Result;
+use crate::ports::ObjectFactMap;
 
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// Reload object facts and keep authorized projections.
@@ -26,7 +26,8 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
                     .map(|policy| (policy.object_kind, item.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
-        let facts: ObjectFactMap = self.facts.load_object_facts(&keys, &mut NoTransaction).await?;
+        let mut facts: ObjectFactMap = self.facts.load_object_facts(&keys, &mut NoTransaction).await?;
+        filter_order_facts(&self.auth, &access.actor_id, &mut facts, &mut NoTransaction).await?;
         Ok(items
             .into_iter()
             .filter_map(|item| authorized_item_fields(item, access, &facts))
@@ -126,8 +127,9 @@ pub(super) fn counts_as_processable_stat(
 pub(super) fn business_day_bounds_at(
     now_unix_secs: i64,
 ) -> crate::error::Result<(erp_core::common::time::Instant, erp_core::common::time::Instant)> {
-    use crate::entity::work_item::WorkItemDueFilter;
     use erp_core::common::time::Instant;
+
+    use crate::entity::work_item::WorkItemDueFilter;
     let window = WorkItemDueFilter::Today
         .window_at(Instant::from_unix_secs(now_unix_secs))
         .map_err(|error| crate::error::Error::Internal(error.to_string()))?;

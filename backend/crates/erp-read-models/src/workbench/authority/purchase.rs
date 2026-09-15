@@ -3,13 +3,12 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_core::ids::PurchaseOrderSubmissionId;
-use erp_procurement::repository::PurchaseOrderExt;
-use persistence_core::Executor;
-use {
-    erp_procurement::entity::purchase_order::PurchaseOrder,
-    erp_procurement::entity::purchase_order::PurchaseOrderSubmission,
-    erp_procurement::entity::purchase_order::PurchaseOrderSubmissionLine,
+use erp_procurement::entity::purchase_order::{
+    PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
+use erp_procurement::repository::PurchaseOrderExt;
+use erp_workflow::ports::OrderTaskSource;
+use persistence_core::Executor;
 
 use super::amount::{non_empty, purchase_review_impact_summary};
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief};
@@ -155,6 +154,7 @@ fn purchase_order_fact(
         format!("采购单 {}", order.purchase_no),
         order.stable.created_by.clone(),
     );
+    fact.order_scope_source = Some(OrderTaskSource::Purchase(order.base.id.clone()));
     for (submission_id, display) in displays {
         if display.purchase_order_id != order.base.id {
             continue;

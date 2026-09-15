@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test } from "vitest"
 
 import type { WorkspaceWorkItem } from "../types"
+import { canProcess, canView, isBlockedWorkItem } from "../lib/work-item"
 import {
     WorkspaceTaskContextHelp,
     WorkspaceTaskHeaderActions,
@@ -9,6 +10,25 @@ import {
 } from "./workspace-task-context"
 
 afterEach(cleanup)
+
+test("负责人资格失效保留管理查看和改派能力，不允许代办执行", () => {
+    const item = sampleItem({
+        workItemType: "FULFILLMENT_OPERATION",
+        processingState: "EXECUTION_BLOCKED",
+        allowedActions: ["VIEW", "REASSIGN"],
+        actionBlockers: [
+            {
+                action: "PROCESS",
+                code: "WORK_ITEM_OWNER_INELIGIBLE",
+                message: "当前负责人已失去关联订单读取资格",
+            },
+        ],
+    })
+    expect(isBlockedWorkItem(item)).toBe(true)
+    expect(canProcess(item)).toBe(false)
+    expect(canView(item)).toBe(true)
+    expect(item.allowedActions).toContain("REASSIGN")
+})
 
 function sampleItem(
     overrides: Partial<WorkspaceWorkItem> = {},

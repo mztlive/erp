@@ -2,14 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use persistence_core::Executor;
-use {
-    erp_procurement::entity::purchase_order::PurchaseChangeOrder,
-    erp_procurement::entity::purchase_order::PurchaseChangeSubmission,
-    erp_procurement::entity::purchase_order::PurchaseOrderRevision,
-    erp_sales::entity::sales_order::SalesOrderRevision, erp_sales::entity::sales_review::SalesChangeOrder,
-    erp_sales::entity::sales_review::SalesChangeSubmission,
+use erp_procurement::entity::purchase_order::{
+    PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrderRevision,
 };
+use erp_sales::entity::sales_order::SalesOrderRevision;
+use erp_sales::entity::sales_review::{SalesChangeOrder, SalesChangeSubmission};
+use erp_workflow::ports::OrderTaskSource;
+use persistence_core::Executor;
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;
@@ -182,6 +181,7 @@ pub(in crate::workbench) fn sales_change_fact(
             .unwrap_or_else(|| "销售变更单（来源单号待补全）".to_string()),
         change.stable.created_by.clone(),
     );
+    fact.order_scope_source = Some(OrderTaskSource::Sales(change.sales_order_id.to_string()));
     fact.counterparty_label = submission
         .map(|item| item.customer_snapshot.customer_name.clone())
         .or_else(|| base.map(|item| item.customer_snapshot.customer_name.clone()));
@@ -203,6 +203,7 @@ pub(in crate::workbench) fn purchase_change_fact(
             .unwrap_or_else(|| "采购变更单（来源单号待补全）".to_string()),
         change.stable.created_by.clone(),
     );
+    fact.order_scope_source = Some(OrderTaskSource::Purchase(change.purchase_order_id.to_string()));
     fact.counterparty_label = submission
         .map(|item| item.supplier_snapshot.supplier_name.clone())
         .or_else(|| base.map(|item| item.supplier_snapshot.supplier_name.clone()));

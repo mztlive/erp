@@ -3,11 +3,12 @@
 use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
+use erp_core::common::time::Instant;
 use persistence_core::Executor;
 
+use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::{WorkItem, WorkItemBriefObjectKind, WorkItemSubjectVersions};
 use crate::error::Result;
-use erp_core::common::time::Instant;
 
 /// Work-item brief object kind.
 pub type ObjectKind = WorkItemBriefObjectKind;
@@ -17,6 +18,74 @@ pub type ObjectFactKey = (ObjectKind, String);
 
 /// Map of loaded object facts.
 pub type ObjectFactMap = HashMap<ObjectFactKey, ObjectFact>;
+
+/// 关联任务必须独立读取的 S2 订单；不得使用任务标题、创建人或结算主体推断。
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum OrderTaskSource {
+    /// 当前销售单主键，包括沿原单授权的销售变更和发货任务。
+    Sales(String),
+    /// 当前采购单主键，包括采购变更、入库、电子及服务履约任务。
+    Purchase(String),
+}
+
+impl OrderTaskSource {
+    /// 返回适用 S2 订单读取重验的审批对象种类。
+    ///
+    /// # 返回
+    /// 非订单审批属于其他阶段，返回 None；不得将其伪装成销售单。
+    pub fn approval_kind(document_type: DocumentType) -> Option<ObjectKind> {
+        match document_type {
+            DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Some(ObjectKind::SalesOrder),
+            DocumentType::PurchaseOrder => Some(ObjectKind::PurchaseOrder),
+            DocumentType::SalesChangeOrder => Some(ObjectKind::SalesChangeOrder),
+            DocumentType::PurchaseChangeOrder => Some(ObjectKind::PurchaseChangeOrder),
+            _ => None,
+        }
+    }
+    /// 校验订单种类与任务注册关系一致，拒绝空主键和来源类型错配。
+    ///
+    /// # 返回
+    /// 精确匹配时为 true；展示根节点不能作为缺失来源的替代。
+    pub fn matches_kind(&self, kind: ObjectKind) -> bool {
+        match self {
+            Self::Sales(id) => {
+                !id.trim().is_empty()
+                    && matches!(
+                        kind,
+                        ObjectKind::SalesOrder | ObjectKind::SalesChangeOrder | ObjectKind::Delivery
+                    )
+            }
+            Self::Purchase(id) => {
+                !id.trim().is_empty()
+                    && matches!(
+                        kind,
+                        ObjectKind::PurchaseOrder
+                            | ObjectKind::PurchaseChangeOrder
+                            | ObjectKind::PurchaseReceipt
+                            | ObjectKind::ElectronicDelivery
+                            | ObjectKind::ServiceFulfillment
+                    )
+            }
+        }
+    }
+    /// 判断对象注册类型是否必须提供订单来源。
+    ///
+    /// # 返回
+    /// S2 订单及其关联履约对象返回 true；其他阶段资源另行接入。
+    pub fn required_for(kind: ObjectKind) -> bool {
+        matches!(
+            kind,
+            ObjectKind::SalesOrder
+                | ObjectKind::PurchaseOrder
+                | ObjectKind::SalesChangeOrder
+                | ObjectKind::PurchaseChangeOrder
+                | ObjectKind::PurchaseReceipt
+                | ObjectKind::Delivery
+                | ObjectKind::ElectronicDelivery
+                | ObjectKind::ServiceFulfillment
+        )
+    }
+}
 
 /// Subject-level brief overlay.
 #[derive(Debug, Clone, Default)]
@@ -30,6 +99,8 @@ pub struct SubjectBrief {
 /// Minimum object fact used by work-item authorization and labels.
 #[derive(Debug, Clone)]
 pub struct ObjectFact {
+    /// 由业务实体外键提供的订单授权来源；不复用展示根节点或历史参与根节点。
+    pub order_scope_source: Option<OrderTaskSource>,
     /// Work-surface root object id.
     pub root_document_id: String,
     /// User-facing object title.
@@ -54,6 +125,7 @@ impl ObjectFact {
         created_by: impl Into<String>,
     ) -> Self {
         Self {
+            order_scope_source: None,
             root_document_id: root_document_id.into(),
             label: label.into(),
             created_by: created_by.into(),
@@ -62,6 +134,15 @@ impl ObjectFact {
             impact_summary: None,
             subject_briefs: HashMap::new(),
         }
+    }
+
+    /// 附加由业务实体证明的 S2 订单来源。
+    ///
+    /// # 返回
+    /// 返回带独立订单读取依据的对象事实，不改变展示或参与关系。
+    pub fn with_order_source(mut self, source: OrderTaskSource) -> Self {
+        self.order_scope_source = Some(source);
+        self
     }
 }
 

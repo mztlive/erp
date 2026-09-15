@@ -2,12 +2,10 @@
 
 use std::collections::HashSet;
 
+use erp_sales::entity::sales_order::{SalesOrder, SalesOrderSubmission, SubmissionStatus};
 use erp_sales::repository::SalesOrderExt;
+use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
-use {
-    erp_sales::entity::sales_order::SalesOrder, erp_sales::entity::sales_order::SalesOrderSubmission,
-    erp_sales::entity::sales_order::SubmissionStatus,
-};
 
 use super::amount::non_empty;
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind};
@@ -87,6 +85,7 @@ pub(in crate::workbench) fn sales_order_fact(
         format!("销售单 {}", order.order_no),
         order.stable.created_by.clone(),
     );
+    fact.order_scope_source = Some(OrderTaskSource::Sales(order.base.id.clone()));
     let Some(submission) = preferred_submission(&order.base.id, submissions) else {
         return fact;
     };

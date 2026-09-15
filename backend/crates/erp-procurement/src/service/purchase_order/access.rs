@@ -135,16 +135,37 @@ impl PurchaseAccess {
             .find_authorized(id, &scope, executor)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在或无权操作".into()))?;
-        let object = PurchaseScopeObject {
-            owned: order.current_owner_user_id()? == actor.id(),
-            org_unit_id: Some(order.business_org_unit_id.clone()),
-            historical_read_participant: scope.historical_order_ids.iter().any(|value| value == id),
-            collaborating: false,
-        };
-        if !self.scope.allows(&access, &object)? {
+        if !self.allows(&access, &scope, &order)? {
             return Err(Error::NotFound("采购单不存在或无权操作".into()));
         }
         Ok(order)
+    }
+
+    /// 复用公共单对象判定检查已加载的采购单，供批量关联任务授权使用。
+    ///
+    /// # 参数
+    /// * `access` - 当前采购资源动作的已解析事实。
+    /// * `scope` - 同一次解析形成的采购责任条件。
+    /// * `order` - 调用方执行器中读取的采购单。
+    /// # 返回
+    /// 返回当前责任、业务组织和合法参与经公共解析后的判定。
+    /// # 错误
+    /// 责任事实损坏或授权 Port 未装配时拒绝。
+    pub fn allows(
+        &self,
+        access: &PurchaseResolvedScope,
+        scope: &PurchaseReadScope,
+        order: &PurchaseOrder,
+    ) -> Result<bool> {
+        self.scope.allows(
+            access,
+            &PurchaseScopeObject {
+                owned: order.current_owner_user_id()? == access.user_id,
+                org_unit_id: Some(order.business_org_unit_id.clone()),
+                historical_read_participant: scope.historical_order_ids.contains(&order.base.id),
+                collaborating: false,
+            },
+        )
     }
 
     /// 新单使用即将持久化的显式责任解释创建与提交范围。

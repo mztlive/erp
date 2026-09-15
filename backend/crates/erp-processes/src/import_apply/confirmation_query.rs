@@ -210,6 +210,7 @@ fn processing_state_code(state: ProcessingState) -> &'static str {
     match state {
         ProcessingState::Ready => "READY",
         ProcessingState::ApprovalBlocked => "APPROVAL_BLOCKED",
+        ProcessingState::ExecutionBlocked => "EXECUTION_BLOCKED",
     }
 }
 

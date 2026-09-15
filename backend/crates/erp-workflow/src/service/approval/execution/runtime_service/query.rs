@@ -34,6 +34,7 @@ use super::read_auth::{
 };
 use super::ApprovalRuntimeService;
 use crate::error::{Error, Result};
+use crate::ports::OrderTaskSource;
 use crate::service::approval::business_adapter::adapter_spec_of;
 use crate::service::approval::policy::{policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES};
 use crate::service::approval::process_kind::process_kind_of;
@@ -639,12 +640,35 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         })
     }
 
+    /// 订单审批详情不能由启动人或历史责任绕过当前订单详情范围。
+    async fn ensure_order_approval_read(
+        &self,
+        actor: &AuditActor,
+        subject: &RuntimeReadSubject,
+    ) -> Result<()> {
+        if OrderTaskSource::approval_kind(subject.document_type).is_some()
+            && !self
+                .auth
+                .order_approval_readable(
+                    actor,
+                    subject.document_type,
+                    &subject.snapshot.business_object_id,
+                    &mut NoTransaction,
+                )
+                .await?
+        {
+            return Err(hidden_not_found());
+        }
+        Ok(())
+    }
+
     /// 校验普通详情/历史读取的三条互斥授权来源。
     async fn ensure_ordinary_runtime_read(
         &self,
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
+        self.ensure_order_approval_read(actor, subject).await?;
         let initiator = subject.instance.started_by.as_str() == actor.id();
         if ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
             actor_active: true,
@@ -681,6 +705,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         actor: &AuditActor,
         subject: &RuntimeReadSubject,
     ) -> Result<()> {
+        self.ensure_order_approval_read(actor, subject).await?;
         let visibility = definition_management_visibility(&self.auth, actor).await?;
         adapter_spec_of(subject.document_type)?;
         let scope = approval_document_read_scope(&self.auth, actor, subject.document_type).await?;

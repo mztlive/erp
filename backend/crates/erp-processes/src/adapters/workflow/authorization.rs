@@ -1,22 +1,29 @@
 //! 将身份域权限与 policy 事务装配到工作流授权端口。
 
-use super::{account_fact, map_service};
-use crate::errors::Error;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
+
+use application_core::AuditActor;
 use erp_core::AccountKind;
 use erp_identity::access_control::{DataScope, DataScopeSubjectType, DataScopeType};
 use erp_identity::{
     subject, AccessControlExt, MongoCasbinAdapter, Permission, PermissionSet, SharedRbacService,
 };
+use erp_read_models::sales_center::access::SalesAccess;
 use erp_workflow::ports::{
-    DataScopeFact, DataScopeTypeFact, RolePermissionSnapshotFact, WorkflowAccountFact,
+    DataScopeFact, DataScopeTypeFact, OrderTaskSource, RolePermissionSnapshotFact, WorkflowAccountFact,
     WorkflowAuthorizationPort,
 };
 use erp_workflow::{Error as WorkflowError, Result as WorkflowResult};
 use mongodb::{ClientSession, Database};
 use persistence_core::Executor;
-use std::collections::{HashMap, HashSet};
-use std::future::Future;
-use std::pin::Pin;
+
+use super::order_access::{approval_readable, readable_sources};
+use super::{account_fact, map_service};
+use crate::adapters::purchase_access;
+use crate::errors::Error;
+use erp_workflow::entity::document_registry::DocumentType;
 
 /// Shared RBAC adapter consumed by workflow command and definition services.
 #[derive(Clone)]
@@ -72,6 +79,48 @@ impl WorkflowAuth {
 }
 
 impl WorkflowAuthorizationPort for WorkflowAuth {
+    async fn order_approval_readable(
+        &self,
+        actor: &AuditActor,
+        document_type: DocumentType,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<bool> {
+        approval_readable(&self.db, &self.rbac, actor, document_type, document_id, executor).await
+    }
+
+    async fn readable_order_sources(
+        &self,
+        actor: &AuditActor,
+        sources: &BTreeSet<OrderTaskSource>,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<BTreeSet<OrderTaskSource>> {
+        readable_sources(&self.db, &self.rbac, actor, sources, executor).await
+    }
+
+    async fn require_order_task_read(
+        &self,
+        actor: &AuditActor,
+        source: &OrderTaskSource,
+        executor: &mut dyn Executor,
+    ) -> WorkflowResult<()> {
+        match source {
+            OrderTaskSource::Sales(id) => {
+                SalesAccess::new(self.db.clone(), self.rbac.clone())
+                    .require_object(actor, "detail", id, &[], executor)
+                    .await
+                    .map_err(|error| map_service(Error::from(error)))?;
+            }
+            OrderTaskSource::Purchase(id) => {
+                purchase_access(self.db.clone(), self.rbac.clone())
+                    .require_object(actor, "detail", id, &[], executor)
+                    .await
+                    .map_err(|error| map_service(Error::from(error)))?;
+            }
+        }
+        Ok(())
+    }
+
     fn role_ids(
         &self,
         account_kind: AccountKind,

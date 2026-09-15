@@ -238,7 +238,7 @@ export type ImportConfirmationView = Readonly<{
         subjectVersion: string
         status: "OPEN" | "COMPLETED" | "CLOSED"
         ownerUserId?: string
-        processingState: "READY" | "APPROVAL_BLOCKED"
+        processingState: "READY" | "APPROVAL_BLOCKED" | "EXECUTION_BLOCKED"
         allowedActions: readonly ImportConfirmationAllowedAction[]
         actionBlockers: readonly string[]
     }>

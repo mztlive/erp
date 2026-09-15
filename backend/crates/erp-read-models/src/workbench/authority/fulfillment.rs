@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_fulfillment::repository::FulfillmentExt;
+use erp_workflow::ports::OrderTaskSource;
 use persistence_core::Executor;
 
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemFactsReader};
@@ -56,7 +57,8 @@ impl super::WorkItemFactsReader {
                     receipt.purchase_order_id.to_string(),
                     fulfillment_source_label("采购入库", "采购单", purchase_no.map(String::as_str)),
                     SYSTEM_OBJECT_OWNER,
-                ),
+                )
+                .with_order_source(OrderTaskSource::Purchase(receipt.purchase_order_id.to_string())),
             );
         }
 
@@ -87,7 +89,8 @@ impl super::WorkItemFactsReader {
                         sales_no.map(String::as_str),
                     ),
                     SYSTEM_OBJECT_OWNER,
-                ),
+                )
+                .with_order_source(OrderTaskSource::Sales(delivery.sales_order_id.to_string())),
             );
         }
 
@@ -114,7 +117,8 @@ impl super::WorkItemFactsReader {
                     delivery.purchase_order_id.to_string(),
                     fulfillment_source_label("电子交付", "采购单", purchase_no.map(String::as_str)),
                     SYSTEM_OBJECT_OWNER,
-                ),
+                )
+                .with_order_source(OrderTaskSource::Purchase(delivery.purchase_order_id.to_string())),
             );
         }
 
@@ -141,7 +145,10 @@ impl super::WorkItemFactsReader {
                     fulfillment.purchase_order_id.to_string(),
                     fulfillment_source_label("服务履约", "采购单", purchase_no.map(String::as_str)),
                     SYSTEM_OBJECT_OWNER,
-                ),
+                )
+                .with_order_source(OrderTaskSource::Purchase(
+                    fulfillment.purchase_order_id.to_string(),
+                )),
             );
         }
         Ok(())

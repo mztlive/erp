@@ -479,6 +479,7 @@ pub(super) fn allowed_actions(
         && item.status == WorkItemStatus::Open
         && item.approval_node_execution_id.is_some()
         && item.owner_user_id.as_deref() == Some(actor_id)
+        && has_permission(access, "approval_instance:decide")
     {
         actions.push(WorkItemAllowedAction::Approve);
         actions.push(WorkItemAllowedAction::Reject);

@@ -13,7 +13,7 @@ export function responsibilityOf(
     if (!workItem) return "blocked"
     if (workItem.workItemStatus === "COMPLETED") return "completed"
     if (workItem.workItemStatus === "CLOSED") return "closed"
-    if (workItem.processingState === "APPROVAL_BLOCKED") return "blocked"
+    if (workItem.processingState !== "READY") return "blocked"
     if (!workItem.ownerUser?.id || !currentUserId) return "assigned_to_other"
     return workItem.ownerUser.id === currentUserId
         ? "assigned_to_me"

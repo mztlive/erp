@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{ObjectFact, ObjectFactMap, ObjectKind};
 use erp_import::LegacyImportExt;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask};
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
@@ -10,6 +9,7 @@ use erp_supply::repository::{SupplierFulfillmentExt, SupplierOfferingExt};
 use erp_workflow::entity::work_item::WorkItemSubjectVersions;
 use persistence_core::Executor;
 
+use super::{ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;
 
 /// Return the integration-error impact shown on work items.
@@ -136,6 +136,7 @@ impl super::WorkItemFactsReader {
             facts.insert(
                 (ObjectKind::SupplierFulfillmentOrder, order.base.id.clone()),
                 ObjectFact {
+                    order_scope_source: None,
                     root_document_id: order.base.id.clone(),
                     label: format!("供应商履约订单 {}", order.fulfillment_order_no),
                     created_by: SYSTEM_OBJECT_OWNER.to_string(),
@@ -197,6 +198,7 @@ impl super::WorkItemFactsReader {
             facts.insert(
                 (ObjectKind::SupplierOffering, offering.base.id.clone()),
                 ObjectFact {
+                    order_scope_source: None,
                     root_document_id: offering.base.id.clone(),
                     label: format!("供应商供给 {}", offering.supplier_sku_code),
                     created_by: offering.stable.created_by,

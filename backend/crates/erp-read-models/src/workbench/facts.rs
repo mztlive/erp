@@ -5,16 +5,14 @@ use std::collections::{HashMap, HashSet};
 use erp_core::common::time::Instant;
 use erp_integration::entity::integration_ops::{ErrorClass, IntegrationErrorTask, ReconciliationDifference};
 use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
+pub(crate) use erp_workflow::ports::ObjectKind;
+use erp_workflow::service::work_item::order_access::filter_order_facts;
+use erp_workflow::WorkflowAuthorizationPort;
 use persistence_core::{Executor, NoTransaction};
 
-use crate::errors::Result;
-
-use super::brief;
-use super::dto;
-use super::WorkbenchReadService;
-
 pub(crate) use super::authority::object_ids;
-pub(crate) use erp_workflow::ports::ObjectKind;
+use super::{brief, dto, WorkbenchReadService};
+use crate::errors::Result;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WorkbenchSubjectDisplay {
@@ -330,6 +328,23 @@ fn apply_subject_display(
         .unwrap_or_else(|| fact.display.brief_source.clone());
 }
 
+impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
+    /// 共享命令端的订单来源和公共范围判定；必须先过滤再分页或统计。
+    pub(super) async fn filter_order_access(
+        &self,
+        actor_id: &str,
+        facts: &mut WorkbenchObjectFactMap,
+    ) -> Result<()> {
+        let mut authority = facts
+            .iter()
+            .map(|(key, fact)| (key.clone(), fact.authority.clone()))
+            .collect();
+        filter_order_facts(&self.auth, actor_id, &mut authority, &mut NoTransaction).await?;
+        facts.retain(|key, _| authority.contains_key(key));
+        Ok(())
+    }
+}
+
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 批量读取当前页任务的权威对象事实，避免按行 N+1。
     pub(super) async fn object_facts_for_rows(
@@ -602,11 +617,12 @@ mod integration_brief_tests {
 
 #[cfg(test)]
 mod authority_display_tests {
-    use super::super::access::{has_object_participation, ActorAccess};
-    use super::*;
     use erp_core::ids::WorkItemId;
     use erp_workflow::entity::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority};
     use erp_workflow::ports::{ObjectFact, SubjectBrief};
+
+    use super::super::access::{has_object_participation, ActorAccess};
+    use super::*;
 
     fn fields() -> dto::WorkItemFields {
         WorkItem::new(
