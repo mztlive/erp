@@ -150,12 +150,17 @@ export function ContractsTablePanel({
                                     placeholder="组织 ID，逗号分隔"
                                     aria-label="按当前主负责人所属组织筛选"
                                 />
-                                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                <label
+                                    htmlFor="card-contracts-list-filter-org-descendants"
+                                    className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                                >
                                     <Checkbox
                                         id="card-contracts-list-filter-org-descendants"
                                         checked={descendantsDraft}
                                         onCheckedChange={(checked) =>
-                                            setDescendantsDraft(checked === true)
+                                            setDescendantsDraft(
+                                                checked === true,
+                                            )
                                         }
                                     />
                                     包含下级

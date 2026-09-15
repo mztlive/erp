@@ -1,6 +1,6 @@
 # S2 组织与范围实施及验收合同
 
-状态：执行中；未达到 S2 退出条件（剩余见 §6.15 第 6 条：既有前端门禁漂移；代表性业务数据与导出下载已按 §6.15／浏览器导出用例核销）
+状态：执行中；未达到 S2 退出条件（剩余见 §6.15 第 6 条：既有 oxfmt 漂移；代表性业务数据与导出下载已按 §6.15／浏览器导出用例核销，前端 oxlint 已清零）
 
 实施日期：2026-09-13
 
@@ -345,7 +345,7 @@
 3. 代表性业务数据：新入口 `s2_business_data_evidence`，`ERP_TEST_MONGO_URI` 指向隔离副本集、`S2_BUSINESS_SOURCE_DB=erp_s2_browser_20260916` 为只读来源（本入口只读该库、复制 19013 个文档／175 个集合到随机库 `erp_s2_bizdata_*` 后验证，用后删除）。通过：`representative_work_item_managed_plan`（500 条真实种子账号属主任务，生产管理条件真实扫描命中 250 条候选，`IXSCAN`，未用 `hint`）、`representative_approval_pipeline_plan`（300 条实例＋快照，发起人为真实种子账号，与生产 Started 全管线同形 `$match＋$sort＋$lookup＋$facet`，首段 `IXSCAN`）、`representative_task_over_limit_20000_rejected`（以真实种子成员行为模板扩写 20001 条同组织成员，整体拒绝零截断）、`representative_concurrent_org_moves_timed`（6 个真实种子账号并发调岗全部成功，`elapsed_ms=20257`，仅记录不判定）。断言边界：数据量仍低于生产规模，见各 `EVIDENCE_JSON` 的 `data_volume`；并发冲突按串行重试消化（版本冲突／同秒生效／事务冲突最多 12 次）。
 4. 导出下载：浏览器脚本追加第三用例（真实销售账号登录销售单列表页）。隔离库无销售单据时走空态分支（导出按钮禁用＋截图 `s2-sales-export-empty.png`，不伪造单据）；有单据时拦截真实下载事件校验 CSV 文件名与“导出完成”。两种分支外，统一用接口验证导出收集口径：第一页 `scope_version` 传递给后续页一致、伪造版本 `scope_version=forged-version` 返回 409 失败关闭。`3 passed`，零页面错误。
 5. 本批门禁：`cargo check --workspace --locked` 通过；BPM／领域／组织范围静态总门禁（`STATIC_CHECKS_PASSED`，零阻断）维持通过；权限生成物无漂移；`cargo test --workspace --lib` 维持 3891 通过、0 失败；前端 `dashboard.test.ts` 21 项通过，e2e `tsc` 通过。
-6. 仍未核销（S2 保持“执行中”的唯一剩余原因）：前端 oxlint 3 errors 与 oxfmt 24 文件问题均在本批 diff 之外的既有文件中（与 §6.14 同一批次确认，main 同样失败）；S2 功能与隔离／业务／浏览器证据均已齐备，但全部门禁未绿前不得登记 S2 已完成。
+6. 仍未核销（S2 保持“执行中”的唯一剩余原因）：`oxfmt --check .` 仍有 22 个既有文件未按当前 Theodor 风格排版（stash 本批改动后复跑同样失败，均为 S2 diff 之外的既有文件，如 `AGENTS.md`、`globals.css`、未改动的业务文件；全量重排会污染 S2 范围 diff，故未动）。前端 `oxlint --deny-warnings`（含 fixed-decimal 与 feature-cycles）已清零：修复 6 个 S2 范围内文件的真实问题（label 关联 control、无用变量、冗余 Boolean），行为不变；`dashboard.test.ts` 21 项、vitest 205 文件／876 项、node 76 项全过。S2 功能与隔离／业务／浏览器证据均已齐备，但全部门禁未绿前不得登记 S2 已完成。
 3. 执行 `API_BASE=http://127.0.0.1:10002 S2_BALANCE_ID=s2-stock-zero node scripts/verify-org-data-scope-s2.mjs`，三行通过：`seeded_accounts_stock_binding_submit_manager_no_proxy_and_no_approval_transfer`、`seeded_accounts_current_member_scope_no_automatic_reassignment`、`seeded_accounts_dimension_isolation_revoked_approval_blocked_and_restored`，结果 JSON 为 `POSTED`。只读复核：11 个账号、2 个仓库、1 条余额，审批与任务生产索引齐备（含 `idx_approval_process_instances_started_by`）。
 4. 环境插曲：首次运行中途外接构建盘卸载，服务进程异常退出（`EXIT:138`）；改用 `CARGO_TARGET_DIR=/tmp/erp-target` 本地重新构建后完整重跑通过。插曲残留单据保留在新库专用数据中（新部门随机命名，无冲突），不影响断言。
 5. 生产规模：代表性计划、20000 超限与事务耗时以前述隔离证据（§6.9、§6.11、§6.12）为准，不在业务库重放，避免污染可核销单据；浏览器验收暂缓未执行。
