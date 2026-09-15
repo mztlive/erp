@@ -1,77 +1,189 @@
-# 仓库指南
+# 后端仓库规则
 
-## 架构与归属
+通用 Rust 编码规范见 `rust-coding-standards` skill；本文件只写本仓库特有规则，冲突时以本文件为准。
 
-- 调用链：HTTP Handler → 本域 Service 或命名 Process/ReadModel → 拥有领域 Repository → MongoDB。Handler 只做协议适配；纯业务规则归实体/值对象，Service 只做编排，Repository 屏蔽查询细节，Handler 禁止直连数据库。
-- 19 个业务领域 crate 拥有实际实现：identity、audit、workflow、support、party、customer、supplier、catalog、warehouse、contract、import、inventory、finance、sales、procurement、fulfillment、returns、integration、supply。
-- `erp-core`、`application-core`、`persistence-core` 只留共享基础合同（通用值对象/应用/持久化合同），禁放 AccountCore、Role、AuditLog、WorkItem、SalesOrder 等业务实体。
-- `erp-processes` 拥有跨域事务、正式用例、实际 adapter 与外部 I/O 边界；`erp-read-models` 拥有混合查询、工作台/中心页展示投影及唯一正式任务事实读取器。允许 Process → ReadModel，禁止反向；事实权限政策仍由拥有领域执行。
-- 业务领域 normal/build/dev 均禁依赖其他业务领域、组合层或旧三层；跨域事实经窄 Port 获取，实际 adapter 在组合层装配；共享规则保留唯一领域提供方。
-- `crates/bpm` 只留流程定义、运行状态和引擎规则；`erp-workflow` 负责 ERP 政策、工作项、审批集成及 BPM 持久化适配；BPM 禁依赖 ERP、MongoDB、HTTP、配置、ID 生成器或通知客户端。
-- `apps/web-api` 负责 Axum 协议、AppState 装配、后台 worker 生命周期，管理员路由固定走 JWT + RBAC；`apps/cli` 只做管理员初始化与密码重置运维装配，复用身份领域用例与组合层 adapter，并登记全域索引；CLI 禁依赖 web-api。
-- `crates/erp-<domain>` 含本域实体、DTO、规则、Service、Repository、collection accessor 和 indexes，不留旧路径 façade。`config`、`docs`、`scripts` 为配置、执行合同与门禁工具。
-- 禁止恢复顶层 `entities/`、`database/`、`services/`；其源码、manifest 和三类依赖入边必须为零。旧三层测试与旧文档只以原始字节存 `docs/archive/legacy-crates/` 供追溯，禁接入活动 Cargo target，历史 tests 档案亦然。
-- HTTP、CLI 和库测试组合根只按阶段00原逐集合顺序登记各领域公开索引入口，不复制索引定义；事务执行器、幂等恢复、ID/时钟位置和外部 I/O 边界保持业务合同。
-- 管理端 Handler 必须加 `#[permission_macros::permission(...)]`（公开登录/上传/公开选品入口除外）；`apps/web-api/build.rs` 生成前台权限，以权限漂移脚本校验，不手改生成物。
-- 配置用 `config::SafeConfig`；Web API 日志与 Tracing 在 `apps/web-api/src/core/tracing`；上传经 `AppState` 的 `storage::S3Storage` 写配置 bucket，公开 URL 由 `public_base_url`、`key_prefix` 与对象键生成。
+## 目录结构
 
-## 新功能开发流程（后端）
+```text
+backend/
+├── apps/
+│   ├── web-api/                      # Axum 协议层、AppState 装配、后台 worker 生命周期
+│   │   ├── build.rs                  # 由 permission 标注生成前端权限
+│   │   ├── examples/                 # 真实 Mongo 验收例程（禁新增/修改/执行）
+│   │   └── src/
+│   │       ├── app_state.rs
+│   │       ├── indexes.rs            # 全域索引登记
+│   │       └── core/
+│   │           ├── auth/             # JWT
+│   │           ├── middleware/       # authenticate、with_permission（RBAC）
+│   │           ├── handler/<domain>/ # 协议适配
+│   │           ├── routes/           # public.rs、account.rs、admin.rs、<domain>.rs
+│   │           ├── tracing/          # 日志与请求 tracing
+│   │           ├── errors.rs
+│   │           ├── response.rs       # ApiResponse
+│   │           ├── rate_limit.rs
+│   │           └── upload.rs
+│   └── cli/                          # init-admin、reset-password
+├── crates/
+│   ├── erp-<domain>/                 # 19 个业务领域：identity audit workflow support party customer
+│   │   │                             #   supplier catalog warehouse contract import inventory finance
+│   │   │                             #   sales procurement fulfillment returns integration supply
+│   │   └── src/
+│   │       ├── entity/               # 实体、值对象、不变式
+│   │       ├── dto/
+│   │       ├── service/              # 本域用例
+│   │       ├── repository/           # owned/ 集合仓储；extensions/ *Ext 访问器
+│   │       ├── ports/                # 本域消费的外域窄接口
+│   │       ├── indexes               # 公开索引入口
+│   │       └── error.rs
+│   ├── erp-processes/                # 跨域写用例、adapter、外部 I/O
+│   ├── erp-read-models/              # 跨域查询、中心页/工作台投影、正式任务事实读取器
+│   ├── erp-core/                     # 共享业务值对象
+│   ├── application-core/             # 共享应用合同（分页、调用人、命令幂等）
+│   ├── persistence-core/             # Executor、事务、通用仓储
+│   ├── bpm/                          # 流程定义、运行状态、引擎规则
+│   ├── entity-core/                  # BaseModel
+│   ├── entity-macros/                # Entity 派生、id_type
+│   ├── permission-macros/
+│   ├── id-generator/
+│   ├── storage/                      # S3Storage
+│   └── test-support/                 # 仅 dev-dependency
+├── config/                           # SafeConfig
+├── scripts/                          # 边界与权限漂移门禁
+└── docs/archive/legacy-crates/       # 旧三层原始字节档案（只读）
+```
 
-1. **建模**：在拥有领域 `entity` 建/扩实体与值对象，封装不变式与验证（见§领域模型定义原则）。
-2. **仓储**：在拥有领域 `repository` 新增仓库做实体读写与聚合，经各领域 `*Ext` 扩展 trait（如 `AccessControlExt::accounts()/roles()`）暴露；不管理事务，只按传入执行器决定是否加入事务。
-3. **服务**：本域 DTO + 单域用例放拥有领域；跨域写入放命名 Process，混合读取放 ReadModel；可复用不变式必须下沉到类型，禁长期滞留 Service 私有 helper（见§类型内聚与下沉）。
-4. **HTTP**：在 `apps/web-api/src/core/handler` 新增 handler，统一用 `ApiResponse` 返回；必须复用领域/组合层 DTO，禁重复定义同语义 Request/Response，仅 HTTP 形态差异（路径拆分、上下文注入、协议重命名）允许最小薄包装并实现 `From/Into` + 注释原因。
-5. **路由/权限**：挂到 `apps/web-api/src/core/routes`，管理员接口放 `admin` 并走 JWT + RBAC，加 `permission` 标注；组织机构 handler 无独立路由文件，经 `access_control` 路由装配。
-6. **测试与门禁**：按§测试期望补单元测试（至少 happy-path + 失败/边界，不新增集成测试）；然后一次过§CI 与质量门禁。
+## 架构与依赖
+
+- 调用链：Handler → 本域 Service 或 Process/ReadModel → 拥有领域 Repository → MongoDB；Handler 禁直连数据库。
+- 业务领域的 normal/build/dev 依赖禁指向其他业务领域、`erp-processes`、`erp-read-models`；跨域事实经本域 `ports/` 窄 Port 获取，实现由组合层装配。
+- 跨域写入放 `erp-processes` 命名 Process；跨域读取放 `erp-read-models`。Process 可依赖 ReadModel，禁反向；事实权限政策由拥有领域执行。
+- 单域查询留在本域 Service/Repository，禁放 ReadModel。
+- `erp-core`、`application-core`、`persistence-core` 禁放业务实体（AccountCore、Role、AuditLog、WorkItem、SalesOrder 等），禁依赖业务领域。
+- `bpm` 禁依赖 ERP crate、MongoDB、HTTP、配置、ID 生成器、通知客户端；ERP 审批政策、工作项、BPM 持久化归 `erp-workflow`。
+- `apps/cli` 复用 `erp-identity` 用例与组合层 adapter，禁依赖 `web-api`。
+- 禁恢复 `entities/`、`database/`、`services/` 旧三层 crate 或转发 façade；`docs/archive/legacy-crates/` 保持原始字节，禁接入 Cargo target。
+- 新增 crate 同步更新 workspace 成员、边界检查配置、`crates/README.md` 与该 crate README。
+
+## 新功能落点
+
+1. **实体**：拥有领域 `entity/` 建/扩实体与值对象，封装不变式。
+2. **仓储**：拥有领域 `repository/` 新增仓储，经本域 `*Ext` trait 暴露（如 `AccessControlExt::accounts()/roles()`）。
+3. **服务**：本域 DTO 与单域用例放拥有领域；跨域写入放 Process，混合读取放 ReadModel。
+4. **Handler**：`apps/web-api/src/core/handler/<domain>/`，返回 `ApiResponse`；请求/响应复用领域或组合层 DTO，禁重复定义同语义结构。仅路径拆分、上下文注入、协议重命名允许薄包装，须实现 `From` 并注释原因。
+5. **路由**：新增 `routes/<domain>.rs`，在 `routes/admin.rs` 合并，经 `with_permission` 走 JWT + RBAC；组织机构路由挂在 `routes/access_control.rs`。
+6. **索引**：新查询评估索引；在本域 `indexes` 登记，组合根（`apps/web-api/src/indexes.rs`、`apps/cli/src/indexes.rs`）只调用领域公开入口，保持现有逐集合顺序，禁复制索引定义。
+7. **测试与门禁**：按 §测试 补单元测试，跑 §质量门禁。
+
+## HTTP 与权限
+
+- `/admin` 下 Handler 必须加 `#[permission_macros::permission(...)]`；仅 `/login`、`/upload`、`/public/selection/*`、`/account/*` 等非管理端入口除外。
+- 前端权限由 `apps/web-api/build.rs` 生成，禁手改生成物；改动后跑 `./scripts/check-permissions-drift.sh`。
+- 配置只经 `config::SafeConfig` 读取；上传只经 `AppState` 的 `storage::S3Storage` 写入。
 
 ## 编码约定
 
-- 格式 rustfmt（宽 110）；模块 snake_case，类型 CamelCase，常量大写蛇形；日志用 `tracing` 带 id、account、request_id 等上下文；敏感信息禁入日志。
-- **导入**：禁写完整路径引用（如 `erp_workflow::service::...`），一律顶部 `use` 后用短名，冲突用 `as` 别名；`use`/`mod` 语句本身及 `<Type as Trait>::item` 消歧除外。
-- **分支与错误**：优先 guard clauses（含 `let-else`），拆复杂分支为私有函数；`Option` 简单透传用 `map/and_then/filter`，禁 `match x { Some(v) => ..., None => None }`；固定模式语义清晰可用 `match`。错误优先 `?` + `thiserror #[from]/From` 转换，需映射语义（如转 `BadRequest`）时允许 `map_err`，纯透传用 `?`。
-- **注释**：所有公共方法必须多行文档注释（参数/返回值/错误）；私有方法仅在含校验分支、业务规则或复杂流程时补充，简单 getter/format 转换可省。
-- **Service 组织与命名**：单个 service 文件写 `mod.rs`，多个才拆 `service.rs`；查询用名词（`role_list`），操作用动词（`create/update/delete`）。
-- **方法长度**：业务方法（handler、领域 `service/repository/entity`、Process/ReadModel）限 30 有效行内，超限拆私有 helper；测试、`build.rs`、宏实现除外。
+- 导入：禁在代码中写完整路径（如 `erp_workflow::service::...`），顶部 `use` 后用短名，冲突用 `as`；`<Type as Trait>::item` 消歧除外。
+- 注释：所有公共方法写多行文档注释，含 `# 参数`、`# 返回`、`# 错误` 段。
+- Service：模块只有一个服务时实现写 `mod.rs`，多个时拆文件；查询方法用名词（`role_list`），操作用动词（`create/update/delete`）。
+- 方法长度：handler、领域 `service/repository/entity`、Process、ReadModel 方法限 30 有效行，超限拆私有 helper；测试、`build.rs`、宏实现除外。
 
-## 类型内聚与下沉
+## 逻辑归属
 
-- 原则：不依赖 DB/外部 I/O 的业务规则，优先进拥有领域实体/值对象或 DTO 自身；Service 仅留流程编排、事务边界、仓储调用、跨聚合协作。
-- **必须下沉**：账号类型/可用性判定、权限覆盖判定（`Permission::covers`/`PermissionSet::covers`、workflow `permission_covers` 等）、RoleId/AccountId 类输入规范化（trim/去重/空校验/类型化）、DTO 确定性构造（`AvailableWorkItemAccount::from_account`、`AdminItem::from_account` 等）。复用输入优先显式值对象（如 `RoleIdSet`），只给 `as_slice/to_strings` 等最小接口。
-- **留在 Service**：依赖仓储结果的判断（唯一冲突、跨集合存在性）、事务内多步写入一致性、查询过滤拼装与分页编排。
-- 同类 `normalize_*`/`ensure_*`/权限覆盖 helper 在 ≥2 个 Service 出现，必须上提到拥有领域公共方法/值对象，禁复制粘贴；下沉后删原私有 helper，并为该规则补实体/值对象单元测试（happy-path + 失败路径）。
+| 逻辑 | 归属 |
+| --- | --- |
+| 不依赖 I/O 的判定：状态、可用性、权限覆盖、范围包含 | 拥有领域的实体/值对象方法 |
+| 输入规范化：trim、去重、非空、类型化 | 值对象构造函数；下游只接收值对象 |
+| 由实体确定性生成 DTO | DTO 的 `from_*` 关联函数 |
+| 依赖仓储结果的判断：唯一冲突、关联存在性 | 本域 Service；跨域放 Process |
+| 多步写入、事务边界 | 本域 Service；跨域放 Process |
+| 查询条件与分页 | Service 组装参数，Repository 实现查询 |
 
-## 事务使用约定
+- 纯规则禁写成 Handler、Service、Process 的私有 helper。
+- 范例：`Permission::covers`、`RoleIdSet`、`AdminItem::from_account`。
 
-- 边界由本域用例或跨域 Process 控制；Repository 方法统一收 `executor: &mut dyn Executor`（`persistence_core::Executor`），Repository 层无 `_with_session` 重复方法（Process 内部事务闭包 helper 如 `persist_*_with_session` 除外）。
-- 单集合 CRUD（无需跨集合原子性）传 `&mut NoTransaction`；多集合写入或需原子性的关联操作，用 `mongodb::Client` 经 `persistence_core::Transactional::with_transaction` 开事务，把 `&mut ClientSession` 传给 Repository/policy 方法。
+## 事务
 
-## 构建、运行与工具
+- 一个用例一个事务：只在用例入口（本域 Service 公开方法、Process 命令）用 `Transactional::with_transaction` 开启，提交与回滚由它完成。
+- 入口以下的 Service、Process 步骤、Port、Repository 只收 `executor: &mut dyn Executor`；禁收 `&mut ClientSession`，禁开启、提交或嵌套事务。
+- 业务步骤写在收 executor 的函数里，入口只做 `with_transaction` 包裹；其他用例复用时传入自己的 executor 加入其事务。禁为有无事务复制实现，函数名禁带 `_with_session`、`_in_transaction`。
+- 单文档写入传 `&mut NoTransaction`；多文档或多集合需原子时开事务。
+- 决定写入的读取（不变式、授权重验、版本、唯一性检查）用同一 executor 在事务内执行。
+- 事务只包含必须原子的数据库读写；外部 HTTP、S3、供应商调用、通知禁放在事务内，需与写入保持一致的外部副作用写 outbox，提交后由后台 worker 执行。
+- 提交结果未知（`CommitOutcomeUnknown`）时禁自动重放；写命令带幂等键，由调用方凭同一幂等键重试。
 
-- 初始化：`cp config.toml.example config.toml`，填 `app`、`database`、`s3`。
-- API：`cargo run -p web-api -- --config-path ./config.toml`（`RUST_LOG=info|debug`、`LOG_FORMAT=json`）；CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"` / `reset-password --account admin`，密码优先 `--password`，其次 `ERP_ADMIN_PASSWORD`，否则交互输入。
-- Docker：`./manage.sh start|status|logs` 封装 `docker compose`；只按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写 S3。
+## 领域模型
 
-## 测试期望
+- 实体 `#[serde(flatten)]` 内嵌 `BaseModel`，派生 `Entity`；字段序列化与现有 Mongo 文档一致。
+- ID 用 `entity_macros::id_type` 生成的 newtype（`role` 沿用 `RoleId`）。
+- 创建/更新入参用独立 `*Data`/`*Update` 结构，与系统字段分离。
+- 校验用 `erp_core::validation::non_empty_trimmed` 与 `*_MAX_LEN` 常量；关键字段（如 `category_code`、`parent_category_id`）只许专门方法修改。
+- 树形实体用邻接表 `parent_*_id: Option<Id>`（`None` 为根），实体方法拒绝自环；跨节点成环检测与子树移动在 Service 事务内完成。
+- 实体测试用 `BaseModel::fake()` 构造；范例 `crates/erp-identity/src/entity/account_core.rs`、`role.rs`。
 
-- 单元测试内联（`mod tests`），尽量覆盖全面：每个改动至少一个 happy-path；路由/行为变更同步更新 HTTP 层单测；必想失败/边界（参数非法、权限拒绝、空输入/空集合、重复、超长超限、缺失关联、软删除）、查询分页（过滤组合、稳定排序、总数一致、空页/尾页/越界页、归组去重）、金额数量（零/正负/精度舍入/溢出守恒，聚合与基准对拍）、状态幂等（全迁移矩阵、幂等重放、异载荷冲突、版本冲突、失败原子性）。覆盖不到须在 PR 说明理由，禁以“后续补集成测试”省略。
-- 禁新增/修改/执行集成测试（含 `examples/` 下需真实 Mongo 的验收例程）：禁跑各 crate `tests/`、任何 `--test` 目标、`--include-ignored` 或依赖真实 MongoDB/外部服务的命令。上传/临时产物不入库，提交前清大日志。
+## 兼容、安全与数据
 
-## CI 与质量门禁
+- 新增字段向后兼容；禁无迁移删/改线上字段；字段/索引变更附迁移脚本与回滚预案。
+- 错误用统一结构与稳定语义，新增错误场景写进接口文档；对外变更在 PR 列影响范围、回滚策略、兼容窗口。
+- 上传校验大小、扩展名、MIME；对象键限 `key_prefix` 下的安全相对路径。
+- 权限拒绝与关键修改记审计日志；登录、上传、公开页等高频敏感接口必须限流。
+- 禁全表扫描；唯一性靠唯一索引；过期数据用 TTL 或归档任务。
+- 外部 HTTP 统一超时、重试上限与错误分类；资金与状态机变更必须有幂等键或去重。
+- 日志与降级错误带 `account`、`request_id` 上下文。
 
-- 本地/CI 统一跑（CI 加 `--check`/`-D warnings`/`--locked`，`domain-boundaries` 加 `--cutover`，并跑权限漂移校验；全程不跑集成测试）：
-  `cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`env -u ERP_TEST_MONGO_URI cargo test --workspace --lib`、`./scripts/check-bpm-boundaries.sh`、`./scripts/check-domain-boundaries.sh`、`./scripts/check-permissions-drift.sh`。
+## 测试
 
-## 兼容、安全、治理与容错
+- 只写内联单元测试（`mod tests`）；路由/行为变更同步更新 HTTP 层单测。
+- 每个改动至少覆盖 happy-path 与失败/边界；按涉及范围覆盖：
+  - 输入：非法参数、权限拒绝、空输入/空集合、重复、超长、缺失关联、软删除。
+  - 分页：过滤组合、稳定排序、总数一致、空页/尾页/越界页、归组去重。
+  - 金额数量：零、正负、精度舍入、溢出守恒，聚合与基准对拍。
+  - 状态幂等：全迁移矩阵、幂等重放、异载荷冲突、版本冲突、失败原子性。
+- 覆盖不到须在 PR 说明理由，禁以“后续补集成测试”省略。
+- 禁新增、修改、执行集成测试：禁跑 `tests/`、`--test`、`--include-ignored`、`examples/` 验收例程及任何依赖真实 MongoDB/外部服务的命令。
+- 上传与临时产物不入库，提交前清理大日志。
 
-- **兼容/API**：新增字段默认向后兼容，禁无迁移删/改线上字段；错误用统一结构与稳定语义，新增场景写进接口文档；外部变更在 PR 列影响范围、回滚策略和兼容窗口。
-- **安全**：禁输密码/token/身份证号；上传校验大小/扩展名/MIME，对象键限配置 `key_prefix` 下的安全相对路径；权限失败与关键修改记审计日志；登录/上传等高频敏感接口具备或预留限流。
-- **数据治理**：新增查询评估索引，禁 N+1 与全表扫描；唯一性靠唯一索引；过期数据用 TTL 或归档任务；字段/索引变更给迁移脚本与回滚预案。
-- **容错**：外部 HTTP 统一超时、重试上限与错误分类；资金/状态机变更必须幂等键或去重；依赖失败降级为可观测错误并记 account/request_id 上下文。
+## 质量门禁
 
-## 领域模型定义原则
+均在 `backend/` 执行。
 
-- **结构**：实体必含 `BaseModel`（`#[serde(flatten)]`：`id/version/created_at/updated_at/deleted_at`）；ID 优先 newtype（如 `ProductCategoryId`、`SalesOrderId`，`role` 沿用 `RoleId`）；创建/更新传参与系统字段分离，用独立 `Data` 结构。派生 `#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]`，持久化映射与现 Mongo 模型一致。
-- **验证**：`new()` 做完整验证+规范化（`non_empty_trimmed`、长度常量如 `NAME_MAX_LEN`、业务规则、去空白/截断），复杂逻辑抽私有 `ensure_*`；`update()` 复用同逻辑，但关键字段（如 `category_code`、`parent_category_id`）只许专门操作改。
-- **树形**：当前为纯邻接表（`parent_category_id: Option<ProductCategoryId>`，`None` 为根，`set_parent` 拒绝自环）；`internal_code` 物化路径尚未落库，跨节点成环检测在 Service 事务内完成，搬子树同样走事务。
-- **方法**：不变式封进实体方法（如 `is_root/is_active/ensure_assignable`），不外泄判断。
-- **测试**：实体内 `#[cfg(test)] mod tests` 覆盖创建/更新验证、边界（空/超长/非法）、层级与唯一规则，用 `BaseModel::fake()` 或最小数据。范例看 `crates/erp-identity/src/entity/account_core.rs` 与 `role.rs`。
+### 开发阶段
+
+每轮改动只跑受影响 crate：
+
+```bash
+cargo fmt --all
+cargo check -p <crate>
+env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
+```
+
+- 改公开类型或方法签名：追加 `cargo check --workspace`。
+- 一项功能完成时：`cargo clippy -p <crate> --all-targets`。
+- 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。
+- 改 `bpm` 或 `erp-workflow`：`./scripts/check-bpm-boundaries.sh`。
+- 改 `permission` 标注：`./scripts/check-permissions-drift.sh`，并提交 `erp-client/lib/permissions.generated.ts`。
+- 仅改文档：不编译、不测试，只跑 `git diff --check`。
+
+### 提交阶段
+
+提交前全量跑一次，全部通过才提交（与 Jenkinsfile 一致）：
+
+```bash
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+env -u ERP_TEST_MONGO_URI cargo test --workspace --lib --locked
+./scripts/check-bpm-boundaries.sh
+./scripts/check-domain-boundaries.sh --cutover
+./scripts/check-permissions-drift.sh
+git diff --check
+```
+
+## 运行
+
+```bash
+cp config.toml.example config.toml   # 填 app、database、s3
+cargo run -p web-api -- --config-path ./config.toml          # RUST_LOG=info|debug，LOG_FORMAT=json
+cargo run -p cli -- init-admin --account admin --name "System Admin"
+cargo run -p cli -- reset-password --account admin             # 密码：--password > ERP_ADMIN_PASSWORD > 交互输入
+```
